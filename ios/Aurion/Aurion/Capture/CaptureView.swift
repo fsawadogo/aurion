@@ -14,9 +14,7 @@ struct CaptureView: View {
             AurionGradients.navyBackground.ignoresSafeArea()
 
             VStack {
-                // Status bar — frosted glass
                 HStack {
-                    // Device indicator
                     Image(systemName: "eyeglasses")
                         .foregroundColor(Color.aurionGold)
                     Text(session.state == .recording ? "Recording" : session.state.rawValue)
@@ -25,7 +23,6 @@ struct CaptureView: View {
 
                     Spacer()
 
-                    // Timer
                     Text(formatTime(elapsedTime))
                         .font(.title3)
                         .monospacedDigit()
@@ -33,7 +30,6 @@ struct CaptureView: View {
 
                     Spacer()
 
-                    // Specialty badge
                     Text(session.specialty)
                         .font(.caption2)
                         .foregroundColor(.white.opacity(0.7))
@@ -46,31 +42,32 @@ struct CaptureView: View {
 
                 Spacer()
 
-                // Consent gate
                 if !session.isConsentConfirmed {
                     consentOverlay
                         .transition(AurionTransition.scaleIn)
                 } else {
-                    // Recording controls
                     controlBar
                 }
             }
             .animation(AurionAnimation.smooth, value: session.isConsentConfirmed)
         }
         .onChange(of: session.state) { _, newState in
-            if newState == .recording {
+            switch newState {
+            case .recording:
                 startTimer()
                 AurionHaptics.impact(.heavy)
                 withAnimation(AurionAnimation.pulse) {
                     isPulsing = true
                 }
-            } else if newState == .paused {
+            case .paused:
                 stopTimer()
                 isPulsing = false
-            } else if newState == .processingStage1 {
+            case .processingStage1:
                 stopTimer()
                 isPulsing = false
                 AurionHaptics.notification(.success)
+            default:
+                break
             }
         }
         .onAppear {
@@ -114,22 +111,23 @@ struct CaptureView: View {
 
     private var controlBar: some View {
         HStack(spacing: 40) {
-            // Pause / Resume
-            if session.state == .recording {
+            switch session.state {
+            case .recording:
                 Button(action: { session.pause() }) {
                     Image(systemName: "pause.circle.fill")
                         .font(.system(size: 44))
                         .foregroundColor(.white)
                 }
-            } else if session.state == .paused {
+            case .paused:
                 Button(action: { session.resume() }) {
                     Image(systemName: "play.circle.fill")
                         .font(.system(size: 44))
                         .foregroundColor(Color.aurionGold)
                 }
+            default:
+                EmptyView()
             }
 
-            // Record / Stop
             Button(action: {
                 Task {
                     if session.state == .consentPending && session.isConsentConfirmed {
@@ -140,7 +138,6 @@ struct CaptureView: View {
                 }
             }) {
                 ZStack {
-                    // Pulse animation ring — visible when recording
                     if isPulsing {
                         Circle()
                             .stroke(Color.red.opacity(0.6), lineWidth: 3)
@@ -167,7 +164,7 @@ struct CaptureView: View {
             }
             .disabled(!session.recordButtonEnabled && session.state != .recording && session.state != .paused)
 
-            Spacer().frame(width: 44) // Balance
+            Spacer().frame(width: 44)
         }
         .padding(.bottom, 40)
     }

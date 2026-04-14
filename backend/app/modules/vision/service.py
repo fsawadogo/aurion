@@ -11,15 +11,14 @@ Sequence:
 
 from __future__ import annotations
 
+import asyncio
 import logging
-import os
-import uuid
-from typing import Any, Optional
+from typing import Optional
 
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.retry import with_retry
+from app.core.s3 import FRAMES_BUCKET, get_s3_client
 from app.core.types import (
     FrameCaption,
     MaskedFrame,
@@ -34,17 +33,6 @@ from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
 
 logger = logging.getLogger("aurion.vision")
-
-_FRAMES_BUCKET = os.getenv("FRAMES_S3_BUCKET", "aurion-frames-local")
-_REGION = os.getenv("AWS_DEFAULT_REGION", "ca-central-1")
-_ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL")
-
-
-def _get_s3_client():
-    kwargs: dict[str, Any] = {"region_name": _REGION}
-    if _ENDPOINT_URL:
-        kwargs["endpoint_url"] = _ENDPOINT_URL
-    return boto3.client("s3", **kwargs)
 
 
 # ── Frame Extraction ─────────────────────────────────────────────────────
@@ -66,7 +54,7 @@ async def retrieve_frames_for_triggers(
     Each trigger segment maps to frames within the configured window.
     """
     frames: list[MaskedFrame] = []
-    s3 = _get_s3_client()
+    s3 = get_s3_client()
 
     for segment in trigger_segments:
         window_ms = get_frame_window_ms(segment.trigger_type)
@@ -75,7 +63,7 @@ async def retrieve_frames_for_triggers(
         try:
             response = await with_retry(
                 s3.list_objects_v2,
-                Bucket=_FRAMES_BUCKET,
+                Bucket=FRAMES_BUCKET,
                 Prefix=prefix,
                 max_retries=3,
                 base_delay=1.0,
@@ -132,47 +120,38 @@ async def caption_frames(
 ) -> list[FrameCaption]:
     """Caption each frame using the active vision provider with fallback.
 
+    Frames are captioned concurrently via asyncio.gather for throughput.
     Low-confidence frames are discarded before classification.
     If the primary provider fails on a frame, a fallback provider is tried.
     """
     registry = get_registry()
     provider = registry.get_vision_provider_with_fallback()
     audit = get_audit_log_service()
-
-    captions: list[FrameCaption] = []
-    discarded_count = 0
-    failed_count = 0
     session_id = frames[0].session_id if frames else ""
 
-    for frame in frames:
-        # Find the closest trigger segment for this frame
+    async def _caption_single(frame: MaskedFrame) -> Optional[FrameCaption]:
+        """Caption a single frame, returning None on discard or failure."""
         anchor = _find_anchor_segment(frame.timestamp_ms, trigger_segments)
         if not anchor:
-            continue
+            return None
 
         try:
             caption = await provider.caption_frame(frame, anchor)
-
-            # Low-confidence frames discarded before conflict detection
             if caption.confidence == "low":
-                discarded_count += 1
                 logger.info(
                     "Low confidence frame discarded: frame=%s reason=%s",
                     frame.frame_id, caption.confidence_reason,
                 )
-                continue
-
-            captions.append(caption)
+                return None
+            return caption
         except ProviderError as e:
             logger.warning(
                 "Primary vision provider failed on frame=%s: %s — trying fallback",
                 frame.frame_id, str(e),
             )
-            # Attempt fallback provider
             try:
                 fallback_provider = registry.get_vision_provider_with_fallback()
                 caption = await fallback_provider.caption_frame(frame, anchor)
-
                 await audit.write_event(
                     session_id=frame.session_id,
                     event_type="provider_fallback",
@@ -180,14 +159,10 @@ async def caption_frames(
                     original_error=str(e),
                     fallback_provider=caption.provider_used,
                 )
-
                 if caption.confidence == "low":
-                    discarded_count += 1
-                    continue
-
-                captions.append(caption)
+                    return None
+                return caption
             except ProviderError as fallback_err:
-                failed_count += 1
                 logger.error(
                     "Vision captioning failed (all providers): frame=%s error=%s",
                     frame.frame_id, str(fallback_err),
@@ -198,6 +173,26 @@ async def caption_frames(
                     frame_id=frame.frame_id,
                     error_message=str(fallback_err),
                 )
+                return None
+
+    # Caption all frames concurrently
+    results = await asyncio.gather(
+        *(_caption_single(frame) for frame in frames),
+        return_exceptions=True,
+    )
+
+    captions: list[FrameCaption] = []
+    failed_count = 0
+    discarded_count = 0
+
+    for result in results:
+        if isinstance(result, Exception):
+            failed_count += 1
+            logger.error("Unexpected error captioning frame: %s", result)
+        elif result is None:
+            discarded_count += 1
+        else:
+            captions.append(result)
 
     # If every frame failed, log a stage2 failure event
     if frames and failed_count == len(frames):
@@ -239,28 +234,20 @@ def classify_conflicts(
 ) -> list[FrameCaption]:
     """Classify each caption as ENRICHES, REPEATS, or CONFLICTS.
 
-    Compares visual description against the audio-based note claims
-    for the corresponding anchor segment.
-
-    This is a simplified rule-based classifier. In production,
-    an LLM call would do the comparison. For MVP, we use the
-    classification returned by the vision provider.
+    For MVP, trusts the provider's classification. Production will use
+    an LLM comparison against audio-anchored note claims.
     """
     for caption in captions:
-        # The vision provider already returns integration_status
-        # For MVP, we trust the provider's classification
-        # Real conflict detection would compare caption.visual_description
-        # against note claims anchored to caption.audio_anchor_id
         if caption.integration_status == "CONFLICTS":
             caption.conflict_flag = True
 
-    conflicts = [c for c in captions if c.conflict_flag]
-    enriches = [c for c in captions if c.integration_status == "ENRICHES"]
-    repeats = [c for c in captions if c.integration_status == "REPEATS"]
+    enriches = sum(1 for c in captions if c.integration_status == "ENRICHES")
+    repeats = sum(1 for c in captions if c.integration_status == "REPEATS")
+    conflicts = sum(1 for c in captions if c.conflict_flag)
 
     logger.info(
         "Conflict classification: enriches=%d repeats=%d conflicts=%d",
-        len(enriches), len(repeats), len(conflicts),
+        enriches, repeats, conflicts,
     )
     return captions
 

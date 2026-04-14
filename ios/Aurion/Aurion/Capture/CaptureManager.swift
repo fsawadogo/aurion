@@ -77,6 +77,12 @@ final class CaptureManager: NSObject, ObservableObject {
     private var lastFrameExtractionTime: TimeInterval = 0
     /// Session start time, used to compute relative timestamps for frames.
     private var sessionStartTime: TimeInterval = 0
+    /// Reusable CIContext for frame conversion -- creating one per frame is expensive.
+    private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
+
+    /// Maximum frames retained in memory. Older frames are dropped to prevent
+    /// unbounded memory growth during long sessions.
+    private let maxRetainedFrames = 300
 
     // MARK: - Interruption Handling
 
@@ -262,44 +268,12 @@ final class CaptureManager: NSObject, ObservableObject {
         audioPCMLock.unlock()
 
         guard !pcmData.isEmpty else { return nil }
-        return buildWavFile(from: pcmData)
-    }
-
-    // MARK: - WAV File Builder
-
-    /// Wraps raw PCM data in a standard WAV header.
-    private func buildWavFile(from pcmData: Data) -> Data {
-        let sampleRate = UInt32(audioSampleRate)
-        let channels = audioChannels
-        let bitsPerSample = audioBitsPerSample
-        let byteRate = sampleRate * UInt32(channels) * UInt32(bitsPerSample / 8)
-        let blockAlign = channels * (bitsPerSample / 8)
-        let dataSize = UInt32(pcmData.count)
-        let fileSize = 36 + dataSize
-
-        var wav = Data()
-
-        // RIFF header
-        wav.append("RIFF".data(using: .ascii)!)
-        wav.append(withUnsafeBytes(of: fileSize.littleEndian) { Data($0) })
-        wav.append("WAVE".data(using: .ascii)!)
-
-        // fmt subchunk
-        wav.append("fmt ".data(using: .ascii)!)
-        wav.append(withUnsafeBytes(of: UInt32(16).littleEndian) { Data($0) }) // subchunk size
-        wav.append(withUnsafeBytes(of: UInt16(1).littleEndian) { Data($0) })  // PCM format
-        wav.append(withUnsafeBytes(of: channels.littleEndian) { Data($0) })
-        wav.append(withUnsafeBytes(of: sampleRate.littleEndian) { Data($0) })
-        wav.append(withUnsafeBytes(of: byteRate.littleEndian) { Data($0) })
-        wav.append(withUnsafeBytes(of: blockAlign.littleEndian) { Data($0) })
-        wav.append(withUnsafeBytes(of: bitsPerSample.littleEndian) { Data($0) })
-
-        // data subchunk
-        wav.append("data".data(using: .ascii)!)
-        wav.append(withUnsafeBytes(of: dataSize.littleEndian) { Data($0) })
-        wav.append(pcmData)
-
-        return wav
+        return WAVBuilder.build(
+            from: pcmData,
+            sampleRate: UInt32(audioSampleRate),
+            channels: audioChannels,
+            bitsPerSample: audioBitsPerSample
+        )
     }
 
     // MARK: - Interruption Handling
@@ -415,8 +389,8 @@ extension CaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptur
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return }
+        // Use the shared CIContext instead of allocating a new one per frame.
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
 
         let uiImage = UIImage(cgImage: cgImage)
         guard let jpegData = uiImage.jpegData(compressionQuality: 0.85) else { return }
@@ -427,6 +401,10 @@ extension CaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptur
         Task { @MainActor [weak self] in
             guard let self, self.isCapturing, !self.isPaused else { return }
             self.capturedFrames.append(frame)
+            // Cap retained frames to prevent unbounded memory growth in long sessions.
+            if self.capturedFrames.count > self.maxRetainedFrames {
+                self.capturedFrames.removeFirst(self.capturedFrames.count - self.maxRetainedFrames)
+            }
         }
     }
 }

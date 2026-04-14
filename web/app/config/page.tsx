@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import {
   CpuChipIcon,
@@ -7,8 +8,29 @@ import {
   FlagIcon,
   ClockIcon,
 } from "@heroicons/react/24/outline";
+import { getConfig, getConfigHistory } from "@/lib/api";
+import type { ProviderConfig, ConfigChangeEvent } from "@/types";
 
-const placeholderConfig = {
+function ProviderBadge({ name }: { name: string }) {
+  const colors: Record<string, string> = {
+    whisper: "bg-green-100 text-green-700",
+    assemblyai: "bg-blue-100 text-blue-700",
+    openai: "bg-emerald-100 text-emerald-700",
+    anthropic: "bg-orange-100 text-orange-700",
+    gemini: "bg-purple-100 text-purple-700",
+  };
+  return (
+    <span
+      className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${
+        colors[name] ?? "bg-gray-100 text-gray-700"
+      }`}
+    >
+      {name}
+    </span>
+  );
+}
+
+const defaultConfig: ProviderConfig = {
   providers: {
     transcription: "whisper",
     note_generation: "anthropic",
@@ -33,48 +55,33 @@ const placeholderConfig = {
   },
 };
 
-const placeholderHistory = [
-  {
-    id: "ch_001",
-    changed_by: "admin@aurionclinical.com",
-    changed_at: "2026-04-10T16:00:00Z",
-    field: "providers.note_generation",
-    previous: "openai",
-    new_value: "anthropic",
-    version: 3,
-  },
-  {
-    id: "ch_002",
-    changed_by: "admin@aurionclinical.com",
-    changed_at: "2026-04-08T10:30:00Z",
-    field: "providers.vision",
-    previous: "anthropic",
-    new_value: "openai",
-    version: 2,
-  },
-];
-
-function ProviderBadge({ name }: { name: string }) {
-  const colors: Record<string, string> = {
-    whisper: "bg-green-100 text-green-700",
-    assemblyai: "bg-blue-100 text-blue-700",
-    openai: "bg-emerald-100 text-emerald-700",
-    anthropic: "bg-orange-100 text-orange-700",
-    gemini: "bg-purple-100 text-purple-700",
-  };
-  return (
-    <span
-      className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${
-        colors[name] ?? "bg-gray-100 text-gray-700"
-      }`}
-    >
-      {name}
-    </span>
-  );
-}
-
 export default function ConfigPage() {
-  const cfg = placeholderConfig;
+  const [cfg, setCfg] = useState<ProviderConfig>(defaultConfig);
+  const [history, setHistory] = useState<ConfigChangeEvent[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    async function fetchData() {
+      setLoading(true);
+      setError(null);
+      try {
+        const [configData, historyData] = await Promise.all([
+          getConfig(),
+          getConfigHistory(),
+        ]);
+        setCfg(configData);
+        setHistory(historyData);
+      } catch (err) {
+        setError(
+          err instanceof Error ? err.message : "Failed to load configuration",
+        );
+      } finally {
+        setLoading(false);
+      }
+    }
+    fetchData();
+  }, []);
 
   return (
     <>
@@ -84,6 +91,22 @@ export default function ConfigPage() {
       />
 
       <div className="p-6 lg:p-8">
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+            <button
+              onClick={() => setError(null)}
+              className="ml-2 text-red-500 underline"
+            >
+              dismiss
+            </button>
+          </div>
+        )}
+
+        {loading && (
+          <p className="mb-4 text-sm text-gray-400">Loading configuration...</p>
+        )}
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
           {/* Active Providers */}
           <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
@@ -231,9 +254,6 @@ export default function ConfigPage() {
                       Changed By
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      Field
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                       Previous
                     </th>
                     <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
@@ -245,28 +265,40 @@ export default function ConfigPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {placeholderHistory.map((h) => (
-                    <tr key={h.id} className="hover:bg-gray-50">
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                        {new Date(h.changed_at).toLocaleString()}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                        {h.changed_by}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-500">
-                        {h.field}
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm">
-                        <ProviderBadge name={h.previous} />
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm">
-                        <ProviderBadge name={h.new_value} />
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                        v{h.version}
+                  {history.length === 0 ? (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-8 text-center text-sm text-gray-400"
+                      >
+                        No configuration changes recorded yet.
                       </td>
                     </tr>
-                  ))}
+                  ) : (
+                    history.map((h) => (
+                      <tr key={h.id} className="hover:bg-gray-50">
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                          {new Date(h.changed_at).toLocaleString()}
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                          {h.changed_by}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          <code className="rounded bg-gray-50 px-1.5 py-0.5 text-xs">
+                            {JSON.stringify(h.previous_config).slice(0, 60)}
+                          </code>
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          <code className="rounded bg-gray-50 px-1.5 py-0.5 text-xs">
+                            {JSON.stringify(h.new_config).slice(0, 60)}
+                          </code>
+                        </td>
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
+                          v{h.appconfig_version}
+                        </td>
+                      </tr>
+                    ))
+                  )}
                 </tbody>
               </table>
             </div>

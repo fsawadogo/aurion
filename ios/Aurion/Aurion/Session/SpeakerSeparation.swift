@@ -41,6 +41,14 @@ final class SpeakerSeparation {
     /// Target sample rate for audio processing.
     private let targetSampleRate: Double = 16000.0
 
+    /// Cached Mel filter bank -- computed once from constant parameters,
+    /// reused across all calls to avoid redundant computation.
+    private lazy var cachedMelFilters: [[Float]] = createMelFilterBank(
+        numFilters: numMelFilters,
+        fftSize: fftLength,
+        sampleRate: targetSampleRate
+    )
+
     private init() {}
 
     // MARK: - Voice Embedding Generation
@@ -172,12 +180,8 @@ final class SpeakerSeparation {
         guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(FFT_RADIX2)) else { return nil }
         defer { vDSP_destroy_fftsetup(fftSetup) }
 
-        // Pre-compute Mel filter bank
-        let melFilters = createMelFilterBank(
-            numFilters: numMelFilters,
-            fftSize: fftLength,
-            sampleRate: targetSampleRate
-        )
+        // Use the cached Mel filter bank instead of recomputing per call.
+        let melFilters = cachedMelFilters
 
         var mfccMatrix: [[Float]] = []
 

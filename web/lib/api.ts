@@ -134,7 +134,9 @@ export async function getAuditLog(
 export async function getSessionAudit(
   sessionId: string,
 ): Promise<AuditEvent[]> {
-  const res = await fetchWithAuth(`/api/v1/admin/audit/session/${sessionId}`);
+  const res = await fetchWithAuth(
+    `/api/v1/admin/audit/session/${encodeURIComponent(sessionId)}`,
+  );
   return res.json();
 }
 
@@ -153,7 +155,7 @@ export async function getMaskingReport(
   filters: { date_from?: string; date_to?: string; clinician_id?: string } = {},
 ): Promise<MaskingReport> {
   const res = await fetchWithAuth(
-    `/api/v1/admin/masking${buildQuery(filters)}`,
+    `/api/v1/admin/masking/report${buildQuery(filters)}`,
   );
   return res.json();
 }

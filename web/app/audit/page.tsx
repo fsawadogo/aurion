@@ -1,54 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import Header from "@/components/Header";
 import {
   FunnelIcon,
   ArrowDownTrayIcon,
 } from "@heroicons/react/24/outline";
-
-const placeholderEvents = [
-  {
-    session_id: "sess_001",
-    event_timestamp: "2026-04-10T09:12:34Z",
-    event_type: "session_created",
-    actor_id: "dr_perry",
-    actor_role: "CLINICIAN",
-    details: {},
-  },
-  {
-    session_id: "sess_001",
-    event_timestamp: "2026-04-10T09:12:40Z",
-    event_type: "consent_confirmed",
-    actor_id: "dr_perry",
-    actor_role: "CLINICIAN",
-    details: {},
-  },
-  {
-    session_id: "sess_001",
-    event_timestamp: "2026-04-10T09:12:45Z",
-    event_type: "recording_started",
-    actor_id: "dr_perry",
-    actor_role: "CLINICIAN",
-    details: {},
-  },
-  {
-    session_id: "sess_001",
-    event_timestamp: "2026-04-10T09:28:10Z",
-    event_type: "stage1_started",
-    actor_id: "system",
-    actor_role: "ADMIN",
-    details: { provider: "anthropic" },
-  },
-  {
-    session_id: "sess_001",
-    event_timestamp: "2026-04-10T09:28:35Z",
-    event_type: "stage1_delivered",
-    actor_id: "system",
-    actor_role: "ADMIN",
-    details: { latency_ms: 24500 },
-  },
-];
+import { getAuditLog, exportAuditCsv } from "@/lib/api";
+import type { AuditEvent, AuditFilters, PaginatedResponse } from "@/types";
 
 const eventTypeColors: Record<string, string> = {
   session_created: "bg-blue-100 text-blue-700",
@@ -61,13 +20,79 @@ const eventTypeColors: Record<string, string> = {
   full_note_delivered: "bg-emerald-100 text-emerald-700",
   note_exported: "bg-teal-100 text-teal-700",
   session_purged: "bg-gray-100 text-gray-700",
+  user_created: "bg-blue-100 text-blue-700",
+  user_updated: "bg-amber-100 text-amber-700",
+  config_changed: "bg-orange-100 text-orange-700",
+  masking_confirmed: "bg-green-100 text-green-700",
+  masking_failed: "bg-red-100 text-red-700",
+  eval_score_submitted: "bg-purple-100 text-purple-700",
 };
 
 export default function AuditPage() {
+  const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Filters
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [eventType, setEventType] = useState("");
   const [clinician, setClinician] = useState("");
+
+  const pageSize = 50;
+
+  const fetchEvents = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const filters: AuditFilters = {
+        page,
+        page_size: pageSize,
+      };
+      if (dateFrom) filters.date_from = dateFrom;
+      if (dateTo) filters.date_to = dateTo;
+      if (eventType) filters.event_type = eventType;
+      if (clinician) filters.clinician_id = clinician;
+
+      const data: PaginatedResponse<AuditEvent> = await getAuditLog(filters);
+      setEvents(data.items);
+      setTotal(data.total);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load audit log");
+    } finally {
+      setLoading(false);
+    }
+  }, [page, dateFrom, dateTo, eventType, clinician]);
+
+  useEffect(() => {
+    fetchEvents();
+  }, [fetchEvents]);
+
+  async function handleExportCsv() {
+    try {
+      const filters: AuditFilters = {};
+      if (dateFrom) filters.date_from = dateFrom;
+      if (dateTo) filters.date_to = dateTo;
+      if (eventType) filters.event_type = eventType;
+      if (clinician) filters.clinician_id = clinician;
+
+      const blob = await exportAuditCsv(filters);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "aurion_audit_log.csv";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "CSV export failed");
+    }
+  }
+
+  const totalPages = Math.ceil(total / pageSize);
 
   return (
     <>
@@ -77,6 +102,18 @@ export default function AuditPage() {
       />
 
       <div className="p-6 lg:p-8">
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+            <button
+              onClick={() => setError(null)}
+              className="ml-2 text-red-500 underline"
+            >
+              dismiss
+            </button>
+          </div>
+        )}
+
         {/* Filters */}
         <div className="mb-6 flex flex-wrap items-end gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
           <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
@@ -88,7 +125,7 @@ export default function AuditPage() {
             <input
               type="date"
               value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
+              onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
             />
           </div>
@@ -97,7 +134,7 @@ export default function AuditPage() {
             <input
               type="date"
               value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
+              onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
             />
           </div>
@@ -109,7 +146,7 @@ export default function AuditPage() {
               type="text"
               placeholder="All clinicians"
               value={clinician}
-              onChange={(e) => setClinician(e.target.value)}
+              onChange={(e) => { setClinician(e.target.value); setPage(1); }}
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
             />
           </div>
@@ -119,7 +156,7 @@ export default function AuditPage() {
             </label>
             <select
               value={eventType}
-              onChange={(e) => setEventType(e.target.value)}
+              onChange={(e) => { setEventType(e.target.value); setPage(1); }}
               className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
             >
               <option value="">All events</option>
@@ -133,9 +170,14 @@ export default function AuditPage() {
               <option value="full_note_delivered">full_note_delivered</option>
               <option value="note_exported">note_exported</option>
               <option value="session_purged">session_purged</option>
+              <option value="masking_confirmed">masking_confirmed</option>
+              <option value="config_changed">config_changed</option>
             </select>
           </div>
-          <button className="flex items-center gap-2 rounded-lg bg-gold px-4 py-2 text-sm font-medium text-navy transition-colors hover:bg-gold-600">
+          <button
+            onClick={handleExportCsv}
+            className="flex items-center gap-2 rounded-lg bg-gold px-4 py-2 text-sm font-medium text-navy transition-colors hover:bg-gold-600"
+          >
             <ArrowDownTrayIcon className="h-4 w-4" />
             Export CSV
           </button>
@@ -157,57 +199,81 @@ export default function AuditPage() {
                     Event
                   </th>
                   <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Actor
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Role
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
                     Details
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {placeholderEvents.map((evt, i) => (
-                  <tr key={i} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                      {new Date(evt.event_timestamp).toLocaleString()}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-500">
-                      {evt.session_id}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      <span
-                        className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          eventTypeColors[evt.event_type] ??
-                          "bg-gray-100 text-gray-700"
-                        }`}
-                      >
-                        {evt.event_type}
-                      </span>
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                      {evt.actor_id}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                      {evt.actor_role}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-400">
-                      {Object.keys(evt.details).length > 0
-                        ? JSON.stringify(evt.details)
-                        : "--"}
+                {loading ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400">
+                      Loading audit events...
                     </td>
                   </tr>
-                ))}
+                ) : events.length === 0 ? (
+                  <tr>
+                    <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400">
+                      No audit events found matching the current filters.
+                    </td>
+                  </tr>
+                ) : (
+                  events.map((evt, i) => (
+                    <tr key={`${evt.session_id}-${evt.event_timestamp}-${i}`} className="hover:bg-gray-50">
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                        {new Date(evt.event_timestamp).toLocaleString()}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-500">
+                        {evt.session_id.length > 12
+                          ? `${evt.session_id.slice(0, 8)}...`
+                          : evt.session_id}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm">
+                        <span
+                          className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
+                            eventTypeColors[evt.event_type] ??
+                            "bg-gray-100 text-gray-700"
+                          }`}
+                        >
+                          {evt.event_type}
+                        </span>
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-400">
+                        {evt.details && Object.keys(evt.details).length > 0
+                          ? JSON.stringify(evt.details).slice(0, 80)
+                          : "--"}
+                      </td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
-        <p className="mt-4 text-center text-xs text-gray-400">
-          Showing placeholder data. Connect to the FastAPI backend to display
-          live audit events.
-        </p>
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div className="mt-4 flex items-center justify-between">
+            <p className="text-sm text-gray-500">
+              Page {page} of {totalPages} ({total} events)
+            </p>
+            <div className="flex gap-2">
+              <button
+                disabled={page <= 1}
+                onClick={() => setPage((p) => p - 1)}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+              >
+                Previous
+              </button>
+              <button
+                disabled={page >= totalPages}
+                onClick={() => setPage((p) => p + 1)}
+                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </>
   );

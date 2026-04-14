@@ -15,9 +15,7 @@ from app.core.types import (
     TranscriptSegment,
 )
 from app.modules.note_gen.service import calculate_completeness, get_template, load_templates
-from app.modules.providers.note_gen.openai import SYSTEM_PROMPT as OPENAI_PROMPT
-from app.modules.providers.note_gen.anthropic import SYSTEM_PROMPT as ANTHROPIC_PROMPT
-from app.modules.providers.note_gen.gemini import SYSTEM_PROMPT as GEMINI_PROMPT
+from app.modules.providers.note_gen.shared import NOTE_GEN_SYSTEM_PROMPT
 
 
 ORTHO_TEMPLATE = Template(
@@ -141,19 +139,15 @@ class TestTemplateLoading:
 
 
 class TestSystemPrompts:
-    """All three providers must use the EXACT same system prompt."""
-
-    def test_all_providers_use_same_system_prompt(self):
-        assert OPENAI_PROMPT == ANTHROPIC_PROMPT
-        assert ANTHROPIC_PROMPT == GEMINI_PROMPT
+    """All providers use the single shared system prompt."""
 
     def test_system_prompt_enforces_descriptive_mode(self):
-        assert "Do not infer" in OPENAI_PROMPT
-        assert "Do not conclude what it means" in OPENAI_PROMPT
-        assert "traceable to a source" in OPENAI_PROMPT
+        assert "Do not infer" in NOTE_GEN_SYSTEM_PROMPT
+        assert "Do not conclude what it means" in NOTE_GEN_SYSTEM_PROMPT
+        assert "traceable to a source" in NOTE_GEN_SYSTEM_PROMPT
 
     def test_system_prompt_requires_json(self):
-        assert "Return only valid JSON" in OPENAI_PROMPT
+        assert "Return only valid JSON" in NOTE_GEN_SYSTEM_PROMPT
 
     def test_system_prompt_no_fabrication(self):
-        assert "Never fabricate content" in OPENAI_PROMPT
+        assert "Never fabricate content" in NOTE_GEN_SYSTEM_PROMPT

@@ -16,9 +16,7 @@ from app.modules.vision.service import (
     has_unresolved_conflicts,
     merge_visual_citations,
 )
-from app.modules.providers.vision.openai import VISION_SYSTEM_PROMPT as OPENAI_VISION_PROMPT
-from app.modules.providers.vision.anthropic import VISION_SYSTEM_PROMPT as ANTHROPIC_VISION_PROMPT
-from app.modules.providers.vision.gemini import VISION_SYSTEM_PROMPT as GEMINI_VISION_PROMPT
+from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT
 
 
 def _make_caption(
@@ -203,17 +201,13 @@ class TestFrameWindowFromConfig:
 class TestVisionSystemPrompts:
     """All three vision providers must use the EXACT same system prompt."""
 
-    def test_all_vision_providers_use_same_prompt(self):
-        assert OPENAI_VISION_PROMPT == ANTHROPIC_VISION_PROMPT
-        assert ANTHROPIC_VISION_PROMPT == GEMINI_VISION_PROMPT
-
     def test_vision_prompt_enforces_descriptive_mode(self):
-        assert "Do not diagnose" in OPENAI_VISION_PROMPT
-        assert "literally visible" in OPENAI_VISION_PROMPT
+        assert "Do not diagnose" in VISION_SYSTEM_PROMPT
+        assert "literally visible" in VISION_SYSTEM_PROMPT
 
     def test_vision_prompt_requires_json(self):
-        assert "Return JSON only" in OPENAI_VISION_PROMPT
+        assert "Return JSON only" in VISION_SYSTEM_PROMPT
 
     def test_vision_prompt_defines_confidence_low(self):
-        assert "blurry" in OPENAI_VISION_PROMPT
-        assert "LOW" in OPENAI_VISION_PROMPT
+        assert "blurry" in VISION_SYSTEM_PROMPT
+        assert "LOW" in VISION_SYSTEM_PROMPT

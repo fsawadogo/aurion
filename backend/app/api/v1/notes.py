@@ -90,7 +90,6 @@ async def get_stage1_note(
     """
     session = await _get_session_or_404(db, session_id)
 
-    # Stage 1 note is available once session reaches AWAITING_REVIEW
     valid_states = {
         SessionState.AWAITING_REVIEW,
         SessionState.PROCESSING_STAGE2,
@@ -138,7 +137,6 @@ async def approve_stage1_note(
             ),
         )
 
-    # Verify the Stage 1 note exists
     note = await get_note_by_stage(str(session_id), stage=1, db=db)
     if not note:
         raise HTTPException(
@@ -146,7 +144,6 @@ async def approve_stage1_note(
             detail="No Stage 1 note found to approve.",
         )
 
-    # Approve the note
     try:
         approved_note = await approve_note(str(session_id), db)
     except ValueError as exc:
@@ -155,7 +152,6 @@ async def approve_stage1_note(
             detail=str(exc),
         )
 
-    # Transition session to PROCESSING_STAGE2
     try:
         await transition_session(db, session, SessionState.PROCESSING_STAGE2)
     except InvalidTransitionError as exc:
@@ -164,7 +160,6 @@ async def approve_stage1_note(
             detail=str(exc),
         )
 
-    # Write audit log events
     audit = get_audit_log_service()
     await audit.write_event(
         session_id=str(session_id),
@@ -225,7 +220,6 @@ async def approve_final_note(
     """
     session = await _get_session_or_404(db, session_id)
 
-    # Allow approval from PROCESSING_STAGE2 or REVIEW_COMPLETE
     allowed_states = {SessionState.PROCESSING_STAGE2, SessionState.REVIEW_COMPLETE}
     if session.state not in allowed_states:
         raise HTTPException(
@@ -236,7 +230,6 @@ async def approve_final_note(
             ),
         )
 
-    # Get the latest note
     note = await get_latest_note(str(session_id), db)
     if not note:
         raise HTTPException(
@@ -244,10 +237,8 @@ async def approve_final_note(
             detail="No note found to approve.",
         )
 
-    # Check for unresolved CONFLICTS -- 100% must be resolved before approval
     _check_unresolved_conflicts(note)
 
-    # Check if already approved
     already_approved = await is_note_approved(str(session_id), db)
     if already_approved and session.state == SessionState.REVIEW_COMPLETE:
         return NoteApprovalResponse(
@@ -258,7 +249,6 @@ async def approve_final_note(
             message="Note was already approved.",
         )
 
-    # Approve the note
     try:
         approved_note = await approve_note(str(session_id), db)
     except ValueError as exc:
@@ -267,7 +257,6 @@ async def approve_final_note(
             detail=str(exc),
         )
 
-    # Transition to REVIEW_COMPLETE if not already there
     if session.state == SessionState.PROCESSING_STAGE2:
         try:
             await transition_session(db, session, SessionState.REVIEW_COMPLETE)
@@ -277,7 +266,6 @@ async def approve_final_note(
                 detail=str(exc),
             )
 
-    # Write audit log event
     audit = get_audit_log_service()
     await audit.write_event(
         session_id=str(session_id),
@@ -334,7 +322,6 @@ async def edit_note_endpoint(
             detail=str(exc),
         )
 
-    # Write audit event -- note_version_created
     audit = get_audit_log_service()
     await audit.write_event(
         session_id=str(session_id),
@@ -360,19 +347,14 @@ async def _get_session_or_404(db: AsyncSession, session_id: uuid.UUID):
 
 
 def _check_unresolved_conflicts(note) -> None:
-    """Raise 409 if the note has any unresolved CONFLICTS from vision.
-
-    Per CLAUDE.md: CONFLICTS are surfaced side by side in review UI,
-    flagged amber, mandatory physician resolution before approval.
-    Never auto-resolve.
-    """
+    """Raise 409 if the note has any unresolved CONFLICTS from vision."""
     for section in note.sections:
         for claim in section.claims:
-            if claim.source_type == "visual" and "CONFLICTS" in claim.text.upper():
+            if claim.source_type == "visual" and claim.id.startswith("conflict_"):
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
                     detail=(
-                        f"Unresolved CONFLICTS found in section '{section.id}'. "
+                        f"Unresolved conflict in section '{section.id}'. "
                         "All conflicts must be resolved before approval."
                     ),
                 )

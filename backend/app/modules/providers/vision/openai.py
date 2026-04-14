@@ -1,12 +1,11 @@
-"""OpenAI vision provider — real implementation.
+"""OpenAI vision provider -- real implementation.
 
 Calls GPT-4o Vision to generate descriptive captions for masked clinical frames.
-Uses the EXACT vision system prompt from CLAUDE.md — no variations.
+Uses the shared system prompt and caption builder from shared.py.
 """
 
 from __future__ import annotations
 
-import base64
 import json
 import logging
 import os
@@ -14,22 +13,15 @@ from typing import Any
 
 import httpx
 
+from app.core.s3 import load_frame_image_base64
 from app.core.types import FrameCaption, MaskedFrame, ProviderError, TranscriptSegment
 from app.modules.providers.base import VisionProvider
+from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT, build_frame_caption
 
 logger = logging.getLogger("aurion.providers.vision.openai")
 
 _OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
 _MODEL = "gpt-4o"
-
-# EXACT vision system prompt from CLAUDE.md — no variations
-VISION_SYSTEM_PROMPT = """You are a clinical visual documentation assistant. Describe only what is literally visible in this image. Do not diagnose, interpret, or infer clinical meaning.
-
-Describe: patient position, visible body parts being examined, observable physical findings (swelling, redness, range of motion if measurable), equipment in use, screen content.
-Do not describe: clinical meaning, what findings suggest, what should be done, anything not directly visible.
-
-Return JSON only: {"description": "...", "confidence": "high|medium|low", "confidence_reason": "..."}
-Confidence is LOW if: blurry, wrong angle, subject not clearly visible, no clinically relevant content visible."""
 
 
 class OpenAIVisionProvider(VisionProvider):
@@ -41,8 +33,7 @@ class OpenAIVisionProvider(VisionProvider):
         if not _OPENAI_API_KEY:
             raise ProviderError("openai", "OPENAI_API_KEY not configured")
 
-        # Load frame from S3 or use placeholder for testing
-        image_data = await self._load_frame_image(frame)
+        image_data = load_frame_image_base64(frame.s3_key)
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
@@ -86,49 +77,8 @@ class OpenAIVisionProvider(VisionProvider):
                 response.raise_for_status()
                 data = response.json()
                 content = json.loads(data["choices"][0]["message"]["content"])
-                return self._build_caption(frame, anchor, content)
+                return build_frame_caption(frame, anchor, content, "openai")
 
         except httpx.HTTPError as e:
             logger.error("OpenAI vision failed: frame=%s error=%s", frame.frame_id, str(e))
             raise ProviderError("openai", f"Vision captioning failed: {e}", e)
-
-    async def _load_frame_image(self, frame: MaskedFrame) -> str:
-        """Load frame image from S3 and return base64-encoded string."""
-        try:
-            import boto3
-            endpoint_url = os.getenv("AWS_ENDPOINT_URL")
-            s3 = boto3.client(
-                "s3",
-                region_name=os.getenv("AWS_DEFAULT_REGION", "ca-central-1"),
-                endpoint_url=endpoint_url,
-            )
-            bucket = os.getenv("FRAMES_S3_BUCKET", "aurion-frames-local")
-            obj = s3.get_object(Bucket=bucket, Key=frame.s3_key)
-            return base64.b64encode(obj["Body"].read()).decode("utf-8")
-        except Exception:
-            # Return a tiny placeholder for testing
-            return base64.b64encode(b"placeholder").decode("utf-8")
-
-    def _build_caption(
-        self, frame: MaskedFrame, anchor: TranscriptSegment, content: dict
-    ) -> FrameCaption:
-        confidence = content.get("confidence", "medium")
-        description = content.get("description", "")
-        reason = content.get("confidence_reason", "")
-
-        # Determine integration status based on comparing visual to audio
-        integration_status = "ENRICHES"  # Default — visual adds new info
-
-        return FrameCaption(
-            frame_id=frame.frame_id,
-            session_id=frame.session_id,
-            timestamp_ms=frame.timestamp_ms,
-            audio_anchor_id=anchor.id,
-            provider_used="openai",
-            visual_description=description,
-            confidence=confidence,
-            confidence_reason=reason,
-            conflict_flag=False,
-            conflict_detail=None,
-            integration_status=integration_status,
-        )

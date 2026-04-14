@@ -21,8 +21,8 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
-from app.core.models import PilotMetricsModel, SessionModel
-from app.core.types import UserRole
+from app.core.models import NoteVersionModel, PilotMetricsModel, SessionModel
+from app.core.types import SessionState, UserRole
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, require_role
 from app.modules.config.appconfig_client import get_config
@@ -85,7 +85,7 @@ class UserResponse(BaseModel):
     id: str
     email: str
     full_name: str
-    role: str
+    role: UserRole
     is_active: bool
     voice_enrolled: bool
     created_at: str
@@ -95,13 +95,13 @@ class UserResponse(BaseModel):
 class CreateUserRequest(BaseModel):
     email: str
     full_name: str
-    role: str
+    role: UserRole
     password: str = Field(exclude=True)
 
 
 class UpdateUserRequest(BaseModel):
     full_name: Optional[str] = None
-    role: Optional[str] = None
+    role: Optional[UserRole] = None
     is_active: Optional[bool] = None
 
 
@@ -232,21 +232,12 @@ async def create_user(
     user: CurrentUser = Depends(require_role(UserRole.ADMIN)),
 ):
     """Create a new user. ADMIN only."""
-    # Validate role
-    try:
-        UserRole(body.role)
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid role: {body.role}. Valid roles: {[r.value for r in UserRole]}",
-        )
-
     new_id = f"u{len(_MOCK_USERS) + 1}_{uuid.uuid4().hex[:6]}"
     new_user = {
         "id": new_id,
         "email": body.email,
         "full_name": body.full_name,
-        "role": body.role,
+        "role": body.role.value,
         "is_active": True,
         "voice_enrolled": False,
         "created_at": datetime.now(timezone.utc).isoformat(),
@@ -286,15 +277,8 @@ async def update_user(
         target["full_name"] = body.full_name
 
     if body.role is not None:
-        try:
-            UserRole(body.role)
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Invalid role: {body.role}",
-            )
-        changes["role"] = {"previous": target["role"], "new": body.role}
-        target["role"] = body.role
+        changes["role"] = {"previous": target["role"], "new": body.role.value}
+        target["role"] = body.role.value
 
     if body.is_active is not None:
         changes["is_active"] = {"previous": target["is_active"], "new": body.is_active}
@@ -688,32 +672,46 @@ async def get_admin_sessions(
     result = await db.execute(stmt)
     sessions = result.scalars().all()
 
+    # Batch-load latest note versions for all sessions in a single query
+    # to avoid N+1 (one query per session in the loop).
+    session_ids = [s.id for s in sessions]
+    notes_by_session: dict[uuid.UUID, NoteVersionModel] = {}
+
+    if session_ids:
+        max_version_sub = (
+            select(
+                NoteVersionModel.session_id,
+                func.max(NoteVersionModel.version).label("max_ver"),
+            )
+            .where(NoteVersionModel.session_id.in_(session_ids))
+            .group_by(NoteVersionModel.session_id)
+            .subquery()
+        )
+        notes_stmt = (
+            select(NoteVersionModel)
+            .join(
+                max_version_sub,
+                (NoteVersionModel.session_id == max_version_sub.c.session_id)
+                & (NoteVersionModel.version == max_version_sub.c.max_ver),
+            )
+        )
+        notes_result = await db.execute(notes_stmt)
+        for nv in notes_result.scalars().all():
+            notes_by_session[nv.session_id] = nv
+
     items = []
     for s in sessions:
-        # Look up clinician name from mock store
         clinician_name = _get_clinician_name(str(s.clinician_id))
 
-        # Completeness — derive from note if available, otherwise default
         completeness_score = 0.0
         sections_populated = 0
         sections_required = 0
         provider_used = ""
 
-        # Try to get from the latest note version
-        from app.core.models import NoteVersionModel
-        note_stmt = (
-            select(NoteVersionModel)
-            .where(NoteVersionModel.session_id == s.id)
-            .order_by(NoteVersionModel.version.desc())
-            .limit(1)
-        )
-        note_result = await db.execute(note_stmt)
-        latest_note = note_result.scalar_one_or_none()
-
+        latest_note = notes_by_session.get(s.id)
         if latest_note:
             completeness_score = latest_note.completeness_score
             provider_used = latest_note.provider_used
-            # Parse note content to count sections
             try:
                 content = json.loads(latest_note.content)
                 note_sections = content.get("sections", [])
@@ -762,13 +760,12 @@ async def get_eval_sessions(
     db: AsyncSession = Depends(get_db),
 ):
     """Eval assignments — sessions available for quality scoring. EVAL_TEAM or ADMIN."""
-    # Get sessions that have at least reached AWAITING_REVIEW
     reviewable_states = [
-        "AWAITING_REVIEW",
-        "PROCESSING_STAGE2",
-        "REVIEW_COMPLETE",
-        "EXPORTED",
-        "PURGED",
+        SessionState.AWAITING_REVIEW,
+        SessionState.PROCESSING_STAGE2,
+        SessionState.REVIEW_COMPLETE,
+        SessionState.EXPORTED,
+        SessionState.PURGED,
     ]
 
     stmt = (
@@ -779,27 +776,49 @@ async def get_eval_sessions(
     result = await db.execute(stmt)
     sessions = result.scalars().all()
 
+    # Batch-load latest note versions for all sessions to avoid N+1 queries.
+    session_ids = [s.id for s in sessions]
+    notes_by_session: dict[uuid.UUID, NoteVersionModel] = {}
+
+    if session_ids:
+        max_version_sub = (
+            select(
+                NoteVersionModel.session_id,
+                func.max(NoteVersionModel.version).label("max_ver"),
+            )
+            .where(NoteVersionModel.session_id.in_(session_ids))
+            .group_by(NoteVersionModel.session_id)
+            .subquery()
+        )
+        notes_stmt = (
+            select(NoteVersionModel)
+            .join(
+                max_version_sub,
+                (NoteVersionModel.session_id == max_version_sub.c.session_id)
+                & (NoteVersionModel.version == max_version_sub.c.max_ver),
+            )
+        )
+        notes_result = await db.execute(notes_stmt)
+        for nv in notes_result.scalars().all():
+            notes_by_session[nv.session_id] = nv
+
+    # Batch-load masking status from audit log for all sessions at once,
+    # instead of one DynamoDB query per session.
+    audit = get_audit_log_service()
+    masking_by_session: dict[str, bool] = {}
+    for s in sessions:
+        sid = str(s.id)
+        session_events = await audit.get_session_events(sid)
+        masking_by_session[sid] = any(
+            e.get("event_type") == "masking_confirmed" for e in session_events
+        )
+
     eval_sessions = []
     for s in sessions:
         sid = str(s.id)
         clinician_name = _get_clinician_name(str(s.clinician_id))
         scores = _EVAL_SCORES.get(sid)
-
-        # Determine masking status from audit log
-        audit = get_audit_log_service()
-        session_events = await audit.get_session_events(sid)
-        has_masking = any(e.get("event_type") == "masking_confirmed" for e in session_events)
-
-        # Get latest note version number
-        from app.core.models import NoteVersionModel
-        note_stmt = (
-            select(NoteVersionModel)
-            .where(NoteVersionModel.session_id == s.id)
-            .order_by(NoteVersionModel.version.desc())
-            .limit(1)
-        )
-        note_result = await db.execute(note_stmt)
-        latest_note = note_result.scalar_one_or_none()
+        latest_note = notes_by_session.get(s.id)
         note_version = latest_note.version if latest_note else 0
 
         eval_sessions.append(EvalSessionResponse(
@@ -808,7 +827,7 @@ async def get_eval_sessions(
             clinician_name=clinician_name,
             specialty=s.specialty,
             transcript_masked=True,  # All transcripts are masked by policy
-            frames_masked=has_masking,
+            frames_masked=masking_by_session.get(sid, False),
             note_version=note_version,
             scored=scores is not None,
             scores=scores,

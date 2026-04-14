@@ -285,7 +285,7 @@ class TestVisionProviders:
         }
         with patch("app.modules.providers.vision.openai.httpx.AsyncClient") as mc, \
              patch("app.modules.providers.vision.openai._OPENAI_API_KEY", "test"), \
-             patch.object(provider, "_load_frame_image", new_callable=AsyncMock, return_value="dGVzdA=="):
+             patch("app.core.s3.load_frame_image_base64", return_value="dGVzdA=="):
             inst = AsyncMock()
             inst.post = AsyncMock(return_value=mock_resp)
             inst.__aenter__ = AsyncMock(return_value=inst)
@@ -304,7 +304,7 @@ class TestVisionProviders:
         mock_resp.json.return_value = {"content": [{"text": _MOCK_VISION_JSON}]}
         with patch("app.modules.providers.vision.anthropic.httpx.AsyncClient") as mc, \
              patch("app.modules.providers.vision.anthropic._ANTHROPIC_API_KEY", "test"), \
-             patch.object(provider, "_load_frame_image", new_callable=AsyncMock, return_value="dGVzdA=="):
+             patch("app.core.s3.load_frame_image_base64", return_value="dGVzdA=="):
             inst = AsyncMock()
             inst.post = AsyncMock(return_value=mock_resp)
             inst.__aenter__ = AsyncMock(return_value=inst)
@@ -323,7 +323,7 @@ class TestVisionProviders:
         }
         with patch("app.modules.providers.vision.gemini.httpx.AsyncClient") as mc, \
              patch("app.modules.providers.vision.gemini._GOOGLE_AI_API_KEY", "test"), \
-             patch.object(provider, "_load_frame_image", new_callable=AsyncMock, return_value="dGVzdA=="):
+             patch("app.core.s3.load_frame_image_base64", return_value="dGVzdA=="):
             inst = AsyncMock()
             inst.post = AsyncMock(return_value=mock_resp)
             inst.__aenter__ = AsyncMock(return_value=inst)

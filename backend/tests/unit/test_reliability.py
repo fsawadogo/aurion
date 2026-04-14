@@ -189,7 +189,7 @@ async def test_cleanup_verify_purge_empty_bucket():
     mock_client.list_objects_v2 = MagicMock(return_value={"KeyCount": 0})
 
     with patch(
-        "app.modules.cleanup.service._get_s3_client",
+        "app.modules.cleanup.service.get_s3_client",
         return_value=mock_client,
     ):
         from app.modules.cleanup.service import verify_purge
@@ -213,7 +213,7 @@ async def test_cleanup_verify_purge_with_remaining():
     )
 
     with patch(
-        "app.modules.cleanup.service._get_s3_client",
+        "app.modules.cleanup.service.get_s3_client",
         return_value=mock_client,
     ):
         from app.modules.cleanup.service import verify_purge

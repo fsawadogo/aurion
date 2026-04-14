@@ -1,67 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import { PlusIcon } from "@heroicons/react/24/outline";
-import type { UserRole } from "@/types";
-
-interface PlaceholderUser {
-  id: string;
-  full_name: string;
-  email: string;
-  role: UserRole;
-  is_active: boolean;
-  voice_enrolled: boolean;
-  last_login_at: string | null;
-}
-
-const placeholderUsers: PlaceholderUser[] = [
-  {
-    id: "u1",
-    full_name: "Dr. Perry Gdalevitch",
-    email: "perry@creoq.ca",
-    role: "CLINICIAN",
-    is_active: true,
-    voice_enrolled: true,
-    last_login_at: "2026-04-10T14:30:00Z",
-  },
-  {
-    id: "u2",
-    full_name: "Dr. Marie Gdalevitch",
-    email: "marie@creoq.ca",
-    role: "CLINICIAN",
-    is_active: true,
-    voice_enrolled: false,
-    last_login_at: "2026-04-09T09:15:00Z",
-  },
-  {
-    id: "u3",
-    full_name: "Compliance Officer",
-    email: "compliance@aurionclinical.com",
-    role: "COMPLIANCE_OFFICER",
-    is_active: true,
-    voice_enrolled: false,
-    last_login_at: null,
-  },
-  {
-    id: "u4",
-    full_name: "Eval Reviewer",
-    email: "eval@aurionclinical.com",
-    role: "EVAL_TEAM",
-    is_active: true,
-    voice_enrolled: false,
-    last_login_at: null,
-  },
-  {
-    id: "u5",
-    full_name: "Faical Sawadogo",
-    email: "admin@aurionclinical.com",
-    role: "ADMIN",
-    is_active: true,
-    voice_enrolled: false,
-    last_login_at: "2026-04-11T08:00:00Z",
-  },
-];
+import { getUsers, createUser, updateUser } from "@/lib/api";
+import type { User, UserRole, CreateUserPayload } from "@/types";
 
 const roleBadgeColors: Record<UserRole, string> = {
   CLINICIAN: "bg-blue-100 text-blue-700",
@@ -72,7 +15,66 @@ const roleBadgeColors: Record<UserRole, string> = {
 };
 
 export default function UsersPage() {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
+
+  // Create form state
+  const [newName, setNewName] = useState("");
+  const [newEmail, setNewEmail] = useState("");
+  const [newRole, setNewRole] = useState<UserRole>("CLINICIAN");
+  const [newPassword, setNewPassword] = useState("");
+  const [creating, setCreating] = useState(false);
+
+  async function fetchUsers() {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getUsers();
+      setUsers(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to load users");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  async function handleCreate() {
+    setCreating(true);
+    try {
+      const payload: CreateUserPayload = {
+        full_name: newName,
+        email: newEmail,
+        role: newRole,
+        password: newPassword,
+      };
+      await createUser(payload);
+      setShowCreateModal(false);
+      setNewName("");
+      setNewEmail("");
+      setNewRole("CLINICIAN");
+      setNewPassword("");
+      await fetchUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to create user");
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDeactivate(userId: string) {
+    try {
+      await updateUser(userId, { role: undefined });
+      await fetchUsers();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update user");
+    }
+  }
 
   return (
     <>
@@ -82,10 +84,22 @@ export default function UsersPage() {
       />
 
       <div className="p-6 lg:p-8">
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+            <button
+              onClick={() => setError(null)}
+              className="ml-2 text-red-500 underline"
+            >
+              dismiss
+            </button>
+          </div>
+        )}
+
         {/* Actions */}
         <div className="mb-6 flex items-center justify-between">
           <p className="text-sm text-gray-500">
-            {placeholderUsers.length} users
+            {loading ? "Loading..." : `${users.length} users`}
           </p>
           <button
             onClick={() => setShowCreateModal(true)}
@@ -126,7 +140,7 @@ export default function UsersPage() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {placeholderUsers.map((user) => (
+                {users.map((user) => (
                   <tr key={user.id} className="hover:bg-gray-50">
                     <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900">
                       {user.full_name}
@@ -137,7 +151,8 @@ export default function UsersPage() {
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
                       <span
                         className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                          roleBadgeColors[user.role]
+                          roleBadgeColors[user.role as UserRole] ??
+                          "bg-gray-100 text-gray-700"
                         }`}
                       >
                         {user.role}
@@ -169,19 +184,32 @@ export default function UsersPage() {
                         Edit
                       </button>
                       {user.is_active && (
-                        <button className="text-red-500 hover:text-red-700">
+                        <button
+                          onClick={() => handleDeactivate(user.id)}
+                          className="text-red-500 hover:text-red-700"
+                        >
                           Deactivate
                         </button>
                       )}
                     </td>
                   </tr>
                 ))}
+                {!loading && users.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-4 py-8 text-center text-sm text-gray-400"
+                    >
+                      No users found.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
         </div>
 
-        {/* Create modal stub */}
+        {/* Create modal */}
         {showCreateModal && (
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
             <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
@@ -195,6 +223,8 @@ export default function UsersPage() {
                   </label>
                   <input
                     type="text"
+                    value={newName}
+                    onChange={(e) => setNewName(e.target.value)}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
                   />
                 </div>
@@ -204,6 +234,8 @@ export default function UsersPage() {
                   </label>
                   <input
                     type="email"
+                    value={newEmail}
+                    onChange={(e) => setNewEmail(e.target.value)}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
                   />
                 </div>
@@ -211,7 +243,11 @@ export default function UsersPage() {
                   <label className="mb-1 block text-sm font-medium text-gray-700">
                     Role
                   </label>
-                  <select className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30">
+                  <select
+                    value={newRole}
+                    onChange={(e) => setNewRole(e.target.value as UserRole)}
+                    className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
+                  >
                     <option value="CLINICIAN">CLINICIAN</option>
                     <option value="EVAL_TEAM">EVAL_TEAM</option>
                     <option value="COMPLIANCE_OFFICER">
@@ -227,6 +263,8 @@ export default function UsersPage() {
                   </label>
                   <input
                     type="password"
+                    value={newPassword}
+                    onChange={(e) => setNewPassword(e.target.value)}
                     className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
                   />
                 </div>
@@ -238,8 +276,12 @@ export default function UsersPage() {
                 >
                   Cancel
                 </button>
-                <button className="rounded-lg bg-gold px-4 py-2 text-sm font-medium text-navy hover:bg-gold-600">
-                  Create
+                <button
+                  onClick={handleCreate}
+                  disabled={creating || !newName || !newEmail || !newPassword}
+                  className="rounded-lg bg-gold px-4 py-2 text-sm font-medium text-navy hover:bg-gold-600 disabled:opacity-60"
+                >
+                  {creating ? "Creating..." : "Create"}
                 </button>
               </div>
             </div>

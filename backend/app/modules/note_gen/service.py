@@ -73,7 +73,7 @@ def load_templates() -> dict[str, Template]:
             logger.info(
                 "Loaded template: %s (%d sections)", template.key, len(template.sections)
             )
-        except (json.JSONDecodeError, Exception) as exc:
+        except Exception as exc:
             logger.error("Failed to load template %s: %s", template_file.name, exc)
 
     return _templates_cache
@@ -245,17 +245,12 @@ async def generate_stage1_note(
         type(provider).__name__,
     )
 
-    # Call the provider -- it receives the transcript, template, and stage.
-    # The provider implementation is responsible for including the
-    # NOTE_GENERATION_SYSTEM_PROMPT on every call.
     note = await provider.generate_note(transcript, template, stage=1)
 
-    # Ensure the note has the correct session metadata
     note.session_id = session_id
     note.stage = 1
     note.specialty = specialty
 
-    # Calculate completeness score
     note.completeness_score = round(calculate_completeness(note, template), 4)
 
     logger.info(
@@ -266,7 +261,6 @@ async def generate_stage1_note(
         len(note.sections),
     )
 
-    # Create immutable version record
     await create_note_version(session_id, note, db)
 
     return note
@@ -282,9 +276,7 @@ async def create_note_version(
     """Create a new immutable note version record.
 
     Every edit creates a new version. No version is ever deleted.
-    Uses json.dumps to serialize note content.
     """
-    # Determine the next version number
     result = await db.execute(
         select(func.max(NoteVersionModel.version)).where(
             NoteVersionModel.session_id == uuid.UUID(session_id)
@@ -386,7 +378,6 @@ async def approve_note(
         # Already approved -- return existing note
         return _deserialize_note(version_record)
 
-    # Mark the current version as approved
     version_record.is_approved = True
     await db.flush()
 
@@ -428,7 +419,6 @@ async def edit_note(
     if not latest:
         raise ValueError(f"No note found for session {session_id}")
 
-    # Deep-copy the note so the original object is not mutated
     edited_note = latest.model_copy(deep=True)
 
     for section_id, new_text in section_edits.items():
@@ -442,10 +432,8 @@ async def edit_note(
             continue
 
         if section.claims:
-            # Update the first claim's text
             section.claims[0].text = new_text
         else:
-            # Create a new claim for this section
             section.claims.append(
                 NoteClaim(
                     id=f"claim_{uuid.uuid4().hex[:8]}",
@@ -457,7 +445,6 @@ async def edit_note(
             )
             section.status = "populated"
 
-    # Persist as a new immutable version
     await create_note_version(session_id, edited_note, db)
 
     logger.info(

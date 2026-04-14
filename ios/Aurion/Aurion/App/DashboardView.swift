@@ -15,7 +15,6 @@ struct DashboardView: View {
         ("general", "General"),
     ]
 
-    /// Time-of-day greeting computed from current hour.
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {

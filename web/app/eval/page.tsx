@@ -1,69 +1,81 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import {
   CheckCircleIcon,
   ClockIcon,
 } from "@heroicons/react/24/outline";
-
-const placeholderEvalSessions = [
-  {
-    id: "eval_001",
-    session_id: "sess_001",
-    clinician_name: "Dr. Perry Gdalevitch",
-    specialty: "plastic_surgery",
-    transcript_masked: true,
-    frames_masked: true,
-    note_version: 3,
-    scored: true,
-    scores: {
-      transcript_accuracy: 92,
-      citation_correctness: 95,
-      descriptive_mode_compliance: 100,
-      overall: 96,
-      notes: "High-quality documentation. All citations traceable.",
-      scored_by: "eval@aurionclinical.com",
-      scored_at: "2026-04-10T16:00:00Z",
-    },
-    created_at: "2026-04-10T09:30:00Z",
-  },
-  {
-    id: "eval_002",
-    session_id: "sess_002",
-    clinician_name: "Dr. Marie Gdalevitch",
-    specialty: "orthopedic_surgery",
-    transcript_masked: true,
-    frames_masked: true,
-    note_version: 2,
-    scored: false,
-    scores: null,
-    created_at: "2026-04-10T11:00:00Z",
-  },
-  {
-    id: "eval_003",
-    session_id: "sess_003",
-    clinician_name: "Dr. Perry Gdalevitch",
-    specialty: "plastic_surgery",
-    transcript_masked: true,
-    frames_masked: true,
-    note_version: 4,
-    scored: false,
-    scores: null,
-    created_at: "2026-04-09T15:00:00Z",
-  },
-];
+import { getEvalSessions, submitEvalScore } from "@/lib/api";
+import type { EvalSession, EvalScore } from "@/types";
 
 export default function EvalPage() {
+  const [evalSessions, setEvalSessions] = useState<EvalSession[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [transcriptAccuracy, setTranscriptAccuracy] = useState(0);
   const [citationCorrectness, setCitationCorrectness] = useState(0);
   const [descriptiveCompliance, setDescriptiveCompliance] = useState(0);
   const [evalNotes, setEvalNotes] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
-  const selectedSession = placeholderEvalSessions.find(
-    (s) => s.id === selectedId,
-  );
+  async function fetchEvalSessions() {
+    setLoading(true);
+    setError(null);
+    try {
+      const data = await getEvalSessions();
+      setEvalSessions(data);
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to load eval sessions",
+      );
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchEvalSessions();
+  }, []);
+
+  const selectedSession = evalSessions.find((s) => s.id === selectedId);
+
+  async function handleSubmitScore() {
+    if (!selectedSession) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      await submitEvalScore(selectedSession.session_id, {
+        transcript_accuracy: transcriptAccuracy,
+        citation_correctness: citationCorrectness,
+        descriptive_mode_compliance: descriptiveCompliance,
+        overall:
+          Math.round(
+            ((transcriptAccuracy +
+              citationCorrectness +
+              descriptiveCompliance) /
+              3) *
+              10,
+          ) / 10,
+        notes: evalNotes,
+      });
+      // Reset form
+      setTranscriptAccuracy(0);
+      setCitationCorrectness(0);
+      setDescriptiveCompliance(0);
+      setEvalNotes("");
+      // Refresh data
+      await fetchEvalSessions();
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : "Failed to submit score",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   return (
     <>
@@ -73,6 +85,18 @@ export default function EvalPage() {
       />
 
       <div className="p-6 lg:p-8">
+        {error && (
+          <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
+            {error}
+            <button
+              onClick={() => setError(null)}
+              className="ml-2 text-red-500 underline"
+            >
+              dismiss
+            </button>
+          </div>
+        )}
+
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           {/* Session list */}
           <div className="lg:col-span-2">
@@ -103,59 +127,81 @@ export default function EvalPage() {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {placeholderEvalSessions.map((s) => (
-                      <tr
-                        key={s.id}
-                        className={`cursor-pointer hover:bg-gray-50 ${
-                          selectedId === s.id ? "bg-gold-50" : ""
-                        }`}
-                        onClick={() => setSelectedId(s.id)}
-                      >
-                        <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-500">
-                          {s.session_id}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
-                          {s.clinician_name}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                          {s.specialty.replace(/_/g, " ")}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm">
-                          {s.transcript_masked && s.frames_masked ? (
-                            <span className="text-green-600">Yes</span>
-                          ) : (
-                            <span className="text-red-600">No</span>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm">
-                          {s.scored ? (
-                            <span className="inline-flex items-center gap-1 text-green-600">
-                              <CheckCircleIcon className="h-4 w-4" />
-                              Scored
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 text-amber-600">
-                              <ClockIcon className="h-4 w-4" />
-                              Pending
-                            </span>
-                          )}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-navy">
-                          {s.scores ? `${s.scores.overall}%` : "--"}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm">
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setSelectedId(s.id);
-                            }}
-                            className="text-gold-600 hover:text-gold-800"
-                          >
-                            Review
-                          </button>
+                    {loading ? (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="px-4 py-8 text-center text-sm text-gray-400"
+                        >
+                          Loading eval sessions...
                         </td>
                       </tr>
-                    ))}
+                    ) : evalSessions.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={7}
+                          className="px-4 py-8 text-center text-sm text-gray-400"
+                        >
+                          No sessions available for evaluation yet.
+                        </td>
+                      </tr>
+                    ) : (
+                      evalSessions.map((s) => (
+                        <tr
+                          key={s.id}
+                          className={`cursor-pointer hover:bg-gray-50 ${
+                            selectedId === s.id ? "bg-gold-50" : ""
+                          }`}
+                          onClick={() => setSelectedId(s.id)}
+                        >
+                          <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-500">
+                            {s.session_id.length > 12
+                              ? `${s.session_id.slice(0, 8)}...`
+                              : s.session_id}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                            {s.clinician_name}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
+                            {s.specialty.replace(/_/g, " ")}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm">
+                            {s.transcript_masked && s.frames_masked ? (
+                              <span className="text-green-600">Yes</span>
+                            ) : (
+                              <span className="text-red-600">No</span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm">
+                            {s.scored ? (
+                              <span className="inline-flex items-center gap-1 text-green-600">
+                                <CheckCircleIcon className="h-4 w-4" />
+                                Scored
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-amber-600">
+                                <ClockIcon className="h-4 w-4" />
+                                Pending
+                              </span>
+                            )}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm font-semibold text-navy">
+                            {s.scores ? `${s.scores.overall}%` : "--"}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-sm">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setSelectedId(s.id);
+                              }}
+                              className="text-gold-600 hover:text-gold-800"
+                            >
+                              Review
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -170,30 +216,34 @@ export default function EvalPage() {
               </h3>
 
               {selectedSession ? (
-                selectedSession.scored ? (
+                selectedSession.scored && selectedSession.scores ? (
                   <div className="space-y-4">
                     <p className="text-sm text-gray-500">
-                      Session {selectedSession.session_id} has been scored.
+                      Session{" "}
+                      {selectedSession.session_id.length > 12
+                        ? `${selectedSession.session_id.slice(0, 8)}...`
+                        : selectedSession.session_id}{" "}
+                      has been scored.
                     </p>
                     <div className="space-y-2">
                       <ScoreRow
                         label="Transcript Accuracy"
-                        value={selectedSession.scores!.transcript_accuracy}
+                        value={selectedSession.scores.transcript_accuracy}
                       />
                       <ScoreRow
                         label="Citation Correctness"
-                        value={selectedSession.scores!.citation_correctness}
+                        value={selectedSession.scores.citation_correctness}
                       />
                       <ScoreRow
                         label="Descriptive Mode"
                         value={
-                          selectedSession.scores!.descriptive_mode_compliance
+                          selectedSession.scores.descriptive_mode_compliance
                         }
                       />
                       <div className="border-t border-gray-200 pt-2">
                         <ScoreRow
                           label="Overall"
-                          value={selectedSession.scores!.overall}
+                          value={selectedSession.scores.overall}
                           bold
                         />
                       </div>
@@ -201,14 +251,18 @@ export default function EvalPage() {
                     <div className="rounded-lg bg-gray-50 p-3">
                       <p className="text-xs text-gray-400">Notes</p>
                       <p className="mt-1 text-sm text-gray-600">
-                        {selectedSession.scores!.notes}
+                        {selectedSession.scores.notes || "No notes."}
                       </p>
                     </div>
                   </div>
                 ) : (
                   <div className="space-y-4">
                     <p className="text-sm text-gray-500">
-                      Score session {selectedSession.session_id}:
+                      Score session{" "}
+                      {selectedSession.session_id.length > 12
+                        ? `${selectedSession.session_id.slice(0, 8)}...`
+                        : selectedSession.session_id}
+                      :
                     </p>
                     <div>
                       <label className="mb-1 block text-sm font-medium text-gray-700">
@@ -267,8 +321,12 @@ export default function EvalPage() {
                         placeholder="Quality observations..."
                       />
                     </div>
-                    <button className="w-full rounded-lg bg-gold py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-gold-600">
-                      Submit Score
+                    <button
+                      onClick={handleSubmitScore}
+                      disabled={submitting}
+                      className="w-full rounded-lg bg-gold py-2.5 text-sm font-semibold text-navy transition-colors hover:bg-gold-600 disabled:opacity-60"
+                    >
+                      {submitting ? "Submitting..." : "Submit Score"}
                     </button>
                   </div>
                 )
@@ -280,11 +338,6 @@ export default function EvalPage() {
             </div>
           </div>
         </div>
-
-        <p className="mt-4 text-center text-xs text-gray-400">
-          Showing placeholder data. Masked transcript and frames will appear
-          here once the backend is connected.
-        </p>
       </div>
     </>
   );

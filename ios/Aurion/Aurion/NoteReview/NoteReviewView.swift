@@ -1,8 +1,21 @@
 import SwiftUI
 
-/// Note review UI -- adaptive layout for iPhone and iPad.
-/// iPhone: single column section cards. iPad: two-column split view.
-/// CONFLICTS flagged amber -- mandatory resolution before approval.
+// MARK: - Conflict Detection
+
+private extension NoteClaimResponse {
+    var isConflict: Bool { id.hasPrefix("conflict_") }
+}
+
+private extension NoteSectionResponse {
+    var hasConflicts: Bool { claims.contains { $0.isConflict } }
+}
+
+private extension NoteResponse {
+    var hasUnresolvedConflicts: Bool { sections.contains { $0.hasConflicts } }
+}
+
+// MARK: - Note Review
+
 struct NoteReviewView: View {
     let sessionId: String
     var initialNote: NoteResponse?
@@ -147,9 +160,7 @@ struct NoteReviewView: View {
 
     private func checkConflicts() {
         guard let note else { return }
-        hasUnresolvedConflicts = note.sections.contains { section in
-            section.claims.contains { $0.text.contains("CONFLICT") }
-        }
+        hasUnresolvedConflicts = note.hasUnresolvedConflicts
     }
 
     private func approveNote() {
@@ -165,10 +176,6 @@ struct NoteReviewView: View {
 
 struct SectionCardView: View {
     let section: NoteSectionResponse
-
-    private var isConflict: Bool {
-        section.claims.contains { $0.text.contains("CONFLICT") }
-    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -187,7 +194,7 @@ struct SectionCardView: View {
             }
         }
         .padding(.vertical, 4)
-        .listRowBackground(isConflict ? Color.aurionAmber.opacity(0.1) : Color.clear)
+        .listRowBackground(section.hasConflicts ? Color.aurionAmber.opacity(0.1) : Color.clear)
     }
 
     private var statusBadge: some View {
@@ -253,7 +260,6 @@ struct ClaimView: View {
     @State private var isEditing = false
     @State private var editText: String = ""
 
-    private var isConflict: Bool { claim.text.contains("CONFLICT") }
     private var isVisual: Bool { claim.sourceType == "visual" }
 
     var body: some View {
@@ -298,8 +304,8 @@ struct ClaimView: View {
                 // Display mode
                 Text(claim.text)
                     .aurionClaimText()
-                    .foregroundColor(isConflict ? Color.aurionAmber : .aurionTextPrimary)
-                    .fontWeight(isConflict ? .semibold : .regular)
+                    .foregroundColor(claim.isConflict ? Color.aurionAmber : .aurionTextPrimary)
+                    .fontWeight(claim.isConflict ? .semibold : .regular)
                     .onTapGesture(count: 2) {
                         // Double-tap to edit
                         editText = claim.text
@@ -353,7 +359,7 @@ struct ClaimView: View {
         }
         .padding(.vertical, 4)
         .padding(.horizontal, 12)
-        .background(isConflict ? Color.aurionAmber.opacity(0.05) : Color.clear)
+        .background(claim.isConflict ? Color.aurionAmber.opacity(0.05) : Color.clear)
         .cornerRadius(8)
     }
 }

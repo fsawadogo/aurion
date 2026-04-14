@@ -2,9 +2,7 @@ import Foundation
 import Combine
 import SwiftUI
 
-/// Manages the full session lifecycle — bridges iOS UI to backend API.
-/// Handles: create → consent → record → stop → receive note → review → export.
-/// Uses mock audio for Simulator (no AVFoundation needed).
+/// Manages the full session lifecycle -- bridges iOS UI to backend API.
 @MainActor
 final class SessionManager: ObservableObject {
     @Published var session: CaptureSession?
@@ -17,7 +15,6 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Session Lifecycle
 
-    /// Create a new session on the backend and start the capture flow.
     func startNewSession(specialty: String) async {
         error = nil
         do {
@@ -30,7 +27,6 @@ final class SessionManager: ObservableObject {
         }
     }
 
-    /// Confirm patient consent via backend.
     func confirmConsent() async {
         guard let session else { return }
         do {
@@ -41,7 +37,6 @@ final class SessionManager: ObservableObject {
         }
     }
 
-    /// Start recording — calls backend then starts local capture.
     func startRecording() async {
         guard let session else { return }
         do {
@@ -52,7 +47,6 @@ final class SessionManager: ObservableObject {
         }
     }
 
-    /// Stop recording — calls backend, then submits mock audio for transcription.
     func stopRecording() async {
         guard let session else { return }
         do {
@@ -68,18 +62,14 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Mock Audio Pipeline (Simulator)
 
-    /// Submit a mock audio file to the transcription endpoint.
-    /// In production, this would be real captured audio.
     private func submitMockAudio() async {
         guard let session else { return }
         isProcessing = true
         processingStatus = "Transcribing audio..."
 
         do {
-            // Create mock WAV data (minimal valid WAV header + silence)
-            let mockAudio = createMockWavData()
+            let mockAudio = WAVBuilder.silence()
 
-            // Upload to transcription endpoint
             let url = URL(string: "\(AppConfig.baseAPIPath)/transcription/\(session.id)")!
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
@@ -103,14 +93,9 @@ final class SessionManager: ObservableObject {
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
                 processingStatus = "Note ready for review"
 
-                // Fetch the Stage 1 note
-                // Note: In production, this comes via WebSocket.
-                // For Simulator, we poll after a short delay.
-                try await Task.sleep(nanoseconds: 2_000_000_000) // 2s for note gen
+                try await Task.sleep(nanoseconds: 2_000_000_000)
                 await fetchNote()
             } else {
-                // Transcription may have failed (no real Whisper in Simulator)
-                // Proceed with mock note for UI testing
                 processingStatus = "Using demo note for Simulator"
                 try await Task.sleep(nanoseconds: 1_000_000_000)
                 note = createMockNote(sessionId: session.id, specialty: session.specialty)
@@ -119,24 +104,20 @@ final class SessionManager: ObservableObject {
             isProcessing = false
         } catch {
             processingStatus = "Using demo note for Simulator"
-            // Fall back to mock note so the UI flow can be tested
             note = createMockNote(sessionId: session.id, specialty: session.specialty)
             isProcessing = false
         }
     }
 
-    /// Fetch the latest note from the backend.
     private func fetchNote() async {
         guard let session else { return }
         do {
             note = try await api.getStage1Note(sessionId: session.id)
         } catch {
-            // Fall back to mock
             note = createMockNote(sessionId: session.id, specialty: session.specialty)
         }
     }
 
-    /// Approve the final note.
     func approveNote() async {
         guard let session else { return }
         do {
@@ -147,7 +128,6 @@ final class SessionManager: ObservableObject {
         }
     }
 
-    /// Clear the current session.
     func endSession() {
         session?.clearPersistence()
         session = nil
@@ -157,21 +137,17 @@ final class SessionManager: ObservableObject {
         error = nil
     }
 
-    // MARK: - Crash Recovery Validation
+    // MARK: - Crash Recovery
 
-    /// Validate a recovered session against the backend before resuming.
-    /// Returns true if the session is still valid, false if it should be discarded.
     func validateRecoveredSession(_ recoveredSession: CaptureSession) async -> Bool {
         do {
             let response = try await api.getSession(sessionId: recoveredSession.id)
-            // Sync local state to backend state
             if let backendState = SessionState(rawValue: response.state) {
                 if backendState.isActive {
                     recoveredSession.state = backendState
                     session = recoveredSession
                     return true
                 } else {
-                    // Session already completed on backend
                     SessionPersistence.clear()
                     return false
                 }
@@ -180,12 +156,10 @@ final class SessionManager: ObservableObject {
         } catch let error as APIError {
             switch error {
             case .notFound:
-                // Session no longer exists on backend
                 SessionPersistence.clear()
                 self.error = "Session expired. Starting fresh."
                 return false
             case .offline:
-                // Can't reach backend — allow local recovery
                 session = recoveredSession
                 return true
             default:
@@ -199,34 +173,6 @@ final class SessionManager: ObservableObject {
     }
 
     // MARK: - Mock Data Generators
-
-    private func createMockWavData() -> Data {
-        // Minimal 44-byte WAV header + 1s of silence at 16kHz mono 16-bit
-        var data = Data()
-        let sampleRate: UInt32 = 16000
-        let numSamples: UInt32 = 16000 // 1 second
-        let dataSize: UInt32 = numSamples * 2
-        let fileSize: UInt32 = 36 + dataSize
-
-        // RIFF header
-        data.append("RIFF".data(using: .ascii)!)
-        data.append(withUnsafeBytes(of: fileSize.littleEndian) { Data($0) })
-        data.append("WAVE".data(using: .ascii)!)
-        // fmt chunk
-        data.append("fmt ".data(using: .ascii)!)
-        data.append(withUnsafeBytes(of: UInt32(16).littleEndian) { Data($0) })
-        data.append(withUnsafeBytes(of: UInt16(1).littleEndian) { Data($0) }) // PCM
-        data.append(withUnsafeBytes(of: UInt16(1).littleEndian) { Data($0) }) // mono
-        data.append(withUnsafeBytes(of: sampleRate.littleEndian) { Data($0) })
-        data.append(withUnsafeBytes(of: (sampleRate * 2).littleEndian) { Data($0) }) // byte rate
-        data.append(withUnsafeBytes(of: UInt16(2).littleEndian) { Data($0) }) // block align
-        data.append(withUnsafeBytes(of: UInt16(16).littleEndian) { Data($0) }) // bits per sample
-        // data chunk
-        data.append("data".data(using: .ascii)!)
-        data.append(withUnsafeBytes(of: dataSize.littleEndian) { Data($0) })
-        data.append(Data(count: Int(dataSize))) // silence
-        return data
-    }
 
     private func createMockNote(sessionId: String, specialty: String) -> NoteResponse {
         NoteResponse(

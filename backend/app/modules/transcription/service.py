@@ -7,30 +7,18 @@ PHI audit → audit log entries. Audio S3 object has < 1h TTL.
 from __future__ import annotations
 
 import logging
-import os
 import uuid
-from typing import Any, Optional
+from typing import Optional
 
-import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.retry import with_retry
+from app.core.s3 import AUDIO_BUCKET, get_s3_client
 from app.core.types import ProviderError, Transcript
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.provider_registry import get_registry
 
 logger = logging.getLogger("aurion.transcription")
-
-_AUDIO_BUCKET = os.getenv("AUDIO_S3_BUCKET", "aurion-audio-local")
-_REGION = os.getenv("AWS_DEFAULT_REGION", "ca-central-1")
-_ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL")
-
-
-def _get_s3_client():
-    kwargs: dict[str, Any] = {"region_name": _REGION}
-    if _ENDPOINT_URL:
-        kwargs["endpoint_url"] = _ENDPOINT_URL
-    return boto3.client("s3", **kwargs)
 
 
 async def upload_audio_to_s3(
@@ -44,10 +32,10 @@ async def upload_audio_to_s3(
     """
     s3_key = f"audio/{session_id}/{uuid.uuid4()}.wav"
     try:
-        s3 = _get_s3_client()
+        s3 = get_s3_client()
         await with_retry(
             s3.put_object,
-            Bucket=_AUDIO_BUCKET,
+            Bucket=AUDIO_BUCKET,
             Key=s3_key,
             Body=audio_bytes,
             ContentType="audio/wav",
@@ -127,8 +115,8 @@ async def delete_audio_from_s3(s3_key: str) -> bool:
     This is in addition to the bucket TTL policy — belt and suspenders.
     """
     try:
-        s3 = _get_s3_client()
-        s3.delete_object(Bucket=_AUDIO_BUCKET, Key=s3_key)
+        s3 = get_s3_client()
+        s3.delete_object(Bucket=AUDIO_BUCKET, Key=s3_key)
         logger.info("Audio purged: key=%s", s3_key)
         return True
     except (BotoCoreError, ClientError) as e:
