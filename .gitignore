@@ -1,0 +1,63 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Node
+node_modules/
+.next/
+out/
+
+# Coverage
+htmlcov/
+.coverage
+.coverage.*
+coverage.xml
+
+# Docker
+postgres_data/
+localstack_data/
+
+# iOS
+ios/Aurion.xcodeproj/xcuserdata/
+ios/Aurion.xcworkspace/xcuserdata/
+ios/build/
+ios/DerivedData/
+*.xcuserstate
+
+# CDK
+infrastructure/cdk.out/
+infrastructure/node_modules/
+
+# Terraform
+*.tfstate
+*.tfstate.*
+
+# Secrets — never commit
+*.pem
+*.key
+credentials.json

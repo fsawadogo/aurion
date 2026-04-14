@@ -1,0 +1,45 @@
+{
+  "key": "general",
+  "display_name": "General",
+  "version": "1.0",
+  "sections": [
+    {
+      "id": "chief_complaint",
+      "title": "Chief Complaint",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Primary presenting complaint in the patient's own words"
+    },
+    {
+      "id": "hpi",
+      "title": "History of Present Illness",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Onset, duration, character, radiation, associated symptoms, timing, exacerbating/relieving factors, severity"
+    },
+    {
+      "id": "physical_exam",
+      "title": "Physical Examination",
+      "required": true,
+      "visual_trigger_keywords": [
+        "looking at", "you can see", "examination",
+        "palpation", "inspection", "right here"
+      ],
+      "description": "Inspection, palpation, and relevant physical examination findings as observed"
+    },
+    {
+      "id": "assessment",
+      "title": "Assessment",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Clinical assessment as stated by the physician — diagnosis or working diagnosis explicitly stated"
+    },
+    {
+      "id": "plan",
+      "title": "Plan",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Treatment plan, investigations ordered, referrals, follow-up timeline as stated by the physician"
+    }
+  ]
+}

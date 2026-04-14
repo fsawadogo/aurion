@@ -1,0 +1,59 @@
+{
+  "key": "orthopedic_surgery",
+  "display_name": "Orthopedic Surgery",
+  "version": "1.0",
+  "sections": [
+    {
+      "id": "chief_complaint",
+      "title": "Chief Complaint",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Primary presenting complaint in the patient's own words"
+    },
+    {
+      "id": "hpi",
+      "title": "History of Present Illness",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Onset, duration, character, radiation, associated symptoms, timing, exacerbating/relieving factors, severity"
+    },
+    {
+      "id": "physical_exam",
+      "title": "Physical Examination",
+      "required": true,
+      "visual_trigger_keywords": [
+        "range of motion", "ROM", "flexion", "extension", "rotation",
+        "palpation", "tenderness", "guarding", "swelling", "effusion",
+        "strength", "sensation", "reflexes", "special test",
+        "Lachman", "McMurray", "Hawkins", "Neer", "empty can",
+        "looking here", "you can see"
+      ],
+      "description": "Inspection, palpation, range of motion measurements, strength testing, special orthopedic tests, neurovascular status"
+    },
+    {
+      "id": "imaging_review",
+      "title": "Imaging Review",
+      "required": true,
+      "visual_trigger_keywords": [
+        "X-ray", "x-ray", "radiograph", "MRI", "CT", "ultrasound",
+        "looking at", "pulling up", "on the screen", "you can see here",
+        "this view", "AP view", "lateral view", "comparing"
+      ],
+      "description": "Description of imaging findings as literally observed on screen — modality, laterality, findings described only"
+    },
+    {
+      "id": "assessment",
+      "title": "Assessment",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Clinical assessment as stated by the physician — diagnosis or working diagnosis explicitly stated"
+    },
+    {
+      "id": "plan",
+      "title": "Plan",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Treatment plan, investigations ordered, referrals, follow-up timeline as stated by the physician"
+    }
+  ]
+}

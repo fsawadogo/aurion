@@ -1,0 +1,66 @@
+{
+  "key": "emergency_medicine",
+  "display_name": "Emergency Medicine",
+  "version": "1.0",
+  "sections": [
+    {
+      "id": "chief_complaint",
+      "title": "Chief Complaint",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Primary presenting complaint in the patient's own words"
+    },
+    {
+      "id": "hpi",
+      "title": "History of Present Illness",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Onset, duration, character, radiation, associated symptoms, timing, exacerbating/relieving factors, severity"
+    },
+    {
+      "id": "vital_signs",
+      "title": "Vital Signs",
+      "required": true,
+      "visual_trigger_keywords": [
+        "vitals", "blood pressure", "heart rate", "temperature",
+        "oxygen saturation", "sat", "respiratory rate",
+        "looking at the monitor", "on the screen"
+      ],
+      "description": "Vital signs as observed on monitor or stated by physician"
+    },
+    {
+      "id": "physical_exam",
+      "title": "Physical Examination",
+      "required": true,
+      "visual_trigger_keywords": [
+        "looking at", "you can see", "examination", "palpation",
+        "auscultation", "percussion", "inspection"
+      ],
+      "description": "Inspection, palpation, auscultation, percussion findings as observed during examination"
+    },
+    {
+      "id": "investigations",
+      "title": "Investigations",
+      "required": true,
+      "visual_trigger_keywords": [
+        "lab", "labs", "blood work", "results", "ECG", "EKG",
+        "chest X-ray", "CT", "ultrasound", "looking at"
+      ],
+      "description": "Lab results, ECG findings, imaging — as stated or shown on screen"
+    },
+    {
+      "id": "assessment",
+      "title": "Assessment",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Clinical assessment as stated by the physician — diagnosis or working diagnosis explicitly stated"
+    },
+    {
+      "id": "disposition",
+      "title": "Disposition",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Discharge plan, admission decision, referrals, follow-up instructions as stated by physician"
+    }
+  ]
+}

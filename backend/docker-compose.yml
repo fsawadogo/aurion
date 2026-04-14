@@ -1,0 +1,96 @@
+version: "3.9"
+
+services:
+
+  # ── FastAPI Backend ──────────────────────────────────────────────────────
+  aurion-api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: aurion-api
+    ports:
+      - "8080:8000"
+    environment:
+      - APP_ENV=local
+      - LOG_LEVEL=DEBUG
+      - DATABASE_URL=postgresql+asyncpg://aurion:aurion@postgres:5432/aurion
+      - AWS_ACCESS_KEY_ID=test
+      - AWS_SECRET_ACCESS_KEY=test
+      - AWS_DEFAULT_REGION=ca-central-1
+      - AWS_ENDPOINT_URL=http://localstack:4566
+      - COGNITO_USER_POOL_ID=local_pool
+      - COGNITO_CLIENT_ID=local_client
+      - WHISPER_API_URL=http://whisper:8001
+      - SCREEN_OCR_LOCAL_MODE=true
+    env_file:
+      - .env
+    volumes:
+      - ./app:/app/app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      localstack:
+        condition: service_healthy
+    command: uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:15-alpine
+    container_name: aurion-postgres
+    ports:
+      - "5434:5432"
+    environment:
+      POSTGRES_USER: aurion
+      POSTGRES_PASSWORD: aurion
+      POSTGRES_DB: aurion
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aurion"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  # ── LocalStack — AWS Emulation ─────���─────────────────────────────────────
+  localstack:
+    image: localstack/localstack:latest
+    container_name: aurion-localstack
+    ports:
+      - "4566:4566"
+    environment:
+      - SERVICES=s3,dynamodb,appconfig,cognito-idp,kms,textract,secretsmanager
+      - DEFAULT_REGION=ca-central-1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      - LOCALSTACK_AUTH_TOKEN=${LOCALSTACK_AUTH_TOKEN:-}
+    volumes:
+      - ./scripts/localstack-init:/etc/localstack/init/ready.d
+      - localstack_data:/var/lib/localstack
+      - /var/run/docker.sock:/var/run/docker.sock
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:4566/_localstack/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 15
+      start_period: 30s
+
+  # ── Whisper Transcription ────────────────────────────────────────────────
+  whisper:
+    image: onerahmet/openai-whisper-asr-webservice:latest
+    container_name: aurion-whisper
+    ports:
+      - "8001:9000"
+    environment:
+      - ASR_MODEL=base
+      - ASR_ENGINE=openai_whisper
+
+  # ── Mailhog — Email Catcher ──────��────────────────────────────────���──────
+  mailhog:
+    image: mailhog/mailhog
+    container_name: aurion-mailhog
+    ports:
+      - "1025:1025"
+      - "8025:8025"
+
+volumes:
+  postgres_data:
+  localstack_data:
