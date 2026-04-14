@@ -126,8 +126,8 @@ struct DashboardView: View {
             .navigationTitle("Aurion")
             .toolbar {
                 ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink(destination: SettingsView()) {
-                        Image(systemName: "gear")
+                    NavigationLink(destination: ProfileView()) {
+                        Image(systemName: "person.circle")
                     }
                 }
             }
