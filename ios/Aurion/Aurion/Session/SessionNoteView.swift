@@ -1,6 +1,46 @@
 import SwiftUI
 import UIKit
 
+// MARK: - Section Styling Helpers
+
+private extension String {
+    /// Map section ID to a left-border color.
+    var sectionBorderColor: Color {
+        switch self {
+        case "chief_complaint", "hpi":
+            return .clinicalInfo
+        case "physical_exam", "wound_assessment", "functional_assessment":
+            return .clinicalNormal
+        case "imaging_review", "investigations", "vital_signs":
+            return .clinicalInfo
+        case "assessment":
+            return .clinicalWarning
+        case "plan", "disposition":
+            return .aurionNavy
+        default:
+            return .secondary.opacity(0.3)
+        }
+    }
+
+    /// Map section ID to an SF Symbol icon.
+    var sectionIcon: String {
+        switch self {
+        case "chief_complaint": return "exclamationmark.bubble.fill"
+        case "hpi": return "clock.fill"
+        case "physical_exam": return "hand.raised.fill"
+        case "wound_assessment": return "bandage.fill"
+        case "functional_assessment": return "figure.walk"
+        case "imaging_review": return "photo.on.rectangle.angled"
+        case "investigations": return "flask.fill"
+        case "vital_signs": return "heart.fill"
+        case "assessment": return "list.clipboard.fill"
+        case "plan": return "arrow.right.circle.fill"
+        case "disposition": return "arrow.uturn.right.circle.fill"
+        default: return "doc.text.fill"
+        }
+    }
+}
+
 /// Read-only note view for a completed session.
 /// Displays formatted SOAP note with copy-to-clipboard and export.
 struct SessionNoteView: View {
@@ -17,39 +57,30 @@ struct SessionNoteView: View {
             } else if let note {
                 noteContent(note)
             } else {
-                VStack(spacing: 16) {
-                    Image(systemName: "doc.questionmark")
-                        .font(.system(size: 48))
-                        .foregroundColor(.secondary.opacity(0.4))
-                    Text("No note available")
-                        .font(.headline)
-                        .foregroundColor(.secondary)
-                    if let error {
-                        Text(error)
-                            .font(.caption)
-                            .foregroundColor(.red)
-                    }
-                }
+                EmptyStateView(
+                    icon: "doc.questionmark",
+                    title: "No note available",
+                    subtitle: error ?? "The note could not be loaded."
+                )
             }
 
             // Copied toast
             if showCopiedToast {
                 VStack {
                     Spacer()
-                    HStack(spacing: 8) {
+                    HStack(spacing: AurionSpacing.sm) {
                         Image(systemName: "checkmark.circle.fill")
-                            .foregroundColor(.green)
+                            .foregroundColor(.clinicalNormal)
                         Text("Copied to clipboard")
-                            .font(.subheadline)
-                            .fontWeight(.medium)
+                            .font(.system(size: 14, weight: .semibold))
                     }
                     .foregroundColor(.white)
-                    .padding(.horizontal, 20)
-                    .padding(.vertical, 12)
+                    .padding(.horizontal, AurionSpacing.xl)
+                    .padding(.vertical, AurionSpacing.sm)
                     .background(Color.aurionNavy)
-                    .cornerRadius(24)
-                    .shadow(radius: 8)
-                    .padding(.bottom, 32)
+                    .clipShape(Capsule())
+                    .shadow(color: .black.opacity(0.2), radius: 12, y: 6)
+                    .padding(.bottom, AurionSpacing.xxl)
                     .transition(AurionTransition.fadeUp)
                 }
                 .animation(AurionAnimation.spring, value: showCopiedToast)
@@ -59,7 +90,6 @@ struct SessionNoteView: View {
         .aurionNavBar()
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
-                // Copy button
                 Button {
                     if let note { copyToClipboard(note) }
                 } label: {
@@ -67,7 +97,6 @@ struct SessionNoteView: View {
                 }
                 .disabled(note == nil)
 
-                // Export button
                 Button {
                     exportNote()
                 } label: {
@@ -83,99 +112,121 @@ struct SessionNoteView: View {
 
     private func noteContent(_ note: NoteResponse) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 20) {
+            VStack(alignment: .leading, spacing: AurionSpacing.lg) {
                 // Header card
-                VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: AurionSpacing.sm) {
                     HStack {
                         Text(displaySpecialty)
-                            .aurionHeadline()
+                            .aurionTitle()
                         Spacer()
-                        HStack(spacing: 4) {
+                        HStack(spacing: AurionSpacing.xs) {
                             CircularProgressRing(
                                 progress: note.completenessScore,
-                                color: note.completenessScore >= 0.9 ? .green : .aurionAmber,
+                                color: note.completenessScore >= 0.9 ? .clinicalNormal : .clinicalWarning,
                                 lineWidth: 3,
                                 size: 28
                             )
                             Text("\(Int(note.completenessScore * 100))%")
-                                .font(.caption.bold())
-                                .foregroundColor(note.completenessScore >= 0.9 ? .green : .aurionAmber)
+                                .font(.system(size: 13, weight: .bold, design: .rounded))
+                                .foregroundColor(note.completenessScore >= 0.9 ? .clinicalNormal : .clinicalWarning)
                         }
                     }
 
-                    HStack(spacing: 16) {
+                    HStack(spacing: AurionSpacing.lg) {
                         Label(displayDate, systemImage: "calendar")
                         Label("v\(note.version)", systemImage: "doc.badge.clock")
                         Label(note.providerUsed, systemImage: "cpu")
                     }
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .aurionCaption()
                 }
-                .padding(16)
+                .padding(AurionSpacing.lg)
                 .background(Color.aurionCardBackground)
-                .cornerRadius(12)
+                .cornerRadius(AurionSpacing.sm)
 
                 // Sections
                 ForEach(note.sections, id: \.id) { section in
-                    VStack(alignment: .leading, spacing: 10) {
-                        HStack {
-                            Text(section.title)
-                                .font(.headline)
-                                .foregroundColor(.aurionTextPrimary)
-                            Spacer()
-                            sectionStatusBadge(section.status)
-                        }
-
-                        if section.claims.isEmpty {
-                            Text("No content captured")
-                                .font(.body)
-                                .foregroundColor(.secondary)
-                                .italic()
-                        } else {
-                            ForEach(section.claims, id: \.id) { claim in
-                                VStack(alignment: .leading, spacing: 4) {
-                                    Text(claim.text)
-                                        .font(.body)
-                                        .foregroundColor(.aurionTextPrimary)
-
-                                    HStack(spacing: 4) {
-                                        Image(systemName: claim.sourceType == "visual" ? "eye.circle" : "waveform")
-                                            .font(.caption2)
-                                        Text("[\(claim.sourceId)]")
-                                            .font(.caption2)
-                                    }
-                                    .foregroundColor(.secondary)
-                                }
-                                .padding(.vertical, 2)
-                            }
-                        }
-                    }
-                    .padding(16)
-                    .background(Color.aurionCardBackground)
-                    .cornerRadius(12)
+                    sectionCard(section)
                 }
 
                 // EMR Integration placeholder
-                VStack(spacing: 8) {
+                VStack(spacing: AurionSpacing.sm) {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.title2)
                         .foregroundColor(.secondary.opacity(0.4))
                     Text("EMR Integration")
-                        .font(.subheadline)
-                        .fontWeight(.medium)
+                        .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.secondary)
                     Text("Coming Soon")
-                        .font(.caption)
-                        .foregroundColor(.secondary.opacity(0.6))
+                        .aurionCaption()
                 }
                 .frame(maxWidth: .infinity)
-                .padding(20)
+                .padding(AurionSpacing.xl)
                 .background(Color.aurionFieldBackground)
-                .cornerRadius(12)
+                .cornerRadius(AurionSpacing.sm)
             }
-            .padding(20)
+            .padding(AurionSpacing.xl)
         }
         .background(Color.aurionBackground)
+    }
+
+    // MARK: - Section Card with Colored Border
+
+    private func sectionCard(_ section: NoteSectionResponse) -> some View {
+        let borderColor = section.id.sectionBorderColor
+        let icon = section.id.sectionIcon
+
+        return VStack(alignment: .leading, spacing: AurionSpacing.sm) {
+            // Section header with icon
+            HStack(spacing: AurionSpacing.sm) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(borderColor)
+
+                Text(section.title)
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundColor(.aurionTextPrimary)
+
+                Spacer()
+
+                sectionStatusBadge(section.status)
+            }
+
+            if section.claims.isEmpty {
+                Text("No content captured")
+                    .aurionBody()
+                    .foregroundColor(.secondary)
+                    .italic()
+                    .padding(.top, AurionSpacing.xxs)
+            } else {
+                ForEach(section.claims, id: \.id) { claim in
+                    VStack(alignment: .leading, spacing: AurionSpacing.xxs) {
+                        Text(claim.text)
+                            .aurionBody()
+
+                        HStack(spacing: AurionSpacing.xxs) {
+                            Image(systemName: claim.sourceType == "visual" ? "eye.circle" : "waveform")
+                                .font(.system(size: 10))
+                            Text("[\(claim.sourceId)]")
+                                .font(.system(size: 10))
+                        }
+                        .aurionCaption()
+                    }
+                    .padding(.vertical, AurionSpacing.xxs)
+                }
+            }
+        }
+        .padding(AurionSpacing.lg)
+        .background(Color.aurionCardBackground)
+        .cornerRadius(AurionSpacing.sm)
+        .overlay(
+            HStack {
+                RoundedRectangle(cornerRadius: 2)
+                    .fill(borderColor)
+                    .frame(width: 4)
+                Spacer()
+            }
+            .clipShape(RoundedRectangle(cornerRadius: AurionSpacing.sm))
+        )
     }
 
     // MARK: - Helpers
@@ -199,20 +250,17 @@ struct SessionNoteView: View {
         Group {
             switch status {
             case "populated":
-                Label("Complete", systemImage: "checkmark.circle.fill")
-                    .foregroundColor(.green)
+                StatusBadge(text: "Complete", color: .clinicalNormal)
             case "pending_video":
-                Label("Pending", systemImage: "video.circle")
-                    .foregroundColor(.blue)
+                StatusBadge(text: "Pending", color: .clinicalInfo)
             case "not_captured":
-                Label("Empty", systemImage: "circle.dashed")
-                    .foregroundColor(.secondary)
+                StatusBadge(text: "Empty", color: .secondary)
+            case "processing_failed":
+                StatusBadge(text: "Failed", color: .clinicalAlert)
             default:
-                Label(status, systemImage: "circle")
-                    .foregroundColor(.secondary)
+                StatusBadge(text: status.capitalized, color: .secondary)
             }
         }
-        .font(.caption2)
     }
 
     // MARK: - Actions
@@ -239,7 +287,7 @@ struct SessionNoteView: View {
                     ]),
                     NoteSectionResponse(id: "physical_exam", title: "Physical Examination", status: "populated", claims: [
                         NoteClaimResponse(id: "c3", text: "Physician noted tenderness on palpation at the medial joint line of the right knee.", sourceType: "transcript", sourceId: "seg_003", sourceQuote: "tenderness on palpation at the medial joint line"),
-                        NoteClaimResponse(id: "c4", text: "Physician noted range of motion restricted — flexion limited to approximately 110 degrees.", sourceType: "transcript", sourceId: "seg_004", sourceQuote: "flexion limited to approximately 110 degrees"),
+                        NoteClaimResponse(id: "c4", text: "Physician noted range of motion restricted -- flexion limited to approximately 110 degrees.", sourceType: "transcript", sourceId: "seg_004", sourceQuote: "flexion limited to approximately 110 degrees"),
                         NoteClaimResponse(id: "c5", text: "McMurray test positive with palpable click on the medial side.", sourceType: "transcript", sourceId: "seg_005", sourceQuote: "McMurray test is positive")
                     ]),
                     NoteSectionResponse(id: "imaging_review", title: "Imaging Review", status: "populated", claims: [
@@ -258,14 +306,24 @@ struct SessionNoteView: View {
     }
 
     private func copyToClipboard(_ note: NoteResponse) {
+        let dateStr = displayDate
+        let specialtyStr = displaySpecialty
+
         var text = ""
+        text += "\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\n"
+        text += "AURION CLINICAL NOTE\n"
+        text += "\(specialtyStr) | \(dateStr)\n"
+        text += "\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\u{2550}\n\n"
+
         for section in note.sections where !section.claims.isEmpty {
             text += "\(section.title.uppercased())\n"
+            text += "\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\u{2500}\n"
             for claim in section.claims {
                 text += "\(claim.text)\n"
             }
             text += "\n"
         }
+
         UIPasteboard.general.string = text.trimmingCharacters(in: .whitespacesAndNewlines)
         AurionHaptics.notification(.success)
 
@@ -280,7 +338,6 @@ struct SessionNoteView: View {
         Task {
             do {
                 _ = try await APIClient.shared.exportNote(sessionId: note.sessionId)
-                // In production, present share sheet with DOCX data
                 AurionHaptics.notification(.success)
             } catch {
                 self.error = "Export failed"

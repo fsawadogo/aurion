@@ -16,6 +16,8 @@ struct DashboardView: View {
         ("general", "General"),
     ]
 
+    // MARK: - Computed Properties
+
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
@@ -25,112 +27,64 @@ struct DashboardView: View {
         }
     }
 
-    private var sessionCount: String {
-        "\(recentSessions.count)"
+    private var totalSessionCount: Int {
+        recentSessions.count
+    }
+
+    private var thisWeekCount: Int {
+        let calendar = Calendar.current
+        let now = Date()
+        let formatter = ISO8601DateFormatter()
+        return recentSessions.filter { session in
+            guard let date = formatter.date(from: session.createdAt) else { return false }
+            return calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear)
+        }.count
+    }
+
+    private var pendingCount: Int {
+        recentSessions.filter { $0.state == "AWAITING_REVIEW" }.count
     }
 
     private var avgScore: String {
-        guard !recentSessions.isEmpty else { return "—" }
-        // Placeholder — real score would come from pilot metrics
-        return "—"
+        guard !recentSessions.isEmpty else { return "--" }
+        return "--"
     }
+
+    /// Mock weekly data for the mini chart (Mon-Sun)
+    private var weeklyBarHeights: [CGFloat] {
+        [0.4, 0.7, 0.5, 0.9, 0.6, 0.3, 0.2]
+    }
+
+    private let weekDayLabels = ["M", "T", "W", "T", "F", "S", "S"]
+
+    // MARK: - Body
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 24) {
+                VStack(spacing: AurionSpacing.xl) {
+
+                    // Greeting
                     Text(greeting)
-                        .aurionHeadline()
+                        .aurionDisplay()
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     // Welcome card
-                    VStack(spacing: 12) {
-                        Image(systemName: "waveform.circle.fill")
-                            .font(.system(size: 48))
-                            .foregroundColor(Color.aurionGold)
+                    welcomeCard
 
-                        Text("Ready to capture")
-                            .font(.title2)
-                            .fontWeight(.bold)
-                            .foregroundColor(.white)
+                    // Metric cards — 2x2 grid
+                    metricGrid
 
-                        if appState.hasVoiceProfile {
-                            Label("Voice profile active", systemImage: "checkmark.circle.fill")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.85))
-                        } else {
-                            Label("No voice profile — speaker separation disabled", systemImage: "info.circle")
-                                .font(.caption)
-                                .foregroundColor(.white.opacity(0.6))
-                        }
-                    }
-                    .padding(20)
-                    .frame(maxWidth: .infinity)
-                    .background(AurionGradients.navyBackground)
-                    .cornerRadius(16)
+                    // Mini weekly chart
+                    weeklyChart
 
-                    // Stat cards — live data
-                    HStack(spacing: 16) {
-                        statCard(icon: "waveform.path", title: "Sessions", value: sessionCount)
-                        statCard(icon: "chart.bar.fill", title: "Avg Score", value: avgScore)
-                    }
-
-                    // Recent sessions — from API
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("RECENT SESSIONS")
-                            .aurionSectionHeader()
-
-                        if isLoadingSessions {
-                            HStack {
-                                Spacer()
-                                ProgressView()
-                                Spacer()
-                            }
-                            .padding(.vertical, 20)
-                        } else if recentSessions.isEmpty {
-                            Text("No sessions yet — start your first one below")
-                                .font(.subheadline)
-                                .foregroundColor(.secondary)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 20)
-                        } else {
-                            ForEach(recentSessions.prefix(5), id: \.id) { session in
-                                recentSessionRow(session: session)
-                            }
-                        }
-                    }
+                    // Recent sessions
+                    recentSessionsSection
 
                     // New session card
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("New Session")
-                            .font(.headline)
-                            .foregroundColor(.aurionTextPrimary)
-
-                        Picker("Specialty", selection: $selectedSpecialty) {
-                            ForEach(specialties, id: \.0) { key, name in
-                                Text(name).tag(key)
-                            }
-                        }
-                        .pickerStyle(.menu)
-
-                        Button("Start Session") {
-                            AurionHaptics.impact(.medium)
-                            Task {
-                                await sessionManager.startNewSession(specialty: selectedSpecialty)
-                            }
-                        }
-                        .buttonStyle(AurionPrimaryButtonStyle())
-
-                        if let error = sessionManager.error {
-                            Text(error)
-                                .font(.caption)
-                                .foregroundColor(.red)
-                                .multilineTextAlignment(.center)
-                        }
-                    }
-                    .aurionElevatedCard()
+                    newSessionCard
                 }
-                .padding(20)
+                .padding(AurionSpacing.lg)
             }
             .background(Color.aurionBackground)
             .navigationTitle("Aurion")
@@ -138,6 +92,163 @@ struct DashboardView: View {
             .task { await loadRecentSessions() }
             .refreshable { await loadRecentSessions() }
         }
+    }
+
+    // MARK: - Welcome Card
+
+    private var welcomeCard: some View {
+        VStack(spacing: AurionSpacing.sm) {
+            Image(systemName: "waveform.circle.fill")
+                .font(.system(size: 44))
+                .foregroundColor(Color.aurionGold)
+
+            if totalSessionCount > 0 {
+                Text("You've captured \(totalSessionCount) session\(totalSessionCount == 1 ? "" : "s")")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+            } else {
+                Text("Ready to capture")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundColor(.white)
+            }
+
+            if appState.hasVoiceProfile {
+                Label("Voice profile active", systemImage: "checkmark.circle.fill")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.85))
+            } else {
+                Label("No voice profile -- speaker separation disabled", systemImage: "info.circle")
+                    .font(.caption)
+                    .foregroundColor(.white.opacity(0.6))
+            }
+        }
+        .padding(AurionSpacing.xl)
+        .frame(maxWidth: .infinity)
+        .background(AurionGradients.navyBackground)
+        .cornerRadius(16)
+    }
+
+    // MARK: - Metric Grid
+
+    private var metricGrid: some View {
+        let columns = [
+            GridItem(.flexible(), spacing: AurionSpacing.md),
+            GridItem(.flexible(), spacing: AurionSpacing.md),
+        ]
+
+        return LazyVGrid(columns: columns, spacing: AurionSpacing.md) {
+            MetricCard(
+                title: "Sessions",
+                value: "\(totalSessionCount)",
+                icon: "waveform.path"
+            )
+            MetricCard(
+                title: "This Week",
+                value: "\(thisWeekCount)",
+                icon: "calendar"
+            )
+            MetricCard(
+                title: "Pending",
+                value: "\(pendingCount)",
+                icon: "clock.arrow.circlepath",
+                trend: pendingCount > 0 ? "\(pendingCount)" : nil
+            )
+            MetricCard(
+                title: "Avg Score",
+                value: avgScore,
+                icon: "chart.bar.fill"
+            )
+        }
+    }
+
+    // MARK: - Weekly Chart
+
+    private var weeklyChart: some View {
+        VStack(alignment: .leading, spacing: AurionSpacing.sm) {
+            SectionHeader(title: "This Week")
+
+            HStack(alignment: .bottom, spacing: AurionSpacing.xs) {
+                ForEach(0..<7, id: \.self) { index in
+                    VStack(spacing: AurionSpacing.xxs) {
+                        RoundedRectangle(cornerRadius: 3)
+                            .fill(
+                                LinearGradient(
+                                    colors: [Color.aurionGold, Color.aurionGoldLight],
+                                    startPoint: .bottom,
+                                    endPoint: .top
+                                )
+                            )
+                            .frame(height: weeklyBarHeights[index] * 48)
+
+                        Text(weekDayLabels[index])
+                            .aurionMicro()
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+            }
+            .frame(height: 64)
+        }
+        .aurionCard()
+    }
+
+    // MARK: - Recent Sessions
+
+    private var recentSessionsSection: some View {
+        VStack(alignment: .leading, spacing: AurionSpacing.sm) {
+            SectionHeader(title: "Recent Sessions", count: recentSessions.isEmpty ? nil : recentSessions.count)
+
+            if isLoadingSessions {
+                HStack {
+                    Spacer()
+                    ProgressView()
+                    Spacer()
+                }
+                .padding(.vertical, AurionSpacing.lg)
+            } else if recentSessions.isEmpty {
+                EmptyStateView(
+                    icon: "waveform.path.ecg",
+                    title: "No sessions yet",
+                    subtitle: "Start your first clinical session below"
+                )
+            } else {
+                ForEach(recentSessions.prefix(5), id: \.id) { session in
+                    recentSessionRow(session: session)
+                }
+            }
+        }
+    }
+
+    // MARK: - New Session Card
+
+    private var newSessionCard: some View {
+        VStack(alignment: .leading, spacing: AurionSpacing.sm) {
+            Text("New Session")
+                .font(.headline)
+                .foregroundColor(.aurionTextPrimary)
+
+            Picker("Specialty", selection: $selectedSpecialty) {
+                ForEach(specialties, id: \.0) { key, name in
+                    Text(name).tag(key)
+                }
+            }
+            .pickerStyle(.menu)
+
+            Button("Start Session") {
+                AurionHaptics.impact(.medium)
+                Task {
+                    await sessionManager.startNewSession(specialty: selectedSpecialty)
+                }
+            }
+            .buttonStyle(AurionPrimaryButtonStyle())
+
+            if let error = sessionManager.error {
+                Text(error)
+                    .font(.caption)
+                    .foregroundColor(.clinicalAlert)
+                    .multilineTextAlignment(.center)
+            }
+        }
+        .aurionElevatedCard()
     }
 
     // MARK: - Data Loading
@@ -152,25 +263,6 @@ struct DashboardView: View {
         isLoadingSessions = false
     }
 
-    // MARK: - Stat Card
-
-    private func statCard(icon: String, title: String, value: String) -> some View {
-        VStack(spacing: 8) {
-            Image(systemName: icon)
-                .font(.title3)
-                .foregroundColor(Color.aurionGold)
-            Text(value)
-                .font(.title2)
-                .fontWeight(.bold)
-                .foregroundColor(.aurionTextPrimary)
-            Text(title)
-                .font(.caption)
-                .foregroundColor(.secondary)
-        }
-        .frame(maxWidth: .infinity)
-        .aurionCard()
-    }
-
     // MARK: - Recent Session Row
 
     private func recentSessionRow(session: SessionResponse) -> some View {
@@ -178,27 +270,19 @@ struct DashboardView: View {
             .replacingOccurrences(of: "_", with: " ")
             .capitalized
         let displayDate = formatDate(session.createdAt)
-        let stateBadge = badgeForState(session.state)
+        let badge = badgeForState(session.state)
 
-        return HStack {
-            VStack(alignment: .leading, spacing: 4) {
+        return HStack(spacing: AurionSpacing.sm) {
+            VStack(alignment: .leading, spacing: AurionSpacing.xxs) {
                 Text(displaySpecialty)
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundColor(.aurionTextPrimary)
                 Text(displayDate)
-                    .font(.caption)
-                    .foregroundColor(.secondary)
+                    .aurionCaption()
             }
             Spacer()
-            Text(stateBadge.text)
-                .font(.caption2)
-                .fontWeight(.medium)
-                .foregroundColor(stateBadge.color)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 4)
-                .background(stateBadge.color.opacity(0.12))
-                .cornerRadius(8)
+            StatusBadge(text: badge.text, color: badge.color)
         }
         .aurionCard()
     }
@@ -216,13 +300,16 @@ struct DashboardView: View {
 
     private func badgeForState(_ state: String) -> (text: String, color: Color) {
         switch state {
-        case "EXPORTED": return ("Exported", .green)
-        case "REVIEW_COMPLETE": return ("Ready", .blue)
-        case "PURGED": return ("Archived", .secondary)
-        case "PROCESSING_STAGE1": return ("Processing", .aurionAmber)
+        case "EXPORTED": return ("Exported", .clinicalNormal)
+        case "REVIEW_COMPLETE": return ("Ready", .clinicalInfo)
+        case "PURGED": return ("Archived", .clinicalNeutral)
+        case "PROCESSING_STAGE1": return ("Processing", .clinicalWarning)
+        case "PROCESSING_STAGE2": return ("Enriching", .clinicalWarning)
         case "AWAITING_REVIEW": return ("Review", .aurionGold)
-        case "CONSENT_PENDING": return ("Pending", .secondary)
-        default: return (state, .secondary)
+        case "RECORDING": return ("Recording", .clinicalAlert)
+        case "PAUSED": return ("Paused", .clinicalWarning)
+        case "CONSENT_PENDING": return ("Consent", .clinicalNeutral)
+        default: return (state, .clinicalNeutral)
         }
     }
 }

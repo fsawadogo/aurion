@@ -13,36 +13,69 @@ struct OnboardingFlowView: View {
         case voiceProcessing
     }
 
-    /// Maps the current enum case to a 0-based index for progress dots.
+    /// Step labels displayed below the progress bar.
+    private static let stepLabels = ["Setup", "Consent", "Voice", "Processing", "Ready"]
+
+    /// Maps the current enum case to a 0-based index.
     private var currentStepIndex: Int {
         OnboardingStep.allCases.firstIndex(of: currentStep) ?? 0
+    }
+
+    /// Progress fraction: (current step index + 1) / total steps.
+    private var progressFraction: CGFloat {
+        CGFloat(currentStepIndex + 1) / CGFloat(OnboardingStep.allCases.count)
     }
 
     var body: some View {
         NavigationStack {
             VStack(spacing: 0) {
+                // Top progress bar with step labels
+                progressHeader
+                    .padding(.horizontal, AurionSpacing.xl)
+                    .padding(.top, AurionSpacing.sm)
+                    .padding(.bottom, AurionSpacing.lg)
+
+                // Step content
                 Group {
                     switch currentStep {
                     case .wearableSetup:
                         WearableSetupView(onComplete: {
-                            currentStep = .voiceExplanation
+                            withAnimation(AurionAnimation.smooth) {
+                                currentStep = .voiceExplanation
+                            }
                         })
                         .transition(AurionTransition.fadeSlide)
                     case .voiceExplanation:
                         VoiceExplanationView(
-                            onGetStarted: { currentStep = .biometricConsent },
+                            onGetStarted: {
+                                withAnimation(AurionAnimation.smooth) {
+                                    currentStep = .biometricConsent
+                                }
+                            },
                             onSkip: { completeOnboarding() }
                         )
                         .transition(AurionTransition.fadeSlide)
                     case .biometricConsent:
                         BiometricConsentView(
-                            onAccept: { currentStep = .voiceRecording },
-                            onBack: { currentStep = .voiceExplanation }
+                            onAccept: {
+                                withAnimation(AurionAnimation.smooth) {
+                                    currentStep = .voiceRecording
+                                }
+                            },
+                            onBack: {
+                                withAnimation(AurionAnimation.smooth) {
+                                    currentStep = .voiceExplanation
+                                }
+                            }
                         )
                         .transition(AurionTransition.fadeSlide)
                     case .voiceRecording:
                         VoiceRecordingView(
-                            onComplete: { currentStep = .voiceProcessing }
+                            onComplete: {
+                                withAnimation(AurionAnimation.smooth) {
+                                    currentStep = .voiceProcessing
+                                }
+                            }
                         )
                         .transition(AurionTransition.fadeSlide)
                     case .voiceProcessing:
@@ -53,25 +86,56 @@ struct OnboardingFlowView: View {
                     }
                 }
                 .animation(AurionAnimation.smooth, value: currentStep)
-
-                // Progress dots
-                progressDots
-                    .padding(.bottom, 24)
             }
             .navigationBarBackButtonHidden(true)
         }
     }
 
-    // MARK: - Progress Dots
+    // MARK: - Progress Header
 
-    private var progressDots: some View {
-        HStack(spacing: 8) {
-            ForEach(0..<OnboardingStep.allCases.count, id: \.self) { index in
-                Circle()
-                    .fill(index == currentStepIndex ? Color.aurionGold : Color.aurionNavy.opacity(0.2))
-                    .frame(width: 8, height: 8)
-                    .scaleEffect(index == currentStepIndex ? 1.2 : 1.0)
-                    .animation(AurionAnimation.spring, value: currentStepIndex)
+    private var progressHeader: some View {
+        VStack(spacing: AurionSpacing.sm) {
+            // Thin gold progress line
+            GeometryReader { geo in
+                ZStack(alignment: .leading) {
+                    // Track
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(Color.aurionNavy.opacity(0.1))
+                        .frame(height: 3)
+
+                    // Filled portion
+                    RoundedRectangle(cornerRadius: 2)
+                        .fill(
+                            LinearGradient(
+                                colors: [.aurionGold, .aurionGoldLight],
+                                startPoint: .leading,
+                                endPoint: .trailing
+                            )
+                        )
+                        .frame(width: geo.size.width * progressFraction, height: 3)
+                        .animation(AurionAnimation.smooth, value: progressFraction)
+                }
+            }
+            .frame(height: 3)
+
+            // Step labels
+            HStack(spacing: 0) {
+                ForEach(0..<Self.stepLabels.count, id: \.self) { index in
+                    Text(Self.stepLabels[index])
+                        .font(.system(
+                            size: 11,
+                            weight: index == currentStepIndex ? .bold : .medium
+                        ))
+                        .foregroundColor(
+                            index == currentStepIndex
+                                ? .aurionGold
+                                : (index < currentStepIndex
+                                    ? .aurionTextPrimary
+                                    : .secondary.opacity(0.5))
+                        )
+                        .frame(maxWidth: .infinity)
+                        .animation(AurionAnimation.smooth, value: currentStepIndex)
+                }
             }
         }
     }

@@ -273,3 +273,171 @@ struct CircularProgressRing: View {
         }
     }
 }
+
+// MARK: - Spacing Tokens
+
+enum AurionSpacing {
+    static let xxs: CGFloat = 4
+    static let xs: CGFloat = 8
+    static let sm: CGFloat = 12
+    static let md: CGFloat = 16
+    static let lg: CGFloat = 20
+    static let xl: CGFloat = 24
+    static let xxl: CGFloat = 32
+    static let xxxl: CGFloat = 48
+}
+
+// MARK: - Clinical Status Colors
+
+extension Color {
+    static let clinicalNormal = Color.green
+    static let clinicalWarning = Color(red: 255/255, green: 179/255, blue: 0/255)
+    static let clinicalAlert = Color.red
+    static let clinicalInfo = Color.blue
+    static let clinicalNeutral = Color.secondary
+}
+
+// MARK: - Typography Scale
+
+extension View {
+    func aurionDisplay() -> some View {
+        self
+            .font(.system(size: 28, weight: .bold))
+            .foregroundColor(.aurionTextPrimary)
+    }
+
+    func aurionTitle() -> some View {
+        self
+            .font(.system(size: 22, weight: .semibold))
+            .foregroundColor(.aurionTextPrimary)
+    }
+
+    func aurionBody() -> some View {
+        self
+            .font(.system(size: 16, weight: .regular))
+            .foregroundColor(.aurionTextPrimary)
+    }
+
+    func aurionCallout() -> some View {
+        self
+            .font(.system(size: 14, weight: .medium))
+            .foregroundColor(.secondary)
+    }
+
+    func aurionCaption() -> some View {
+        self
+            .font(.system(size: 12, weight: .regular))
+            .foregroundColor(.secondary)
+    }
+
+    func aurionMicro() -> some View {
+        self
+            .font(.system(size: 10, weight: .medium))
+            .foregroundColor(.secondary)
+    }
+}
+
+// MARK: - Status Badge
+
+struct StatusBadge: View {
+    let text: String
+    let color: Color
+
+    var body: some View {
+        Text(text)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(color)
+            .padding(.horizontal, 10)
+            .padding(.vertical, 4)
+            .background(color.opacity(0.12))
+            .clipShape(Capsule())
+    }
+}
+
+// MARK: - Empty State View
+
+struct EmptyStateView: View {
+    let icon: String
+    let title: String
+    let subtitle: String
+
+    var body: some View {
+        VStack(spacing: AurionSpacing.md) {
+            Image(systemName: icon)
+                .font(.system(size: 48))
+                .foregroundColor(.secondary.opacity(0.4))
+
+            Text(title)
+                .font(.headline)
+                .foregroundColor(.aurionTextPrimary)
+
+            Text(subtitle)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .padding(AurionSpacing.xxl)
+    }
+}
+
+// MARK: - Metric Card
+
+struct MetricCard: View {
+    let title: String
+    let value: String
+    let icon: String
+    var trend: String? = nil
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: AurionSpacing.xs) {
+            HStack {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.aurionGold)
+                Spacer()
+                if let trend = trend {
+                    Text(trend)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(trend.hasPrefix("-") ? .clinicalAlert : .clinicalNormal)
+                }
+            }
+
+            Text(value)
+                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .foregroundColor(.aurionTextPrimary)
+
+            Text(title)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.secondary)
+        }
+        .aurionCard()
+    }
+}
+
+// MARK: - Section Header
+
+struct SectionHeader: View {
+    let title: String
+    var count: Int? = nil
+
+    var body: some View {
+        HStack(spacing: AurionSpacing.xs) {
+            Text(title.uppercased())
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.secondary)
+                .tracking(0.8)
+
+            if let count = count {
+                Text("\(count)")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white)
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 2)
+                    .background(Color.aurionGold)
+                    .clipShape(Capsule())
+            }
+
+            Spacer()
+        }
+    }
+}

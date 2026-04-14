@@ -11,44 +11,56 @@ struct ProfileView: View {
     @State private var consentEvents: [ConsentEvent] = []
     @State private var sessionHistory: [SessionHistoryItem] = []
     @State private var error: String?
+    @State private var sessionAlertsEnabled = true
+    @State private var noteReadyAlertsEnabled = true
+
+    private var physicianInitials: String {
+        "Dr"
+    }
 
     var body: some View {
         List {
             // ── Account Info ──────────────────────────────────
             Section {
-                HStack(spacing: 16) {
+                HStack(spacing: AurionSpacing.md) {
+                    // Avatar — initials on gold gradient
                     ZStack {
                         Circle()
                             .fill(AurionGradients.goldShimmer)
-                            .frame(width: 56, height: 56)
-                        Text("Dr")
-                            .font(.title3.bold())
+                            .frame(width: 64, height: 64)
+                        Text(physicianInitials)
+                            .font(.system(size: 22, weight: .bold))
                             .foregroundColor(.white)
                     }
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: AurionSpacing.xxs) {
                         Text("Physician")
-                            .font(.headline)
+                            .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.aurionTextPrimary)
-                        Text("clinician@aurion.local")
-                            .font(.caption)
+                        Text("Orthopedic Surgery")
+                            .font(.system(size: 14, weight: .medium))
                             .foregroundColor(.secondary)
-                        HStack(spacing: 4) {
+                        Text("CREOQ / CLLC")
+                            .font(.system(size: 13, weight: .regular))
+                            .foregroundColor(.secondary.opacity(0.8))
+
+                        HStack(spacing: AurionSpacing.xxs) {
                             Image(systemName: "shield.checkered")
                                 .font(.caption2)
                             Text(appState.userRole.rawValue)
                                 .font(.caption2)
                         }
                         .foregroundColor(.aurionGold)
+                        .padding(.top, AurionSpacing.xxs)
                     }
                 }
-                .padding(.vertical, 8)
+                .padding(.vertical, AurionSpacing.xs)
             }
 
             // ── Voice Profile ─────────────────────────────────
-            Section("Voice Profile") {
+            Section {
                 if appState.hasVoiceProfile {
                     Label("Voice profile enrolled", systemImage: "checkmark.circle.fill")
-                        .foregroundColor(.green)
+                        .foregroundColor(.clinicalNormal)
 
                     Button("Re-record Voice Profile") {
                         appState.isOnboardingComplete = false
@@ -69,6 +81,25 @@ struct ProfileView: View {
                     }
                     .foregroundColor(.aurionGold)
                 }
+            } header: {
+                SectionHeader(title: "Voice Profile")
+            }
+
+            // ── Notification Preferences ─────────────────────
+            Section {
+                Toggle(isOn: $sessionAlertsEnabled) {
+                    Label("Session Alerts", systemImage: "bell.badge")
+                        .foregroundColor(.aurionTextPrimary)
+                }
+                .tint(.aurionGold)
+
+                Toggle(isOn: $noteReadyAlertsEnabled) {
+                    Label("Note Ready", systemImage: "doc.badge.clock")
+                        .foregroundColor(.aurionTextPrimary)
+                }
+                .tint(.aurionGold)
+            } header: {
+                SectionHeader(title: "Notification Preferences")
             }
 
             // ── Privacy & Data (Law 25) ───────────────────────
@@ -91,18 +122,17 @@ struct ProfileView: View {
                     Label("Delete My Account", systemImage: "trash")
                 }
             } header: {
-                Text("Privacy & Data")
+                SectionHeader(title: "Privacy & Data")
             } footer: {
                 Text("Under Quebec Law 25, you have the right to access, export, and delete your personal data. Account deletion is permanent and cannot be undone.")
                     .font(.caption2)
             }
 
             // ── Consent History ───────────────────────────────
-            Section("Consent History") {
+            Section {
                 if consentEvents.isEmpty {
                     Text("No consent events recorded")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .aurionCaption()
                 } else {
                     ForEach(consentEvents) { event in
                         HStack {
@@ -111,24 +141,24 @@ struct ProfileView: View {
                                     .font(.subheadline)
                                     .foregroundColor(.aurionTextPrimary)
                                 Text(event.timestamp)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
+                                    .aurionMicro()
                             }
                             Spacer()
                             Image(systemName: "checkmark.seal.fill")
-                                .foregroundColor(.green)
+                                .foregroundColor(.clinicalNormal)
                                 .font(.caption)
                         }
                     }
                 }
+            } header: {
+                SectionHeader(title: "Consent History", count: consentEvents.isEmpty ? nil : consentEvents.count)
             }
 
             // ── Session History ───────────────────────────────
-            Section("Session History") {
+            Section {
                 if sessionHistory.isEmpty {
                     Text("No sessions recorded")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                        .aurionCaption()
                 } else {
                     ForEach(sessionHistory) { session in
                         HStack {
@@ -137,23 +167,22 @@ struct ProfileView: View {
                                     .font(.subheadline)
                                     .foregroundColor(.aurionTextPrimary)
                                 Text(session.date)
-                                    .font(.caption2)
-                                    .foregroundColor(.secondary)
+                                    .aurionMicro()
                             }
                             Spacer()
-                            Text(session.state)
-                                .font(.caption2)
-                                .padding(.horizontal, 8)
-                                .padding(.vertical, 2)
-                                .background(Color.aurionFieldBackground)
-                                .cornerRadius(4)
+                            StatusBadge(
+                                text: displayState(session.state).text,
+                                color: displayState(session.state).color
+                            )
                         }
                     }
                 }
+            } header: {
+                SectionHeader(title: "Session History", count: sessionHistory.isEmpty ? nil : sessionHistory.count)
             }
 
             // ── Legal ─────────────────────────────────────────
-            Section("Legal") {
+            Section {
                 Link(destination: URL(string: "https://aurionclinical.com/privacy")!) {
                     Label("Privacy Policy", systemImage: "lock.doc")
                 }
@@ -164,11 +193,31 @@ struct ProfileView: View {
                     Label("Biometric Data Policy", systemImage: "faceid")
                 }
 
-                HStack {
-                    Text("Version")
-                    Spacer()
-                    Text("0.1.0").foregroundColor(.secondary)
+                // Version info
+                VStack(alignment: .leading, spacing: AurionSpacing.xs) {
+                    HStack {
+                        Text("Version")
+                            .foregroundColor(.aurionTextPrimary)
+                        Spacer()
+                        Text("0.1.0")
+                            .foregroundColor(.secondary)
+                    }
+                    HStack {
+                        Text("Build")
+                            .foregroundColor(.aurionTextPrimary)
+                        Spacer()
+                        Text("1")
+                            .foregroundColor(.secondary)
+                    }
+                    HStack {
+                        Text("Environment")
+                            .foregroundColor(.aurionTextPrimary)
+                        Spacer()
+                        StatusBadge(text: "Development", color: .clinicalWarning)
+                    }
                 }
+            } header: {
+                SectionHeader(title: "Legal")
             }
         }
         .navigationTitle("Profile")
@@ -189,17 +238,30 @@ struct ProfileView: View {
             if isLoadingData {
                 ZStack {
                     Color.black.opacity(0.3).ignoresSafeArea()
-                    VStack(spacing: 12) {
+                    VStack(spacing: AurionSpacing.sm) {
                         ProgressView()
                         Text("Loading your data...")
                             .font(.caption)
                             .foregroundColor(.white)
                     }
-                    .padding(24)
+                    .padding(AurionSpacing.xl)
                     .background(.ultraThinMaterial)
-                    .cornerRadius(16)
+                    .cornerRadius(AurionSpacing.md)
                 }
             }
+        }
+    }
+
+    // MARK: - State Display
+
+    private func displayState(_ state: String) -> (text: String, color: Color) {
+        switch state {
+        case "EXPORTED": return ("Exported", .clinicalNormal)
+        case "REVIEW_COMPLETE": return ("Ready", .clinicalInfo)
+        case "PURGED": return ("Archived", .clinicalNeutral)
+        case "AWAITING_REVIEW": return ("Review", .aurionGold)
+        case "PROCESSING_STAGE1": return ("Processing", .clinicalWarning)
+        default: return (state, .clinicalNeutral)
         }
     }
 
