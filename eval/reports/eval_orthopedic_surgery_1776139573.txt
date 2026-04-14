@@ -1,0 +1,38 @@
+
+======================================================================
+AURION EVAL REPORT
+======================================================================
+
+  Eval A (orthopedic_surgery) — [PASS]
+    Provider:              pipeline
+    Completeness:          100% (target ≥ 90%)
+    Citation traceability: 100% (target ≥ 95%)
+    Descriptive mode:      PASS
+    Hallucinations:        0 (target 0)
+    Latency:               255ms
+
+  Eval B (orthopedic_surgery) — [PASS]
+    Provider:              vision_mock
+    Completeness:          100% (target ≥ 90%)
+    Citation traceability: 100% (target ≥ 95%)
+    Descriptive mode:      PASS
+    Hallucinations:        0 (target 0)
+
+  Eval C (orthopedic_surgery) — [PASS]
+    Provider:              screen_mock
+    Completeness:          100% (target ≥ 90%)
+    Citation traceability: 100% (target ≥ 95%)
+    Descriptive mode:      PASS
+    Hallucinations:        0 (target 0)
+
+  Eval D (orthopedic_surgery) — [FAIL]
+    Provider:              combined
+    Completeness:          100% (target ≥ 90%)
+    Citation traceability: 0% (target ≥ 95%)
+    Descriptive mode:      PASS
+    Hallucinations:        0 (target 0)
+
+----------------------------------------------------------------------
+  SUMMARY: 3/4 evals passed
+  STATUS: ✗ Some evals failed — review violations above
+======================================================================
