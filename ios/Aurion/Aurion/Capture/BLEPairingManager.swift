@@ -10,6 +10,7 @@ enum BLEConnectionState: String {
     case scanning
     case connecting
     case connected
+    case recovering  // Attempting to reconnect after failover
     case failedOver
 }
 
@@ -196,7 +197,7 @@ final class BLEPairingManager: NSObject, ObservableObject {
 
     // MARK: - Auto-Reconnect
 
-    /// Attempts to reconnect to the last known peripheral after an unexpected disconnect.
+    /// Attempts to reconnect with exponential backoff (2s, 4s, 8s).
     private func attemptReconnect() {
         guard let peripheral = connectedPeripheral else {
             handleFailover()
@@ -212,13 +213,16 @@ final class BLEPairingManager: NSObject, ObservableObject {
         reconnectAttempts += 1
         connectionState = .connecting
 
+        // Exponential backoff: 2s, 4s, 8s
+        let delay = reconnectDelaySeconds * pow(2.0, Double(reconnectAttempts - 1))
+
         #if DEBUG
-        print("[BLE] Reconnect attempt \(reconnectAttempts)/\(maxReconnectAttempts)")
+        print("[BLE] Reconnect attempt \(reconnectAttempts)/\(maxReconnectAttempts) — delay \(delay)s")
         #endif
 
         reconnectTimer?.invalidate()
         reconnectTimer = Timer.scheduledTimer(
-            withTimeInterval: reconnectDelaySeconds,
+            withTimeInterval: delay,
             repeats: false
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
@@ -239,7 +243,6 @@ final class BLEPairingManager: NSObject, ObservableObject {
 
         error = "Glasses disconnected. Using device camera."
 
-        // Log audit event
         AuditLogger.log(
             event: .deviceFailover,
             sessionId: activeSessionId,
@@ -250,9 +253,27 @@ final class BLEPairingManager: NSObject, ObservableObject {
             ]
         )
 
-        // Notify the app to switch to the device camera
         let sessionId = activeSessionId ?? "unknown"
         onDeviceFailover?(sessionId)
+    }
+
+    /// Attempt recovery after failover — scan for glasses again.
+    /// Call this when the user wants to try reconnecting to glasses
+    /// after the app has fallen back to the device camera.
+    func attemptRecovery() {
+        guard connectionState == .failedOver else { return }
+        connectionState = .recovering
+        reconnectAttempts = 0
+        error = nil
+
+        AuditLogger.log(
+            event: .deviceFailover,
+            sessionId: activeSessionId,
+            extra: ["action": "recovery_attempt"]
+        )
+
+        // Start scanning again
+        startScanning()
     }
 
     // MARK: - Simulated Mode

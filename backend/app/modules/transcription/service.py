@@ -14,7 +14,9 @@ from typing import Any, Optional
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.core.retry import with_retry
 from app.core.types import ProviderError, Transcript
+from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.provider_registry import get_registry
 
 logger = logging.getLogger("aurion.transcription")
@@ -43,16 +45,27 @@ async def upload_audio_to_s3(
     s3_key = f"audio/{session_id}/{uuid.uuid4()}.wav"
     try:
         s3 = _get_s3_client()
-        s3.put_object(
+        await with_retry(
+            s3.put_object,
             Bucket=_AUDIO_BUCKET,
             Key=s3_key,
             Body=audio_bytes,
             ContentType="audio/wav",
+            max_retries=3,
+            base_delay=1.0,
+            operation="s3_put_object",
+            session_id=str(session_id),
         )
         logger.info("Audio uploaded: session=%s key=%s", str(session_id), s3_key)
         return s3_key
     except (BotoCoreError, ClientError) as e:
         logger.error("S3 upload failed: session=%s error=%s", str(session_id), str(e))
+        audit = get_audit_log_service()
+        await audit.write_event(
+            session_id=str(session_id),
+            event_type="s3_upload_failed",
+            error_message=str(e),
+        )
         raise ProviderError("s3", f"Audio upload failed: {e}", e)
 
 
@@ -87,8 +100,20 @@ async def transcribe_audio(
         )
         return transcript
     except ProviderError:
+        audit = get_audit_log_service()
+        await audit.write_event(
+            session_id=str(session_id),
+            event_type="transcription_failed",
+            error_message="Provider raised ProviderError",
+        )
         raise
     except Exception as e:
+        audit = get_audit_log_service()
+        await audit.write_event(
+            session_id=str(session_id),
+            event_type="transcription_failed",
+            error_message=str(e),
+        )
         raise ProviderError(
             provider_override or "transcription",
             f"Transcription failed: {e}",

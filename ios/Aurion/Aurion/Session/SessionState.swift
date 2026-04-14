@@ -34,9 +34,19 @@ final class CaptureSession: ObservableObject, Identifiable {
     let specialty: String
     @Published var state: SessionState = .consentPending
     @Published var isConsentConfirmed = false
+    @Published var pausedAt: Date?
+    @Published var isPauseExpired = false
+
+    /// Maximum pause duration before session times out (30 minutes)
+    static let maxPauseDuration: TimeInterval = 1800
 
     var recordButtonEnabled: Bool {
         state == .recording || (state == .consentPending && isConsentConfirmed)
+    }
+
+    var pauseDuration: TimeInterval? {
+        guard let pausedAt, state == .paused else { return nil }
+        return Date().timeIntervalSince(pausedAt)
     }
 
     init(id: String = UUID().uuidString, specialty: String) {
@@ -61,12 +71,21 @@ final class CaptureSession: ObservableObject, Identifiable {
     func pause() {
         guard state == .recording else { return }
         state = .paused
+        pausedAt = Date()
         persist()
         AuditLogger.log(event: .sessionPaused, sessionId: id)
     }
 
     func resume() {
         guard state == .paused else { return }
+        // Check pause duration limit
+        if let pausedAt, Date().timeIntervalSince(pausedAt) > Self.maxPauseDuration {
+            isPauseExpired = true
+            AuditLogger.log(event: .recordingStopped, sessionId: id,
+                            extra: ["reason": "pause_timeout"])
+            return
+        }
+        pausedAt = nil
         state = .recording
         persist()
         AuditLogger.log(event: .sessionResumed, sessionId: id)

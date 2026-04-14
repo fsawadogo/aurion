@@ -12,6 +12,10 @@ final class APIClient: Sendable {
 
     // MARK: - Session
 
+    func getSession(sessionId: String) async throws -> SessionResponse {
+        return try await get(path: "/sessions/\(sessionId)")
+    }
+
     func createSession(specialty: String) async throws -> SessionResponse {
         return try await post(
             path: "/sessions",
@@ -64,8 +68,10 @@ final class APIClient: Sendable {
     private func get<T: Decodable>(path: String) async throws -> T {
         let url = URL(string: "\(baseURL)\(path)")!
         var request = URLRequest(url: url)
+        request.timeoutInterval = 30
         addAuth(&request)
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await performRequest(request)
+        try validateResponse(response, data: data)
         return try JSONDecoder().decode(T.self, from: data)
     }
 
@@ -73,18 +79,75 @@ final class APIClient: Sendable {
         let url = URL(string: "\(baseURL)\(path)")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
+        request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         addAuth(&request)
         if let body = body {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
-        let (data, _) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await performRequest(request)
+        try validateResponse(response, data: data)
         return try JSONDecoder().decode(T.self, from: data)
     }
 
+    private func performRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
+        do {
+            return try await URLSession.shared.data(for: request)
+        } catch let error as URLError {
+            switch error.code {
+            case .notConnectedToInternet, .networkConnectionLost:
+                throw APIError.offline
+            case .timedOut:
+                throw APIError.timeout
+            default:
+                throw APIError.networkError(error.localizedDescription)
+            }
+        }
+    }
+
+    private func validateResponse(_ response: URLResponse, data: Data) throws {
+        guard let http = response as? HTTPURLResponse else { return }
+        switch http.statusCode {
+        case 200..<300: return
+        case 401: throw APIError.unauthorized
+        case 403: throw APIError.forbidden
+        case 404: throw APIError.notFound
+        case 409: throw APIError.conflict(String(data: data, encoding: .utf8) ?? "")
+        case 500..<600: throw APIError.serverError(http.statusCode)
+        default: throw APIError.serverError(http.statusCode)
+        }
+    }
+
     private func addAuth(_ request: inout URLRequest) {
-        // Dev token format: ROLE (parsed by backend auth service)
         request.setValue("Bearer CLINICIAN", forHTTPHeaderField: "Authorization")
+    }
+}
+
+// MARK: - API Error Types
+
+enum APIError: LocalizedError {
+    case offline
+    case timeout
+    case networkError(String)
+    case unauthorized
+    case forbidden
+    case notFound
+    case conflict(String)
+    case serverError(Int)
+    case decodingError(String)
+
+    var errorDescription: String? {
+        switch self {
+        case .offline: return "No internet connection"
+        case .timeout: return "Request timed out"
+        case .networkError(let msg): return "Network error: \(msg)"
+        case .unauthorized: return "Authentication required"
+        case .forbidden: return "Access denied"
+        case .notFound: return "Not found"
+        case .conflict(let msg): return msg
+        case .serverError(let code): return "Server error (\(code))"
+        case .decodingError(let msg): return "Data error: \(msg)"
+        }
     }
 }
 

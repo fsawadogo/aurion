@@ -19,6 +19,7 @@ from typing import Any, Optional
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.core.retry import with_retry
 from app.core.types import (
     FrameCaption,
     MaskedFrame,
@@ -28,6 +29,7 @@ from app.core.types import (
     ProviderError,
     TranscriptSegment,
 )
+from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
 
@@ -71,8 +73,14 @@ async def retrieve_frames_for_triggers(
         prefix = f"frames/{session_id}/"
 
         try:
-            response = s3.list_objects_v2(
-                Bucket=_FRAMES_BUCKET, Prefix=prefix
+            response = await with_retry(
+                s3.list_objects_v2,
+                Bucket=_FRAMES_BUCKET,
+                Prefix=prefix,
+                max_retries=3,
+                base_delay=1.0,
+                operation="s3_list_frames",
+                session_id=session_id,
             )
             for obj in response.get("Contents", []):
                 key = obj["Key"]
@@ -122,15 +130,19 @@ async def caption_frames(
     trigger_segments: list[TranscriptSegment],
     provider_override: Optional[str] = None,
 ) -> list[FrameCaption]:
-    """Caption each frame using the active vision provider.
+    """Caption each frame using the active vision provider with fallback.
 
     Low-confidence frames are discarded before classification.
+    If the primary provider fails on a frame, a fallback provider is tried.
     """
     registry = get_registry()
-    provider = registry.get_vision_provider(override=provider_override)
+    provider = registry.get_vision_provider_with_fallback()
+    audit = get_audit_log_service()
 
     captions: list[FrameCaption] = []
     discarded_count = 0
+    failed_count = 0
+    session_id = frames[0].session_id if frames else ""
 
     for frame in frames:
         # Find the closest trigger segment for this frame
@@ -152,14 +164,53 @@ async def caption_frames(
 
             captions.append(caption)
         except ProviderError as e:
-            logger.error(
-                "Vision captioning failed: frame=%s error=%s",
+            logger.warning(
+                "Primary vision provider failed on frame=%s: %s — trying fallback",
                 frame.frame_id, str(e),
             )
+            # Attempt fallback provider
+            try:
+                fallback_provider = registry.get_vision_provider_with_fallback()
+                caption = await fallback_provider.caption_frame(frame, anchor)
+
+                await audit.write_event(
+                    session_id=frame.session_id,
+                    event_type="provider_fallback",
+                    frame_id=frame.frame_id,
+                    original_error=str(e),
+                    fallback_provider=caption.provider_used,
+                )
+
+                if caption.confidence == "low":
+                    discarded_count += 1
+                    continue
+
+                captions.append(caption)
+            except ProviderError as fallback_err:
+                failed_count += 1
+                logger.error(
+                    "Vision captioning failed (all providers): frame=%s error=%s",
+                    frame.frame_id, str(fallback_err),
+                )
+                await audit.write_event(
+                    session_id=frame.session_id,
+                    event_type="vision_frame_failed",
+                    frame_id=frame.frame_id,
+                    error_message=str(fallback_err),
+                )
+
+    # If every frame failed, log a stage2 failure event
+    if frames and failed_count == len(frames):
+        await audit.write_event(
+            session_id=session_id,
+            event_type="stage2_failed",
+            total_frames=len(frames),
+            failed_frames=failed_count,
+        )
 
     logger.info(
-        "Captioning complete: total=%d captioned=%d discarded=%d",
-        len(frames), len(captions), discarded_count,
+        "Captioning complete: total=%d captioned=%d discarded=%d failed=%d",
+        len(frames), len(captions), discarded_count, failed_count,
     )
     return captions
 

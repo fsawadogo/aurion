@@ -14,6 +14,7 @@ from typing import Any
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.core.retry import with_retry
 from app.modules.audit_log.service import get_audit_log_service
 
 logger = logging.getLogger("aurion.cleanup")
@@ -51,13 +52,28 @@ async def purge_audio(session_id: str, s3_key: str) -> None:
     )
 
     try:
-        client.delete_object(Bucket=_AUDIO_BUCKET, Key=s3_key)
+        await with_retry(
+            client.delete_object,
+            Bucket=_AUDIO_BUCKET,
+            Key=s3_key,
+            max_retries=3,
+            base_delay=1.0,
+            operation="s3_delete_audio",
+            session_id=session_id,
+        )
     except (BotoCoreError, ClientError) as exc:
         logger.error(
             "Failed to purge audio: session=%s key=%s error=%s",
             session_id,
             s3_key,
             str(exc),
+        )
+        await audit.write_event(
+            session_id=session_id,
+            event_type="cleanup_partial_failure",
+            bucket=_AUDIO_BUCKET,
+            s3_key=s3_key,
+            error_message=str(exc),
         )
         raise
 
@@ -92,10 +108,12 @@ async def purge_frames(session_id: str) -> None:
         prefix,
     )
 
+    keys_deleted: list[str] = []
+    failed_keys: list[str] = []
+
     try:
         # List all objects under the session prefix
         paginator = client.get_paginator("list_objects_v2")
-        keys_deleted: list[str] = []
 
         for page in paginator.paginate(Bucket=_FRAMES_BUCKET, Prefix=prefix):
             objects = page.get("Contents", [])
@@ -106,8 +124,24 @@ async def purge_frames(session_id: str) -> None:
                 "Objects": [{"Key": obj["Key"]} for obj in objects],
                 "Quiet": True,
             }
-            client.delete_objects(Bucket=_FRAMES_BUCKET, Delete=delete_request)
-            keys_deleted.extend(obj["Key"] for obj in objects)
+            try:
+                await with_retry(
+                    client.delete_objects,
+                    Bucket=_FRAMES_BUCKET,
+                    Delete=delete_request,
+                    max_retries=3,
+                    base_delay=1.0,
+                    operation="s3_delete_frames",
+                    session_id=session_id,
+                )
+                keys_deleted.extend(obj["Key"] for obj in objects)
+            except (BotoCoreError, ClientError) as batch_exc:
+                logger.error(
+                    "Failed to delete frame batch: session=%s error=%s",
+                    session_id,
+                    str(batch_exc),
+                )
+                failed_keys.extend(obj["Key"] for obj in objects)
 
     except (BotoCoreError, ClientError) as exc:
         logger.error(
@@ -117,6 +151,14 @@ async def purge_frames(session_id: str) -> None:
         )
         raise
 
+    if failed_keys:
+        await audit.write_event(
+            session_id=session_id,
+            event_type="cleanup_partial_failure",
+            bucket=_FRAMES_BUCKET,
+            failed_count=len(failed_keys),
+        )
+
     await audit.write_event(
         session_id=session_id,
         event_type="frames_purged",
@@ -125,9 +167,10 @@ async def purge_frames(session_id: str) -> None:
     )
 
     logger.info(
-        "Frames purged successfully: session=%s count=%d",
+        "Frames purged: session=%s deleted=%d failed=%d",
         session_id,
         len(keys_deleted),
+        len(failed_keys),
     )
 
 
@@ -152,9 +195,11 @@ async def migrate_eval_frames(session_id: str) -> None:
         _EVAL_BUCKET,
     )
 
+    migrated_keys: list[str] = []
+    failed_keys: list[str] = []
+
     try:
         paginator = client.get_paginator("list_objects_v2")
-        migrated_keys: list[str] = []
 
         for page in paginator.paginate(Bucket=_FRAMES_BUCKET, Prefix=prefix):
             objects = page.get("Contents", [])
@@ -165,21 +210,55 @@ async def migrate_eval_frames(session_id: str) -> None:
                 source_key = obj["Key"]
                 copy_source = {"Bucket": _FRAMES_BUCKET, "Key": source_key}
 
-                # Copy to eval bucket preserving the key structure
-                client.copy_object(
-                    CopySource=copy_source,
-                    Bucket=_EVAL_BUCKET,
-                    Key=source_key,
-                )
-                migrated_keys.append(source_key)
+                try:
+                    # Copy to eval bucket preserving the key structure
+                    await with_retry(
+                        client.copy_object,
+                        CopySource=copy_source,
+                        Bucket=_EVAL_BUCKET,
+                        Key=source_key,
+                        max_retries=3,
+                        base_delay=1.0,
+                        operation="s3_copy_eval_frame",
+                        session_id=session_id,
+                    )
 
-        # Delete originals from the frames bucket after successful copy
+                    # Verify destination object exists before deleting source
+                    await with_retry(
+                        client.head_object,
+                        Bucket=_EVAL_BUCKET,
+                        Key=source_key,
+                        max_retries=2,
+                        base_delay=0.5,
+                        operation="s3_verify_eval_copy",
+                        session_id=session_id,
+                    )
+
+                    migrated_keys.append(source_key)
+                except (BotoCoreError, ClientError) as copy_exc:
+                    logger.error(
+                        "Failed to migrate frame: session=%s key=%s error=%s",
+                        session_id,
+                        source_key,
+                        str(copy_exc),
+                    )
+                    failed_keys.append(source_key)
+
+        # Delete originals from the frames bucket only for verified copies
         if migrated_keys:
             delete_request = {
                 "Objects": [{"Key": key} for key in migrated_keys],
                 "Quiet": True,
             }
-            client.delete_objects(Bucket=_FRAMES_BUCKET, Delete=delete_request)
+            await with_retry(
+                client.delete_objects,
+                Bucket=_FRAMES_BUCKET,
+                Delete=delete_request,
+                max_retries=3,
+                base_delay=1.0,
+                operation="s3_delete_migrated_frames",
+                session_id=session_id,
+            )
 
     except (BotoCoreError, ClientError) as exc:
         logger.error(
@@ -188,6 +267,14 @@ async def migrate_eval_frames(session_id: str) -> None:
             str(exc),
         )
         raise
+
+    if failed_keys:
+        await audit.write_event(
+            session_id=session_id,
+            event_type="cleanup_partial_failure",
+            bucket=_FRAMES_BUCKET,
+            failed_count=len(failed_keys),
+        )
 
     await audit.write_event(
         session_id=session_id,
@@ -198,7 +285,44 @@ async def migrate_eval_frames(session_id: str) -> None:
     )
 
     logger.info(
-        "Eval frames migrated successfully: session=%s count=%d",
+        "Eval frames migrated: session=%s migrated=%d failed=%d",
         session_id,
         len(migrated_keys),
+        len(failed_keys),
     )
+
+
+async def verify_purge(session_id: str) -> bool:
+    """Verify all audio and frame files for a session have been purged.
+
+    Checks both the audio and frames S3 buckets for any remaining objects
+    under the session prefix. Returns True only if both are empty.
+    """
+    client = _get_s3_client()
+
+    for bucket, prefix in [
+        (_AUDIO_BUCKET, f"audio/{session_id}/"),
+        (_FRAMES_BUCKET, f"{session_id}/"),
+    ]:
+        try:
+            response = client.list_objects_v2(
+                Bucket=bucket, Prefix=prefix, MaxKeys=1
+            )
+            if response.get("Contents"):
+                logger.warning(
+                    "Purge verification failed: session=%s bucket=%s — objects remain",
+                    session_id,
+                    bucket,
+                )
+                return False
+        except (BotoCoreError, ClientError) as exc:
+            logger.error(
+                "Purge verification error: session=%s bucket=%s error=%s",
+                session_id,
+                bucket,
+                str(exc),
+            )
+            return False
+
+    logger.info("Purge verified: session=%s — all buckets empty", session_id)
+    return True

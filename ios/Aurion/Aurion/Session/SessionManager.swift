@@ -157,6 +157,47 @@ final class SessionManager: ObservableObject {
         error = nil
     }
 
+    // MARK: - Crash Recovery Validation
+
+    /// Validate a recovered session against the backend before resuming.
+    /// Returns true if the session is still valid, false if it should be discarded.
+    func validateRecoveredSession(_ recoveredSession: CaptureSession) async -> Bool {
+        do {
+            let response = try await api.getSession(sessionId: recoveredSession.id)
+            // Sync local state to backend state
+            if let backendState = SessionState(rawValue: response.state) {
+                if backendState.isActive {
+                    recoveredSession.state = backendState
+                    session = recoveredSession
+                    return true
+                } else {
+                    // Session already completed on backend
+                    SessionPersistence.clear()
+                    return false
+                }
+            }
+            return false
+        } catch let error as APIError {
+            switch error {
+            case .notFound:
+                // Session no longer exists on backend
+                SessionPersistence.clear()
+                self.error = "Session expired. Starting fresh."
+                return false
+            case .offline:
+                // Can't reach backend — allow local recovery
+                session = recoveredSession
+                return true
+            default:
+                SessionPersistence.clear()
+                return false
+            }
+        } catch {
+            SessionPersistence.clear()
+            return false
+        }
+    }
+
     // MARK: - Mock Data Generators
 
     private func createMockWavData() -> Data {
