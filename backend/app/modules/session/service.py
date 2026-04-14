@@ -102,9 +102,10 @@ async def transition_session(
     if target_state not in allowed:
         raise InvalidTransitionError(current, target_state)
 
-    # Consent hard block — cannot go to RECORDING without going through CONSENT_PENDING
-    if target_state == SessionState.RECORDING and current != SessionState.CONSENT_PENDING and current != SessionState.PAUSED:
-        raise ConsentRequiredError()
+    # Consent hard block — cannot go to RECORDING without consent_confirmed
+    if target_state == SessionState.RECORDING and current == SessionState.CONSENT_PENDING:
+        if not session.consent_confirmed:
+            raise ConsentRequiredError()
 
     session.state = target_state
     session.updated_at = datetime.now(timezone.utc)
@@ -121,11 +122,16 @@ async def confirm_consent(
     db: AsyncSession,
     session: SessionModel,
 ) -> SessionModel:
-    """Explicit consent confirmation — transitions from CONSENT_PENDING to allow RECORDING."""
+    """Explicit consent confirmation — sets consent_confirmed flag.
+
+    Session stays in CONSENT_PENDING. The next call to transition_session
+    to RECORDING is now valid (the flag is checked in the transition).
+    """
     if session.state != SessionState.CONSENT_PENDING:
         raise InvalidTransitionError(session.state, SessionState.RECORDING)
-    # Stay in CONSENT_PENDING — the next call to transition_session to RECORDING is now valid
-    # The consent_confirmed audit event is written by the caller
+    session.consent_confirmed = True
+    session.updated_at = datetime.now(timezone.utc)
+    await db.flush()
     return session
 
 

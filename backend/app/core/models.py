@@ -26,6 +26,7 @@ class SessionModel(Base):
         nullable=False,
         default=SessionState.IDLE,
     )
+    consent_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     provider_overrides: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
