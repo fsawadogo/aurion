@@ -88,7 +88,7 @@ final class SessionManager: ObservableObject {
 
             processingStatus = "Generating note..."
 
-            let (data, response) = try await URLSession.shared.data(for: request)
+            let (_, response) = try await URLSession.shared.data(for: request)
 
             if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
                 processingStatus = "Note ready for review"

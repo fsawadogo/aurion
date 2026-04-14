@@ -1,4 +1,4 @@
-import CoreBluetooth
+@preconcurrency import CoreBluetooth
 import Combine
 import Foundation
 
@@ -221,13 +221,14 @@ final class BLEPairingManager: NSObject, ObservableObject {
         #endif
 
         reconnectTimer?.invalidate()
+        let peripheralToReconnect = peripheral
         reconnectTimer = Timer.scheduledTimer(
             withTimeInterval: delay,
             repeats: false
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
                 guard let self else { return }
-                self.centralManager.connect(peripheral, options: nil)
+                self.centralManager.connect(peripheralToReconnect, options: nil)
             }
         }
     }

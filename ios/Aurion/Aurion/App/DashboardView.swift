@@ -5,7 +5,8 @@ struct DashboardView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var sessionManager: SessionManager
     @State private var selectedSpecialty = "orthopedic_surgery"
-    @State private var showingNewSession = false
+    @State private var recentSessions: [SessionResponse] = []
+    @State private var isLoadingSessions = false
 
     private let specialties = [
         ("orthopedic_surgery", "Orthopedic Surgery"),
@@ -18,25 +19,31 @@ struct DashboardView: View {
     private var greeting: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 0..<12:
-            return "Good morning, Dr."
-        case 12..<17:
-            return "Good afternoon, Dr."
-        default:
-            return "Good evening, Dr."
+        case 0..<12: return "Good morning, Dr."
+        case 12..<17: return "Good afternoon, Dr."
+        default: return "Good evening, Dr."
         }
+    }
+
+    private var sessionCount: String {
+        "\(recentSessions.count)"
+    }
+
+    private var avgScore: String {
+        guard !recentSessions.isEmpty else { return "—" }
+        // Placeholder — real score would come from pilot metrics
+        return "—"
     }
 
     var body: some View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 24) {
-                    // Greeting
                     Text(greeting)
                         .aurionHeadline()
                         .frame(maxWidth: .infinity, alignment: .leading)
 
-                    // Welcome card — navy gradient background
+                    // Welcome card
                     VStack(spacing: 12) {
                         Image(systemName: "waveform.circle.fill")
                             .font(.system(size: 48))
@@ -62,32 +69,35 @@ struct DashboardView: View {
                     .background(AurionGradients.navyBackground)
                     .cornerRadius(16)
 
-                    // Stat cards row
+                    // Stat cards — live data
                     HStack(spacing: 16) {
-                        statCard(icon: "waveform.path", title: "Sessions", value: "12")
-                        statCard(icon: "chart.bar.fill", title: "Avg Score", value: "94%")
+                        statCard(icon: "waveform.path", title: "Sessions", value: sessionCount)
+                        statCard(icon: "chart.bar.fill", title: "Avg Score", value: avgScore)
                     }
 
-                    // Recent sessions section
+                    // Recent sessions — from API
                     VStack(alignment: .leading, spacing: 12) {
                         Text("RECENT SESSIONS")
                             .aurionSectionHeader()
 
-                        recentSessionRow(
-                            specialty: "Orthopedic Surgery",
-                            date: "Apr 10, 2026",
-                            score: 96
-                        )
-                        recentSessionRow(
-                            specialty: "Plastic Surgery",
-                            date: "Apr 9, 2026",
-                            score: 91
-                        )
-                        recentSessionRow(
-                            specialty: "Orthopedic Surgery",
-                            date: "Apr 8, 2026",
-                            score: 94
-                        )
+                        if isLoadingSessions {
+                            HStack {
+                                Spacer()
+                                ProgressView()
+                                Spacer()
+                            }
+                            .padding(.vertical, 20)
+                        } else if recentSessions.isEmpty {
+                            Text("No sessions yet — start your first one below")
+                                .font(.subheadline)
+                                .foregroundColor(.secondary)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 20)
+                        } else {
+                            ForEach(recentSessions.prefix(5), id: \.id) { session in
+                                recentSessionRow(session: session)
+                            }
+                        }
                     }
 
                     // New session card
@@ -125,7 +135,21 @@ struct DashboardView: View {
             .background(Color.aurionBackground)
             .navigationTitle("Aurion")
             .aurionNavBar()
+            .task { await loadRecentSessions() }
+            .refreshable { await loadRecentSessions() }
         }
+    }
+
+    // MARK: - Data Loading
+
+    private func loadRecentSessions() async {
+        isLoadingSessions = true
+        do {
+            recentSessions = try await APIClient.shared.listSessions()
+        } catch {
+            recentSessions = []
+        }
+        isLoadingSessions = false
     }
 
     // MARK: - Stat Card
@@ -149,84 +173,56 @@ struct DashboardView: View {
 
     // MARK: - Recent Session Row
 
-    private func recentSessionRow(specialty: String, date: String, score: Int) -> some View {
-        HStack {
+    private func recentSessionRow(session: SessionResponse) -> some View {
+        let displaySpecialty = session.specialty
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+        let displayDate = formatDate(session.createdAt)
+        let stateBadge = badgeForState(session.state)
+
+        return HStack {
             VStack(alignment: .leading, spacing: 4) {
-                Text(specialty)
+                Text(displaySpecialty)
                     .font(.subheadline)
                     .fontWeight(.medium)
                     .foregroundColor(.aurionTextPrimary)
-                Text(date)
+                Text(displayDate)
                     .font(.caption)
                     .foregroundColor(.secondary)
             }
             Spacer()
-            Text("\(score)%")
-                .font(.subheadline)
-                .fontWeight(.semibold)
-                .foregroundColor(score >= 90 ? Color.aurionGold : .secondary)
+            Text(stateBadge.text)
+                .font(.caption2)
+                .fontWeight(.medium)
+                .foregroundColor(stateBadge.color)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 4)
-                .background(
-                    (score >= 90 ? Color.aurionGold : Color.secondary)
-                        .opacity(0.12)
-                )
+                .background(stateBadge.color.opacity(0.12))
                 .cornerRadius(8)
         }
         .aurionCard()
     }
-}
 
-// MARK: - Settings
-
-struct SettingsView: View {
-    @EnvironmentObject var appState: AppState
-    @State private var showDeleteConfirmation = false
-
-    var body: some View {
-        List {
-            Section("Voice Profile") {
-                if appState.hasVoiceProfile {
-                    Label("Voice profile enrolled", systemImage: "checkmark.circle.fill")
-                        .foregroundColor(.green)
-
-                    Button("Re-record Voice Profile") {
-                        // Run enrollment flow again
-                    }
-
-                    Button("Delete Voice Profile", role: .destructive) {
-                        showDeleteConfirmation = true
-                    }
-                } else {
-                    Label("No voice profile", systemImage: "mic.slash")
-                        .foregroundColor(.secondary)
-
-                    Button("Set Up Voice Profile") {
-                        appState.isOnboardingComplete = false
-                    }
-                }
-            }
-
-            Section("About") {
-                HStack {
-                    Text("Version")
-                    Spacer()
-                    Text("0.1.0")
-                        .foregroundColor(.secondary)
-                }
-            }
+    private func formatDate(_ iso: String) -> String {
+        let formatter = ISO8601DateFormatter()
+        if let date = formatter.date(from: iso) {
+            let display = DateFormatter()
+            display.dateStyle = .medium
+            display.timeStyle = .short
+            return display.string(from: date)
         }
-        .navigationTitle("Settings")
-        .aurionNavBar()
-        .alert("Delete Voice Profile", isPresented: $showDeleteConfirmation) {
-            Button("Delete", role: .destructive) {
-                KeychainHelper.shared.deleteVoiceEmbedding()
-                AuditLogger.log(event: .voiceProfileDeleted)
-                appState.checkVoiceEnrollment()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("This will remove your voice profile. Speaker separation will be disabled.")
+        return iso
+    }
+
+    private func badgeForState(_ state: String) -> (text: String, color: Color) {
+        switch state {
+        case "EXPORTED": return ("Exported", .green)
+        case "REVIEW_COMPLETE": return ("Ready", .blue)
+        case "PURGED": return ("Archived", .secondary)
+        case "PROCESSING_STAGE1": return ("Processing", .aurionAmber)
+        case "AWAITING_REVIEW": return ("Review", .aurionGold)
+        case "CONSENT_PENDING": return ("Pending", .secondary)
+        default: return (state, .secondary)
         }
     }
 }

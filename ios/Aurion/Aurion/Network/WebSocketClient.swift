@@ -29,25 +29,26 @@ final class WebSocketClient: ObservableObject {
 
     private func receiveMessage() {
         webSocket?.receive { [weak self] result in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
                 switch result {
                 case .success(let message):
                     switch message {
                     case .string(let text):
                         if let data = text.data(using: .utf8),
                            let note = try? JSONDecoder().decode(NoteResponse.self, from: data) {
-                            self?.latestNote = note
+                            self.latestNote = note
                         }
                     case .data(let data):
                         if let note = try? JSONDecoder().decode(NoteResponse.self, from: data) {
-                            self?.latestNote = note
+                            self.latestNote = note
                         }
                     @unknown default:
                         break
                     }
-                    self?.receiveMessage()
+                    self.receiveMessage()
                 case .failure:
-                    self?.isConnected = false
+                    self.isConnected = false
                 }
             }
         }

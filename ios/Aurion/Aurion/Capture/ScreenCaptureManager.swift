@@ -36,13 +36,13 @@ final class ScreenCaptureManager: ObservableObject {
     // MARK: - Internal State
 
     /// The configured frames-per-second rate for screen capture.
-    private var targetFPS: Int = 2
+    private nonisolated(unsafe) var targetFPS: Int = 2
 
     /// Timestamp of the last captured frame, used to throttle to the target FPS.
-    private var lastCaptureTime: TimeInterval = 0
+    private nonisolated(unsafe) var lastCaptureTime: TimeInterval = 0
 
     /// Session start time for computing relative timestamps.
-    private var sessionStartTime: TimeInterval = 0
+    private nonisolated(unsafe) var sessionStartTime: TimeInterval = 0
 
     /// Reference to the shared screen recorder.
     private var recorder: RPScreenRecorder {

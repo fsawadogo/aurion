@@ -46,7 +46,7 @@ final class CaptureManager: NSObject, ObservableObject {
     // MARK: - Configuration
 
     /// Frames per second to extract from the video stream (from AppConfig pipeline.video_capture_fps).
-    var videoCaptureFPS: Double = 1.0
+    nonisolated(unsafe) var videoCaptureFPS: Double = 1.0
 
     /// JPEG compression quality for captured video frames.
     private let jpegQuality: CGFloat = 0.85
@@ -58,9 +58,9 @@ final class CaptureManager: NSObject, ObservableObject {
 
     // MARK: - AVFoundation
 
-    private let captureSession = AVCaptureSession()
-    private let audioOutput = AVCaptureAudioDataOutput()
-    private let videoOutput = AVCaptureVideoDataOutput()
+    private nonisolated(unsafe) let captureSession = AVCaptureSession()
+    private nonisolated(unsafe) let audioOutput = AVCaptureAudioDataOutput()
+    private nonisolated(unsafe) let videoOutput = AVCaptureVideoDataOutput()
     private let sessionQueue = DispatchQueue(label: "com.aurion.capture.session", qos: .userInitiated)
     private let audioProcessingQueue = DispatchQueue(label: "com.aurion.capture.audio", qos: .userInitiated)
     private let videoProcessingQueue = DispatchQueue(label: "com.aurion.capture.video", qos: .userInitiated)
@@ -68,15 +68,16 @@ final class CaptureManager: NSObject, ObservableObject {
     // MARK: - Audio Recording State
 
     /// Raw PCM audio samples accumulated during recording.
-    private var audioPCMData = Data()
+    /// Protected by audioPCMLock — accessed from audio delegate queue.
+    private nonisolated(unsafe) var audioPCMData = Data()
     private let audioPCMLock = NSLock()
 
     // MARK: - Video Frame Extraction
 
     /// Timestamp of the last extracted frame, used to throttle to the configured FPS.
-    private var lastFrameExtractionTime: TimeInterval = 0
+    private nonisolated(unsafe) var lastFrameExtractionTime: TimeInterval = 0
     /// Session start time, used to compute relative timestamps for frames.
-    private var sessionStartTime: TimeInterval = 0
+    private nonisolated(unsafe) var sessionStartTime: TimeInterval = 0
     /// Reusable CIContext for frame conversion -- creating one per frame is expensive.
     private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
@@ -283,22 +284,9 @@ final class CaptureManager: NSObject, ObservableObject {
             forName: AVCaptureSession.wasInterruptedNotification,
             object: captureSession,
             queue: .main
-        ) { [weak self] notification in
-            guard let self else { return }
-            let reasonValue = (notification.userInfo?[AVCaptureSession.InterruptionReasonKey] as? NSNumber)?.intValue
-            let reason = AVCaptureSession.InterruptionReason(rawValue: reasonValue ?? 0)
-
-            Task { @MainActor in
-                switch reason {
-                case .videoDeviceNotAvailableDueToSystemPressure:
-                    self.error = "Capture paused due to system pressure."
-                case .videoDeviceInUseByAnotherClient:
-                    self.error = "Camera in use by another app."
-                case .audioDeviceInUseByAnotherClient:
-                    self.error = "Microphone in use by another app."
-                default:
-                    self.error = "Capture interrupted."
-                }
+        ) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                self?.error = "Capture interrupted."
             }
         }
 
@@ -307,7 +295,7 @@ final class CaptureManager: NSObject, ObservableObject {
             object: captureSession,
             queue: .main
         ) { [weak self] _ in
-            Task { @MainActor in
+            Task { @MainActor [weak self] in
                 self?.error = nil
             }
         }

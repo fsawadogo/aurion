@@ -201,20 +201,22 @@ final class SpeakerSeparation {
             var realPart = [Float](repeating: 0, count: halfN)
             var imagPart = [Float](repeating: 0, count: halfN)
 
-            // Pack interleaved real data into split complex form
-            frame.withUnsafeBufferPointer { framePtr in
-                framePtr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { complexPtr in
-                    var splitComplex = DSPSplitComplex(realp: &realPart, imagp: &imagPart)
-                    vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(halfN))
+            // Pack interleaved real data into split complex form and run FFT
+            var magnitudes = [Float](repeating: 0, count: halfN)
+            realPart.withUnsafeMutableBufferPointer { realBuf in
+                imagPart.withUnsafeMutableBufferPointer { imagBuf in
+                    var splitComplex = DSPSplitComplex(realp: realBuf.baseAddress!, imagp: imagBuf.baseAddress!)
+
+                    frame.withUnsafeBufferPointer { framePtr in
+                        framePtr.baseAddress!.withMemoryRebound(to: DSPComplex.self, capacity: halfN) { complexPtr in
+                            vDSP_ctoz(complexPtr, 2, &splitComplex, 1, vDSP_Length(halfN))
+                        }
+                    }
+
+                    vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
+                    vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(halfN))
                 }
             }
-
-            var splitComplex = DSPSplitComplex(realp: &realPart, imagp: &imagPart)
-            vDSP_fft_zrip(fftSetup, &splitComplex, 1, log2n, FFTDirection(FFT_FORWARD))
-
-            // Compute magnitude spectrum
-            var magnitudes = [Float](repeating: 0, count: halfN)
-            vDSP_zvmags(&splitComplex, 1, &magnitudes, 1, vDSP_Length(halfN))
 
             // Normalize
             var scale = Float(1.0 / Float(fftLength))

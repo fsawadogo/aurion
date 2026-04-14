@@ -279,7 +279,7 @@ struct SessionNoteView: View {
         guard let note else { return }
         Task {
             do {
-                let data = try await APIClient.shared.exportNote(sessionId: note.sessionId)
+                _ = try await APIClient.shared.exportNote(sessionId: note.sessionId)
                 // In production, present share sheet with DOCX data
                 AurionHaptics.notification(.success)
             } catch {
