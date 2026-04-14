@@ -124,13 +124,6 @@ struct DashboardView: View {
             }
             .background(Color.aurionBackground)
             .navigationTitle("Aurion")
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    NavigationLink(destination: ProfileView()) {
-                        Image(systemName: "person.circle")
-                    }
-                }
-            }
             .aurionNavBar()
         }
     }

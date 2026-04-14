@@ -12,6 +12,10 @@ final class APIClient: Sendable {
 
     // MARK: - Session
 
+    func listSessions() async throws -> [SessionResponse] {
+        return try await get(path: "/sessions")
+    }
+
     func getSession(sessionId: String) async throws -> SessionResponse {
         return try await get(path: "/sessions/\(sessionId)")
     }

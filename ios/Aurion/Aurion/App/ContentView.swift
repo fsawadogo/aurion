@@ -39,7 +39,7 @@ struct ContentView: View {
                     .transition(.opacity)
                     .environmentObject(sessionManager)
             } else {
-                DashboardView()
+                MainTabView()
                     .transition(AurionTransition.fadeSlide)
                     .environmentObject(sessionManager)
             }
