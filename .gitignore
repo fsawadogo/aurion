@@ -54,6 +54,7 @@ infrastructure/cdk.out/
 infrastructure/node_modules/
 
 # Terraform
+.terraform/
 *.tfstate
 *.tfstate.*
 

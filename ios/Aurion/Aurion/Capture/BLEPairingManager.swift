@@ -34,6 +34,7 @@ final class BLEPairingManager: NSObject, ObservableObject {
     @Published var pairedDeviceName: String?
     @Published var connectionState: BLEConnectionState = .disconnected
     @Published var bluetoothEnabled = false
+    @Published var signalStrength: Int = -100
     @Published var error: String?
 
     // MARK: - Callbacks
@@ -370,7 +371,8 @@ extension BLEPairingManager: CBCentralManagerDelegate {
 
             guard matchesServiceUUID || matchesName else { return }
 
-            // Avoid duplicates
+            self.signalStrength = RSSI.intValue
+
             if !self.discoveredPeripherals.contains(where: { $0.identifier == peripheral.identifier }) {
                 self.discoveredPeripherals.append(peripheral)
 
@@ -378,7 +380,6 @@ extension BLEPairingManager: CBCentralManagerDelegate {
                 print("[BLE] Discovered: \(peripheral.name ?? "Unknown") (RSSI: \(RSSI))")
                 #endif
 
-                // Auto-connect to the first discovered device
                 self.connect(to: peripheral)
             }
         }

@@ -1,7 +1,7 @@
 import SwiftUI
 
 /// Main tab bar — shown after login + onboarding.
-/// Dashboard | Sessions | Profile
+/// Dashboard | Sessions | Devices | Profile
 struct MainTabView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var sessionManager: SessionManager
@@ -21,11 +21,17 @@ struct MainTabView: View {
                 }
                 .tag(1)
 
+            DeviceHubView()
+                .tabItem {
+                    Label("Devices", systemImage: "wifi.router")
+                }
+                .tag(2)
+
             ProfileView()
                 .tabItem {
                     Label("Profile", systemImage: "person.circle")
                 }
-                .tag(2)
+                .tag(3)
         }
         .tint(Color.aurionGold)
     }
