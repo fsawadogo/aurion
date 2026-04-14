@@ -5,6 +5,7 @@ import SwiftUI
 /// CONFLICTS flagged amber -- mandatory resolution before approval.
 struct NoteReviewView: View {
     let sessionId: String
+    var initialNote: NoteResponse?
     @StateObject private var wsClient: WebSocketClient
     @State private var note: NoteResponse?
     @State private var selectedSection: NoteSectionResponse?
@@ -12,8 +13,9 @@ struct NoteReviewView: View {
     @State private var showApprovalConfirmation = false
     @Environment(\.horizontalSizeClass) var sizeClass
 
-    init(sessionId: String) {
+    init(sessionId: String, initialNote: NoteResponse? = nil) {
         self.sessionId = sessionId
+        self.initialNote = initialNote
         _wsClient = StateObject(wrappedValue: WebSocketClient(sessionId: sessionId))
     }
 
@@ -129,6 +131,13 @@ struct NoteReviewView: View {
     // MARK: - Actions
 
     private func loadNote() {
+        // Use the note passed in from SessionManager if available
+        if let initialNote {
+            note = initialNote
+            checkConflicts()
+            return
+        }
+        // Otherwise fetch from backend
         wsClient.connect()
         Task {
             note = try? await APIClient.shared.getFullNote(sessionId: sessionId)

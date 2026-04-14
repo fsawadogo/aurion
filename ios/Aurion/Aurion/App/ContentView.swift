@@ -16,9 +16,9 @@ struct ContentView: View {
             } else if !appState.isOnboardingComplete {
                 OnboardingFlowView()
                     .transition(AurionTransition.fadeSlide)
-            } else if sessionManager.note != nil {
+            } else if let note = sessionManager.note {
                 // Note received — show review
-                NoteReviewView(sessionId: sessionManager.session?.id ?? "")
+                NoteReviewView(sessionId: sessionManager.session?.id ?? "", initialNote: note)
                     .transition(AurionTransition.fadeSlide)
                     .overlay(alignment: .topTrailing) {
                         Button("Done") {

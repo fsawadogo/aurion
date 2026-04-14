@@ -63,7 +63,8 @@ final class APIClient: Sendable {
 
     private func get<T: Decodable>(path: String) async throws -> T {
         let url = URL(string: "\(baseURL)\(path)")!
-        let request = URLRequest(url: url)
+        var request = URLRequest(url: url)
+        addAuth(&request)
         let (data, _) = try await URLSession.shared.data(for: request)
         return try JSONDecoder().decode(T.self, from: data)
     }
@@ -73,11 +74,17 @@ final class APIClient: Sendable {
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        addAuth(&request)
         if let body = body {
             request.httpBody = try JSONSerialization.data(withJSONObject: body)
         }
         let (data, _) = try await URLSession.shared.data(for: request)
         return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    private func addAuth(_ request: inout URLRequest) {
+        // Dev token format: ROLE (parsed by backend auth service)
+        request.setValue("Bearer CLINICIAN", forHTTPHeaderField: "Authorization")
     }
 }
 

@@ -111,6 +111,13 @@ struct DashboardView: View {
                             }
                         }
                         .buttonStyle(AurionPrimaryButtonStyle())
+
+                        if let error = sessionManager.error {
+                            Text(error)
+                                .font(.caption)
+                                .foregroundColor(.red)
+                                .multilineTextAlignment(.center)
+                        }
                     }
                     .aurionElevatedCard()
                 }
