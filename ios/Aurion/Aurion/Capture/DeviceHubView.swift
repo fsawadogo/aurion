@@ -1,177 +1,156 @@
 import SwiftUI
 import AVFoundation
 import ReplayKit
-@preconcurrency import CoreBluetooth
 
 /// Device management hub — 4th tab.
-/// Shows all capture devices, permissions, and scanning controls.
+/// Audio and video sources are picked independently so a session can mix
+/// hardware (e.g. Ray-Ban Meta video + iPhone mic, or iPhone for both).
 struct DeviceHubView: View {
-    @StateObject private var bleManager = BLEPairingManager()
-    @StateObject private var captureManager = CaptureManager()
-    @State private var isScanning = false
-    @State private var showTestCapture = false
+    @StateObject private var registry = CaptureSourceRegistry.shared
+    @ObservedObject private var builtIn = CaptureSourceRegistry.shared.builtIn
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: 20) {
-                    // ── Active Capture Device ─────────────────
-                    activeDeviceCard
+                VStack(alignment: .leading, spacing: 20) {
+                    Text("Devices")
+                        .font(.system(size: 28, weight: .bold))
+                        .tracking(-0.56)
+                        .foregroundColor(.aurionNavy)
+                        .padding(.bottom, -4)
 
-                    // ── Permissions Grid ──────────────────────
+                    activeSummary
+
                     VStack(alignment: .leading, spacing: 12) {
-                        Text("PERMISSIONS")
-                            .aurionSectionHeader()
+                        SectionHeader(title: "Audio Source")
+                        audioSourcesList
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader(title: "Video Source")
+                        videoSourcesList
+                    }
+
+                    VStack(alignment: .leading, spacing: 12) {
+                        SectionHeader(title: "Permissions")
                         permissionsGrid
                     }
-
-                    // ── Connected Devices ─────────────────────
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("DEVICES")
-                            .aurionSectionHeader()
-                        devicesList
-                    }
-
-                    // ── Device Actions ────────────────────────
-                    VStack(spacing: 12) {
-                        Button {
-                            AurionHaptics.impact(.medium)
-                            startScan()
-                        } label: {
-                            HStack {
-                                Image(systemName: "antenna.radiowaves.left.and.right")
-                                Text(isScanning ? "Scanning..." : "Scan for Devices")
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(AurionPrimaryButtonStyle())
-                        .disabled(isScanning)
-
-                        Button {
-                            showTestCapture = true
-                        } label: {
-                            HStack {
-                                Image(systemName: "checkmark.circle")
-                                Text("Test Capture")
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(AurionSecondaryButtonStyle())
-                    }
-                    .padding(.top, 8)
                 }
-                .padding(20)
+                .padding(.horizontal, AurionSpacing.edgeIPhone)
+                .padding(.top, 10)
+                .padding(.bottom, 20)
             }
             .background(Color.aurionBackground)
-            .navigationTitle("Devices")
-            .aurionNavBar()
-            .onAppear { captureManager.checkPermissions() }
-            .alert("Test Capture", isPresented: $showTestCapture) {
-                Button("Run Test") {
-                    AurionHaptics.impact(.light)
-                }
-                Button("Cancel", role: .cancel) {}
-            } message: {
-                Text("This will run a 3-second test recording to verify camera, microphone, and screen capture are working.")
+            .navigationBarHidden(true)
+            .onAppear {
+                builtIn.refreshPermissions()
             }
         }
     }
 
-    // MARK: - Active Device Card
+    // MARK: - Active summary
 
-    private var activeDeviceCard: some View {
-        VStack(spacing: 16) {
-            ZStack {
-                // Pulse ring when connected
-                if bleManager.connectionState == .connected {
-                    Circle()
-                        .stroke(Color.green.opacity(0.3), lineWidth: 2)
-                        .frame(width: 80, height: 80)
-                        .scaleEffect(1.2)
-                        .opacity(0.5)
-                        .animation(AurionAnimation.pulse, value: bleManager.isPaired)
+    /// Shows the currently selected audio + video sources side by side.
+    private var activeSummary: some View {
+        HStack(spacing: 12) {
+            summaryCard(
+                title: "Audio",
+                source: registry.activeAudioSource,
+                placeholder: nil
+            )
+            summaryCard(
+                title: "Video",
+                source: registry.activeVideoSource,
+                placeholder: "Audio-only session"
+            )
+        }
+    }
+
+    private func summaryCard(title: String, source: CaptureSource?, placeholder: String?) -> some View {
+        let tint = source?.status.tint ?? .aurionTextSecondary
+        return VStack(alignment: .leading, spacing: 8) {
+            Text(title.uppercased())
+                .font(.system(size: 10, weight: .semibold))
+                .tracking(1.0)
+                .foregroundColor(.aurionTextSecondary)
+            HStack(spacing: 8) {
+                Image(systemName: source?.iconSystemName ?? "minus.circle")
+                    .font(.system(size: 18))
+                    .foregroundColor(tint)
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(source?.displayName ?? (placeholder ?? "—"))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.aurionTextPrimary)
+                        .lineLimit(1)
+                    if let source {
+                        Text(source.status.label)
+                            .font(.system(size: 11))
+                            .foregroundColor(tint)
+                            .lineLimit(1)
+                    }
                 }
-
-                Circle()
-                    .fill(activeDeviceColor.opacity(0.1))
-                    .frame(width: 72, height: 72)
-
-                Image(systemName: activeDeviceIcon)
-                    .font(.system(size: 32))
-                    .foregroundColor(activeDeviceColor)
-            }
-
-            Text(activeDeviceName)
-                .font(.headline)
-                .foregroundColor(.aurionTextPrimary)
-
-            Text(activeDeviceStatus)
-                .font(.caption)
-                .foregroundColor(activeDeviceColor)
-
-            // Signal strength for BLE devices
-            if bleManager.connectionState == .connected {
-                signalStrengthBars
+                Spacer()
             }
         }
-        .padding(24)
-        .frame(maxWidth: .infinity)
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.aurionCardBackground)
-        .cornerRadius(16)
+        .cornerRadius(14)
         .overlay(
-            RoundedRectangle(cornerRadius: 16)
-                .stroke(activeDeviceColor.opacity(0.2), lineWidth: 1)
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(Color.aurionBorder, lineWidth: 1)
         )
     }
 
-    private var activeDeviceName: String {
-        if bleManager.connectionState == .connected {
-            return bleManager.pairedDeviceName ?? "Ray-Ban Meta"
-        }
-        return "iPhone Camera"
-    }
+    // MARK: - Source pickers
 
-    private var activeDeviceIcon: String {
-        bleManager.connectionState == .connected ? "eyeglasses" : "camera.fill"
-    }
-
-    private var activeDeviceColor: Color {
-        switch bleManager.connectionState {
-        case .connected: return .green
-        case .scanning, .connecting, .recovering: return .aurionGold
-        case .failedOver: return .aurionAmber
-        case .disconnected: return .secondary
-        }
-    }
-
-    private var activeDeviceStatus: String {
-        switch bleManager.connectionState {
-        case .connected: return "Connected — Ready to capture"
-        case .scanning: return "Scanning for devices..."
-        case .connecting: return "Connecting..."
-        case .recovering: return "Reconnecting..."
-        case .failedOver: return "Glasses lost — using iPhone camera"
-        case .disconnected: return "Using device camera"
-        }
-    }
-
-    private var signalStrengthBars: some View {
-        HStack(spacing: 3) {
-            ForEach(0..<4, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 1)
-                    .fill(i < signalBars ? Color.green : Color.secondary.opacity(0.2))
-                    .frame(width: 4, height: CGFloat(8 + i * 4))
+    private var audioSourcesList: some View {
+        pickerCard {
+            sourceRows(registry.audioSources, activeID: registry.activeAudioSource.id) {
+                registry.setActiveAudio($0)
             }
         }
     }
 
-    private var signalBars: Int {
-        let rssi = bleManager.signalStrength
-        if rssi > -50 { return 4 }
-        if rssi > -65 { return 3 }
-        if rssi > -80 { return 2 }
-        if rssi > -95 { return 1 }
-        return 0
+    private var videoSourcesList: some View {
+        pickerCard {
+            VideoNoneRow(
+                isActive: registry.activeVideoSource == nil,
+                onTap: { registry.setActiveVideo(nil) }
+            )
+            if !registry.videoSources.isEmpty {
+                Divider().padding(.leading, 52)
+                sourceRows(registry.videoSources, activeID: registry.activeVideoSource?.id) {
+                    registry.setActiveVideo($0)
+                }
+            }
+        }
+    }
+
+    /// Shared chrome for the audio + video picker cards.
+    private func pickerCard<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 0, content: content)
+            .background(Color.aurionCardBackground)
+            .cornerRadius(16)
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(Color.aurionBorder, lineWidth: 1)
+            )
+            .aurionCardShadow()
+    }
+
+    @ViewBuilder
+    private func sourceRows(_ sources: [CaptureSource], activeID: String?, onTap: @escaping (String) -> Void) -> some View {
+        ForEach(Array(sources.enumerated()), id: \.element.id) { index, source in
+            SourceRow(
+                source: source,
+                isActive: source.id == activeID,
+                onTap: { onTap(source.id) }
+            )
+            if index < sources.count - 1 {
+                Divider().padding(.leading, 52)
+            }
+        }
     }
 
     // MARK: - Permissions Grid
@@ -181,17 +160,17 @@ struct DeviceHubView: View {
             permissionCard(
                 icon: "camera.fill",
                 label: "Camera",
-                granted: captureManager.cameraPermission == .authorized
+                granted: builtIn.cameraPermission == .authorized
             )
             permissionCard(
                 icon: "mic.fill",
                 label: "Microphone",
-                granted: captureManager.microphonePermission == .authorized
+                granted: builtIn.microphonePermission == .authorized
             )
             permissionCard(
                 icon: "antenna.radiowaves.left.and.right",
                 label: "Bluetooth",
-                granted: bleManager.bluetoothEnabled
+                granted: true
             )
             permissionCard(
                 icon: "rectangle.on.rectangle",
@@ -203,109 +182,126 @@ struct DeviceHubView: View {
 
     private func permissionCard(icon: String, label: String, granted: Bool) -> some View {
         Button {
-            if !granted {
-                if let url = URL(string: UIApplication.openSettingsURLString) {
-                    UIApplication.shared.open(url)
-                }
+            if !granted, let url = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(url)
             }
         } label: {
-            VStack(spacing: 8) {
-                Image(systemName: icon)
-                    .font(.title3)
-                    .foregroundColor(granted ? .green : .red)
-                Text(label)
-                    .font(.caption)
-                    .foregroundColor(.aurionTextPrimary)
-                Image(systemName: granted ? "checkmark.circle.fill" : "xmark.circle.fill")
-                    .font(.caption)
-                    .foregroundColor(granted ? .green : .red)
+            AurionCard(padding: 14) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        Image(systemName: icon)
+                            .font(.system(size: 20))
+                            .foregroundColor(.aurionNavy)
+                        Text(label)
+                            .font(.system(size: 14, weight: .medium))
+                            .foregroundColor(.aurionNavy)
+                            .lineLimit(1)
+                    }
+                    AurionStatusPill(
+                        kind: granted ? .done : .archived,
+                        labelOverride: granted ? "Granted" : "Denied"
+                    )
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .frame(maxWidth: .infinity)
-            .padding(.vertical, 16)
-            .background(Color.aurionCardBackground)
-            .cornerRadius(12)
         }
         .buttonStyle(.plain)
     }
+}
 
-    // MARK: - Devices List
+// MARK: - Video "None" Row
 
-    private var devicesList: some View {
-        VStack(spacing: 8) {
-            // Glasses
-            DeviceStatusCard(
-                icon: "eyeglasses",
-                name: bleManager.pairedDeviceName ?? "Ray-Ban Meta",
-                status: bleDeviceStatus,
-                subtitle: bleSubtitle,
-                onForget: bleManager.isPaired ? { bleManager.disconnect() } : nil
-            )
+/// Audio-only opt-out row. Stateless — no @ObservedObject needed because
+/// it doesn't track a CaptureSource.
+private struct VideoNoneRow: View {
+    let isActive: Bool
+    let onTap: () -> Void
 
-            // iPhone Camera (always available)
-            DeviceStatusCard(
-                icon: "camera.fill",
-                name: UIDevice.current.name,
-                status: captureManager.cameraPermission == .authorized ? .connected : .unavailable,
-                subtitle: captureManager.cameraPermission == .authorized ? "Built-in camera ready" : "Permission denied"
-            )
-
-            // Microphone
-            DeviceStatusCard(
-                icon: "mic.fill",
-                name: "Microphone",
-                status: captureManager.microphonePermission == .authorized ? .connected : .unavailable,
-                subtitle: captureManager.microphonePermission == .authorized ? "Built-in microphone ready" : "Permission denied"
-            )
-
-            // Screen Recording
-            DeviceStatusCard(
-                icon: "rectangle.on.rectangle",
-                name: "Screen Capture",
-                status: RPScreenRecorder.shared().isAvailable ? .connected : .unavailable,
-                subtitle: RPScreenRecorder.shared().isAvailable ? "ReplayKit available" : "Not available on this device"
-            )
-
-            // Scanning results
-            if isScanning {
-                HStack {
-                    ProgressView()
-                    Text("Scanning for nearby devices...")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+    var body: some View {
+        Button {
+            AurionHaptics.selection()
+            onTap()
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(isActive ? Color.aurionGoldBg : Color.aurionFieldBackground)
+                        .frame(width: 36, height: 36)
+                    Image(systemName: "video.slash")
+                        .font(.system(size: 16))
+                        .foregroundColor(isActive ? .aurionGoldDark : .aurionTextSecondary)
                 }
-                .padding(.vertical, 12)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("None")
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.aurionTextPrimary)
+                    Text("Audio-only session")
+                        .font(.system(size: 12))
+                        .foregroundColor(.aurionTextSecondary)
+                }
+                Spacer()
+                if isActive {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.aurionGold)
+                }
             }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
+        .buttonStyle(.plain)
     }
+}
 
-    private var bleDeviceStatus: DeviceStatus {
-        switch bleManager.connectionState {
-        case .connected: return .connected
-        case .scanning, .connecting: return .scanning
-        case .recovering: return .recovering
-        case .failedOver, .disconnected: return .disconnected
+// MARK: - Source Row
+
+/// Single picker row. Observes `source` directly so status/audioLevel/detail
+/// updates only re-render this row, not the whole DeviceHubView.
+private struct SourceRow: View {
+    @ObservedObject var source: CaptureSource
+    let isActive: Bool
+    let onTap: () -> Void
+
+    var body: some View {
+        Button {
+            AurionHaptics.selection()
+            onTap()
+        } label: {
+            HStack(spacing: 12) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 9)
+                        .fill(isActive ? Color.aurionGoldBg : Color.aurionFieldBackground)
+                        .frame(width: 36, height: 36)
+                    Image(systemName: source.iconSystemName)
+                        .font(.system(size: 16))
+                        .foregroundColor(isActive ? .aurionGoldDark : .aurionTextSecondary)
+                }
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(source.displayName)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundColor(.aurionTextPrimary)
+                    Text(source.detail.isEmpty ? source.status.label : source.detail)
+                        .font(.system(size: 12))
+                        .foregroundColor(source.status.tint)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                if isActive {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.aurionGold)
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .contentShape(Rectangle())
         }
-    }
-
-    private var bleSubtitle: String {
-        switch bleManager.connectionState {
-        case .connected: return "Signal: \(bleManager.signalStrength) dBm"
-        case .scanning: return "Searching..."
-        case .connecting: return "Pairing..."
-        case .recovering: return "Reconnecting..."
-        case .failedOver: return "Connection lost"
-        case .disconnected: return "Not paired"
-        }
-    }
-
-    // MARK: - Actions
-
-    private func startScan() {
-        isScanning = true
-        bleManager.startScanning()
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10) {
-            isScanning = false
-            bleManager.stopScanning()
-        }
+        .buttonStyle(.plain)
+        .disabled(!source.status.isSelectable)
+        .opacity(source.status.isSelectable ? 1.0 : 0.55)
     }
 }

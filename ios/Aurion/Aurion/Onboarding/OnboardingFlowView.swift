@@ -4,6 +4,7 @@ import SwiftUI
 struct OnboardingFlowView: View {
     @EnvironmentObject var appState: AppState
     @State private var currentStep: OnboardingStep = .wearableSetup
+    @State private var enrollmentAudioURL: URL?
 
     enum OnboardingStep: CaseIterable {
         case wearableSetup
@@ -13,8 +14,9 @@ struct OnboardingFlowView: View {
         case voiceProcessing
     }
 
-    /// Step labels displayed below the progress bar.
-    private static let stepLabels = ["Setup", "Consent", "Voice", "Processing", "Ready"]
+    /// Step labels displayed below the progress bar — must align with
+    /// `OnboardingStep.allCases` order.
+    private static let stepLabels = ["Pair", "Voice", "Consent", "Record", "Save"]
 
     /// Maps the current enum case to a 0-based index.
     private var currentStepIndex: Int {
@@ -71,7 +73,8 @@ struct OnboardingFlowView: View {
                         .transition(AurionTransition.fadeSlide)
                     case .voiceRecording:
                         VoiceRecordingView(
-                            onComplete: {
+                            onComplete: { url in
+                                enrollmentAudioURL = url
                                 withAnimation(AurionAnimation.smooth) {
                                     currentStep = .voiceProcessing
                                 }
@@ -80,6 +83,7 @@ struct OnboardingFlowView: View {
                         .transition(AurionTransition.fadeSlide)
                     case .voiceProcessing:
                         VoiceProcessingView(
+                            audioFileURL: enrollmentAudioURL,
                             onComplete: { completeOnboarding() }
                         )
                         .transition(AurionTransition.fadeSlide)

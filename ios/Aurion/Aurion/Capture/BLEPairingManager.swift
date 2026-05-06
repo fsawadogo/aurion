@@ -14,28 +14,48 @@ enum BLEConnectionState: String {
     case failedOver
 }
 
+// MARK: - Discovered Device (UI-facing)
+
+/// Public-facing representation of a peripheral the picker can render.
+/// Wrapping CBPeripheral keeps SwiftUI views from importing CoreBluetooth and
+/// makes the discovered list trivially `Equatable` for diffable updates.
+struct BLEDiscoveredDevice: Identifiable, Equatable, Hashable {
+    let id: UUID         // peripheral.identifier
+    var name: String
+    var rssi: Int
+}
+
 // MARK: - BLE Pairing Manager
 
-/// BLE pairing manager for wearable devices (Ray-Ban Meta Smart Glasses).
+/// BLE pairing manager for wearable devices (Ray-Ban Meta and any
+/// compatible Bluetooth glasses / capture wearable).
 /// Handles scanning, pairing, connection monitoring, and auto-failover.
 ///
 /// When the glasses disconnect unexpectedly, the manager attempts to reconnect
-/// up to 3 times at 2-second intervals. If all attempts fail, it fires the
-/// `onDeviceFailover` callback so the app can switch to the iPhone/iPad camera.
+/// up to 3 times with exponential backoff (2s, 4s, 8s). If all attempts fail,
+/// it fires the `onDeviceFailover` callback so the app can switch to the
+/// iPhone/iPad camera.
 ///
-/// For development/testing without physical glasses, set `simulatedMode = true`.
+/// On the iOS Simulator there is no Bluetooth radio, so `simulatedMode`
+/// defaults to true and a small set of synthetic devices is published so the
+/// pairing UX can be exercised end-to-end.
 @MainActor
 final class BLEPairingManager: NSObject, ObservableObject {
+
+    static let shared = BLEPairingManager()
 
     // MARK: - Published State
 
     @Published var isPaired = false
     @Published var isScanning = false
     @Published var pairedDeviceName: String?
+    @Published var pairedDeviceId: UUID?
     @Published var connectionState: BLEConnectionState = .disconnected
     @Published var bluetoothEnabled = false
     @Published var signalStrength: Int = -100
     @Published var error: String?
+    /// Devices the picker should render. Updated as `didDiscover` fires.
+    @Published var discoveredDevices: [BLEDiscoveredDevice] = []
 
     // MARK: - Callbacks
 
@@ -45,7 +65,13 @@ final class BLEPairingManager: NSObject, ObservableObject {
     // MARK: - Configuration
 
     /// When true, simulates BLE discovery and pairing for Simulator / no-hardware testing.
+    /// Defaults to true on the simulator (no Bluetooth radio exists there) so the
+    /// pairing UX is testable; on device this is false unless the caller flips it.
+    #if targetEnvironment(simulator)
+    var simulatedMode = true
+    #else
     var simulatedMode = false
+    #endif
 
     /// Maximum number of reconnection attempts after unexpected disconnect.
     private let maxReconnectAttempts = 3
@@ -55,6 +81,12 @@ final class BLEPairingManager: NSObject, ObservableObject {
 
     /// Timeout for scanning before giving up (seconds).
     private let scanTimeoutSeconds: TimeInterval = 30.0
+
+    /// UserDefaults key for the last successfully paired peripheral UUID.
+    /// Storing only the UUID — never advertised name or anything else — keeps
+    /// the on-disk footprint to the minimum needed to retrieve the peripheral
+    /// via `CBCentralManager.retrievePeripherals(withIdentifiers:)` next launch.
+    private static let pairedPeripheralIdKey = "aurion.ble.pairedPeripheralId"
 
     // MARK: - Known Ray-Ban Meta BLE Identifiers
 
@@ -66,12 +98,19 @@ final class BLEPairingManager: NSObject, ObservableObject {
     ]
 
     /// Fallback name fragments for discovery when service UUIDs are not advertised.
+    /// We accept a permissive set so users can pair non-Meta wearables (body
+    /// cams, third-party glasses) as well — the audio/video integration is
+    /// gated downstream by feature flags, not by the BLE filter.
     private static let nameMatchPatterns: [String] = [
         "ray-ban",
-        "meta",
         "ray ban",
+        "meta",
         "stories",       // Ray-Ban Stories (Gen 1)
         "wayfarer",      // Ray-Ban Meta Wayfarer
+        "glasses",
+        "wearable",
+        "cam",
+        "aurion",
     ]
 
     // MARK: - CoreBluetooth
@@ -95,11 +134,13 @@ final class BLEPairingManager: NSObject, ObservableObject {
     override init() {
         super.init()
         centralManager = CBCentralManager(delegate: self, queue: nil)
+        // Restore is attempted on the first centralManagerDidUpdateState callback
+        // once the radio reports `.poweredOn`; CoreBluetooth refuses earlier.
     }
 
     // MARK: - Scanning
 
-    /// Start scanning for Ray-Ban Meta glasses or compatible wearables.
+    /// Start scanning for compatible wearables.
     func startScanning() {
         guard !simulatedMode else {
             simulateDiscovery()
@@ -115,12 +156,15 @@ final class BLEPairingManager: NSObject, ObservableObject {
 
         error = nil
         discoveredPeripherals = []
+        discoveredDevices = []
         isScanning = true
         connectionState = .scanning
 
-        // Scan for known service UUIDs first; also scan broadly to catch name-based matches
+        // Scan broadly — we filter by name/service in didDiscover. Passing nil
+        // for services is the only way to also pick up devices that don't
+        // advertise our known service UUIDs.
         centralManager.scanForPeripherals(
-            withServices: nil, // Scan all — we filter in didDiscover
+            withServices: nil,
             options: [CBCentralManagerScanOptionAllowDuplicatesKey: false]
         )
 
@@ -130,8 +174,8 @@ final class BLEPairingManager: NSObject, ObservableObject {
             Task { @MainActor [weak self] in
                 guard let self, self.isScanning else { return }
                 self.stopScanning()
-                if !self.isPaired {
-                    self.error = "No glasses found. Make sure they are powered on and nearby."
+                if !self.isPaired && self.discoveredDevices.isEmpty {
+                    self.error = "No devices found. Make sure your wearable is powered on and nearby."
                 }
             }
         }
@@ -139,14 +183,14 @@ final class BLEPairingManager: NSObject, ObservableObject {
 
     /// Stop scanning for peripherals.
     func stopScanning() {
+        scanTimer?.invalidate()
+        scanTimer = nil
+
         guard !simulatedMode else {
             isScanning = false
             if connectionState == .scanning { connectionState = .disconnected }
             return
         }
-
-        scanTimer?.invalidate()
-        scanTimer = nil
 
         if centralManager.isScanning {
             centralManager.stopScan()
@@ -159,13 +203,25 @@ final class BLEPairingManager: NSObject, ObservableObject {
 
     // MARK: - Connection
 
-    /// Connect to a discovered peripheral.
-    func connect(to peripheral: CBPeripheral) {
+    /// Connect by the public-facing device id (peripheral UUID).
+    /// Used by the pairing picker so views never have to touch CBPeripheral.
+    func connect(deviceId: UUID) {
         guard !simulatedMode else {
-            simulateConnection(deviceName: peripheral.name ?? "Simulated Glasses")
+            let name = discoveredDevices.first(where: { $0.id == deviceId })?.name
+                ?? "Simulated Wearable"
+            simulateConnection(deviceId: deviceId, deviceName: name)
             return
         }
 
+        guard let peripheral = discoveredPeripherals.first(where: { $0.identifier == deviceId }) else {
+            error = "Device no longer available. Tap Scan to refresh."
+            return
+        }
+        connect(to: peripheral)
+    }
+
+    /// Connect to a discovered peripheral.
+    private func connect(to peripheral: CBPeripheral) {
         stopScanning()
         connectionState = .connecting
         error = nil
@@ -175,10 +231,20 @@ final class BLEPairingManager: NSObject, ObservableObject {
         centralManager.connect(peripheral, options: nil)
     }
 
-    /// Disconnect from the currently paired peripheral.
+    /// Disconnect from the currently paired peripheral and forget it on disk.
     func disconnect() {
+        let nameForAudit = pairedDeviceName ?? "unknown"
+        let idForAudit = pairedDeviceId?.uuidString ?? "unknown"
+
         guard !simulatedMode else {
             simulateDisconnection()
+            forgetPairedPeripheral()
+            AuditLogger.log(event: .deviceFailover, extra: [
+                "action": "manual_unpair",
+                "device": nameForAudit,
+                "device_id": idForAudit,
+                "mode": "simulated",
+            ])
             return
         }
 
@@ -193,7 +259,50 @@ final class BLEPairingManager: NSObject, ObservableObject {
         connectedPeripheral = nil
         isPaired = false
         pairedDeviceName = nil
+        pairedDeviceId = nil
         connectionState = .disconnected
+        forgetPairedPeripheral()
+
+        AuditLogger.log(event: .deviceFailover, extra: [
+            "action": "manual_unpair",
+            "device": nameForAudit,
+            "device_id": idForAudit,
+        ])
+    }
+
+    // MARK: - Persistence
+
+    private func savePairedPeripheral(id: UUID) {
+        UserDefaults.standard.set(id.uuidString, forKey: Self.pairedPeripheralIdKey)
+    }
+
+    private func forgetPairedPeripheral() {
+        UserDefaults.standard.removeObject(forKey: Self.pairedPeripheralIdKey)
+    }
+
+    private func loadPairedPeripheralId() -> UUID? {
+        guard let raw = UserDefaults.standard.string(forKey: Self.pairedPeripheralIdKey) else {
+            return nil
+        }
+        return UUID(uuidString: raw)
+    }
+
+    /// Re-acquire the previously paired peripheral and reconnect silently.
+    /// Called when the radio first reports `.poweredOn`.
+    private func attemptRestore() {
+        guard !simulatedMode else { return }
+        guard let savedId = loadPairedPeripheralId() else { return }
+        let known = centralManager.retrievePeripherals(withIdentifiers: [savedId])
+        guard let peripheral = known.first else { return }
+
+        // Show the saved device in the discovered list so the picker doesn't
+        // appear empty if the user pulls up the pairing screen mid-restore.
+        connectedPeripheral = peripheral
+        pairedDeviceId = peripheral.identifier
+        pairedDeviceName = peripheral.name
+        connectionState = .connecting
+
+        centralManager.connect(peripheral, options: nil)
     }
 
     // MARK: - Auto-Reconnect
@@ -240,10 +349,11 @@ final class BLEPairingManager: NSObject, ObservableObject {
         reconnectAttempts = 0
         isPaired = false
         pairedDeviceName = nil
+        pairedDeviceId = nil
         connectionState = .failedOver
         connectedPeripheral = nil
 
-        error = "Glasses disconnected. Using device camera."
+        error = "Wearable disconnected. Using device camera."
 
         AuditLogger.log(
             event: .deviceFailover,
@@ -259,9 +369,9 @@ final class BLEPairingManager: NSObject, ObservableObject {
         onDeviceFailover?(sessionId)
     }
 
-    /// Attempt recovery after failover — scan for glasses again.
-    /// Call this when the user wants to try reconnecting to glasses
-    /// after the app has fallen back to the device camera.
+    /// Attempt recovery after failover — scan for the wearable again.
+    /// Call this when the user wants to try reconnecting after the app has
+    /// fallen back to the device camera.
     func attemptRecovery() {
         guard connectionState == .failedOver else { return }
         connectionState = .recovering
@@ -274,50 +384,109 @@ final class BLEPairingManager: NSObject, ObservableObject {
             extra: ["action": "recovery_attempt"]
         )
 
-        // Start scanning again
         startScanning()
     }
 
     // MARK: - Simulated Mode
 
+    /// Synthetic devices surfaced when running in the iOS Simulator.
+    /// UUIDs are stable across launches so re-pair / restore flows behave
+    /// like the real radio.
+    private static let simulatedCatalog: [BLEDiscoveredDevice] = [
+        BLEDiscoveredDevice(
+            id: UUID(uuidString: "11111111-1111-4111-8111-111111111111")!,
+            name: "Ray-Ban Meta Wayfarer",
+            rssi: -52
+        ),
+        BLEDiscoveredDevice(
+            id: UUID(uuidString: "22222222-2222-4222-8222-222222222222")!,
+            name: "Aurion Body Cam",
+            rssi: -67
+        ),
+        BLEDiscoveredDevice(
+            id: UUID(uuidString: "33333333-3333-4333-8333-333333333333")!,
+            name: "Generic BLE Wearable",
+            rssi: -78
+        ),
+    ]
+
     /// Simulates BLE discovery for development/Simulator testing.
+    /// Devices appear progressively (~600ms apart) so the picker animates as
+    /// in the real flow.
     private func simulateDiscovery() {
         isScanning = true
         connectionState = .scanning
         error = nil
+        discoveredDevices = []
 
-        // Simulate a short scan delay
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
+        let catalog = Self.simulatedCatalog
+        for (index, device) in catalog.enumerated() {
+            let delay = 0.6 + Double(index) * 0.6
+            DispatchQueue.main.asyncAfter(deadline: .now() + delay) { [weak self] in
+                guard let self, self.isScanning else { return }
+                if !self.discoveredDevices.contains(where: { $0.id == device.id }) {
+                    self.discoveredDevices.append(device)
+                }
+            }
+        }
+
+        // Auto-stop simulated scan once the catalog is exhausted.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6 + Double(catalog.count) * 0.6) { [weak self] in
             guard let self else { return }
             self.isScanning = false
-            self.simulateConnection(deviceName: "Ray-Ban Meta (Simulated)")
+            if self.connectionState == .scanning {
+                self.connectionState = .disconnected
+            }
         }
     }
 
     /// Simulates a successful BLE connection.
-    private func simulateConnection(deviceName: String) {
-        connectionState = .connected
-        isPaired = true
-        pairedDeviceName = deviceName
+    private func simulateConnection(deviceId: UUID, deviceName: String) {
+        connectionState = .connecting
+        // Brief delay so the UI shows a connecting state instead of snapping.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in
+            guard let self else { return }
+            self.connectionState = .connected
+            self.isPaired = true
+            self.pairedDeviceId = deviceId
+            self.pairedDeviceName = deviceName
+            self.savePairedPeripheral(id: deviceId)
 
-        #if DEBUG
-        print("[BLE] Simulated connection to \(deviceName)")
-        #endif
+            AuditLogger.log(event: .deviceFailover, extra: [
+                "action": "paired",
+                "device": deviceName,
+                "device_id": deviceId.uuidString,
+                "mode": "simulated",
+            ])
+
+            #if DEBUG
+            print("[BLE] Simulated connection to \(deviceName)")
+            #endif
+        }
     }
 
     /// Simulates a BLE disconnection.
     private func simulateDisconnection() {
         isPaired = false
         pairedDeviceName = nil
+        pairedDeviceId = nil
         connectionState = .disconnected
     }
 
     // MARK: - Helpers
 
-    /// Checks if a peripheral name matches known Ray-Ban Meta patterns.
-    private func isRayBanMetaDevice(name: String?) -> Bool {
+    /// Checks if a peripheral name matches a known wearable pattern.
+    private func isCompatibleWearable(name: String?) -> Bool {
         guard let name = name?.lowercased() else { return false }
         return Self.nameMatchPatterns.contains { name.contains($0) }
+    }
+
+    private func upsertDiscoveredDevice(_ device: BLEDiscoveredDevice) {
+        if let idx = discoveredDevices.firstIndex(where: { $0.id == device.id }) {
+            discoveredDevices[idx] = device
+        } else {
+            discoveredDevices.append(device)
+        }
     }
 }
 
@@ -332,10 +501,16 @@ extension BLEPairingManager: CBCentralManagerDelegate {
             case .poweredOn:
                 self.bluetoothEnabled = true
                 self.error = nil
+                // Attempt silent restore now that the radio is up. If the user
+                // unpaired previously this is a no-op.
+                self.attemptRestore()
             case .poweredOff:
                 self.bluetoothEnabled = false
                 self.error = "Bluetooth is turned off."
-                self.disconnect()
+                // Do NOT call disconnect() — that wipes the saved pairing. The
+                // user just toggled the radio; we want to reconnect on power-on.
+                self.connectionState = .disconnected
+                self.isPaired = false
             case .unauthorized:
                 self.bluetoothEnabled = false
                 self.error = "Bluetooth permission denied. Enable in Settings > Privacy > Bluetooth."
@@ -359,45 +534,68 @@ extension BLEPairingManager: CBCentralManagerDelegate {
         advertisementData: [String: Any],
         rssi RSSI: NSNumber
     ) {
+        // Snapshot any peripheral state we read off the delegate queue before
+        // hopping to the main actor — touching CBPeripheral after the closure
+        // returns can deadlock.
+        let peripheralName = peripheral.name
+        let advertisedName = advertisementData[CBAdvertisementDataLocalNameKey] as? String
+        let advertisedServices = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
+        let rssiValue = RSSI.intValue
+        let identifier = peripheral.identifier
+
         Task { @MainActor [weak self] in
             guard let self else { return }
 
-            // Check if this peripheral matches Ray-Ban Meta by name or advertised services
-            let advertisedServices = advertisementData[CBAdvertisementDataServiceUUIDsKey] as? [CBUUID] ?? []
             let matchesServiceUUID = advertisedServices.contains { uuid in
                 Self.knownServiceUUIDs.contains(uuid)
             }
-            let matchesName = self.isRayBanMetaDevice(name: peripheral.name)
+            let displayName = peripheralName ?? advertisedName ?? "Unknown Device"
+            let matchesName = self.isCompatibleWearable(name: peripheralName)
+                || self.isCompatibleWearable(name: advertisedName)
 
+            // Filter out garbage advertisers — only surface peripherals that
+            // either match our service UUID OR have a name we recognize. This
+            // keeps the picker uncluttered (a phone would otherwise see dozens
+            // of unrelated BLE devices in a clinic).
             guard matchesServiceUUID || matchesName else { return }
 
-            self.signalStrength = RSSI.intValue
+            self.signalStrength = rssiValue
 
-            if !self.discoveredPeripherals.contains(where: { $0.identifier == peripheral.identifier }) {
+            if !self.discoveredPeripherals.contains(where: { $0.identifier == identifier }) {
                 self.discoveredPeripherals.append(peripheral)
-
-                #if DEBUG
-                print("[BLE] Discovered: \(peripheral.name ?? "Unknown") (RSSI: \(RSSI))")
-                #endif
-
-                self.connect(to: peripheral)
             }
+            self.upsertDiscoveredDevice(BLEDiscoveredDevice(
+                id: identifier,
+                name: displayName,
+                rssi: rssiValue
+            ))
         }
     }
 
     nonisolated func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        let name = peripheral.name ?? "Wearable"
+        let id = peripheral.identifier
+
         Task { @MainActor [weak self] in
             guard let self else { return }
             self.connectedPeripheral = peripheral
             self.isPaired = true
-            self.pairedDeviceName = peripheral.name ?? "Ray-Ban Meta"
+            self.pairedDeviceName = name
+            self.pairedDeviceId = id
             self.connectionState = .connected
             self.isAutoReconnecting = false
             self.reconnectAttempts = 0
             self.error = nil
+            self.savePairedPeripheral(id: id)
+
+            AuditLogger.log(event: .deviceFailover, extra: [
+                "action": "paired",
+                "device": name,
+                "device_id": id.uuidString,
+            ])
 
             #if DEBUG
-            print("[BLE] Connected to \(peripheral.name ?? "Unknown")")
+            print("[BLE] Connected to \(name)")
             #endif
         }
     }
@@ -407,22 +605,26 @@ extension BLEPairingManager: CBCentralManagerDelegate {
         didDisconnectPeripheral peripheral: CBPeripheral,
         error: (any Error)?
     ) {
+        let errLocalized = error?.localizedDescription
+        let name = peripheral.name ?? "Unknown"
+
         Task { @MainActor [weak self] in
             guard let self else { return }
 
             #if DEBUG
-            print("[BLE] Disconnected from \(peripheral.name ?? "Unknown"): \(error?.localizedDescription ?? "no error")")
+            print("[BLE] Disconnected from \(name): \(errLocalized ?? "no error")")
             #endif
 
-            // If this was an unexpected disconnect (error present), attempt reconnect
-            if error != nil {
+            // Unexpected disconnect (error present) → trigger reconnect ladder.
+            // Intentional disconnect → already cleaned up by `disconnect()`.
+            if errLocalized != nil {
                 self.isPaired = false
                 self.connectionState = .disconnected
                 self.attemptReconnect()
             } else {
-                // Intentional disconnect — already handled by disconnect()
                 self.isPaired = false
                 self.pairedDeviceName = nil
+                self.pairedDeviceId = nil
                 self.connectionState = .disconnected
                 self.connectedPeripheral = nil
             }
@@ -434,19 +636,21 @@ extension BLEPairingManager: CBCentralManagerDelegate {
         didFailToConnect peripheral: CBPeripheral,
         error: (any Error)?
     ) {
+        let errLocalized = error?.localizedDescription
+        let name = peripheral.name ?? "Unknown"
+
         Task { @MainActor [weak self] in
             guard let self else { return }
 
             #if DEBUG
-            print("[BLE] Failed to connect to \(peripheral.name ?? "Unknown"): \(error?.localizedDescription ?? "unknown")")
+            print("[BLE] Failed to connect to \(name): \(errLocalized ?? "unknown")")
             #endif
 
             if self.isAutoReconnecting {
-                // Part of a reconnection sequence — try again
                 self.attemptReconnect()
             } else {
                 self.connectionState = .disconnected
-                self.error = "Failed to connect to \(peripheral.name ?? "glasses"). Try again."
+                self.error = "Failed to connect to \(name). Try again."
             }
         }
     }

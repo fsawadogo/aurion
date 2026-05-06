@@ -192,6 +192,7 @@
 			knownRegions = (
 				en,
 				Base,
+				fr,
 			);
 			mainGroup = F7BD2FDF2F8B528A000E70A0;
 			minimizedProjectReferenceProxies = 1;
@@ -395,8 +396,15 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S5N6XHH7AQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Aurion-Info.plist";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Aurion connects to your wearable (e.g. Ray-Ban Meta) over Bluetooth to capture audio and video during sessions.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Aurion captures visual frames during clinical encounters to enrich note generation with what was observed.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Aurion communicates with the local Aurion backend on your network during development.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Aurion records audio during clinical encounters to generate structured notes. Recording requires patient consent and stops when you end the session.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Aurion uses on-device speech recognition for voice enrollment and to display live captions during clinical encounters. Audio stays on this device — never sent to Apple servers.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -407,7 +415,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.aurionclinical.Aurion;
+				PRODUCT_BUNDLE_IDENTIFIER = com.faical.aurion;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;
@@ -426,8 +434,15 @@
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S5N6XHH7AQ;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_FILE = "Aurion-Info.plist";
+				INFOPLIST_KEY_NSBluetoothAlwaysUsageDescription = "Aurion connects to your wearable (e.g. Ray-Ban Meta) over Bluetooth to capture audio and video during sessions.";
+				INFOPLIST_KEY_NSCameraUsageDescription = "Aurion captures visual frames during clinical encounters to enrich note generation with what was observed.";
+				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Aurion communicates with the local Aurion backend on your network during development.";
+				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Aurion records audio during clinical encounters to generate structured notes. Recording requires patient consent and stops when you end the session.";
+				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Aurion uses on-device speech recognition for voice enrollment and to display live captions during clinical encounters. Audio stays on this device — never sent to Apple servers.";
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -438,7 +453,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.aurionclinical.Aurion;
+				PRODUCT_BUNDLE_IDENTIFIER = com.faical.aurion;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				STRING_CATALOG_GENERATE_SYMBOLS = YES;
 				SWIFT_APPROACHABLE_CONCURRENCY = YES;

@@ -1,0 +1,185 @@
+/* Aurion Clinical AI — English Localization */
+
+/* ── Tabs ─────────────────────────────────────────────── */
+"tabs.home" = "Home";
+"tabs.dashboard" = "Dashboard";
+"tabs.sessions" = "Sessions";
+"tabs.devices" = "Devices";
+"tabs.profile" = "Profile";
+
+/* ── Dashboard ────────────────────────────────────────── */
+"dashboard.greeting.morning" = "Good morning,";
+"dashboard.greeting.afternoon" = "Good afternoon,";
+"dashboard.greeting.evening" = "Good evening,";
+"dashboard.today" = "today";
+"dashboard.startSession" = "Start Session";
+"dashboard.tapToStart" = "Tap to start";
+"dashboard.pendingReview" = "Pending Review";
+"dashboard.recent" = "Recent";
+"dashboard.noSessions" = "No sessions yet";
+"dashboard.noSessionsSub" = "Start your first session above";
+"dashboard.contextTitle" = "Pre-Encounter Context";
+"dashboard.contextSub" = "Briefly describe what brings the patient in today. This helps generate a more relevant note. (Optional)";
+"dashboard.startButton" = "Start Session";
+"dashboard.skipContext" = "Skip Context";
+"dashboard.cancel" = "Cancel";
+
+/* Quick-start card labels */
+"quickstart.newPatient" = "New Patient";
+"quickstart.followUp" = "Follow-up";
+"quickstart.preOp" = "Pre-Op Assessment";
+"quickstart.postOp" = "Post-Op Follow-up";
+
+/* ── Sessions Inbox ───────────────────────────────────── */
+"sessions.title" = "Sessions";
+"sessions.noSessions" = "No sessions yet";
+"sessions.noSessionsSub" = "Start one from the Dashboard";
+"sessions.noFiltered" = "No %@ sessions";
+"sessions.tryFilter" = "Try a different filter";
+"sessions.pendingReview" = "Pending Review";
+"sessions.resume" = "Resume";
+"sessions.completed" = "Completed";
+"sessions.filter.all" = "All";
+"sessions.filter.pending" = "Pending";
+"sessions.filter.completed" = "Completed";
+"sessions.filter.exported" = "Exported";
+
+/* ── Note Ready ───────────────────────────────────────── */
+"noteReady.title" = "Note Ready";
+"noteReady.subtitle" = "Your clinical note has been generated and is ready for review.";
+"noteReady.reviewNow" = "Review Now";
+"noteReady.saveLater" = "Save for Later";
+
+/* ── Post-Encounter ───────────────────────────────────── */
+"postEncounter.title" = "Confirm Settings";
+"postEncounter.subtitle" = "Confirm the template and settings before generating your note.";
+"postEncounter.template" = "Template";
+"postEncounter.sections" = "%d sections";
+"postEncounter.outputLanguage" = "Output Language";
+"postEncounter.generate" = "Generate Note";
+
+/* ── Capture ──────────────────────────────────────────── */
+"capture.rec" = "REC";
+"capture.recording" = "Recording";
+"capture.paused" = "Paused";
+"capture.consentPending" = "Consent Required";
+"capture.processing" = "Processing...";
+"capture.consentTitle" = "Confirm Patient Consent";
+"capture.consentSub" = "Recording cannot begin until patient consent is confirmed. This is a regulatory requirement.";
+"capture.consentButton" = "Confirm Consent";
+"capture.pause" = "Pause";
+"capture.resume" = "Resume";
+
+/* ── Processing ───────────────────────────────────────── */
+"processing.title" = "Processing Session";
+
+/* ── Login ─────────────────────────────────────────────── */
+"login.appName" = "Aurion";
+"login.tagline" = "CLINICAL AI";
+"login.email" = "Email";
+"login.emailPlaceholder" = "physician@hospital.org";
+"login.password" = "Password";
+"login.signIn" = "Sign In";
+"login.footer" = "For authorized personnel only.";
+
+/* ── Profile Setup ────────────────────────────────────── */
+"setup.step" = "Step %d of %d";
+"setup.back" = "Back";
+"setup.continue" = "Continue";
+"setup.saving" = "Saving...";
+"setup.complete" = "Complete Setup";
+"setup.practiceTitle" = "What type of practice?";
+"setup.practiceSub" = "This helps us tailor the experience to your workflow.";
+"setup.clinic" = "Clinic";
+"setup.surgicalCenter" = "Surgical Center";
+"setup.hospital" = "Hospital";
+"setup.specialtyTitle" = "Primary specialty?";
+"setup.specialtySub" = "You can add more templates in the next step.";
+"setup.visitTitle" = "Common visit types?";
+"setup.visitSub" = "Select all that apply. These become quick-start options on your dashboard.";
+"setup.templateTitle" = "Preferred templates?";
+"setup.templateSub" = "These will be available when you start sessions. Your primary specialty is pre-selected.";
+"setup.languageTitle" = "Output language?";
+"setup.languageSub" = "Your clinical notes will be generated in this language.";
+
+/* ── Specialties ──────────────────────────────────────── */
+"specialty.orthopedic_surgery" = "Orthopedic Surgery";
+"specialty.plastic_surgery" = "Plastic Surgery";
+"specialty.musculoskeletal" = "Musculoskeletal";
+"specialty.emergency_medicine" = "Emergency Medicine";
+"specialty.general" = "General";
+
+/* ── Visit Types ──────────────────────────────────────── */
+"visitType.new_patient" = "New Patient";
+"visitType.follow_up" = "Follow-up";
+"visitType.pre_op" = "Pre-Op Assessment";
+"visitType.post_op" = "Post-Op Follow-up";
+
+/* ── Languages ────────────────────────────────────────── */
+"language.en" = "English";
+"language.fr" = "Fran\U00E7ais";
+
+/* ── Profile ──────────────────────────────────────────── */
+"profile.title" = "Profile";
+"profile.defaultName" = "Physician";
+"profile.voiceEnrolled" = "Voice profile enrolled";
+"profile.rerecordVoice" = "Re-record Voice Profile";
+"profile.deleteVoice" = "Delete Voice Profile";
+"profile.noVoice" = "No voice profile";
+"profile.setupVoice" = "Set Up Voice Profile";
+"profile.sectionVoice" = "Voice Profile";
+"profile.practiceType" = "Practice Type";
+"profile.primarySpecialty" = "Primary Specialty";
+"profile.preferredTemplates" = "Preferred Templates";
+"profile.visitTypes" = "Visit Types";
+"profile.editPractice" = "Edit Practice Settings";
+"profile.sectionPractice" = "Practice Settings";
+"profile.appLanguage" = "App Language";
+"profile.noteLanguage" = "Note Output Language";
+"profile.languageHelp" = "App Language controls the interface. Note Output Language controls the language your clinical notes are generated in.";
+"profile.sectionLanguage" = "Language";
+"profile.sessionAlerts" = "Session Alerts";
+"profile.noteReady" = "Note Ready";
+"profile.sectionNotifications" = "Notification Preferences";
+"profile.viewData" = "View My Data";
+"profile.exportData" = "Export My Data (JSON)";
+"profile.deleteAccount" = "Delete My Account";
+"profile.sectionPrivacy" = "Privacy & Data";
+"profile.privacyFooter" = "Under Quebec Law 25, you have the right to access, export, and delete your personal data. Account deletion is permanent and cannot be undone.";
+"profile.noConsent" = "No consent events recorded";
+"profile.sectionConsent" = "Consent History";
+"profile.noSessionHistory" = "No sessions recorded";
+"profile.sectionSessionHistory" = "Session History";
+"profile.privacyPolicy" = "Privacy Policy";
+"profile.termsOfService" = "Terms of Service";
+"profile.biometricPolicy" = "Biometric Data Policy";
+"profile.version" = "Version";
+"profile.build" = "Build";
+"profile.environment" = "Environment";
+"profile.development" = "Development";
+"profile.sectionLegal" = "Legal";
+"profile.deleteTitle" = "Delete Account";
+"profile.deleteConfirm" = "Delete Everything";
+"profile.deleteCancel" = "Cancel";
+"profile.deleteMessage" = "This will permanently delete all your sessions, notes, and metrics. Audit logs will be retained for compliance. This cannot be undone.";
+"profile.loadingData" = "Loading your data...";
+
+/* ── State Badges ─────────────────────────────────────── */
+"badge.exported" = "Exported";
+"badge.ready" = "Ready";
+"badge.archived" = "Archived";
+"badge.review" = "Review";
+"badge.processing" = "Processing";
+"badge.enriching" = "Enriching";
+"badge.recording" = "Recording";
+"badge.paused" = "Paused";
+"badge.consent" = "Consent";
+
+/* ── Session Recovery ─────────────────────────────────── */
+"recovery.title" = "Incomplete Session Detected";
+"recovery.recover" = "Recover";
+"recovery.discard" = "Discard";
+
+/* ── Common ───────────────────────────────────────────── */
+"common.done" = "Done";
+"common.cancel" = "Cancel";

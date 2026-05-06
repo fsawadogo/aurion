@@ -1,0 +1,185 @@
+/* Aurion Clinical AI — Localisation fran\U00E7aise */
+
+/* ── Onglets ──────────────────────────────────────────── */
+"tabs.home" = "Accueil";
+"tabs.dashboard" = "Accueil";
+"tabs.sessions" = "Sessions";
+"tabs.devices" = "Appareils";
+"tabs.profile" = "Profil";
+
+/* ── Tableau de bord ──────────────────────────────────── */
+"dashboard.greeting.morning" = "Bonjour,";
+"dashboard.greeting.afternoon" = "Bon apr\U00E8s-midi,";
+"dashboard.greeting.evening" = "Bonsoir,";
+"dashboard.today" = "aujourd\U2019hui";
+"dashboard.startSession" = "D\U00E9marrer une session";
+"dashboard.tapToStart" = "Appuyez pour commencer";
+"dashboard.pendingReview" = "En attente de r\U00E9vision";
+"dashboard.recent" = "R\U00E9centes";
+"dashboard.noSessions" = "Aucune session";
+"dashboard.noSessionsSub" = "D\U00E9marrez votre premi\U00E8re session ci-dessus";
+"dashboard.contextTitle" = "Contexte pr\U00E9-consultation";
+"dashboard.contextSub" = "D\U00E9crivez bri\U00E8vement la raison de la visite du patient. Ceci aide \U00E0 g\U00E9n\U00E9rer une note plus pertinente. (Optionnel)";
+"dashboard.startButton" = "D\U00E9marrer la session";
+"dashboard.skipContext" = "Passer";
+"dashboard.cancel" = "Annuler";
+
+/* Cartes de d\U00E9marrage rapide */
+"quickstart.newPatient" = "Nouveau patient";
+"quickstart.followUp" = "Suivi";
+"quickstart.preOp" = "\U00C9valuation pr\U00E9op\U00E9ratoire";
+"quickstart.postOp" = "Suivi postop\U00E9ratoire";
+
+/* ── Bo\U00EEte de r\U00E9ception des sessions ────────── */
+"sessions.title" = "Sessions";
+"sessions.noSessions" = "Aucune session";
+"sessions.noSessionsSub" = "D\U00E9marrez-en une depuis l\U2019accueil";
+"sessions.noFiltered" = "Aucune session %@";
+"sessions.tryFilter" = "Essayez un autre filtre";
+"sessions.pendingReview" = "En attente de r\U00E9vision";
+"sessions.resume" = "Reprendre";
+"sessions.completed" = "Termin\U00E9es";
+"sessions.filter.all" = "Toutes";
+"sessions.filter.pending" = "En attente";
+"sessions.filter.completed" = "Termin\U00E9es";
+"sessions.filter.exported" = "Export\U00E9es";
+
+/* ── Note pr\U00EAte ─────────────────────────────────── */
+"noteReady.title" = "Note pr\U00EAte";
+"noteReady.subtitle" = "Votre note clinique a \U00E9t\U00E9 g\U00E9n\U00E9r\U00E9e et est pr\U00EAte pour r\U00E9vision.";
+"noteReady.reviewNow" = "R\U00E9viser maintenant";
+"noteReady.saveLater" = "Enregistrer pour plus tard";
+
+/* ── Post-consultation ────────────────────────────────── */
+"postEncounter.title" = "Confirmer les param\U00E8tres";
+"postEncounter.subtitle" = "Confirmez le mod\U00E8le et les param\U00E8tres avant de g\U00E9n\U00E9rer votre note.";
+"postEncounter.template" = "Mod\U00E8le";
+"postEncounter.sections" = "%d sections";
+"postEncounter.outputLanguage" = "Langue de sortie";
+"postEncounter.generate" = "G\U00E9n\U00E9rer la note";
+
+/* ── Capture ──────────────────────────────────────────── */
+"capture.rec" = "ENR";
+"capture.recording" = "Enregistrement";
+"capture.paused" = "En pause";
+"capture.consentPending" = "Consentement requis";
+"capture.processing" = "Traitement...";
+"capture.consentTitle" = "Confirmer le consentement du patient";
+"capture.consentSub" = "L\U2019enregistrement ne peut commencer qu\U2019apr\U00E8s la confirmation du consentement du patient. C\U2019est une exigence r\U00E9glementaire.";
+"capture.consentButton" = "Confirmer le consentement";
+"capture.pause" = "Pause";
+"capture.resume" = "Reprendre";
+
+/* ── Traitement ───────────────────────────────────────── */
+"processing.title" = "Traitement de la session";
+
+/* ── Connexion ────────────────────────────────────────── */
+"login.appName" = "Aurion";
+"login.tagline" = "IA CLINIQUE";
+"login.email" = "Courriel";
+"login.emailPlaceholder" = "medecin@hopital.ca";
+"login.password" = "Mot de passe";
+"login.signIn" = "Se connecter";
+"login.footer" = "Conforme HIPAA \U00B7 Confidentialit\U00E9 sur l\U2019appareil";
+
+/* ── Configuration du profil ──────────────────────────── */
+"setup.step" = "\U00C9tape %d de %d";
+"setup.back" = "Retour";
+"setup.continue" = "Continuer";
+"setup.saving" = "Enregistrement...";
+"setup.complete" = "Terminer la configuration";
+"setup.practiceTitle" = "Type de pratique ?";
+"setup.practiceSub" = "Ceci nous aide \U00E0 adapter l\U2019exp\U00E9rience \U00E0 votre flux de travail.";
+"setup.clinic" = "Clinique";
+"setup.surgicalCenter" = "Centre chirurgical";
+"setup.hospital" = "H\U00F4pital";
+"setup.specialtyTitle" = "Sp\U00E9cialit\U00E9 principale ?";
+"setup.specialtySub" = "Vous pourrez ajouter d\U2019autres mod\U00E8les \U00E0 l\U2019\U00E9tape suivante.";
+"setup.visitTitle" = "Types de visites courants ?";
+"setup.visitSub" = "S\U00E9lectionnez tous ceux qui s\U2019appliquent. Ils deviendront des options de d\U00E9marrage rapide.";
+"setup.templateTitle" = "Mod\U00E8les pr\U00E9f\U00E9r\U00E9s ?";
+"setup.templateSub" = "Ceux-ci seront disponibles lors du d\U00E9marrage de sessions. Votre sp\U00E9cialit\U00E9 principale est pr\U00E9s\U00E9lectionn\U00E9e.";
+"setup.languageTitle" = "Langue de sortie ?";
+"setup.languageSub" = "Vos notes cliniques seront g\U00E9n\U00E9r\U00E9es dans cette langue.";
+
+/* ── Sp\U00E9cialit\U00E9s ────────────────────────────── */
+"specialty.orthopedic_surgery" = "Chirurgie orthop\U00E9dique";
+"specialty.plastic_surgery" = "Chirurgie plastique";
+"specialty.musculoskeletal" = "Musculosquelettique";
+"specialty.emergency_medicine" = "M\U00E9decine d\U2019urgence";
+"specialty.general" = "G\U00E9n\U00E9ral";
+
+/* ── Types de visites ─────────────────────────────────── */
+"visitType.new_patient" = "Nouveau patient";
+"visitType.follow_up" = "Suivi";
+"visitType.pre_op" = "\U00C9valuation pr\U00E9op\U00E9ratoire";
+"visitType.post_op" = "Suivi postop\U00E9ratoire";
+
+/* ── Langues ──────────────────────────────────────────── */
+"language.en" = "English";
+"language.fr" = "Fran\U00E7ais";
+
+/* ── Profil ───────────────────────────────────────────── */
+"profile.title" = "Profil";
+"profile.defaultName" = "M\U00E9decin";
+"profile.voiceEnrolled" = "Profil vocal enregistr\U00E9";
+"profile.rerecordVoice" = "R\U00E9enregistrer le profil vocal";
+"profile.deleteVoice" = "Supprimer le profil vocal";
+"profile.noVoice" = "Aucun profil vocal";
+"profile.setupVoice" = "Configurer le profil vocal";
+"profile.sectionVoice" = "Profil vocal";
+"profile.practiceType" = "Type de pratique";
+"profile.primarySpecialty" = "Sp\U00E9cialit\U00E9 principale";
+"profile.preferredTemplates" = "Mod\U00E8les pr\U00E9f\U00E9r\U00E9s";
+"profile.visitTypes" = "Types de visites";
+"profile.editPractice" = "Modifier les param\U00E8tres de pratique";
+"profile.sectionPractice" = "Param\U00E8tres de pratique";
+"profile.appLanguage" = "Langue de l\U2019application";
+"profile.noteLanguage" = "Langue des notes cliniques";
+"profile.languageHelp" = "La langue de l\U2019application contr\U00F4le l\U2019interface. La langue des notes contr\U00F4le la langue dans laquelle vos notes cliniques sont g\U00E9n\U00E9r\U00E9es.";
+"profile.sectionLanguage" = "Langue";
+"profile.sessionAlerts" = "Alertes de session";
+"profile.noteReady" = "Note pr\U00EAte";
+"profile.sectionNotifications" = "Pr\U00E9f\U00E9rences de notification";
+"profile.viewData" = "Voir mes donn\U00E9es";
+"profile.exportData" = "Exporter mes donn\U00E9es (JSON)";
+"profile.deleteAccount" = "Supprimer mon compte";
+"profile.sectionPrivacy" = "Confidentialit\U00E9 et donn\U00E9es";
+"profile.privacyFooter" = "En vertu de la Loi 25 du Qu\U00E9bec, vous avez le droit d\U2019acc\U00E9der, d\U2019exporter et de supprimer vos donn\U00E9es personnelles. La suppression du compte est permanente et irr\U00E9versible.";
+"profile.noConsent" = "Aucun \U00E9v\U00E9nement de consentement enregistr\U00E9";
+"profile.sectionConsent" = "Historique des consentements";
+"profile.noSessionHistory" = "Aucune session enregistr\U00E9e";
+"profile.sectionSessionHistory" = "Historique des sessions";
+"profile.privacyPolicy" = "Politique de confidentialit\U00E9";
+"profile.termsOfService" = "Conditions d\U2019utilisation";
+"profile.biometricPolicy" = "Politique des donn\U00E9es biom\U00E9triques";
+"profile.version" = "Version";
+"profile.build" = "Build";
+"profile.environment" = "Environnement";
+"profile.development" = "D\U00E9veloppement";
+"profile.sectionLegal" = "L\U00E9gal";
+"profile.deleteTitle" = "Supprimer le compte";
+"profile.deleteConfirm" = "Tout supprimer";
+"profile.deleteCancel" = "Annuler";
+"profile.deleteMessage" = "Ceci supprimera d\U00E9finitivement toutes vos sessions, notes et m\U00E9triques. Les journaux d\U2019audit seront conserv\U00E9s pour la conformit\U00E9. Cette action est irr\U00E9versible.";
+"profile.loadingData" = "Chargement de vos donn\U00E9es...";
+
+/* ── Badges d\U2019\U00E9tat ─────────────────────────── */
+"badge.exported" = "Export\U00E9";
+"badge.ready" = "Pr\U00EAt";
+"badge.archived" = "Archiv\U00E9";
+"badge.review" = "R\U00E9vision";
+"badge.processing" = "Traitement";
+"badge.enriching" = "Enrichissement";
+"badge.recording" = "Enregistrement";
+"badge.paused" = "En pause";
+"badge.consent" = "Consentement";
+
+/* ── R\U00E9cup\U00E9ration de session ────────────────── */
+"recovery.title" = "Session incompl\U00E8te d\U00E9tect\U00E9e";
+"recovery.recover" = "R\U00E9cup\U00E9rer";
+"recovery.discard" = "Abandonner";
+
+/* ── Commun ───────────────────────────────────────────── */
+"common.done" = "Termin\U00E9";
+"common.cancel" = "Annuler";

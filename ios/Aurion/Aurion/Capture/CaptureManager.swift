@@ -51,10 +51,25 @@ final class CaptureManager: NSObject, ObservableObject {
     /// JPEG compression quality for captured video frames.
     private let jpegQuality: CGFloat = 0.85
 
-    /// Audio sample rate for the output WAV file.
+    /// Output WAV format. Must match `AudioBufferConverter`'s output format —
+    /// the converter produces 16 kHz / 16-bit / mono interleaved PCM and the
+    /// WAV header is written with these same values.
     private let audioSampleRate: Double = 16_000
     private let audioBitsPerSample: UInt16 = 16
     private let audioChannels: UInt16 = 1
+
+    /// Converts AVCaptureAudioDataOutput's native format (typically Float32 at
+    /// 44.1 or 48 kHz on iOS) to 16-bit Int16 / 16 kHz / mono. Without this
+    /// the WAV header would lie about the payload — see AudioBufferConverter
+    /// for the full explanation.
+    private let audioConverter = AudioBufferConverter()
+
+    /// Optional parallel consumer of the raw audio sample buffers. Set by
+    /// SessionManager when a `LiveTranscriber` is wired up; called on the
+    /// audio delegate queue *in addition to* the existing converter +
+    /// PCM-accumulation path. Non-disruptive: the WAV upload pipeline and
+    /// audio-level meter are unchanged regardless of whether this is set.
+    nonisolated(unsafe) var sampleBufferTap: (@Sendable (CMSampleBuffer) -> Void)?
 
     // MARK: - AVFoundation
 
@@ -143,7 +158,9 @@ final class CaptureManager: NSObject, ObservableObject {
 
     /// Configures the AVCaptureSession with audio and video inputs/outputs.
     /// Call this once after permissions are granted, before starting capture.
-    func configureCaptureSession(preferBackCamera: Bool = false) {
+    /// Defaults to the back camera — clinical use case is the physician's
+    /// phone pointing at the patient. Front-camera capture is opt-in.
+    func configureCaptureSession(preferBackCamera: Bool = true) {
         sessionQueue.async { [weak self] in
             guard let self else { return }
 
@@ -214,6 +231,10 @@ final class CaptureManager: NSObject, ObservableObject {
         audioPCMLock.lock()
         audioPCMData = Data()
         audioPCMLock.unlock()
+        // Drop the converter's lazy state so it picks up the current input
+        // format (handles mic route changes between sessions, e.g. AirPods
+        // unplugged before recording starts).
+        audioConverter.reset()
 
         capturedFrames = []
         lastFrameExtractionTime = 0
@@ -322,44 +343,27 @@ extension CaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptur
 
     // MARK: Audio Processing
 
-    /// Processes an audio sample buffer: computes audio level and accumulates PCM data.
+    /// Processes an audio sample buffer: converts the native capture format
+    /// (typically Float32 @ 44.1/48 kHz on iOS) to 16-bit Int16 / 16 kHz /
+    /// mono, computes the meter level on the converted buffer, and appends
+    /// the PCM bytes to the recording. The conversion is what makes the WAV
+    /// header truthful — without it Whisper transcribes garbled audio.
     private nonisolated func handleAudioSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        guard let blockBuffer = CMSampleBufferGetDataBuffer(sampleBuffer) else { return }
-        let length = CMBlockBufferGetDataLength(blockBuffer)
-        guard length > 0 else { return }
+        guard let result = audioConverter.convert(sampleBuffer) else { return }
 
-        // Copy raw PCM bytes from the sample buffer
-        var rawData = Data(count: length)
-        rawData.withUnsafeMutableBytes { ptr in
-            if let baseAddress = ptr.baseAddress {
-                CMBlockBufferCopyDataBytes(blockBuffer, atOffset: 0, dataLength: length, destination: baseAddress)
-            }
-        }
-
-        // --- Compute RMS audio level for the meter (0.0...1.0) ---
-        let level = rawData.withUnsafeBytes { rawBuffer -> Float in
-            guard let baseAddress = rawBuffer.baseAddress else { return 0 }
-            let samples = baseAddress.bindMemory(to: Int16.self, capacity: length / 2)
-            let sampleCount = length / 2
-            guard sampleCount > 0 else { return 0 }
-
-            var sumOfSquares: Float = 0
-            for i in 0..<sampleCount {
-                let sample = Float(samples[i]) / Float(Int16.max)
-                sumOfSquares += sample * sample
-            }
-            let rms = sqrt(sumOfSquares / Float(sampleCount))
-            return min(max(rms, 0), 1)
-        }
+        // Fan-out the raw sample buffer to any parallel consumer (currently
+        // only LiveTranscriber). Done before the published-state hop so
+        // captioning starts as early as possible. Tap closure is itself
+        // responsible for thread-hopping if needed.
+        sampleBufferTap?(sampleBuffer)
 
         Task { @MainActor [weak self] in
             guard let self, self.isCapturing, !self.isPaused else { return }
-            self.audioLevel = level
+            self.audioLevel = result.rms
         }
 
-        // --- Accumulate PCM data for the WAV file ---
         audioPCMLock.lock()
-        audioPCMData.append(rawData)
+        audioPCMData.append(result.pcm)
         audioPCMLock.unlock()
     }
 

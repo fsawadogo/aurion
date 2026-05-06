@@ -11,11 +11,28 @@ struct ProfileView: View {
     @State private var consentEvents: [ConsentEvent] = []
     @State private var sessionHistory: [SessionHistoryItem] = []
     @State private var error: String?
+    // appLanguage binding comes from appState
+    @State private var showTeamMemberEditor = false
     @State private var sessionAlertsEnabled = true
     @State private var noteReadyAlertsEnabled = true
 
     private var physicianInitials: String {
-        "Dr"
+        if let name = appState.physicianProfile?.displayName, !name.isEmpty {
+            let parts = name.split(separator: " ")
+            if parts.count >= 2 {
+                return String(parts[0].prefix(1)) + String(parts[1].prefix(1))
+            }
+            return String(name.prefix(2))
+        }
+        return "Dr"
+    }
+
+    private var displaySpecialty: String {
+        (appState.physicianProfile?.primarySpecialty ?? "general").displayFormatted
+    }
+
+    private var displayPracticeType: String {
+        (appState.physicianProfile?.practiceType ?? "clinic").displayFormatted
     }
 
     var body: some View {
@@ -23,34 +40,19 @@ struct ProfileView: View {
             // ── Account Info ──────────────────────────────────
             Section {
                 HStack(spacing: AurionSpacing.md) {
-                    // Avatar — initials on gold gradient
-                    ZStack {
-                        Circle()
-                            .fill(AurionGradients.goldShimmer)
-                            .frame(width: 64, height: 64)
-                        Text(physicianInitials)
-                            .font(.system(size: 22, weight: .bold))
-                            .foregroundColor(.white)
-                    }
-                    VStack(alignment: .leading, spacing: AurionSpacing.xxs) {
-                        Text("Physician")
+                    AurionAvatar(initials: physicianInitials, size: 64)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(appState.physicianProfile?.displayName ?? "Physician")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.aurionTextPrimary)
-                        Text("Orthopedic Surgery")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.secondary)
-                        Text("CREOQ / CLLC")
-                            .font(.system(size: 13, weight: .regular))
-                            .foregroundColor(.secondary.opacity(0.8))
-
-                        HStack(spacing: AurionSpacing.xxs) {
-                            Image(systemName: "shield.checkered")
-                                .font(.caption2)
-                            Text(appState.userRole.rawValue)
-                                .font(.caption2)
-                        }
-                        .foregroundColor(.aurionGold)
-                        .padding(.top, AurionSpacing.xxs)
+                            .foregroundColor(.aurionNavy)
+                        Text(displaySpecialty)
+                            .font(.system(size: 13))
+                            .foregroundColor(.aurionTextSecondary)
+                            .padding(.top, 2)
+                        Text(displayPracticeType)
+                            .font(.system(size: 12))
+                            .foregroundColor(Color(red: 154/255, green: 160/255, blue: 172/255))
+                            .padding(.top, 2)
                     }
                 }
                 .padding(.vertical, AurionSpacing.xs)
@@ -85,6 +87,81 @@ struct ProfileView: View {
                 SectionHeader(title: "Voice Profile")
             }
 
+            // ── Practice Settings ────────────────────────────
+            Section {
+                LabeledContent("Practice Type", value: displayPracticeType)
+                LabeledContent("Primary Specialty", value: displaySpecialty)
+
+                if let templates = appState.physicianProfile?.preferredTemplates {
+                    LabeledContent("Preferred Templates", value: templates
+                        .map { $0.displayFormatted }
+                        .joined(separator: ", "))
+                }
+
+                if let types = appState.physicianProfile?.consultationTypes {
+                    LabeledContent("Visit Types", value: types
+                        .map { $0.displayFormatted }
+                        .joined(separator: ", "))
+                }
+
+                Button("Edit Practice Settings") {
+                    appState.hasCompletedProfileSetup = false
+                }
+                .foregroundColor(.aurionGold)
+            } header: {
+                SectionHeader(title: L("profile.sectionPractice"))
+            }
+
+            // ── Team Members ────────────────────────────────
+            Section {
+                let team = appState.physicianProfile?.alliedHealthTeam ?? []
+                if team.isEmpty {
+                    Text("No team members configured")
+                        .aurionCaption()
+                } else {
+                    ForEach(team, id: \.name) { member in
+                        LabeledContent(member.role.displayFormatted, value: member.name)
+                    }
+                }
+
+                Button("Edit Team Members") {
+                    showTeamMemberEditor = true
+                }
+                .foregroundColor(.aurionGold)
+            } header: {
+                SectionHeader(title: "Team Members")
+            }
+
+            // ── Language ─────────────────────────────────────
+            Section {
+                Picker(selection: $appState.appLanguage) {
+                    Text("🇬🇧 English").tag("en")
+                    Text("🇫🇷 Fran\u{00E7}ais").tag("fr")
+                } label: {
+                    Label("App Language", systemImage: "textformat")
+                        .foregroundColor(.aurionTextPrimary)
+                }
+
+                Picker(selection: Binding(
+                    get: { appState.physicianProfile?.outputLanguage ?? "en" },
+                    set: { newLang in
+                        Task { await updateLanguage(newLang) }
+                    }
+                )) {
+                    Text("🇬🇧 English").tag("en")
+                    Text("🇫🇷 Fran\u{00E7}ais").tag("fr")
+                } label: {
+                    Label("Note Output Language", systemImage: "doc.text")
+                        .foregroundColor(.aurionTextPrimary)
+                }
+
+                Text("App Language controls the interface. Note Output Language controls the language your clinical notes are generated in.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } header: {
+                SectionHeader(title: "Language")
+            }
+
             // ── Notification Preferences ─────────────────────
             Section {
                 Toggle(isOn: $sessionAlertsEnabled) {
@@ -114,6 +191,12 @@ struct ProfileView: View {
                     exportMyData()
                 } label: {
                     Label("Export My Data (JSON)", systemImage: "square.and.arrow.up")
+                }
+
+                Button {
+                    signOut()
+                } label: {
+                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
                 }
 
                 Button(role: .destructive) {
@@ -170,9 +253,9 @@ struct ProfileView: View {
                                     .aurionMicro()
                             }
                             Spacer()
-                            StatusBadge(
-                                text: displayState(session.state).text,
-                                color: displayState(session.state).color
+                            AurionStatusPill(
+                                kind: sessionStateKind(session.state),
+                                labelOverride: sessionStateLabel(session.state)
                             )
                         }
                     }
@@ -213,7 +296,7 @@ struct ProfileView: View {
                         Text("Environment")
                             .foregroundColor(.aurionTextPrimary)
                         Spacer()
-                        StatusBadge(text: "Development", color: .clinicalWarning)
+                        AurionStatusPill(kind: .conflict, labelOverride: "Development")
                     }
                 }
             } header: {
@@ -223,6 +306,7 @@ struct ProfileView: View {
         .navigationTitle("Profile")
         .aurionNavBar()
         .onAppear { loadConsentHistory(); loadSessionHistory() }
+        .task { await loadProfile() }
         .alert("Delete Account", isPresented: $showDeleteConfirmation) {
             Button("Delete Everything", role: .destructive) { deleteAccount() }
             Button("Cancel", role: .cancel) {}
@@ -273,7 +357,9 @@ struct ProfileView: View {
             do {
                 let url = URL(string: "\(AppConfig.baseAPIPath)/privacy/my-data")!
                 var request = URLRequest(url: url)
-                request.setValue("Bearer CLINICIAN", forHTTPHeaderField: "Authorization")
+                if let token = KeychainHelper.shared.loadAuthToken() {
+                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
                 let (data, _) = try await URLSession.shared.data(for: request)
                 myData = try JSONDecoder().decode(MyDataResponse.self, from: data)
                 showDataExport = true
@@ -290,7 +376,9 @@ struct ProfileView: View {
             do {
                 let url = URL(string: "\(AppConfig.baseAPIPath)/privacy/export?format=json")!
                 var request = URLRequest(url: url)
-                request.setValue("Bearer CLINICIAN", forHTTPHeaderField: "Authorization")
+                if let token = KeychainHelper.shared.loadAuthToken() {
+                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
                 let (data, _) = try await URLSession.shared.data(for: request)
                 myData = try JSONDecoder().decode(MyDataResponse.self, from: data)
                 showDataExport = true
@@ -307,18 +395,47 @@ struct ProfileView: View {
                 let url = URL(string: "\(AppConfig.baseAPIPath)/privacy/my-account")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
-                request.setValue("Bearer CLINICIAN", forHTTPHeaderField: "Authorization")
+                if let token = KeychainHelper.shared.loadAuthToken() {
+                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+                }
                 let (_, response) = try await URLSession.shared.data(for: request)
                 if let http = response as? HTTPURLResponse, http.statusCode == 200 {
                     // Clear local data
                     KeychainHelper.shared.deleteVoiceEmbedding()
+                    KeychainHelper.shared.clearAuth()
                     SessionPersistence.clear()
                     AurionHaptics.notification(.success)
-                    appState.isAuthenticated = false
+                    appState.clearAuth()
                 }
             } catch {
                 self.error = "Deletion failed"
             }
+        }
+    }
+
+    private func signOut() {
+        KeychainHelper.shared.clearAuth()
+        appState.clearAuth()
+        AurionHaptics.notification(.success)
+    }
+
+    private func loadProfile() async {
+        do {
+            let profile = try await APIClient.shared.getProfile()
+            appState.physicianProfile = profile
+            appState.hasCompletedProfileSetup = true
+        } catch {
+            // Profile not set up yet — that's fine, setup view will show
+        }
+    }
+
+    private func updateLanguage(_ language: String) async {
+        do {
+            let profile = try await APIClient.shared.updateProfile(["output_language": language])
+            appState.physicianProfile = profile
+            AurionHaptics.notification(.success)
+        } catch {
+            // Revert will happen on next profile load
         }
     }
 

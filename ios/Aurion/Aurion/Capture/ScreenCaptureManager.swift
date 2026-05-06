@@ -51,18 +51,23 @@ final class ScreenCaptureManager: ObservableObject {
 
     // MARK: - Capture Control
 
-    /// Starts capturing screen content at the specified FPS.
-    ///
-    /// - Parameter fps: Frames per second to capture. Default is 2 (from AppConfig
-    ///   `pipeline.screen_capture_fps`). Higher values increase storage and processing cost.
-    func startCapture(fps: Int = 2) {
+    /// Starts capturing screen content. FPS and the on/off toggle are read
+    /// from RemoteConfig (backed by AppConfig). The `fps` parameter overrides
+    /// the remote value only when explicitly set; default keeps it remote-driven.
+    @MainActor
+    func startCapture(fps: Int? = nil) {
         guard !isRecording else { return }
+        guard RemoteConfig.shared.featureFlags.screenCaptureEnabled else {
+            error = "Screen capture is disabled by server config."
+            return
+        }
         guard recorder.isAvailable else {
             error = "Screen recording is not available on this device."
             return
         }
 
-        targetFPS = max(1, fps)
+        let resolvedFps = fps ?? RemoteConfig.shared.pipeline.screenCaptureFps
+        targetFPS = max(1, resolvedFps)
         capturedScreenFrames = []
         lastCaptureTime = 0
         sessionStartTime = Date.timeIntervalSinceReferenceDate

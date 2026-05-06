@@ -1,315 +1,567 @@
 import SwiftUI
 
-/// Main dashboard — shown after onboarding. Start new sessions here.
+/// Main dashboard — pixel-perfect port of `screens.jsx → DashboardScreen`.
+/// Greeting (28pt two-line, Avatar trailing) → Pending Review (gold-accent
+/// card) → Quick Start (2×2 grid) → Recent Sessions (compact list).
+/// Encounter-type and pre-encounter (context) sheets share the dashboard's
+/// state because the design click-thru routes both back here.
 struct DashboardView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var sessionManager: SessionManager
-    @State private var selectedSpecialty = "orthopedic_surgery"
     @State private var recentSessions: [SessionResponse] = []
     @State private var isLoadingSessions = false
+    @State private var showEncounterTypeSheet = false
+    @State private var showContextPrompt = false
+    @State private var encounterContext = ""
+    @State private var selectedQuickStart: (specialty: String, consultationType: String)?
+    @State private var selectedEncounterType = "doctor_patient"
+    @State private var selectedParticipants: [[String: Any]] = []
 
-    private let specialties = [
-        ("orthopedic_surgery", "Orthopedic Surgery"),
-        ("plastic_surgery", "Plastic Surgery"),
-        ("musculoskeletal", "Musculoskeletal"),
-        ("emergency_medicine", "Emergency Medicine"),
-        ("general", "General"),
-    ]
+    // MARK: - Greeting
 
-    // MARK: - Computed Properties
-
-    private var greeting: String {
+    private var greetingLine1: String {
         let hour = Calendar.current.component(.hour, from: Date())
         switch hour {
-        case 0..<12: return "Good morning, Dr."
-        case 12..<17: return "Good afternoon, Dr."
-        default: return "Good evening, Dr."
+        case 0..<12: return L("dashboard.greeting.morning")
+        case 12..<17: return L("dashboard.greeting.afternoon")
+        default: return L("dashboard.greeting.evening")
         }
     }
 
-    private var totalSessionCount: Int {
-        recentSessions.count
+    private var doctorLine: String {
+        guard let name = appState.physicianProfile?.displayName, !name.isEmpty else { return "" }
+        let parts = name.split(separator: " ")
+        let last = parts.count > 1 ? String(parts.last!) : name
+        return "Dr. \(last)."
     }
 
-    private var thisWeekCount: Int {
+    private var avatarInitials: String {
+        if let name = appState.physicianProfile?.displayName, !name.isEmpty {
+            let parts = name.split(separator: " ")
+            if parts.count >= 2 {
+                return String(parts[0].prefix(1)) + String(parts[1].prefix(1))
+            }
+            return String(name.prefix(2))
+        }
+        return "Dr"
+    }
+
+    private var todayCount: Int {
         let calendar = Calendar.current
-        let now = Date()
         let formatter = ISO8601DateFormatter()
-        return recentSessions.filter { session in
-            guard let date = formatter.date(from: session.createdAt) else { return false }
-            return calendar.isDate(date, equalTo: now, toGranularity: .weekOfYear)
+        return recentSessions.filter { s in
+            guard let d = formatter.date(from: s.createdAt) else { return false }
+            return calendar.isDateInToday(d)
         }.count
     }
 
-    private var pendingCount: Int {
-        recentSessions.filter { $0.state == "AWAITING_REVIEW" }.count
+    private var pendingReviewSessions: [SessionResponse] {
+        recentSessions.filter { $0.state == "AWAITING_REVIEW" }
     }
 
-    private var avgScore: String {
-        guard !recentSessions.isEmpty else { return "--" }
-        return "--"
+    private var quickStartCards: [(specialty: String, type: String, label: String, icon: String)] {
+        let profile = appState.physicianProfile
+        let specialty = profile?.primarySpecialty ?? "general"
+        let types = profile?.consultationTypes ?? ["new_patient", "follow_up"]
+        let icon: String = {
+            switch specialty {
+            case "orthopedic_surgery": return "figure.walk"
+            case "plastic_surgery": return "heart"
+            case "musculoskeletal": return "figure.run"
+            case "emergency_medicine": return "cross.case"
+            default: return "stethoscope"
+            }
+        }()
+        return types.map { type in
+            let label: String
+            switch type {
+            case "new_patient": label = L("quickstart.newPatient")
+            case "follow_up": label = L("quickstart.followUp")
+            case "pre_op": label = L("quickstart.preOp")
+            case "post_op": label = L("quickstart.postOp")
+            default: label = type.displayFormatted
+            }
+            return (specialty, type, label, icon)
+        }
     }
-
-    /// Mock weekly data for the mini chart (Mon-Sun)
-    private var weeklyBarHeights: [CGFloat] {
-        [0.4, 0.7, 0.5, 0.9, 0.6, 0.3, 0.2]
-    }
-
-    private let weekDayLabels = ["M", "T", "W", "T", "F", "S", "S"]
 
     // MARK: - Body
 
     var body: some View {
         NavigationStack {
             ScrollView {
-                VStack(spacing: AurionSpacing.xl) {
-
-                    // Greeting
-                    Text(greeting)
-                        .aurionDisplay()
-                        .frame(maxWidth: .infinity, alignment: .leading)
-
-                    // Welcome card
-                    welcomeCard
-
-                    // Metric cards — 2x2 grid
-                    metricGrid
-
-                    // Mini weekly chart
-                    weeklyChart
-
-                    // Recent sessions
+                VStack(spacing: 20) {
+                    greetingHeader
+                    if !pendingReviewSessions.isEmpty { pendingReviewSection }
+                    quickStartSection
                     recentSessionsSection
-
-                    // New session card
-                    newSessionCard
                 }
-                .padding(AurionSpacing.lg)
+                .padding(.horizontal, AurionSpacing.edgeIPhone)
+                .padding(.top, 8)
+                .padding(.bottom, 24)
             }
             .background(Color.aurionBackground)
-            .navigationTitle("Aurion")
-            .aurionNavBar()
+            .navigationBarHidden(true)
             .task { await loadRecentSessions() }
             .refreshable { await loadRecentSessions() }
+            .sheet(isPresented: $showEncounterTypeSheet) { encounterTypeSheet }
+            .sheet(isPresented: $showContextPrompt) { encounterContextSheet }
         }
     }
 
-    // MARK: - Welcome Card
+    // MARK: - Greeting (two-line + avatar)
 
-    private var welcomeCard: some View {
-        VStack(spacing: AurionSpacing.sm) {
-            Image(systemName: "waveform.circle.fill")
-                .font(.system(size: 44))
-                .foregroundColor(Color.aurionGold)
-
-            if totalSessionCount > 0 {
-                Text("You've captured \(totalSessionCount) session\(totalSessionCount == 1 ? "" : "s")")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-            } else {
-                Text("Ready to capture")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.white)
-            }
-
-            if appState.hasVoiceProfile {
-                Label("Voice profile active", systemImage: "checkmark.circle.fill")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.85))
-            } else {
-                Label("No voice profile -- speaker separation disabled", systemImage: "info.circle")
-                    .font(.caption)
-                    .foregroundColor(.white.opacity(0.6))
-            }
-        }
-        .padding(AurionSpacing.xl)
-        .frame(maxWidth: .infinity)
-        .background(AurionGradients.navyBackground)
-        .cornerRadius(16)
-    }
-
-    // MARK: - Metric Grid
-
-    private var metricGrid: some View {
-        let columns = [
-            GridItem(.flexible(), spacing: AurionSpacing.md),
-            GridItem(.flexible(), spacing: AurionSpacing.md),
-        ]
-
-        return LazyVGrid(columns: columns, spacing: AurionSpacing.md) {
-            MetricCard(
-                title: "Sessions",
-                value: "\(totalSessionCount)",
-                icon: "waveform.path"
-            )
-            MetricCard(
-                title: "This Week",
-                value: "\(thisWeekCount)",
-                icon: "calendar"
-            )
-            MetricCard(
-                title: "Pending",
-                value: "\(pendingCount)",
-                icon: "clock.arrow.circlepath",
-                trend: pendingCount > 0 ? "\(pendingCount)" : nil
-            )
-            MetricCard(
-                title: "Avg Score",
-                value: avgScore,
-                icon: "chart.bar.fill"
-            )
-        }
-    }
-
-    // MARK: - Weekly Chart
-
-    private var weeklyChart: some View {
-        VStack(alignment: .leading, spacing: AurionSpacing.sm) {
-            SectionHeader(title: "This Week")
-
-            HStack(alignment: .bottom, spacing: AurionSpacing.xs) {
-                ForEach(0..<7, id: \.self) { index in
-                    VStack(spacing: AurionSpacing.xxs) {
-                        RoundedRectangle(cornerRadius: 3)
-                            .fill(
-                                LinearGradient(
-                                    colors: [Color.aurionGold, Color.aurionGoldLight],
-                                    startPoint: .bottom,
-                                    endPoint: .top
-                                )
-                            )
-                            .frame(height: weeklyBarHeights[index] * 48)
-
-                        Text(weekDayLabels[index])
-                            .aurionMicro()
+    private var greetingHeader: some View {
+        HStack(alignment: .top) {
+            VStack(alignment: .leading, spacing: 8) {
+                VStack(alignment: .leading, spacing: 0) {
+                    Text(greetingLine1)
+                        .font(.system(size: 28, weight: .bold))
+                        .tracking(-0.56)
+                        .foregroundColor(.aurionTextPrimary)
+                    if !doctorLine.isEmpty {
+                        Text(doctorLine)
+                            .font(.system(size: 28, weight: .bold))
+                            .tracking(-0.56)
+                            .foregroundColor(.aurionTextPrimary)
                     }
-                    .frame(maxWidth: .infinity)
+                }
+                Text("\(todayCount) sessions \(L("dashboard.today")) \u{00B7} \(pendingReviewSessions.count) pending review")
+                    .font(.system(size: 14))
+                    .foregroundColor(.aurionTextSecondary)
+            }
+            Spacer()
+            AurionAvatar(initials: avatarInitials, size: 44)
+        }
+    }
+
+    // MARK: - Pending Review (gold-accent card)
+
+    private var pendingReviewSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: L("dashboard.pendingReview"))
+            ForEach(pendingReviewSessions, id: \.id) { session in
+                NavigationLink(destination: SessionNoteView(session: session)) {
+                    AurionCard(padding: 16, accent: true) {
+                        HStack {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(session.specialty.displayFormatted)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.aurionNavy)
+                                Text("Recorded \(formatRelativeTime(session.createdAt))")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.aurionTextSecondary)
+                            }
+                            Spacer()
+                            Text(L("sessions.resume"))
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.aurionNavy)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(Color.aurionGold)
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - Quick Start (2×2 grid)
+
+    private var quickStartSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "Quick Start")
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+                ForEach(quickStartCards, id: \.type) { card in
+                    Button {
+                        AurionHaptics.impact(.light)
+                        selectedQuickStart = (card.specialty, card.type)
+                        selectedEncounterType = "doctor_patient"
+                        selectedParticipants = []
+                        encounterContext = ""
+                        showEncounterTypeSheet = true
+                    } label: {
+                        AurionCard(padding: 14) {
+                            VStack(alignment: .leading, spacing: 10) {
+                                AurionIconTile(systemName: card.icon, size: 36, active: true)
+                                Spacer(minLength: 0)
+                                VStack(alignment: .leading, spacing: 3) {
+                                    Text(card.specialty.displayFormatted)
+                                        .font(.system(size: 11, weight: .semibold))
+                                        .tracking(0.6)
+                                        .textCase(.uppercase)
+                                        .foregroundColor(.aurionTextSecondary)
+                                    Text(card.label)
+                                        .font(.system(size: 16, weight: .semibold))
+                                        .foregroundColor(.aurionNavy)
+                                        .lineLimit(2)
+                                }
+                            }
+                            .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
+                        }
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .frame(height: 64)
+            if let error = sessionManager.error {
+                Text(error)
+                    .font(.system(size: 13))
+                    .foregroundColor(.aurionRed)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: .infinity)
+            }
         }
-        .aurionCard()
     }
 
-    // MARK: - Recent Sessions
+    // MARK: - Recent Sessions (compact list inside one card)
 
     private var recentSessionsSection: some View {
-        VStack(alignment: .leading, spacing: AurionSpacing.sm) {
-            SectionHeader(title: "Recent Sessions", count: recentSessions.isEmpty ? nil : recentSessions.count)
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "Recent Sessions") {
+                Text("See all")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.aurionGold)
+            }
 
             if isLoadingSessions {
-                HStack {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                }
-                .padding(.vertical, AurionSpacing.lg)
+                HStack { Spacer(); ProgressView(); Spacer() }
+                    .padding(.vertical, AurionSpacing.lg)
             } else if recentSessions.isEmpty {
                 EmptyStateView(
                     icon: "waveform.path.ecg",
-                    title: "No sessions yet",
-                    subtitle: "Start your first clinical session below"
+                    title: L("dashboard.noSessions"),
+                    subtitle: L("dashboard.noSessionsSub")
                 )
             } else {
-                ForEach(recentSessions.prefix(5), id: \.id) { session in
-                    recentSessionRow(session: session)
+                AurionCard(padding: 0) {
+                    VStack(spacing: 0) {
+                        ForEach(Array(recentSessions.prefix(3).enumerated()), id: \.element.id) { index, session in
+                            recentSessionRow(session: session)
+                            if index < min(recentSessions.count, 3) - 1 {
+                                Rectangle().fill(Color.aurionBorder).frame(height: 1).padding(.leading, 60)
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    // MARK: - New Session Card
-
-    private var newSessionCard: some View {
-        VStack(alignment: .leading, spacing: AurionSpacing.sm) {
-            Text("New Session")
-                .font(.headline)
-                .foregroundColor(.aurionTextPrimary)
-
-            Picker("Specialty", selection: $selectedSpecialty) {
-                ForEach(specialties, id: \.0) { key, name in
-                    Text(name).tag(key)
-                }
+    private func recentSessionRow(session: SessionResponse) -> some View {
+        let icon: String = {
+            switch session.specialty {
+            case "plastic_surgery": return "heart"
+            case "orthopedic_surgery": return "figure.walk"
+            case "musculoskeletal": return "figure.run"
+            case "emergency_medicine": return "cross.case"
+            default: return "stethoscope"
             }
-            .pickerStyle(.menu)
+        }()
 
-            Button("Start Session") {
-                AurionHaptics.impact(.medium)
-                Task {
-                    await sessionManager.startNewSession(specialty: selectedSpecialty)
-                }
+        return HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 9)
+                    .fill(Color.aurionSurfaceAlt)
+                    .frame(width: 32, height: 32)
+                Image(systemName: icon)
+                    .font(.system(size: 14))
+                    .foregroundColor(.aurionTextSecondary)
             }
-            .buttonStyle(AurionPrimaryButtonStyle())
-
-            if let error = sessionManager.error {
-                Text(error)
-                    .font(.caption)
-                    .foregroundColor(.clinicalAlert)
-                    .multilineTextAlignment(.center)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(session.specialty.displayFormatted)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.aurionNavy)
+                    .lineLimit(1)
+                Text(formatRelativeTime(session.createdAt))
+                    .font(.system(size: 12))
+                    .foregroundColor(.aurionTextSecondary)
+                    .lineLimit(1)
             }
+            Spacer()
+            AurionStatusPill(
+                kind: sessionStateKind(session.state),
+                labelOverride: sessionStateLabel(session.state)
+            )
         }
-        .aurionElevatedCard()
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
     }
 
-    // MARK: - Data Loading
+    // MARK: - Encounter Type Sheet (screen 4)
+
+    private var encounterTypeSheet: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                AurionNavBar(title: "Encounter Type") {
+                    AurionTextButton(label: L("common.cancel")) {
+                        showEncounterTypeSheet = false
+                    }
+                }
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("Who\u{2019}s in the room?")
+                                .font(.system(size: 22, weight: .semibold))
+                                .tracking(-0.22)
+                                .foregroundColor(.aurionNavy)
+                            Text("Aurion will adjust capture and consent accordingly.")
+                                .font(.system(size: 14))
+                                .foregroundColor(.aurionTextSecondary)
+                        }
+                        .padding(.top, 8)
+
+                        VStack(spacing: 12) {
+                            AurionSelectableCard(
+                                icon: "person.2",
+                                title: "Doctor + Patient",
+                                subtitle: "Standard one-on-one visit",
+                                selected: selectedEncounterType == "doctor_patient"
+                            ) {
+                                selectedEncounterType = "doctor_patient"
+                                selectedParticipants = []
+                            }
+
+                            AurionSelectableCard(
+                                icon: "person.3",
+                                title: "With Team Member",
+                                subtitle: "Nurse or PA also present",
+                                selected: selectedEncounterType == "doctor_patient_allied"
+                            ) {
+                                selectedEncounterType = "doctor_patient_allied"
+                            }
+
+                            if selectedEncounterType == "doctor_patient_allied" {
+                                alliedHealthPicker
+                            }
+
+                            AurionSelectableCard(
+                                icon: "graduationcap",
+                                title: "With Trainee",
+                                subtitle: "Resident, fellow, or student",
+                                selected: selectedEncounterType == "doctor_patient_transitory"
+                            ) {
+                                selectedEncounterType = "doctor_patient_transitory"
+                            }
+
+                            if selectedEncounterType == "doctor_patient_transitory" {
+                                traineeForm
+                            }
+                        }
+                    }
+                    .padding(.horizontal, AurionSpacing.edgeIPhone)
+                    .padding(.bottom, 20)
+                }
+
+                VStack(spacing: 0) {
+                    Rectangle().fill(Color.aurionBorder).frame(height: 1)
+                    AurionGoldButton(label: L("setup.continue"), full: true) {
+                        showEncounterTypeSheet = false
+                        showContextPrompt = true
+                    }
+                    .padding(.horizontal, AurionSpacing.edgeIPhone)
+                    .padding(.vertical, 12)
+                    .padding(.bottom, 8)
+                }
+                .background(Color.aurionCardBackground)
+            }
+            .background(Color.aurionBackground)
+        }
+        .presentationDetents([.large])
+    }
+
+    private var alliedHealthPicker: some View {
+        let team = appState.physicianProfile?.alliedHealthTeam ?? []
+        return VStack(alignment: .leading, spacing: 10) {
+            if team.isEmpty {
+                Text("No team members configured. Add them in Profile settings.")
+                    .font(.system(size: 13))
+                    .foregroundColor(.aurionTextSecondary)
+                    .padding(.horizontal, 12)
+            } else {
+                ForEach(team, id: \.name) { member in
+                    let isChecked = selectedParticipants.contains { ($0["name"] as? String) == member.name }
+                    Button {
+                        AurionHaptics.selection()
+                        if isChecked {
+                            selectedParticipants.removeAll { ($0["name"] as? String) == member.name }
+                        } else {
+                            selectedParticipants.append([
+                                "name": member.name,
+                                "role": member.role,
+                                "is_persistent": true,
+                            ])
+                        }
+                    } label: {
+                        HStack(spacing: 10) {
+                            ZStack {
+                                RoundedRectangle(cornerRadius: 5)
+                                    .fill(isChecked ? Color.aurionGold : Color.clear)
+                                    .frame(width: 18, height: 18)
+                                    .overlay(
+                                        RoundedRectangle(cornerRadius: 5)
+                                            .stroke(isChecked ? Color.aurionGold : Color(red: 198/255, green: 202/255, blue: 210/255), lineWidth: 2)
+                                    )
+                                if isChecked {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 10, weight: .bold))
+                                        .foregroundColor(.aurionNavy)
+                                }
+                            }
+                            Text("\(member.role.displayFormatted) — \(member.name)")
+                                .font(.system(size: 14))
+                                .foregroundColor(.aurionNavy)
+                            Spacer()
+                        }
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+        }
+        .padding(.leading, 56)
+    }
+
+    @State private var traineeName = ""
+    @State private var traineeRole = "resident"
+
+    private var traineeForm: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(spacing: 10) {
+                AurionField(label: "Name", placeholder: "J. Lee", text: $traineeName)
+                VStack(alignment: .leading, spacing: 6) {
+                    Text("Role")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.aurionTextSecondary)
+                    Picker("Role", selection: $traineeRole) {
+                        Text("Resident").tag("resident")
+                        Text("Fellow").tag("fellow")
+                        Text("Student").tag("medical_student")
+                    }
+                    .pickerStyle(.segmented)
+                }
+            }
+            HStack {
+                Spacer()
+                Button {
+                    guard !traineeName.isEmpty else { return }
+                    selectedParticipants.append([
+                        "name": traineeName,
+                        "role": traineeRole,
+                        "is_persistent": false,
+                    ])
+                    traineeName = ""
+                } label: {
+                    Label("Add", systemImage: "plus.circle")
+                        .font(.system(size: 14, weight: .medium))
+                        .foregroundColor(.aurionGold)
+                }
+                .disabled(traineeName.isEmpty || selectedParticipants.count >= 3)
+            }
+        }
+        .padding(.leading, 56)
+    }
+
+    // MARK: - Pre-Encounter Context Sheet (screen 5)
+
+    private var encounterContextSheet: some View {
+        NavigationStack {
+            VStack(spacing: 0) {
+                AurionNavBar(title: "Context") {
+                    AurionTextButton(label: "Back") {
+                        showContextPrompt = false
+                        showEncounterTypeSheet = true
+                    }
+                }
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 20) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("What brings the patient in today?")
+                                .font(.system(size: 22, weight: .semibold))
+                                .tracking(-0.22)
+                                .foregroundColor(.aurionNavy)
+                            Text("Optional. Improves note accuracy.")
+                                .font(.system(size: 14))
+                                .foregroundColor(.aurionTextSecondary)
+                        }
+
+                        AurionField(
+                            placeholder: "e.g. Right knee pain, 3 weeks post-op meniscus repair.",
+                            text: $encounterContext,
+                            multiline: true
+                        )
+
+                        // Gold tip box
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "sparkles")
+                                .font(.system(size: 18))
+                                .foregroundColor(.aurionGoldDark)
+                            Text("Aurion uses this to focus the structured note. Stays on-device.")
+                                .font(.system(size: 13))
+                                .foregroundColor(.aurionStatusPending)
+                                .lineSpacing(3)
+                        }
+                        .padding(14)
+                        .background(Color.aurionGoldBg)
+                        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
+                    }
+                    .padding(.horizontal, AurionSpacing.edgeIPhone)
+                    .padding(.top, 8)
+                    .padding(.bottom, 20)
+                }
+
+                VStack(spacing: 8) {
+                    Rectangle().fill(Color.aurionBorder).frame(height: 1)
+                    AurionGoldButton(label: "Start Session", full: true) {
+                        showContextPrompt = false
+                        startSession()
+                    }
+                    .padding(.top, 4)
+                    Button {
+                        encounterContext = ""
+                        showContextPrompt = false
+                        startSession()
+                    } label: {
+                        Text("Skip Context")
+                            .font(.system(size: 15, weight: .medium))
+                            .foregroundColor(.aurionNavy)
+                            .padding(8)
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.horizontal, AurionSpacing.edgeIPhone)
+                .padding(.bottom, 16)
+                .background(Color.aurionCardBackground)
+            }
+            .background(Color.aurionBackground)
+        }
+        .presentationDetents([.large])
+    }
+
+    // MARK: - Actions
+
+    private func startSession() {
+        guard let qs = selectedQuickStart else { return }
+        let request = SessionStartRequest(
+            specialty: qs.specialty,
+            consultationType: qs.consultationType,
+            encounterContext: encounterContext.isEmpty ? nil : encounterContext,
+            outputLanguage: appState.physicianProfile?.outputLanguage ?? "en",
+            encounterType: selectedEncounterType,
+            participants: selectedParticipants.isEmpty ? nil : selectedParticipants
+        )
+        Task { await sessionManager.startNewSession(request) }
+    }
 
     private func loadRecentSessions() async {
         isLoadingSessions = true
+        defer { isLoadingSessions = false }
         do {
             recentSessions = try await APIClient.shared.listSessions()
         } catch {
             recentSessions = []
-        }
-        isLoadingSessions = false
-    }
-
-    // MARK: - Recent Session Row
-
-    private func recentSessionRow(session: SessionResponse) -> some View {
-        let displaySpecialty = session.specialty
-            .replacingOccurrences(of: "_", with: " ")
-            .capitalized
-        let displayDate = formatDate(session.createdAt)
-        let badge = badgeForState(session.state)
-
-        return HStack(spacing: AurionSpacing.sm) {
-            VStack(alignment: .leading, spacing: AurionSpacing.xxs) {
-                Text(displaySpecialty)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.aurionTextPrimary)
-                Text(displayDate)
-                    .aurionCaption()
-            }
-            Spacer()
-            StatusBadge(text: badge.text, color: badge.color)
-        }
-        .aurionCard()
-    }
-
-    private func formatDate(_ iso: String) -> String {
-        let formatter = ISO8601DateFormatter()
-        if let date = formatter.date(from: iso) {
-            let display = DateFormatter()
-            display.dateStyle = .medium
-            display.timeStyle = .short
-            return display.string(from: date)
-        }
-        return iso
-    }
-
-    private func badgeForState(_ state: String) -> (text: String, color: Color) {
-        switch state {
-        case "EXPORTED": return ("Exported", .clinicalNormal)
-        case "REVIEW_COMPLETE": return ("Ready", .clinicalInfo)
-        case "PURGED": return ("Archived", .clinicalNeutral)
-        case "PROCESSING_STAGE1": return ("Processing", .clinicalWarning)
-        case "PROCESSING_STAGE2": return ("Enriching", .clinicalWarning)
-        case "AWAITING_REVIEW": return ("Review", .aurionGold)
-        case "RECORDING": return ("Recording", .clinicalAlert)
-        case "PAUSED": return ("Paused", .clinicalWarning)
-        case "CONSENT_PENDING": return ("Consent", .clinicalNeutral)
-        default: return (state, .clinicalNeutral)
         }
     }
 }

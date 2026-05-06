@@ -1,6 +1,35 @@
 import Foundation
 import Combine
 import SwiftUI
+import UIKit
+
+/// Request payload for `SessionManager.startNewSession`. Defaults match the
+/// backend's `POST /sessions` contract so call sites can omit anything
+/// the physician hasn't customized.
+struct SessionStartRequest {
+    let specialty: String
+    let consultationType: String?
+    let encounterContext: String?
+    let outputLanguage: String
+    let encounterType: String
+    let participants: [[String: Any]]?
+
+    init(
+        specialty: String,
+        consultationType: String? = nil,
+        encounterContext: String? = nil,
+        outputLanguage: String = "en",
+        encounterType: String = "doctor_patient",
+        participants: [[String: Any]]? = nil
+    ) {
+        self.specialty = specialty
+        self.consultationType = consultationType
+        self.encounterContext = encounterContext
+        self.outputLanguage = outputLanguage
+        self.encounterType = encounterType
+        self.participants = participants
+    }
+}
 
 /// Manages the full session lifecycle -- bridges iOS UI to backend API.
 @MainActor
@@ -9,19 +38,42 @@ final class SessionManager: ObservableObject {
     @Published var note: NoteResponse?
     @Published var isProcessing = false
     @Published var processingStatus = ""
+    @Published var showingReview = false
+    @Published var showingPostEncounter = false
     @Published var error: String?
 
+    /// On-device live captioner — runs alongside the canonical Whisper batch
+    /// pipeline so the physician sees text accumulate during the encounter.
+    /// Created lazily on first `startRecording`; the same instance is reused
+    /// across pause/resume cycles within a session and discarded on stop.
+    @Published var liveTranscriber: LiveTranscriber?
+
     private let api = APIClient.shared
+    private var registry: CaptureSourceRegistry { .shared }
+    private var audioSource: CaptureSource { registry.activeAudioSource }
+
+    /// Language for live captions, captured from `SessionStartRequest` so we
+    /// don't have to round-trip through AppState. Falls back to "en" if no
+    /// session has been started.
+    private var sessionLanguage: String = "en"
 
     // MARK: - Session Lifecycle
 
-    func startNewSession(specialty: String) async {
+    func startNewSession(_ request: SessionStartRequest) async {
         error = nil
         do {
-            let response = try await api.createSession(specialty: specialty)
-            let captureSession = CaptureSession(id: response.id, specialty: specialty)
+            let response = try await api.createSession(
+                specialty: request.specialty,
+                consultationType: request.consultationType,
+                encounterContext: request.encounterContext,
+                outputLanguage: request.outputLanguage,
+                encounterType: request.encounterType,
+                participants: request.participants
+            )
+            let captureSession = CaptureSession(id: response.id, specialty: request.specialty)
             captureSession.state = .consentPending
             session = captureSession
+            sessionLanguage = request.outputLanguage
         } catch {
             self.error = "Failed to create session: \(error.localizedDescription)"
         }
@@ -39,83 +91,208 @@ final class SessionManager: ObservableObject {
 
     func startRecording() async {
         guard let session else { return }
+        // Trigger iOS's camera + mic prompts on first run. Safe to call every
+        // time — past `.notDetermined` it's a no-op and just refreshes the
+        // cached status. Doing it here means the permission dialog fires
+        // contextually, right after the physician confirms consent and hits
+        // record, rather than at app launch where it'd feel out of place.
+        await registry.builtIn.ensurePermissions()
         do {
             _ = try await api.startRecording(sessionId: session.id)
             session.startRecording()
+            for source in registry.activeSourcesForSession {
+                try source.start()
+            }
+            await startLiveTranscriber()
+        } catch let sourceError as CaptureSourceError {
+            self.error = sourceError.localizedDescription
         } catch {
             self.error = "Start failed: \(error.localizedDescription)"
         }
     }
 
+    /// Spin up the on-device live captioner and bind it to the audio stream.
+    /// Failure is silent — recording still proceeds with the canonical
+    /// post-stop Whisper pipeline; live captions are UX sugar.
+    private func startLiveTranscriber() async {
+        let transcriber = liveTranscriber ?? LiveTranscriber()
+        liveTranscriber = transcriber
+        let language = sessionLanguage
+        await transcriber.prepare(language: language)
+        guard transcriber.isAvailable else { return }
+        registry.builtIn.sampleBufferTap = { [weak transcriber] sampleBuffer in
+            transcriber?.feed(sampleBuffer: sampleBuffer)
+        }
+        transcriber.start()
+    }
+
+    func pauseRecording() {
+        // Pause local capture immediately for responsive UI; let the backend
+        // state transition happen async so a slow network doesn't freeze the
+        // recording lights. If the backend rejects the transition we surface
+        // the error but keep the local pause — better to err on caution.
+        for source in registry.activeSourcesForSession { source.pause() }
+        liveTranscriber?.stop()
+        session?.pause()
+        Task {
+            guard let session else { return }
+            do {
+                _ = try await api.pauseSession(sessionId: session.id)
+            } catch {
+                self.error = "Pause failed (backend): \(error.localizedDescription)"
+            }
+        }
+    }
+
+    func resumeRecording() {
+        for source in registry.activeSourcesForSession { source.resume() }
+        liveTranscriber?.start()
+        session?.resume()
+        Task {
+            guard let session else { return }
+            do {
+                _ = try await api.resumeSession(sessionId: session.id)
+            } catch {
+                self.error = "Resume failed (backend): \(error.localizedDescription)"
+            }
+        }
+    }
+
     func stopRecording() async {
         guard let session else { return }
+        // Stop local capture FIRST so getRecordedAudioData has a complete buffer
+        // by the time submitProcessing fires.
+        for source in registry.activeSourcesForSession { source.stop() }
+        // Tear down live captions — the canonical Whisper batch transcript
+        // takes over from here. Interim text is intentionally discarded so
+        // the UI doesn't show a stale preview alongside the final note.
+        teardownLiveTranscriber()
         do {
             _ = try await api.stopRecording(sessionId: session.id)
             session.stopRecording()
-
-            // Submit mock audio for transcription (Simulator mode)
-            await submitMockAudio()
+            showingPostEncounter = true
+            // Pipeline triggers from PostEncounterView after template confirmation.
         } catch {
             self.error = "Stop failed: \(error.localizedDescription)"
         }
     }
 
-    // MARK: - Mock Audio Pipeline (Simulator)
+    /// Stop the live captioner and detach it from the audio stream. Safe to
+    /// call when no captioner is active (no-op).
+    private func teardownLiveTranscriber() {
+        liveTranscriber?.stop()
+        registry.builtIn.sampleBufferTap = nil
+        liveTranscriber = nil
+    }
 
-    private func submitMockAudio() async {
+    /// Triggered by PostEncounterView after template confirmation.
+    func submitProcessing() async {
+        showingPostEncounter = false
+        await submitFrames()
+        await submitAudio()
+    }
+
+    // MARK: - Frame Submission
+
+    /// Mask each captured video frame and upload to the backend so the Stage 2
+    /// vision pipeline can match them to transcript trigger segments. Frames
+    /// are uploaded sequentially — the API is per-frame, not batched, so this
+    /// is intentionally simple. Failures on individual frames are logged but
+    /// don't abort the whole submission; a partial upload is better than none.
+    private func submitFrames() async {
+        guard let session, let videoSource = registry.activeVideoSource else { return }
+        let frames = videoSource.capturedFrames
+        guard !frames.isEmpty else { return }
+
+        processingStatus = "Uploading frames…"
+        var uploaded = 0
+        for frame in frames {
+            guard let image = UIImage(data: frame.imageData) else { continue }
+
+            // Mask faces before any network egress. MaskingPipeline writes the
+            // masking_confirmed audit event before returning, satisfying the
+            // CLAUDE.md privacy guarantee.
+            let result = await MaskingPipeline.shared.maskVideoFrame(image, sessionId: session.id)
+            guard result.success, let maskedData = result.imageData else { continue }
+
+            let timestampMs = Int((frame.timestamp * 1000).rounded())
+            do {
+                _ = try await api.uploadFrame(
+                    sessionId: session.id,
+                    jpegData: maskedData,
+                    timestampMs: timestampMs
+                )
+                uploaded += 1
+            } catch {
+                // Per-frame failure is non-fatal — keep uploading the rest.
+                continue
+            }
+        }
+        processingStatus = "\(uploaded)/\(frames.count) frames uploaded"
+    }
+
+    // MARK: - Audio Submission
+
+    private func submitAudio() async {
         guard let session else { return }
+        guard let url = URL(string: "\(AppConfig.baseAPIPath)/transcription/\(session.id)") else {
+            self.error = "Invalid API URL"
+            return
+        }
         isProcessing = true
         processingStatus = "Transcribing audio..."
+        defer { isProcessing = false }
+
+        let captured = audioSource.getRecordedAudioData()
+        let audioPayload: Data
+        let isDemoFallback: Bool
+        if let captured, !captured.isEmpty {
+            audioPayload = captured
+            isDemoFallback = false
+        } else {
+            audioPayload = WAVBuilder.silence()
+            isDemoFallback = true
+        }
 
         do {
-            let mockAudio = WAVBuilder.silence()
-
-            let url = URL(string: "\(AppConfig.baseAPIPath)/transcription/\(session.id)")!
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
-
             let boundary = UUID().uuidString
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-            request.setValue("Bearer CLINICIAN", forHTTPHeaderField: "Authorization")
+            if let token = KeychainHelper.shared.loadAuthToken() {
+                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+            }
 
             var body = Data()
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"audio_file\"; filename=\"recording.wav\"\r\n".data(using: .utf8)!)
-            body.append("Content-Type: audio/wav\r\n\r\n".data(using: .utf8)!)
-            body.append(mockAudio)
-            body.append("\r\n--\(boundary)--\r\n".data(using: .utf8)!)
+            body.append(Data("--\(boundary)\r\n".utf8))
+            body.append(Data("Content-Disposition: form-data; name=\"audio_file\"; filename=\"recording.wav\"\r\n".utf8))
+            body.append(Data("Content-Type: audio/wav\r\n\r\n".utf8))
+            body.append(audioPayload)
+            body.append(Data("\r\n--\(boundary)--\r\n".utf8))
             request.httpBody = body
 
             processingStatus = "Generating note..."
-
             let (_, response) = try await URLSession.shared.data(for: request)
 
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                processingStatus = "Note ready for review"
-
-                try await Task.sleep(nanoseconds: 2_000_000_000)
-                await fetchNote()
-            } else {
-                processingStatus = "Using demo note for Simulator"
-                try await Task.sleep(nanoseconds: 1_000_000_000)
-                note = createMockNote(sessionId: session.id, specialty: session.specialty)
+            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+                throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? -1)
             }
 
-            isProcessing = false
+            // Brief delay to let the backend persist Stage 1 before we GET it.
+            try await Task.sleep(nanoseconds: 500_000_000)
+            try await fetchNote()
+            processingStatus = "Note ready for review"
         } catch {
-            processingStatus = "Using demo note for Simulator"
-            note = createMockNote(sessionId: session.id, specialty: session.specialty)
-            isProcessing = false
+            self.error = isDemoFallback
+                ? "Simulator has no audio. Showing demo note."
+                : "Transcription failed: \(error.localizedDescription)"
+            note = createDemoNote(sessionId: session.id, specialty: session.specialty)
         }
     }
 
-    private func fetchNote() async {
+    private func fetchNote() async throws {
         guard let session else { return }
-        do {
-            note = try await api.getStage1Note(sessionId: session.id)
-        } catch {
-            note = createMockNote(sessionId: session.id, specialty: session.specialty)
-        }
+        note = try await api.getStage1Note(sessionId: session.id)
     }
 
     func approveNote() async {
@@ -128,11 +305,30 @@ final class SessionManager: ObservableObject {
         }
     }
 
-    func endSession() {
+    /// Save the current session for later review without advancing the backend state.
+    /// The session stays at AWAITING_REVIEW on the server. Clears local state so the
+    /// physician can return to the dashboard and see the next patient.
+    func saveForLater() {
+        AurionHaptics.notification(.success)
+        teardownLiveTranscriber()
         session?.clearPersistence()
         session = nil
         note = nil
         isProcessing = false
+        showingReview = false
+        showingPostEncounter = false
+        processingStatus = ""
+        error = nil
+    }
+
+    func endSession() {
+        teardownLiveTranscriber()
+        session?.clearPersistence()
+        session = nil
+        note = nil
+        isProcessing = false
+        showingReview = false
+        showingPostEncounter = false
         processingStatus = ""
         error = nil
     }
@@ -172,9 +368,9 @@ final class SessionManager: ObservableObject {
         }
     }
 
-    // MARK: - Mock Data Generators
+    // MARK: - Demo Fallback (Simulator with no mic input)
 
-    private func createMockNote(sessionId: String, specialty: String) -> NoteResponse {
+    private func createDemoNote(sessionId: String, specialty: String) -> NoteResponse {
         NoteResponse(
             sessionId: sessionId,
             stage: 1,

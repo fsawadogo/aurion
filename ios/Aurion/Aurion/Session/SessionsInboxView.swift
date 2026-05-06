@@ -1,267 +1,199 @@
 import SwiftUI
 
-/// Sessions inbox — list of all past sessions with notes.
-/// Physicians access completed notes here to review and copy.
+/// Sessions inbox — pixel-perfect port of `screens.jsx → SessionsScreen`.
+/// 28pt Aurion title, filter pill row (All / Pending / Completed / Exported)
+/// with counts, then a single rounded card containing every session row.
+/// "Resume" gold pill replaces the status badge for pending sessions.
 struct SessionsInboxView: View {
     @State private var sessions: [SessionResponse] = []
     @State private var isLoading = true
-    @State private var selectedSpecialty: String? = nil
-    @State private var error: String?
     @State private var sortNewestFirst = true
+    @State private var filter: Filter = .all
 
-    private let specialties = ["All", "Orthopedic Surgery", "Plastic Surgery", "Musculoskeletal", "Emergency Medicine", "General"]
+    private enum Filter: String, CaseIterable, Hashable {
+        case all = "All"
+        case pending = "Pending"
+        case completed = "Completed"
+        case exported = "Exported"
+    }
 
-    // MARK: - Computed Properties
-
-    private var filteredSessions: [SessionResponse] {
-        var result = sessions
-        if let filter = selectedSpecialty, filter != "All" {
-            let key = filter.lowercased().replacingOccurrences(of: " ", with: "_")
-            result = result.filter { $0.specialty == key }
+    private var filtered: [SessionResponse] {
+        let sorted = sortNewestFirst ? sessions : sessions.reversed()
+        switch filter {
+        case .all: return sorted
+        case .pending: return sorted.filter(isPending)
+        case .completed: return sorted.filter { $0.state == "REVIEW_COMPLETE" }
+        case .exported: return sorted.filter { $0.state == "EXPORTED" || $0.state == "PURGED" }
         }
-        if !sortNewestFirst {
-            result = result.reversed()
+    }
+
+    private func count(for f: Filter) -> Int {
+        switch f {
+        case .all: return sessions.count
+        case .pending: return sessions.filter(isPending).count
+        case .completed: return sessions.filter { $0.state == "REVIEW_COMPLETE" }.count
+        case .exported: return sessions.filter { $0.state == "EXPORTED" || $0.state == "PURGED" }.count
         }
-        return result
     }
 
-    private var pendingSessions: [SessionResponse] {
-        filteredSessions.filter { $0.state == "AWAITING_REVIEW" }
+    private func isPending(_ s: SessionResponse) -> Bool {
+        ["AWAITING_REVIEW", "PROCESSING_STAGE1", "PROCESSING_STAGE2"].contains(s.state)
     }
-
-    private var completedSessions: [SessionResponse] {
-        filteredSessions.filter { $0.state != "AWAITING_REVIEW" }
-    }
-
-    private func countForSpecialty(_ specialty: String) -> Int {
-        if specialty == "All" { return sessions.count }
-        let key = specialty.lowercased().replacingOccurrences(of: " ", with: "_")
-        return sessions.filter { $0.specialty == key }.count
-    }
-
-    // MARK: - Body
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 0) {
-                // Specialty filter chips
+            VStack(alignment: .leading, spacing: 0) {
+                titleHeader
                 filterChips
-
-                if isLoading {
-                    Spacer()
-                    ProgressView()
-                    Spacer()
-                } else if filteredSessions.isEmpty {
-                    Spacer()
-                    EmptyStateView(
-                        icon: "list.clipboard",
-                        title: "No sessions yet",
-                        subtitle: "Start one from the Dashboard"
-                    )
-                    Spacer()
-                } else {
-                    sessionsList
-                }
-            }
-            .background(Color.aurionBackground)
-            .navigationTitle("Sessions")
-            .aurionNavBar()
-            .toolbar {
-                ToolbarItem(placement: .navigationBarTrailing) {
-                    Button {
-                        withAnimation(AurionAnimation.spring) {
-                            sortNewestFirst.toggle()
-                        }
-                    } label: {
-                        Image(systemName: sortNewestFirst ? "arrow.down" : "arrow.up")
-                            .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.white)
+                Group {
+                    if isLoading {
+                        Spacer(); ProgressView().frame(maxWidth: .infinity); Spacer()
+                    } else if filtered.isEmpty {
+                        Spacer()
+                        EmptyStateView(
+                            icon: "tray",
+                            title: filter == .all ? "No sessions yet" : "No \(filter.rawValue.lowercased()) sessions",
+                            subtitle: filter == .all ? "Start one from the Dashboard" : "Try a different filter"
+                        )
+                        .frame(maxWidth: .infinity)
+                        Spacer()
+                    } else {
+                        sessionsList
                     }
                 }
             }
+            .background(Color.aurionBackground)
+            .navigationBarHidden(true)
             .task { await loadSessions() }
         }
     }
 
-    // MARK: - Filter Chips
+    // MARK: - Title + filter chips
+
+    private var titleHeader: some View {
+        HStack {
+            Text("Sessions")
+                .font(.system(size: 28, weight: .bold))
+                .tracking(-0.56)
+                .foregroundColor(.aurionNavy)
+            Spacer()
+            Button {
+                withAnimation(.aurionIOS) { sortNewestFirst.toggle() }
+            } label: {
+                Image(systemName: sortNewestFirst ? "arrow.down" : "arrow.up")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.aurionTextSecondary)
+                    .padding(8)
+            }
+            .buttonStyle(.plain)
+        }
+        .padding(.horizontal, AurionSpacing.edgeIPhone)
+        .padding(.top, 10)
+        .padding(.bottom, 6)
+    }
 
     private var filterChips: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: AurionSpacing.xs) {
-                ForEach(specialties, id: \.self) { specialty in
-                    Button {
-                        withAnimation(AurionAnimation.spring) {
-                            selectedSpecialty = specialty == "All" ? nil : specialty
-                        }
-                    } label: {
-                        HStack(spacing: AurionSpacing.xxs) {
-                            Text(specialty)
-                                .font(.system(size: 13, weight: isSelected(specialty) ? .semibold : .regular))
-
-                            let count = countForSpecialty(specialty)
-                            if count > 0 {
-                                Text("\(count)")
-                                    .font(.system(size: 10, weight: .bold))
-                                    .foregroundColor(isSelected(specialty) ? .aurionGold : .secondary)
-                                    .padding(.horizontal, 5)
-                                    .padding(.vertical, 1)
-                                    .background(
-                                        isSelected(specialty)
-                                            ? Color.white.opacity(0.2)
-                                            : Color.aurionFieldBackground
-                                    )
-                                    .clipShape(Capsule())
-                            }
-                        }
-                        .foregroundColor(isSelected(specialty) ? .white : .aurionTextPrimary)
-                        .padding(.horizontal, AurionSpacing.md)
-                        .padding(.vertical, AurionSpacing.xs)
-                        .background(isSelected(specialty) ? Color.aurionGold : Color.aurionFieldBackground)
-                        .cornerRadius(AurionSpacing.md)
+            HStack(spacing: 8) {
+                ForEach(Filter.allCases, id: \.self) { f in
+                    AurionFilterChip(label: f.rawValue, count: count(for: f), active: filter == f) {
+                        withAnimation(.aurionIOS) { filter = f }
                     }
                 }
             }
-            .padding(.horizontal, AurionSpacing.lg)
-            .padding(.vertical, AurionSpacing.sm)
+            .padding(.horizontal, AurionSpacing.edgeIPhone)
+            .padding(.vertical, 4)
         }
     }
 
-    // MARK: - Sessions List
+    // MARK: - List
 
     private var sessionsList: some View {
-        List {
-            // Pending Review section — pinned at top
-            if !pendingSessions.isEmpty {
-                Section {
-                    ForEach(pendingSessions, id: \.id) { session in
+        ScrollView {
+            AurionCard(padding: 0) {
+                VStack(spacing: 0) {
+                    ForEach(Array(filtered.enumerated()), id: \.element.id) { index, session in
                         NavigationLink(destination: SessionNoteView(session: session)) {
-                            SessionRow(session: session)
+                            sessionRow(session)
                         }
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: AurionSpacing.xxs, leading: AurionSpacing.lg, bottom: AurionSpacing.xxs, trailing: AurionSpacing.lg))
+                        .buttonStyle(.plain)
+                        if index < filtered.count - 1 {
+                            Rectangle().fill(Color.aurionBorder).frame(height: 1).padding(.leading, 64)
+                        }
                     }
-                } header: {
-                    SectionHeader(title: "Pending Review", count: pendingSessions.count)
-                        .padding(.bottom, AurionSpacing.xxs)
                 }
             }
-
-            // Completed section
-            if !completedSessions.isEmpty {
-                Section {
-                    ForEach(completedSessions, id: \.id) { session in
-                        NavigationLink(destination: SessionNoteView(session: session)) {
-                            SessionRow(session: session)
-                        }
-                        .listRowSeparator(.hidden)
-                        .listRowInsets(EdgeInsets(top: AurionSpacing.xxs, leading: AurionSpacing.lg, bottom: AurionSpacing.xxs, trailing: AurionSpacing.lg))
-                    }
-                } header: {
-                    SectionHeader(title: "Completed", count: completedSessions.count)
-                        .padding(.bottom, AurionSpacing.xxs)
-                }
-            }
+            .padding(.horizontal, AurionSpacing.edgeIPhone)
+            .padding(.top, 12)
+            .padding(.bottom, 20)
         }
-        .listStyle(.plain)
         .refreshable { await loadSessions() }
     }
 
-    // MARK: - Helpers
-
-    private func isSelected(_ specialty: String) -> Bool {
-        if specialty == "All" { return selectedSpecialty == nil }
-        return selectedSpecialty == specialty
+    private func sessionRow(_ s: SessionResponse) -> some View {
+        let icon: String = {
+            switch s.specialty {
+            case "orthopedic_surgery": return "figure.walk"
+            case "plastic_surgery": return "heart"
+            case "musculoskeletal": return "figure.run"
+            case "emergency_medicine": return "cross.case"
+            default: return "stethoscope"
+            }
+        }()
+        return HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: AurionRadius.sm)
+                    .fill(Color.aurionSurfaceAlt)
+                    .frame(width: 36, height: 36)
+                Image(systemName: icon)
+                    .font(.system(size: 16))
+                    .foregroundColor(.aurionTextSecondary)
+            }
+            VStack(alignment: .leading, spacing: 2) {
+                Text(s.specialty.displayFormatted)
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundColor(.aurionNavy)
+                    .lineLimit(1)
+                Text(formatRelativeTime(s.createdAt))
+                    .font(.system(size: 12))
+                    .foregroundColor(.aurionTextSecondary)
+                    .lineLimit(1)
+            }
+            Spacer()
+            if isPending(s) {
+                Text(L("sessions.resume"))
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundColor(.aurionNavy)
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(Color.aurionGold)
+                    .clipShape(Capsule())
+            } else {
+                AurionStatusPill(
+                    kind: sessionStateKind(s.state),
+                    labelOverride: sessionStateLabel(s.state)
+                )
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .contentShape(Rectangle())
     }
+
+    // MARK: - Data
 
     private func loadSessions() async {
         isLoading = true
+        defer { isLoading = false }
         do {
             sessions = try await APIClient.shared.listSessions()
         } catch {
-            // Show placeholder sessions for Simulator
             sessions = [
-                SessionResponse(id: "demo-1", clinicianId: "c1", specialty: "orthopedic_surgery", state: "AWAITING_REVIEW", createdAt: "2026-04-14T10:30:00Z", updatedAt: "2026-04-14T11:00:00Z"),
-                SessionResponse(id: "demo-2", clinicianId: "c1", specialty: "plastic_surgery", state: "EXPORTED", createdAt: "2026-04-13T14:00:00Z", updatedAt: "2026-04-13T14:45:00Z"),
-                SessionResponse(id: "demo-3", clinicianId: "c1", specialty: "orthopedic_surgery", state: "REVIEW_COMPLETE", createdAt: "2026-04-12T09:15:00Z", updatedAt: "2026-04-12T10:00:00Z"),
-                SessionResponse(id: "demo-4", clinicianId: "c1", specialty: "orthopedic_surgery", state: "PURGED", createdAt: "2026-04-11T08:00:00Z", updatedAt: "2026-04-11T09:00:00Z"),
+                SessionResponse(id: "demo-1", clinicianId: "c1", specialty: "orthopedic_surgery", state: "AWAITING_REVIEW", encounterType: "doctor_patient", createdAt: "2026-04-14T10:30:00Z", updatedAt: "2026-04-14T11:00:00Z"),
+                SessionResponse(id: "demo-2", clinicianId: "c1", specialty: "plastic_surgery", state: "EXPORTED", encounterType: "doctor_patient", createdAt: "2026-04-13T14:00:00Z", updatedAt: "2026-04-13T14:45:00Z"),
+                SessionResponse(id: "demo-3", clinicianId: "c1", specialty: "orthopedic_surgery", state: "REVIEW_COMPLETE", encounterType: "doctor_patient_allied", createdAt: "2026-04-12T09:15:00Z", updatedAt: "2026-04-12T10:00:00Z"),
+                SessionResponse(id: "demo-4", clinicianId: "c1", specialty: "orthopedic_surgery", state: "PURGED", encounterType: "doctor_patient", createdAt: "2026-04-11T08:00:00Z", updatedAt: "2026-04-11T09:00:00Z"),
             ]
-        }
-        isLoading = false
-    }
-}
-
-// MARK: - Session Row
-
-struct SessionRow: View {
-    let session: SessionResponse
-
-    private var displaySpecialty: String {
-        session.specialty.replacingOccurrences(of: "_", with: " ").capitalized
-    }
-
-    private var displayDate: String {
-        let formatter = ISO8601DateFormatter()
-        if let date = formatter.date(from: session.createdAt) {
-            let display = DateFormatter()
-            display.dateStyle = .medium
-            display.timeStyle = .short
-            return display.string(from: date)
-        }
-        return session.createdAt
-    }
-
-    private var stateBadge: (text: String, color: Color) {
-        switch session.state {
-        case "EXPORTED": return ("Exported", .clinicalNormal)
-        case "REVIEW_COMPLETE": return ("Ready", .clinicalInfo)
-        case "PURGED": return ("Archived", .clinicalNeutral)
-        case "AWAITING_REVIEW": return ("Review", .aurionGold)
-        case "PROCESSING_STAGE1": return ("Processing", .clinicalWarning)
-        case "PROCESSING_STAGE2": return ("Enriching", .clinicalWarning)
-        case "RECORDING": return ("Recording", .clinicalAlert)
-        case "PAUSED": return ("Paused", .clinicalWarning)
-        default: return (session.state, .clinicalNeutral)
-        }
-    }
-
-    var body: some View {
-        HStack(spacing: AurionSpacing.sm) {
-            // Specialty icon
-            ZStack {
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.aurionGold.opacity(0.1))
-                    .frame(width: 44, height: 44)
-                Image(systemName: specialtyIcon)
-                    .font(.title3)
-                    .foregroundColor(.aurionGold)
-            }
-
-            VStack(alignment: .leading, spacing: AurionSpacing.xxs) {
-                Text(displaySpecialty)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
-                    .foregroundColor(.aurionTextPrimary)
-                Text(displayDate)
-                    .aurionCaption()
-            }
-
-            Spacer()
-
-            StatusBadge(text: stateBadge.text, color: stateBadge.color)
-        }
-        .padding(.vertical, AurionSpacing.xs)
-        .padding(.horizontal, AurionSpacing.md)
-        .background(Color.aurionCardBackground)
-        .cornerRadius(AurionSpacing.sm)
-    }
-
-    private var specialtyIcon: String {
-        switch session.specialty {
-        case "orthopedic_surgery": return "figure.walk"
-        case "plastic_surgery": return "bandage"
-        case "musculoskeletal": return "figure.run"
-        case "emergency_medicine": return "cross.case"
-        default: return "stethoscope"
         }
     }
 }

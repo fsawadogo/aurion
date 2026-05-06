@@ -12,39 +12,66 @@ struct CaptureView: View {
 
     var body: some View {
         ZStack {
-            AurionGradients.navyBackground.ignoresSafeArea()
+            AurionGradients.captureBackground.ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Top bar: specialty pill (left) + REC badge (center) + status bar (right area)
-                ZStack {
-                    // Specialty badge -- frosted glass pill at top-left
-                    HStack {
-                        specialtyBadge
-                        Spacer()
-                    }
+                // Top bar: specialty pill (left) + REC badge (center) + A/V/S (right)
+                HStack {
+                    specialtyBadge
 
-                    // REC badge -- top center, only when recording
+                    Spacer()
+
                     if session.state == .recording {
                         recBadge
                             .transition(AurionTransition.scaleIn)
+                    }
+
+                    Spacer()
+
+                    // Stream indicators — top right per design
+                    HStack(spacing: 6) {
+                        streamCircle("A")
+                        streamCircle("V")
+                        streamCircle("S")
                     }
                 }
                 .padding(.horizontal, AurionSpacing.lg)
                 .padding(.top, AurionSpacing.sm)
 
-                // Frosted glass status bar
-                statusBar
-                    .padding(.horizontal, AurionSpacing.lg)
-                    .padding(.top, AurionSpacing.sm)
-
                 Spacer()
 
-                // Large centered timer
-                Text(formatTime(elapsedTime))
-                    .font(.system(size: 44, weight: .light, design: .rounded))
-                    .monospacedDigit()
-                    .foregroundColor(.white)
-                    .shadow(color: .black.opacity(0.3), radius: 4, y: 2)
+                // Large centered timer — monospaced 88pt per design
+                VStack(spacing: 6) {
+                    Text(formatTime(elapsedTime))
+                        .font(.system(size: 88, weight: .medium, design: .monospaced))
+                        .monospacedDigit()
+                        .tracking(-2)
+                        .foregroundColor(.white)
+
+                    Text("Recording \u{00B7} Doctor + Patient")
+                        .font(.system(size: 13))
+                        .tracking(0.4)
+                        .foregroundColor(Color(red: 183/255, green: 192/255, blue: 214/255))
+
+                    // Audio waveform bars
+                    if session.state == .recording {
+                        audioWaveform
+                            .padding(.top, 28)
+                    }
+
+                    // Live captions — on-device, runs alongside the canonical
+                    // Whisper batch transcription. Hidden when the device or
+                    // locale lacks an on-device speech model.
+                    if let live = sessionManager.liveTranscriber,
+                       live.isAvailable,
+                       !live.transcript.isEmpty,
+                       session.state == .recording || session.state == .paused {
+                        liveCaptionStrip(text: live.transcript)
+                            .padding(.top, 28)
+                            .padding(.horizontal, 24)
+                            .transition(.opacity)
+                    }
+                }
 
                 Spacer()
 
@@ -121,139 +148,165 @@ struct CaptureView: View {
     // MARK: - REC Badge
 
     private var recBadge: some View {
-        HStack(spacing: AurionSpacing.xs) {
+        HStack(spacing: 6) {
             Circle()
                 .fill(Color.white)
                 .frame(width: 6, height: 6)
-            Text("REC")
-                .font(.system(size: 13, weight: .heavy, design: .rounded))
+                .opacity(recBadgePulsing ? 0.4 : 1.0)
+                .animation(AurionAnimation.pulse, value: recBadgePulsing)
+            Text(L("capture.rec"))
+                .font(.system(size: 11, weight: .bold))
+                .tracking(1)
                 .foregroundColor(.white)
         }
-        .padding(.horizontal, AurionSpacing.sm)
-        .padding(.vertical, AurionSpacing.xs)
-        .background(Color.red)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 4)
+        .background(Color.aurionRed)
         .clipShape(Capsule())
-        .opacity(recBadgePulsing ? 0.5 : 1.0)
-        .animation(AurionAnimation.pulse, value: recBadgePulsing)
     }
 
-    // MARK: - Status Bar
+    // MARK: - Stream Indicators
 
-    private var statusBar: some View {
-        HStack(spacing: AurionSpacing.sm) {
-            Image(systemName: "eyeglasses")
-                .foregroundColor(Color.aurionGold)
-                .font(.system(size: 14, weight: .semibold))
+    private func streamCircle(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 11, weight: .semibold))
+            .foregroundColor(.aurionGold)
+            .frame(width: 24, height: 24)
+            .background(Color.white.opacity(0.10))
+            .clipShape(Circle())
+    }
 
-            Text(stateLabel)
-                .font(.system(size: 13, weight: .medium))
-                .foregroundColor(.white.opacity(0.9))
+    // MARK: - Audio Waveform
 
-            Spacer()
-
-            // Stream indicators
-            HStack(spacing: AurionSpacing.xs) {
-                streamDot(color: .green, label: "A")
-                streamDot(color: .blue, label: "V")
-                streamDot(color: .purple, label: "S")
+    private var audioWaveform: some View {
+        HStack(alignment: .bottom, spacing: 4) {
+            ForEach(0..<12, id: \.self) { i in
+                RoundedRectangle(cornerRadius: 9999)
+                    .fill(Color.aurionGold.opacity(0.8))
+                    .frame(width: 3, height: waveHeight(for: i))
+                    .animation(
+                        .easeInOut(duration: Double.random(in: 0.8...1.4))
+                        .repeatForever(autoreverses: true)
+                        .delay(Double(i) * 0.05),
+                        value: session.state == .recording
+                    )
             }
         }
-        .padding(.horizontal, AurionSpacing.lg)
-        .padding(.vertical, AurionSpacing.sm)
-        .background(.ultraThinMaterial)
-        .cornerRadius(AurionSpacing.sm)
+        .frame(height: 32)
     }
 
-    private var stateLabel: String {
-        switch session.state {
-        case .recording: return "Recording"
-        case .paused: return "Paused"
-        case .consentPending: return "Consent Required"
-        case .processingStage1: return "Processing..."
-        default: return session.state.rawValue
-        }
+    private func waveHeight(for index: Int) -> CGFloat {
+        let heights: [CGFloat] = [10, 18, 26, 14, 22, 30, 16, 8, 22, 28, 12, 18]
+        return session.state == .recording ? heights[index] : 4
     }
 
-    private func streamDot(color: Color, label: String) -> some View {
-        HStack(spacing: 2) {
+    // MARK: - Live Captions
+
+    /// Two-line italic gold-tint preview of the on-device speech recognizer's
+    /// running transcript. Visually distinct from final SOAP output so the
+    /// physician doesn't mistake interim text for the canonical note: italic,
+    /// 0.85 opacity, gold-tinted on translucent navy. Auto-truncates to the
+    /// last few sentences via `lineLimit(2)` + tail truncation so the strip
+    /// never overflows the centered timer area.
+    private func liveCaptionStrip(text: String) -> some View {
+        HStack(alignment: .top, spacing: 8) {
+            // Tiny pulsing dot tells the physician this is live, not history.
             Circle()
-                .fill(session.state == .recording ? color : color.opacity(0.3))
-                .frame(width: 5, height: 5)
-            Text(label)
-                .font(.system(size: 9, weight: .bold, design: .monospaced))
-                .foregroundColor(.white.opacity(session.state == .recording ? 0.8 : 0.3))
+                .fill(Color.aurionGold)
+                .frame(width: 6, height: 6)
+                .opacity(0.85)
+                .padding(.top, 6)
+            Text(text)
+                .font(.system(size: 15, weight: .regular, design: .default))
+                .italic()
+                .foregroundColor(.aurionGold.opacity(0.85))
+                .lineLimit(2)
+                .truncationMode(.head)
+                .multilineTextAlignment(.leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 10)
+        .background(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .fill(Color.white.opacity(0.06))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(Color.aurionGold.opacity(0.18), lineWidth: 1)
+        )
     }
 
     // MARK: - Consent Overlay
 
     private var consentOverlay: some View {
-        VStack(spacing: AurionSpacing.xl) {
-            // Lock icon with badge
-            ZStack(alignment: .topTrailing) {
-                Image(systemName: "lock.shield.fill")
-                    .font(.system(size: 52))
-                    .foregroundColor(Color.aurionGold)
+        ZStack {
+            // Blurred navy overlay
+            Color(red: 13/255, green: 27/255, blue: 62/255).opacity(0.78)
+                .ignoresSafeArea()
 
-                Image(systemName: "exclamationmark.circle.fill")
-                    .font(.system(size: 18))
-                    .foregroundColor(.white)
-                    .background(Circle().fill(Color.aurionAmber).frame(width: 20, height: 20))
-                    .offset(x: 4, y: -4)
+            // Centered white card
+            VStack(spacing: 14) {
+                ZStack {
+                    RoundedRectangle(cornerRadius: 16)
+                        .fill(Color.aurionGoldBg)
+                        .frame(width: 64, height: 64)
+                    Image(systemName: "lock.shield")
+                        .font(.system(size: 30))
+                        .foregroundColor(.aurionGoldDark)
+                }
+
+                Text("Confirm Patient Consent")
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(.aurionNavy)
+                    .multilineTextAlignment(.center)
+
+                Text("Confirm the patient has been informed and consents to recording for note generation.")
+                    .font(.system(size: 14))
+                    .foregroundColor(.aurionTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .lineSpacing(3)
+
+                AurionGoldButton(label: "Patient Has Consented", full: true) {
+                    Task { await sessionManager.confirmConsent() }
+                }
+
+                Button("Cancel") {}
+                    .font(.system(size: 14))
+                    .foregroundColor(.aurionTextSecondary)
             }
-
-            Text("Confirm Patient Consent")
-                .aurionTitle()
-                .foregroundColor(.white)
-
-            Text("Recording cannot begin until patient consent is confirmed. This is a regulatory requirement.")
-                .font(.system(size: 15, weight: .regular))
-                .foregroundColor(.white.opacity(0.8))
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, AurionSpacing.xxl)
-
-            Button("Confirm Consent") {
-                Task { await sessionManager.confirmConsent() }
-            }
-            .buttonStyle(AurionPrimaryButtonStyle())
+            .padding(28)
+            .background(Color.aurionCardBackground)
+            .clipShape(RoundedRectangle(cornerRadius: AurionRadius.xl))
+            .padding(28)
         }
-        .padding(AurionSpacing.xxl)
-        .background(.ultraThinMaterial)
-        .cornerRadius(AurionSpacing.xxl)
-        .padding(AurionSpacing.xxl)
     }
 
     // MARK: - Control Bar
 
     private var controlBar: some View {
-        HStack(spacing: AurionSpacing.huge) {
-            switch session.state {
-            case .recording:
-                Button(action: { session.pause() }) {
-                    VStack(spacing: AurionSpacing.xs) {
-                        Image(systemName: "pause.circle.fill")
-                            .font(.system(size: 44))
-                            .foregroundColor(.white)
-                        Text("Pause")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.white.opacity(0.7))
-                    }
-                }
-            case .paused:
-                Button(action: { session.resume() }) {
-                    VStack(spacing: AurionSpacing.xs) {
-                        Image(systemName: "play.circle.fill")
-                            .font(.system(size: 44))
-                            .foregroundColor(Color.aurionGold)
-                        Text("Resume")
-                            .font(.system(size: 11, weight: .medium))
-                            .foregroundColor(.aurionGold.opacity(0.7))
-                    }
-                }
-            default:
-                EmptyView()
-            }
+        HStack(alignment: .center) {
+            Spacer()
 
+            // Left button: Pause/Resume (56px circle)
+            Button(action: {
+                if session.state == .recording { sessionManager.pauseRecording() }
+                else if session.state == .paused { sessionManager.resumeRecording() }
+            }) {
+                Circle()
+                    .fill(Color.white.opacity(0.10))
+                    .frame(width: 56, height: 56)
+                    .overlay(
+                        Image(systemName: session.state == .paused ? "play.fill" : "pause.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(.white)
+                    )
+            }
+            .opacity(session.state == .recording || session.state == .paused ? 1 : 0)
+
+            Spacer()
+
+            // Center: Gold record/stop button (78px)
             Button(action: {
                 Task {
                     if session.state == .consentPending && session.isConsentConfirmed {
@@ -266,34 +319,61 @@ struct CaptureView: View {
                 ZStack {
                     if isPulsing {
                         Circle()
-                            .stroke(Color.red.opacity(0.6), lineWidth: 3)
-                            .frame(width: 78, height: 78)
-                            .scaleEffect(isPulsing ? 1.3 : 1.0)
-                            .opacity(isPulsing ? 0 : 0.6)
+                            .fill(
+                                RadialGradient(
+                                    colors: [Color.aurionGold.opacity(0.30), Color.aurionGold.opacity(0)],
+                                    center: .center,
+                                    startRadius: 0,
+                                    endRadius: 50
+                                )
+                            )
+                            .frame(width: 98, height: 98)
+                            .scaleEffect(isPulsing ? 1.18 : 1.0)
+                            .opacity(isPulsing ? 0.4 : 0.9)
                             .animation(AurionAnimation.pulse, value: isPulsing)
                     }
 
+                    // Gold disc with 8pt translucent ring (design spec) and
+                    // a deep gold drop shadow.
                     Circle()
-                        .stroke(Color.white, lineWidth: 4)
+                        .stroke(Color.aurionGold.opacity(0.18), lineWidth: 8)
+                        .frame(width: 86, height: 86)
+
+                    Circle()
+                        .fill(Color.aurionGold)
                         .frame(width: 78, height: 78)
+                        .shadow(color: Color.aurionGold.opacity(0.36), radius: 16, x: 0, y: 12)
 
                     if session.state == .recording || session.state == .paused {
                         RoundedRectangle(cornerRadius: 6)
-                            .fill(Color.red)
+                            .fill(Color.aurionNavy)
                             .frame(width: 30, height: 30)
-                    } else {
-                        Circle()
-                            .fill(Color.red)
-                            .frame(width: 62, height: 62)
                     }
                 }
             }
             .disabled(!session.recordButtonEnabled && session.state != .recording && session.state != .paused)
 
-            // Spacer to balance layout when pause/resume button is shown
-            Color.clear.frame(width: 44, height: 44)
+            Spacer()
+
+            // Right button: Stop (56px circle)
+            Button(action: {
+                Task { await sessionManager.stopRecording() }
+            }) {
+                Circle()
+                    .fill(Color.white.opacity(0.10))
+                    .frame(width: 56, height: 56)
+                    .overlay(
+                        Image(systemName: "stop.fill")
+                            .font(.system(size: 22))
+                            .foregroundColor(.white)
+                    )
+            }
+            .opacity(session.state == .recording || session.state == .paused ? 1 : 0)
+
+            Spacer()
         }
-        .padding(.bottom, AurionSpacing.huge)
+        .padding(.horizontal, 40)
+        .padding(.bottom, 40)
     }
 
     // MARK: - Timer
