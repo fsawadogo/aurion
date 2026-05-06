@@ -128,6 +128,30 @@ class ScreenCaptureResult(BaseModel):
     integration_status: Literal["injected", "skipped", "discarded"]
 
 
+# ── Encounter Types ───────────────────────────────────────────────────────
+
+
+class EncounterType(str, Enum):
+    DOCTOR_PATIENT = "doctor_patient"
+    DOCTOR_PATIENT_ALLIED = "doctor_patient_allied"
+    DOCTOR_PATIENT_TRANSITORY = "doctor_patient_transitory"
+
+
+class ParticipantRole(str, Enum):
+    PHYSICIAN = "physician"
+    NURSE = "nurse"
+    PHYSICIAN_ASSISTANT = "pa"
+    RESIDENT = "resident"
+    FELLOW = "fellow"
+    MEDICAL_STUDENT = "medical_student"
+
+
+class SessionParticipant(BaseModel):
+    name: str
+    role: ParticipantRole
+    is_persistent: bool = False
+
+
 # ── Session Types ─────────────────────────────────────────────────────────
 
 class SessionState(str, Enum):

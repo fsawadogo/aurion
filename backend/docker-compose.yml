@@ -20,7 +20,7 @@ services:
       - AWS_ENDPOINT_URL=http://localstack:4566
       - COGNITO_USER_POOL_ID=local_pool
       - COGNITO_CLIENT_ID=local_client
-      - WHISPER_API_URL=http://whisper:8001
+      - WHISPER_API_URL=http://whisper:9000
       - SCREEN_OCR_LOCAL_MODE=true
     env_file:
       - .env

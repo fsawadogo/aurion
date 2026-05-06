@@ -68,6 +68,10 @@ class FeatureFlagsConfig(BaseModel):
     note_versioning_enabled: bool = True
     session_pause_resume_enabled: bool = True
     per_session_provider_override: bool = True
+    # Gates the Meta Wearables Device Access Toolkit integration. Off until
+    # Meta partner approval lands; flipping this on requires the iOS bundle
+    # to be signed by an approved partner team.
+    meta_wearables_enabled: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────

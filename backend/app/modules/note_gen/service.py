@@ -142,7 +142,19 @@ def calculate_completeness(note: Note, template: Template) -> float:
 
 # ── Prompt Building ───────────────────────────────────────────────────────
 
-def build_stage1_user_prompt(transcript: Transcript, template: Template) -> str:
+LANGUAGE_NAMES: dict[str, str] = {
+    "en": "English",
+    "fr": "French",
+}
+
+
+def build_stage1_user_prompt(
+    transcript: Transcript,
+    template: Template,
+    encounter_context: Optional[str] = None,
+    output_language: str = "en",
+    participants: Optional[list[dict]] = None,
+) -> str:
     """Build the user prompt for Stage 1 note generation.
 
     The system prompt is always NOTE_GENERATION_SYSTEM_PROMPT (set on the
@@ -167,16 +179,63 @@ def build_stage1_user_prompt(transcript: Transcript, template: Template) -> str:
             "description": section.description,
         })
 
+    context_block = ""
+    if encounter_context:
+        context_block = (
+            f"ENCOUNTER CONTEXT (provided by physician before session):\n"
+            f"{encounter_context}\n\n"
+        )
+
+    language_block = ""
+    if output_language != "en":
+        lang_name = LANGUAGE_NAMES.get(output_language, output_language)
+        language_block = (
+            f"OUTPUT LANGUAGE: {lang_name}\n"
+            f"Write ALL claim text and section content in {lang_name}. "
+            f"Keep JSON keys, source_id references, and status values in English.\n\n"
+        )
+
+    participants_block = ""
+    multi_participant = participants and len(participants) > 1
+    if multi_participant:
+        roles_list = "\n".join(
+            f"- {p['name']} ({p['role'].replace('_', ' ').title()})"
+            for p in participants
+        )
+        participants_block = (
+            f"ENCOUNTER PARTICIPANTS:\n{roles_list}\n\n"
+            "Since multiple people are present, attribute statements to the "
+            "appropriate role when identifiable from context (e.g., "
+            "'Nurse noted...', 'Resident reported...'). When the speaker is "
+            "ambiguous, use 'It was noted...' rather than attributing to a "
+            "specific person.\n\n"
+        )
+
+    if multi_participant:
+        attribution_instruction = (
+            '- "text": the documented observation, attributed to the appropriate '
+            "role when identifiable from context (e.g., \"Physician noted...\", "
+            "\"Nurse reported...\", \"Resident observed...\"). "
+            "When the speaker is ambiguous, use \"It was noted...\"\n"
+        )
+    else:
+        attribution_instruction = (
+            '- "text": the documented observation, prefixed with "Physician noted" '
+            "or similar attribution\n"
+        )
+
     prompt = (
         f"Specialty: {template.display_name}\n\n"
+        f"{language_block}"
+        f"{participants_block}"
+        f"{context_block}"
         f"TRANSCRIPT:\n{transcript_text}\n\n"
         f"TEMPLATE SECTIONS:\n{json.dumps(sections_spec, indent=2)}\n\n"
         "Generate a structured clinical note from this transcript. "
         "For each section in the template, extract relevant claims from the "
         "transcript. Each claim must include:\n"
         '- "id": a unique claim ID (e.g. "claim_001")\n'
-        '- "text": the documented observation, prefixed with "Physician noted" '
-        "or similar attribution\n"
+        f"{attribution_instruction}"
         '- "source_type": "transcript"\n'
         '- "source_id": the transcript segment ID (e.g. "seg_001")\n'
         '- "source_quote": the exact text from the transcript segment\n\n'

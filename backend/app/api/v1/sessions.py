@@ -32,8 +32,19 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 
 # ── Request/Response Schemas ──────────────────────────────────────────────
 
+class SessionParticipantRequest(BaseModel):
+    name: str
+    role: str
+    is_persistent: bool = False
+
+
 class CreateSessionRequest(BaseModel):
     specialty: str
+    consultation_type: Optional[str] = None
+    encounter_context: Optional[str] = None
+    output_language: str = "en"
+    encounter_type: str = "doctor_patient"
+    participants: Optional[list[SessionParticipantRequest]] = None
     provider_overrides: Optional[dict] = None
 
 
@@ -42,6 +53,7 @@ class SessionResponse(BaseModel):
     clinician_id: uuid.UUID
     specialty: str
     state: str
+    encounter_type: str = "doctor_patient"
     created_at: str
     updated_at: str
 
@@ -60,6 +72,11 @@ async def create_session_route(
         db=db,
         clinician_id=user.user_id,
         specialty=body.specialty,
+        consultation_type=body.consultation_type,
+        encounter_context=body.encounter_context,
+        output_language=body.output_language,
+        encounter_type=body.encounter_type,
+        participants=[p.model_dump() for p in body.participants] if body.participants else None,
         provider_overrides=body.provider_overrides,
     )
     audit = get_audit_log_service()
@@ -128,6 +145,40 @@ async def stop_recording_route(
     return await _do_transition(db, session, SessionState.PROCESSING_STAGE1)
 
 
+class UpdateTemplateRequest(BaseModel):
+    specialty: str
+
+
+@router.patch("/{session_id}/template", response_model=SessionResponse)
+async def update_session_template(
+    session_id: uuid.UUID,
+    body: UpdateTemplateRequest,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Change the session specialty/template after recording, before note generation.
+
+    Only valid when the session is in PROCESSING_STAGE1 state (audio submitted
+    but note not yet generated).
+    """
+    session = await _get_or_404(db, session_id)
+    if session.state != SessionState.PROCESSING_STAGE1:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Template can only be changed in PROCESSING_STAGE1 state. Current: {session.state.value}",
+        )
+    session.specialty = body.specialty
+    await db.flush()
+
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=session.id,
+        event_type="template_changed",
+        new_specialty=body.specialty,
+    )
+    return _to_response(session)
+
+
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session_route(
     session_id: uuid.UUID,
@@ -178,6 +229,7 @@ def _to_response(session) -> SessionResponse:
         clinician_id=session.clinician_id,
         specialty=session.specialty,
         state=session.state.value if isinstance(session.state, SessionState) else session.state,
+        encounter_type=session.encounter_type or "doctor_patient",
         created_at=session.created_at.isoformat() if session.created_at else "",
         updated_at=session.updated_at.isoformat() if session.updated_at else "",
     )

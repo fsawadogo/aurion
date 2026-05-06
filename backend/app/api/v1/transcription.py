@@ -12,12 +12,20 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from sqlalchemy import select
+
 from app.core.database import get_db
+from app.core.models import TranscriptModel
 from app.core.types import SessionState
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.note_gen.service import generate_stage1_note
 from app.modules.phi_audit.service import scan_transcript_for_phi
-from app.modules.session.service import get_session
+from app.modules.session.service import (
+    InvalidTransitionError,
+    get_session,
+    transition_session,
+)
 from app.modules.transcription.service import transcribe_audio
 from app.modules.transcription.trigger_classifier import classify_triggers
 
@@ -78,12 +86,63 @@ async def submit_transcription(
     # Step 2 — Run trigger classifier
     transcript = classify_triggers(transcript)
 
+    # Step 2b — Persist the transcript so the Stage 2 vision pipeline can find
+    # trigger-flagged segments after /approve-stage1 fires (which happens in
+    # a separate request). Upsert: re-uploads overwrite the prior transcript.
+    existing = await db.execute(
+        select(TranscriptModel).where(TranscriptModel.session_id == session_id)
+    )
+    row = existing.scalar_one_or_none()
+    if row is None:
+        db.add(
+            TranscriptModel(
+                session_id=session_id,
+                provider_used=transcript.provider_used,
+                transcript_json=transcript.model_dump_json(),
+            )
+        )
+    else:
+        row.provider_used = transcript.provider_used
+        row.transcript_json = transcript.model_dump_json()
+    await db.flush()
+
     # Step 3 — PHI audit
     phi_result = await scan_transcript_for_phi(transcript)
     await audit.write_event(
         session_id=str(session_id),
         event_type="phi_audit_complete",
         phi_detected=phi_result.phi_detected,
+    )
+
+    # Step 4 — Generate Stage 1 note from transcript and transition the session
+    # to AWAITING_REVIEW. On failure we leave the session in PROCESSING_STAGE1
+    # so a retry of /transcription/{id} can pick up where it left off.
+    try:
+        await generate_stage1_note(
+            transcript=transcript,
+            specialty=session.specialty,
+            session_id=str(session_id),
+            db=db,
+        )
+    except Exception as exc:
+        await audit.write_event(
+            session_id=str(session_id),
+            event_type="stage1_failed",
+            reason=str(exc)[:200],
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Stage 1 note generation failed: {exc}",
+        )
+
+    try:
+        await transition_session(db, session, SessionState.AWAITING_REVIEW)
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    await audit.write_event(
+        session_id=str(session_id),
+        event_type="stage1_delivered",
     )
 
     return TranscriptResponse(

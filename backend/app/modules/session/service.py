@@ -65,12 +65,25 @@ async def create_session(
     db: AsyncSession,
     clinician_id: uuid.UUID,
     specialty: str,
+    consultation_type: Optional[str] = None,
+    encounter_context: Optional[str] = None,
+    output_language: str = "en",
+    encounter_type: str = "doctor_patient",
+    participants: Optional[list[dict]] = None,
     provider_overrides: Optional[dict] = None,
 ) -> SessionModel:
     """Create a new session in CONSENT_PENDING state."""
+    import json as _json
+    participants_json = _json.dumps(participants) if participants else None
+
     session = SessionModel(
         clinician_id=clinician_id,
         specialty=specialty,
+        consultation_type=consultation_type,
+        encounter_context=encounter_context,
+        output_language=output_language,
+        encounter_type=encounter_type,
+        participants_json=participants_json,
         state=SessionState.CONSENT_PENDING,
         provider_overrides=str(provider_overrides) if provider_overrides else None,
     )

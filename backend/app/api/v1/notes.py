@@ -173,6 +173,23 @@ async def approve_stage1_note(
         event_type="stage2_started",
     )
 
+    # Auto-fire Stage 2 vision enrichment. Done inline (not background) so the
+    # iOS client receives a deterministic state — by the time approve-stage1
+    # returns, the Stage 2 note version exists. If vision fails we log it and
+    # keep the session in PROCESSING_STAGE2 so iOS can fall back to the
+    # Stage 1 note (which is still the latest version).
+    from app.api.v1.vision import run_stage2_vision  # avoid circular import
+    try:
+        await run_stage2_vision(session_id, db)
+    except Exception as exc:
+        await audit.write_event(
+            session_id=str(session_id),
+            event_type="stage2_failed",
+            reason=str(exc)[:200],
+        )
+        # Don't propagate — Stage 1 is approved and iOS can proceed with the
+        # Stage 1 note. Vision is best-effort; failures shouldn't block sign-off.
+
     return NoteApprovalResponse(
         session_id=str(session_id),
         stage=1,

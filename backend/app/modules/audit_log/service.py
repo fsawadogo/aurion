@@ -11,6 +11,7 @@ import logging
 import os
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from typing import Any, Optional
 
 import boto3
@@ -101,11 +102,18 @@ class AuditLogService:
 
 
 def _serialize(value: Any) -> Any:
-    """Serialize values for DynamoDB — convert UUIDs and datetimes to strings."""
+    """Serialize values for DynamoDB.
+
+    DynamoDB rejects Python `float` (precision-unsafe) — they must be passed
+    as `Decimal`. UUIDs and datetimes are stringified for portability.
+    """
     if isinstance(value, uuid.UUID):
         return str(value)
     if isinstance(value, datetime):
         return value.isoformat(timespec="milliseconds")
+    if isinstance(value, float):
+        # Round-trip through str so floats like 0.5 don't pick up binary noise.
+        return Decimal(str(value))
     return value
 
 
