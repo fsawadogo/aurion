@@ -31,6 +31,16 @@ Thumbs.db
 node_modules/
 .next/
 out/
+*.tsbuildinfo
+
+# Claude Code working state
+.playwright-mcp/
+.claude/scheduled_tasks.lock
+
+# Design / scratch artifacts (kept out of git — large or scratch)
+*.zip
+live-at-*.png
+scene-*-at-*.png
 
 # Coverage
 htmlcov/

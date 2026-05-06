@@ -2,12 +2,54 @@
 
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
+import Card from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import {
   CheckCircleIcon,
   XCircleIcon,
 } from "@heroicons/react/24/solid";
 import { getMaskingReport } from "@/lib/api";
 import type { MaskingReport } from "@/types";
+
+function ProgressRing({ value, size = 100 }: { value: number; size?: number }) {
+  const strokeWidth = 7;
+  const radius = (size - strokeWidth) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const offset = circumference - (value / 100) * circumference;
+  const color = value === 100 ? "#10b981" : "#ef4444";
+
+  return (
+    <div className="relative inline-flex items-center justify-center">
+      <svg width={size} height={size} className="-rotate-90">
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke="#f3f4f6"
+          strokeWidth={strokeWidth}
+        />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={radius}
+          fill="none"
+          stroke={color}
+          strokeWidth={strokeWidth}
+          strokeLinecap="round"
+          strokeDasharray={circumference}
+          strokeDashoffset={offset}
+          className="transition-all duration-700 ease-out"
+        />
+      </svg>
+      <div className="absolute flex flex-col items-center">
+        <span className="text-xl font-bold" style={{ color }}>{value}%</span>
+        <span className="text-[10px] font-medium text-gray-400">Pass Rate</span>
+      </div>
+    </div>
+  );
+}
 
 export default function MaskingPage() {
   const [report, setReport] = useState<MaskingReport | null>(null);
@@ -51,169 +93,158 @@ export default function MaskingPage() {
     <>
       <Header
         title="PHI Masking Validation"
-        subtitle="Per-session masking pass/fail status -- 100% target"
+        subtitle="100% pass rate target"
       />
 
       <div className="p-6 lg:p-8">
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-            <button
-              onClick={() => setError(null)}
-              className="ml-2 text-red-500 underline"
-            >
-              dismiss
+          <div className="mb-6 flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-inset ring-red-600/10">
+            <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 text-xs font-medium">
+              Dismiss
             </button>
           </div>
         )}
 
         {/* Date filters */}
-        <div className="mb-6 flex flex-wrap items-end gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">From</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
-            />
+        <Card className="mb-6">
+          <div className="flex flex-wrap items-end gap-4">
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-gray-500">From</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => setDateFrom(e.target.value)}
+                className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-gray-500">To</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => setDateTo(e.target.value)}
+                className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100"
+              />
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">To</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
-            />
-          </div>
-        </div>
+        </Card>
 
         {/* Summary cards */}
-        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
+        <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4 stagger-children">
+          <Card hoverable>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
               Total Sessions
             </p>
-            <p className="mt-1 text-2xl font-bold text-navy">
-              {loading ? "--" : displayReport.total_sessions}
-            </p>
-          </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
+            {loading ? (
+              <LoadingSkeleton lines={1} className="mt-2" />
+            ) : (
+              <p className="mt-1 text-2xl font-bold text-navy-700">
+                {displayReport.total_sessions}
+              </p>
+            )}
+          </Card>
+          <Card hoverable>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
               Passed
             </p>
-            <p className="mt-1 text-2xl font-bold text-green-600">
-              {loading ? "--" : displayReport.pass_count}
-            </p>
-          </div>
-          <div className="rounded-xl border border-gray-200 bg-white p-5 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
+            {loading ? (
+              <LoadingSkeleton lines={1} className="mt-2" />
+            ) : (
+              <p className="mt-1 text-2xl font-bold text-emerald-600">
+                {displayReport.pass_count}
+              </p>
+            )}
+          </Card>
+          <Card hoverable>
+            <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
               Failed
             </p>
-            <p className="mt-1 text-2xl font-bold text-red-600">
-              {loading ? "--" : displayReport.fail_count}
-            </p>
-          </div>
-          <div
-            className={`rounded-xl border p-5 shadow-sm ${
-              displayReport.pass_rate === 100
-                ? "border-green-200 bg-green-50"
-                : "border-red-200 bg-red-50"
-            }`}
-          >
-            <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
-              Pass Rate
-            </p>
-            <p
-              className={`mt-1 text-2xl font-bold ${
-                displayReport.pass_rate === 100
-                  ? "text-green-600"
-                  : "text-red-600"
-              }`}
-            >
-              {loading ? "--" : `${displayReport.pass_rate}%`}
-            </p>
-          </div>
+            {loading ? (
+              <LoadingSkeleton lines={1} className="mt-2" />
+            ) : (
+              <p className="mt-1 text-2xl font-bold text-red-600">
+                {displayReport.fail_count}
+              </p>
+            )}
+          </Card>
+          <Card hoverable>
+            <div className="flex items-center justify-center py-1">
+              {loading ? (
+                <LoadingSkeleton lines={2} />
+              ) : (
+                <ProgressRing value={displayReport.pass_rate} />
+              )}
+            </div>
+          </Card>
         </div>
 
         {/* Per-session table */}
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-gray-200/60 bg-white shadow-card">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Session
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Clinician
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Date
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Total Frames
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Masked
-                  </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                    Status
-                  </th>
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/80">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Session</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Clinician</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Date</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Total Frames</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Masked</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Status</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-8 text-center text-sm text-gray-400"
-                    >
-                      Loading masking report...
+                    <td colSpan={6} className="px-4 py-6">
+                      <LoadingSkeleton lines={4} />
                     </td>
                   </tr>
                 ) : displayReport.sessions.length === 0 ? (
                   <tr>
-                    <td
-                      colSpan={6}
-                      className="px-4 py-8 text-center text-sm text-gray-400"
-                    >
-                      No masking data available yet. Masking events will appear
-                      here once sessions process video frames.
+                    <td colSpan={6} className="px-4 py-12 text-center">
+                      <p className="text-sm text-gray-400">
+                        No masking data available yet. Events appear here once sessions process video frames.
+                      </p>
                     </td>
                   </tr>
                 ) : (
                   displayReport.sessions.map((s) => (
-                    <tr key={s.session_id} className="hover:bg-gray-50">
-                      <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-500">
-                        {s.session_id.length > 12
-                          ? `${s.session_id.slice(0, 8)}...`
-                          : s.session_id}
+                    <tr key={s.session_id} className="transition-colors hover:bg-gray-50/80">
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
+                          {s.session_id.length > 12
+                            ? `${s.session_id.slice(0, 8)}...`
+                            : s.session_id}
+                        </code>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
                         {s.clinician_name}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
                         {s.date}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600 font-medium">
                         {s.total_frames}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600 font-medium">
                         {s.masked_frames}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
                         {s.pass ? (
-                          <span className="inline-flex items-center gap-1 text-green-600">
-                            <CheckCircleIcon className="h-4 w-4" />
-                            Pass
-                          </span>
+                          <Badge variant="success" dot>
+                            <span className="inline-flex items-center gap-1">
+                              <CheckCircleIcon className="h-3 w-3" />
+                              Pass
+                            </span>
+                          </Badge>
                         ) : (
-                          <span className="inline-flex items-center gap-1 text-red-600">
-                            <XCircleIcon className="h-4 w-4" />
-                            Fail
-                          </span>
+                          <Badge variant="error" dot>
+                            <span className="inline-flex items-center gap-1">
+                              <XCircleIcon className="h-3 w-3" />
+                              Fail
+                            </span>
+                          </Badge>
                         )}
                       </td>
                     </tr>

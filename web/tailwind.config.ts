@@ -35,6 +35,18 @@ const config: Config = {
           900: "#403416",
         },
       },
+      boxShadow: {
+        "card": "0 1px 3px 0 rgba(13, 27, 62, 0.04), 0 1px 2px -1px rgba(13, 27, 62, 0.06)",
+        "card-hover": "0 4px 12px -2px rgba(13, 27, 62, 0.08), 0 2px 4px -2px rgba(13, 27, 62, 0.04)",
+        "nav": "0 1px 2px 0 rgba(0, 0, 0, 0.06)",
+      },
+      animation: {
+        "fade-in": "fade-in 0.3s ease-out",
+        "slide-up": "slide-up 0.35s ease-out both",
+      },
+      transitionTimingFunction: {
+        "spring": "cubic-bezier(0.34, 1.56, 0.64, 1)",
+      },
     },
   },
   plugins: [],

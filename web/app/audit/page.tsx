@@ -2,31 +2,33 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Header from "@/components/Header";
+import Card from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import {
   FunnelIcon,
   ArrowDownTrayIcon,
+  MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
 import { getAuditLog, exportAuditCsv } from "@/lib/api";
 import type { AuditEvent, AuditFilters, PaginatedResponse } from "@/types";
 
-const eventTypeColors: Record<string, string> = {
-  session_created: "bg-blue-100 text-blue-700",
-  consent_confirmed: "bg-green-100 text-green-700",
-  recording_started: "bg-indigo-100 text-indigo-700",
-  session_paused: "bg-yellow-100 text-yellow-700",
-  stage1_started: "bg-purple-100 text-purple-700",
-  stage1_delivered: "bg-purple-100 text-purple-700",
-  stage2_started: "bg-violet-100 text-violet-700",
-  full_note_delivered: "bg-emerald-100 text-emerald-700",
-  note_exported: "bg-teal-100 text-teal-700",
-  session_purged: "bg-gray-100 text-gray-700",
-  user_created: "bg-blue-100 text-blue-700",
-  user_updated: "bg-amber-100 text-amber-700",
-  config_changed: "bg-orange-100 text-orange-700",
-  masking_confirmed: "bg-green-100 text-green-700",
-  masking_failed: "bg-red-100 text-red-700",
-  eval_score_submitted: "bg-purple-100 text-purple-700",
-};
+function eventBadgeVariant(
+  eventType: string,
+): "success" | "warning" | "error" | "info" | "neutral" {
+  if (eventType.includes("consent") || eventType.includes("masking_confirmed"))
+    return "info";
+  if (eventType.includes("recording") || eventType.includes("paused") || eventType.includes("purged"))
+    return "neutral";
+  if (eventType.includes("masking_failed") || eventType === "session_failed")
+    return "error";
+  if (eventType.includes("config"))
+    return "warning";
+  if (eventType.includes("delivered") || eventType.includes("exported") || eventType.includes("complete"))
+    return "success";
+  return "info";
+}
 
 export default function AuditPage() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
@@ -34,12 +36,14 @@ export default function AuditPage() {
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   // Filters
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [eventType, setEventType] = useState("");
   const [clinician, setClinician] = useState("");
+  const [sessionSearch, setSessionSearch] = useState("");
 
   const pageSize = 50;
 
@@ -55,6 +59,7 @@ export default function AuditPage() {
       if (dateTo) filters.date_to = dateTo;
       if (eventType) filters.event_type = eventType;
       if (clinician) filters.clinician_id = clinician;
+      if (sessionSearch) filters.session_id = sessionSearch;
 
       const data: PaginatedResponse<AuditEvent> = await getAuditLog(filters);
       setEvents(data.items);
@@ -64,19 +69,21 @@ export default function AuditPage() {
     } finally {
       setLoading(false);
     }
-  }, [page, dateFrom, dateTo, eventType, clinician]);
+  }, [page, dateFrom, dateTo, eventType, clinician, sessionSearch]);
 
   useEffect(() => {
     fetchEvents();
   }, [fetchEvents]);
 
   async function handleExportCsv() {
+    setExporting(true);
     try {
       const filters: AuditFilters = {};
       if (dateFrom) filters.date_from = dateFrom;
       if (dateTo) filters.date_to = dateTo;
       if (eventType) filters.event_type = eventType;
       if (clinician) filters.clinician_id = clinician;
+      if (sessionSearch) filters.session_id = sessionSearch;
 
       const blob = await exportAuditCsv(filters);
       const url = URL.createObjectURL(blob);
@@ -89,6 +96,8 @@ export default function AuditPage() {
       URL.revokeObjectURL(url);
     } catch (err) {
       setError(err instanceof Error ? err.message : "CSV export failed");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -99,145 +108,154 @@ export default function AuditPage() {
       <Header
         title="Audit Log"
         subtitle="Immutable session lifecycle events"
+        actions={
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={exporting}
+            onClick={handleExportCsv}
+          >
+            <ArrowDownTrayIcon className="h-4 w-4" />
+            Export CSV
+          </Button>
+        }
       />
 
       <div className="p-6 lg:p-8">
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-            <button
-              onClick={() => setError(null)}
-              className="ml-2 text-red-500 underline"
-            >
-              dismiss
+          <div className="mb-6 flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-inset ring-red-600/10">
+            <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 text-xs font-medium">
+              Dismiss
             </button>
           </div>
         )}
 
         {/* Filters */}
-        <div className="mb-6 flex flex-wrap items-end gap-4 rounded-xl border border-gray-200 bg-white p-4 shadow-sm">
-          <div className="flex items-center gap-2 text-sm font-medium text-gray-500">
-            <FunnelIcon className="h-4 w-4" />
-            Filters
+        <Card className="mb-6">
+          <div className="flex flex-wrap items-end gap-4">
+            <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400">
+              <FunnelIcon className="h-3.5 w-3.5" />
+              <span className="uppercase tracking-wider">Filters</span>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-gray-500">Session ID</label>
+              <div className="relative">
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search session..."
+                  value={sessionSearch}
+                  onChange={(e) => { setSessionSearch(e.target.value); setPage(1); }}
+                  className="rounded-lg border border-gray-200 bg-gray-50/50 py-2 pl-9 pr-3 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-gray-500">From</label>
+              <input
+                type="date"
+                value={dateFrom}
+                onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
+                className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-gray-500">To</label>
+              <input
+                type="date"
+                value={dateTo}
+                onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
+                className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-gray-500">Clinician</label>
+              <input
+                type="text"
+                placeholder="All clinicians"
+                value={clinician}
+                onChange={(e) => { setClinician(e.target.value); setPage(1); }}
+                className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100"
+              />
+            </div>
+            <div>
+              <label className="mb-1 block text-[11px] font-medium text-gray-500">Event Type</label>
+              <select
+                value={eventType}
+                onChange={(e) => { setEventType(e.target.value); setPage(1); }}
+                className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100"
+              >
+                <option value="">All events</option>
+                <option value="session_created">session_created</option>
+                <option value="consent_confirmed">consent_confirmed</option>
+                <option value="recording_started">recording_started</option>
+                <option value="session_paused">session_paused</option>
+                <option value="stage1_started">stage1_started</option>
+                <option value="stage1_delivered">stage1_delivered</option>
+                <option value="stage2_started">stage2_started</option>
+                <option value="full_note_delivered">full_note_delivered</option>
+                <option value="note_exported">note_exported</option>
+                <option value="session_purged">session_purged</option>
+                <option value="masking_confirmed">masking_confirmed</option>
+                <option value="config_changed">config_changed</option>
+              </select>
+            </div>
           </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">From</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => { setDateFrom(e.target.value); setPage(1); }}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">To</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => { setDateTo(e.target.value); setPage(1); }}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">
-              Clinician
-            </label>
-            <input
-              type="text"
-              placeholder="All clinicians"
-              value={clinician}
-              onChange={(e) => { setClinician(e.target.value); setPage(1); }}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
-            />
-          </div>
-          <div>
-            <label className="mb-1 block text-xs text-gray-500">
-              Event Type
-            </label>
-            <select
-              value={eventType}
-              onChange={(e) => { setEventType(e.target.value); setPage(1); }}
-              className="rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-gold focus:outline-none focus:ring-2 focus:ring-gold/30"
-            >
-              <option value="">All events</option>
-              <option value="session_created">session_created</option>
-              <option value="consent_confirmed">consent_confirmed</option>
-              <option value="recording_started">recording_started</option>
-              <option value="session_paused">session_paused</option>
-              <option value="stage1_started">stage1_started</option>
-              <option value="stage1_delivered">stage1_delivered</option>
-              <option value="stage2_started">stage2_started</option>
-              <option value="full_note_delivered">full_note_delivered</option>
-              <option value="note_exported">note_exported</option>
-              <option value="session_purged">session_purged</option>
-              <option value="masking_confirmed">masking_confirmed</option>
-              <option value="config_changed">config_changed</option>
-            </select>
-          </div>
-          <button
-            onClick={handleExportCsv}
-            className="flex items-center gap-2 rounded-lg bg-gold px-4 py-2 text-sm font-medium text-navy transition-colors hover:bg-gold-600"
-          >
-            <ArrowDownTrayIcon className="h-4 w-4" />
-            Export CSV
-          </button>
-        </div>
+        </Card>
 
         {/* Table */}
-        <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+        <div className="overflow-hidden rounded-xl border border-gray-200/60 bg-white shadow-card">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+            <table className="min-w-full">
+              <thead>
+                <tr className="border-b border-gray-100 bg-gray-50/80">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">
                     Timestamp
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">
                     Session
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">
                     Event
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">
                     Details
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-100">
+              <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400">
-                      Loading audit events...
+                    <td colSpan={4} className="px-4 py-6">
+                      <LoadingSkeleton lines={5} />
                     </td>
                   </tr>
                 ) : events.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-4 py-8 text-center text-sm text-gray-400">
-                      No audit events found matching the current filters.
+                    <td colSpan={4} className="px-4 py-12 text-center">
+                      <p className="text-sm text-gray-400">No audit events found matching the current filters.</p>
                     </td>
                   </tr>
                 ) : (
                   events.map((evt, i) => (
-                    <tr key={`${evt.session_id}-${evt.event_timestamp}-${i}`} className="hover:bg-gray-50">
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                    <tr key={`${evt.session_id}-${evt.event_timestamp}-${i}`} className="transition-colors hover:bg-gray-50/80">
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
                         {new Date(evt.event_timestamp).toLocaleString()}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-500">
-                        {evt.session_id.length > 12
-                          ? `${evt.session_id.slice(0, 8)}...`
-                          : evt.session_id}
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
+                          {evt.session_id.length > 12
+                            ? `${evt.session_id.slice(0, 8)}...`
+                            : evt.session_id}
+                        </code>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
-                        <span
-                          className={`inline-block rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                            eventTypeColors[evt.event_type] ??
-                            "bg-gray-100 text-gray-700"
-                          }`}
-                        >
+                        <Badge variant={eventBadgeVariant(evt.event_type)}>
                           {evt.event_type}
-                        </span>
+                        </Badge>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-400">
+                      <td className="max-w-xs truncate px-4 py-3 text-sm text-gray-400">
                         {evt.details && Object.keys(evt.details).length > 0
                           ? JSON.stringify(evt.details).slice(0, 80)
                           : "--"}
@@ -253,24 +271,26 @@ export default function AuditPage() {
         {/* Pagination */}
         {totalPages > 1 && (
           <div className="mt-4 flex items-center justify-between">
-            <p className="text-sm text-gray-500">
-              Page {page} of {totalPages} ({total} events)
+            <p className="text-xs text-gray-400">
+              Page {page} of {totalPages} &middot; {total} events
             </p>
             <div className="flex gap-2">
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={page <= 1}
                 onClick={() => setPage((p) => p - 1)}
-                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40"
               >
                 Previous
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 disabled={page >= totalPages}
                 onClick={() => setPage((p) => p + 1)}
-                className="rounded-lg border border-gray-300 px-3 py-1.5 text-sm text-gray-600 hover:bg-gray-50 disabled:opacity-40"
               >
                 Next
-              </button>
+              </Button>
             </div>
           </div>
         )}

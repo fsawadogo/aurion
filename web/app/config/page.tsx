@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
+import Card from "@/components/ui/Card";
+import Badge from "@/components/ui/Badge";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import {
   CpuChipIcon,
   AdjustmentsHorizontalIcon,
@@ -10,25 +13,6 @@ import {
 } from "@heroicons/react/24/outline";
 import { getConfig, getConfigHistory } from "@/lib/api";
 import type { ProviderConfig, ConfigChangeEvent } from "@/types";
-
-function ProviderBadge({ name }: { name: string }) {
-  const colors: Record<string, string> = {
-    whisper: "bg-green-100 text-green-700",
-    assemblyai: "bg-blue-100 text-blue-700",
-    openai: "bg-emerald-100 text-emerald-700",
-    anthropic: "bg-orange-100 text-orange-700",
-    gemini: "bg-purple-100 text-purple-700",
-  };
-  return (
-    <span
-      className={`inline-block rounded-full px-3 py-1 text-sm font-medium ${
-        colors[name] ?? "bg-gray-100 text-gray-700"
-      }`}
-    >
-      {name}
-    </span>
-  );
-}
 
 const defaultConfig: ProviderConfig = {
   providers: {
@@ -54,6 +38,31 @@ const defaultConfig: ProviderConfig = {
     per_session_provider_override: true,
   },
 };
+
+function ToggleSwitch({ enabled }: { enabled: boolean }) {
+  return (
+    <div
+      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+        enabled ? "bg-gold-500" : "bg-gray-200"
+      }`}
+    >
+      <span
+        className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform ${
+          enabled ? "translate-x-[18px]" : "translate-x-[3px]"
+        }`}
+      />
+    </div>
+  );
+}
+
+function ConfigRow({ label, value }: { label: string; value: string | number }) {
+  return (
+    <div className="flex items-center justify-between py-1.5">
+      <span className="text-sm text-gray-500">{label}</span>
+      <span className="text-sm font-medium text-navy-700">{value}</span>
+    </div>
+  );
+}
 
 export default function ConfigPage() {
   const [cfg, setCfg] = useState<ProviderConfig>(defaultConfig);
@@ -86,215 +95,177 @@ export default function ConfigPage() {
   return (
     <>
       <Header
-        title="Provider Configuration"
-        subtitle="Read-only view of current AppConfig state"
+        title="Configuration"
+        subtitle="Read-only AppConfig state"
       />
 
       <div className="p-6 lg:p-8">
         {error && (
-          <div className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700">
-            {error}
-            <button
-              onClick={() => setError(null)}
-              className="ml-2 text-red-500 underline"
-            >
-              dismiss
+          <div className="mb-6 flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-inset ring-red-600/10">
+            <span className="flex-1">{error}</span>
+            <button onClick={() => setError(null)} className="text-red-400 hover:text-red-600 text-xs font-medium">
+              Dismiss
             </button>
           </div>
         )}
 
-        {loading && (
-          <p className="mb-4 text-sm text-gray-400">Loading configuration...</p>
-        )}
+        {loading && <LoadingSkeleton lines={4} className="mb-6" />}
 
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2 stagger-children">
           {/* Active Providers */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2">
-              <CpuChipIcon className="h-5 w-5 text-gold" />
-              <h2 className="text-base font-semibold text-navy">
+          <Card hoverable>
+            <div className="mb-4 flex items-center gap-2.5">
+              <div className="rounded-lg bg-gold-50 p-2">
+                <CpuChipIcon className="h-4 w-4 text-gold-600" />
+              </div>
+              <h2 className="text-sm font-semibold text-navy-700">
                 Active Providers
               </h2>
             </div>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Transcription</span>
-                <ProviderBadge name={cfg.providers.transcription} />
+                <span className="text-sm text-gray-500">Transcription</span>
+                <Badge variant="info">{cfg.providers.transcription}</Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Note Generation</span>
-                <ProviderBadge name={cfg.providers.note_generation} />
+                <span className="text-sm text-gray-500">Note Generation</span>
+                <Badge variant="info">{cfg.providers.note_generation}</Badge>
               </div>
               <div className="flex items-center justify-between">
-                <span className="text-sm text-gray-600">Vision</span>
-                <ProviderBadge name={cfg.providers.vision} />
+                <span className="text-sm text-gray-500">Vision</span>
+                <Badge variant="info">{cfg.providers.vision}</Badge>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Model Parameters */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2">
-              <AdjustmentsHorizontalIcon className="h-5 w-5 text-gold" />
-              <h2 className="text-base font-semibold text-navy">
+          <Card hoverable>
+            <div className="mb-4 flex items-center gap-2.5">
+              <div className="rounded-lg bg-gold-50 p-2">
+                <AdjustmentsHorizontalIcon className="h-4 w-4 text-gold-600" />
+              </div>
+              <h2 className="text-sm font-semibold text-navy-700">
                 Model Parameters
               </h2>
             </div>
             <div className="space-y-3">
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-400">
+              <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
                 Note Generation
               </p>
-              <div className="flex gap-6 text-sm text-gray-600">
-                <span>
-                  Temperature:{" "}
-                  <strong>{cfg.model_params.note_generation.temperature}</strong>
+              <div className="flex gap-4 text-sm">
+                <span className="text-gray-500">
+                  Temp: <span className="font-medium text-navy-700">{cfg.model_params.note_generation.temperature}</span>
                 </span>
-                <span>
-                  Max tokens:{" "}
-                  <strong>{cfg.model_params.note_generation.max_tokens}</strong>
+                <span className="text-gray-500">
+                  Max tokens: <span className="font-medium text-navy-700">{cfg.model_params.note_generation.max_tokens}</span>
                 </span>
               </div>
-              <p className="mt-2 text-xs font-medium uppercase tracking-wider text-gray-400">
-                Vision
-              </p>
-              <div className="flex gap-6 text-sm text-gray-600">
-                <span>
-                  Temperature:{" "}
-                  <strong>{cfg.model_params.vision.temperature}</strong>
+              <div className="border-t border-gray-100 pt-3">
+                <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
+                  Vision
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <span className="text-gray-500">
+                  Temp: <span className="font-medium text-navy-700">{cfg.model_params.vision.temperature}</span>
                 </span>
-                <span>
-                  Max tokens:{" "}
-                  <strong>{cfg.model_params.vision.max_tokens}</strong>
+                <span className="text-gray-500">
+                  Max tokens: <span className="font-medium text-navy-700">{cfg.model_params.vision.max_tokens}</span>
                 </span>
-                <span>
-                  Confidence:{" "}
-                  <strong>
-                    {cfg.model_params.vision.confidence_threshold}
-                  </strong>
+                <span className="text-gray-500">
+                  Confidence: <span className="font-medium text-navy-700">{cfg.model_params.vision.confidence_threshold}</span>
                 </span>
               </div>
             </div>
-          </div>
+          </Card>
 
           {/* Pipeline Settings */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2">
-              <ClockIcon className="h-5 w-5 text-gold" />
-              <h2 className="text-base font-semibold text-navy">
+          <Card hoverable>
+            <div className="mb-4 flex items-center gap-2.5">
+              <div className="rounded-lg bg-gold-50 p-2">
+                <ClockIcon className="h-4 w-4 text-gold-600" />
+              </div>
+              <h2 className="text-sm font-semibold text-navy-700">
                 Pipeline Settings
               </h2>
             </div>
-            <div className="space-y-2 text-sm text-gray-600">
-              <div className="flex justify-between">
-                <span>Stage 1 skip window</span>
-                <strong>{cfg.pipeline.stage1_skip_window_seconds}s</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Frame window (clinic)</span>
-                <strong>{cfg.pipeline.frame_window_clinic_ms}ms</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Frame window (procedural)</span>
-                <strong>{cfg.pipeline.frame_window_procedural_ms}ms</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Screen capture FPS</span>
-                <strong>{cfg.pipeline.screen_capture_fps}</strong>
-              </div>
-              <div className="flex justify-between">
-                <span>Video capture FPS</span>
-                <strong>{cfg.pipeline.video_capture_fps}</strong>
-              </div>
+            <div className="divide-y divide-gray-50">
+              <ConfigRow label="Stage 1 skip window" value={`${cfg.pipeline.stage1_skip_window_seconds}s`} />
+              <ConfigRow label="Frame window (clinic)" value={`${cfg.pipeline.frame_window_clinic_ms}ms`} />
+              <ConfigRow label="Frame window (procedural)" value={`${cfg.pipeline.frame_window_procedural_ms}ms`} />
+              <ConfigRow label="Screen capture FPS" value={cfg.pipeline.screen_capture_fps} />
+              <ConfigRow label="Video capture FPS" value={cfg.pipeline.video_capture_fps} />
             </div>
-          </div>
+          </Card>
 
           {/* Feature Flags */}
-          <div className="rounded-xl border border-gray-200 bg-white p-6 shadow-sm">
-            <div className="mb-4 flex items-center gap-2">
-              <FlagIcon className="h-5 w-5 text-gold" />
-              <h2 className="text-base font-semibold text-navy">
+          <Card hoverable>
+            <div className="mb-4 flex items-center gap-2.5">
+              <div className="rounded-lg bg-gold-50 p-2">
+                <FlagIcon className="h-4 w-4 text-gold-600" />
+              </div>
+              <h2 className="text-sm font-semibold text-navy-700">
                 Feature Flags
               </h2>
             </div>
             <div className="space-y-3">
               {Object.entries(cfg.feature_flags).map(([key, value]) => (
                 <div key={key} className="flex items-center justify-between">
-                  <span className="text-sm text-gray-600">
+                  <span className="text-sm capitalize text-gray-500">
                     {key.replace(/_/g, " ")}
                   </span>
-                  <span
-                    className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                      value
-                        ? "bg-green-100 text-green-700"
-                        : "bg-red-100 text-red-700"
-                    }`}
-                  >
-                    {value ? "Enabled" : "Disabled"}
-                  </span>
+                  <ToggleSwitch enabled={value} />
                 </div>
               ))}
             </div>
-          </div>
+          </Card>
         </div>
 
         {/* Config change history */}
         <div className="mt-8">
-          <h2 className="mb-4 text-base font-semibold text-navy">
-            Configuration Change History
+          <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">
+            Change History
           </h2>
-          <div className="overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-xl border border-gray-200/60 bg-white shadow-card">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      Timestamp
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      Changed By
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      Previous
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      New
-                    </th>
-                    <th className="px-4 py-3 text-left text-xs font-semibold uppercase tracking-wider text-gray-500">
-                      Version
-                    </th>
+              <table className="min-w-full">
+                <thead>
+                  <tr className="border-b border-gray-100 bg-gray-50/80">
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Timestamp</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Changed By</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Previous</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">New</th>
+                    <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Version</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-gray-50">
                   {history.length === 0 ? (
                     <tr>
-                      <td
-                        colSpan={5}
-                        className="px-4 py-8 text-center text-sm text-gray-400"
-                      >
-                        No configuration changes recorded yet.
+                      <td colSpan={5} className="px-4 py-12 text-center">
+                        <p className="text-sm text-gray-400">No configuration changes recorded yet.</p>
                       </td>
                     </tr>
                   ) : (
                     history.map((h) => (
-                      <tr key={h.id} className="hover:bg-gray-50">
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
+                      <tr key={h.id} className="transition-colors hover:bg-gray-50/80">
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
                           {new Date(h.changed_at).toLocaleString()}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
                           {h.changed_by}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
-                          <code className="rounded bg-gray-50 px-1.5 py-0.5 text-xs">
+                        <td className="px-4 py-3 text-sm">
+                          <code className="rounded bg-gray-50 px-1.5 py-0.5 text-xs text-gray-500">
                             {JSON.stringify(h.previous_config).slice(0, 60)}
                           </code>
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
-                          <code className="rounded bg-gray-50 px-1.5 py-0.5 text-xs">
+                        <td className="px-4 py-3 text-sm">
+                          <code className="rounded bg-gray-50 px-1.5 py-0.5 text-xs text-gray-500">
                             {JSON.stringify(h.new_config).slice(0, 60)}
                           </code>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                          v{h.appconfig_version}
+                        <td className="whitespace-nowrap px-4 py-3 text-sm">
+                          <Badge variant="info">v{h.appconfig_version}</Badge>
                         </td>
                       </tr>
                     ))
@@ -305,9 +276,8 @@ export default function ConfigPage() {
           </div>
         </div>
 
-        <p className="mt-4 text-center text-xs text-gray-400">
-          Read-only display. Provider switching is available via the admin API
-          only.
+        <p className="mt-6 text-center text-[11px] text-gray-400">
+          Read-only display. Provider switching is available via the admin API only.
         </p>
       </div>
     </>
