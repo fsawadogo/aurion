@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Aurion iOS — UI Kit</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; min-height: 100%; background: #EFEFF4; font-family: 'Inter', -apple-system, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  .stage { min-height: 100vh; padding: 28px 16px 40px; display: flex; flex-direction: column; align-items: center; gap: 18px; }
+  .topbar { display: flex; flex-wrap: wrap; gap: 8px; max-width: 760px; justify-content: center; padding: 0 8px; }
+  .topbar button {
+    padding: 8px 14px; border-radius: 9999px; border: 1px solid rgba(13,27,62,0.10);
+    background: #FFFFFF; color: #0D1B3E; font-size: 13px; font-weight: 600; cursor: pointer;
+    font-family: inherit;
+  }
+  .topbar button.active { background: #0D1B3E; color: #FFFFFF; border-color: #0D1B3E; }
+  .caption { font-size: 12px; color: #6B7280; }
+  .row { display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap; justify-content: center; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="ios-frame.jsx"></script>
+<script type="text/babel" src="components.jsx"></script>
+<script type="text/babel" src="screens.jsx"></script>
+
+<script type="text/babel">
+const { useState } = React;
+
+const SCREENS = [
+  { id: 'login',     label: '1. Login' },
+  { id: 'setup',     label: '2. Profile Setup' },
+  { id: 'dashboard', label: '3. Dashboard' },
+  { id: 'encounter', label: '4. Encounter Type' },
+  { id: 'context',   label: '5. Pre-Encounter' },
+  { id: 'capture',   label: '6. Capture' },
+  { id: 'consent',   label: '6b. Consent' },
+  { id: 'post',      label: '7. Post-Encounter' },
+  { id: 'ready',     label: '8. Note Ready' },
+  { id: 'review',    label: '9. Note Review' },
+  { id: 'sessions',  label: '10. Sessions' },
+  { id: 'profile',   label: '11. Profile' },
+  { id: 'devices',   label: '12. Devices' },
+];
+
+function App() {
+  const [screen, setScreen] = useState('dashboard');
+
+  const goTab = (t) => {
+    if (t === 'home') setScreen('dashboard');
+    else setScreen(t);
+  };
+
+  let contents;
+  switch (screen) {
+    case 'login':
+      contents = <LoginScreen onSubmit={() => setScreen('setup')} />; break;
+    case 'setup':
+      contents = <ProfileSetupScreen onDone={() => setScreen('dashboard')} />; break;
+    case 'dashboard':
+      contents = <DashboardScreen onStartSession={() => setScreen('encounter')} onTab={goTab} />; break;
+    case 'encounter':
+      contents = <EncounterTypeScreen onContinue={() => setScreen('context')} onBack={() => setScreen('dashboard')} />; break;
+    case 'context':
+      contents = <PreEncounterScreen onStart={() => setScreen('consent')} onSkip={() => setScreen('consent')} onBack={() => setScreen('encounter')} />; break;
+    case 'consent':
+      contents = <CaptureScreen consentOpen onConfirmConsent={() => setScreen('capture')} onCancelConsent={() => setScreen('context')} />; break;
+    case 'capture':
+      contents = <CaptureScreen onStop={() => setScreen('post')} />; break;
+    case 'post':
+      contents = <PostEncounterScreen onGenerate={() => setScreen('ready')} onBack={() => setScreen('capture')} />; break;
+    case 'ready':
+      contents = <NoteReadyScreen onReview={() => setScreen('review')} onSave={() => setScreen('dashboard')} />; break;
+    case 'review':
+      contents = <NoteReviewScreen onApprove={() => setScreen('dashboard')} onBack={() => setScreen('ready')} />; break;
+    case 'sessions':
+      contents = <SessionsScreen onTab={goTab} />; break;
+    case 'profile':
+      contents = <ProfileTabScreen onTab={goTab} />; break;
+    case 'devices':
+      contents = <DevicesScreen onTab={goTab} />; break;
+    default:
+      contents = null;
+  }
+
+  // Use dark device for capture/login (dark backgrounds)
+  const dark = screen === 'capture' || screen === 'consent' || screen === 'login';
+  // Login & Capture handle their own top padding (full-bleed dark backgrounds)
+  const safeArea = !(screen === 'login' || screen === 'capture' || screen === 'consent');
+
+  return (
+    <div className="stage">
+      <div style={{ textAlign: 'center' }}>
+        <div style={{ fontSize: 18, fontWeight: 600, color: '#0D1B3E', letterSpacing: '-0.01em' }}>Aurion iOS · UI Kit</div>
+        <div className="caption" style={{ marginTop: 4 }}>Click-thru prototype · 12 core screens</div>
+      </div>
+      <div className="topbar">
+        {SCREENS.map(s => (
+          <button key={s.id}
+            className={screen === s.id ? 'active' : ''}
+            onClick={() => setScreen(s.id)}>{s.label}</button>
+        ))}
+      </div>
+      <IOSDevice dark={dark} safeArea={safeArea}>
+        {contents}
+      </IOSDevice>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

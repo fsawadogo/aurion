@@ -1,0 +1,260 @@
+<template id="scene-6-approve-template">
+  <div data-composition-id="scene-6-approve" data-width="1080" data-height="1920">
+    <div class="s6-bg">
+      <div class="s6-halo"></div>
+
+      <div class="s6-caption">
+        <div class="s6-caption-tag">STEP 05 · APPROVE &amp; PURGE</div>
+        <div class="s6-caption-line">Sign. Export. Purge.</div>
+      </div>
+
+      <div class="phone">
+        <div class="phone-btn left silent"></div>
+        <div class="phone-btn left vol-up"></div>
+        <div class="phone-btn left vol-down"></div>
+        <div class="phone-btn right power"></div>
+        <div class="phone-screen">
+          <div class="phone-statusbar">
+            <span class="time">15:21</span>
+            <div class="dynamic-island"></div>
+            <div class="status-right">
+              <svg viewBox="0 0 18 12" width="18" height="12"><circle cx="2" cy="9" r="1.5" fill="#0D1B3E"/><circle cx="6" cy="9" r="1.5" fill="#0D1B3E"/><circle cx="10" cy="9" r="1.5" fill="#0D1B3E"/><circle cx="14" cy="9" r="1.5" fill="#0D1B3E"/></svg>
+              <svg viewBox="0 0 16 12" width="18" height="12" fill="none" stroke="#0D1B3E" stroke-width="1.5" stroke-linecap="round"><path d="M2 8.5 a8 8 0 0 1 12 0"/><path d="M4 6 a5.5 5.5 0 0 1 8 0"/><circle cx="8" cy="11" r="1" fill="#0D1B3E"/></svg>
+              <svg viewBox="0 0 26 12" width="26" height="12"><rect x="1" y="1" width="22" height="10" rx="2.5" fill="none" stroke="#0D1B3E" stroke-width="1"/><rect x="3" y="3" width="18" height="6" rx="1" fill="#0D1B3E"/><rect x="24" y="4" width="1.5" height="4" rx="0.5" fill="#0D1B3E"/></svg>
+            </div>
+          </div>
+
+          <!-- dimmed underlying screen for sheet effect -->
+          <div class="phone-content dimmed">
+            <div class="dim-row"></div>
+            <div class="dim-row"></div>
+            <div class="dim-row"></div>
+            <div class="dim-row narrow"></div>
+          </div>
+
+          <!-- Bottom sheet sliding up -->
+          <div class="sheet">
+            <div class="sheet-handle"></div>
+            <div class="sheet-title">Approve &amp; Sign</div>
+            <div class="sheet-sub">Plastic Surgery · v2 · 14 claims</div>
+
+            <div class="ring-stage">
+              <svg viewBox="0 0 200 200" width="200" height="200">
+                <circle cx="100" cy="100" r="86" fill="none" stroke="rgba(13,27,62,0.08)" stroke-width="8"/>
+                <circle class="big-ring" cx="100" cy="100" r="86" fill="none" stroke="#C9A84C" stroke-width="8"
+                        stroke-linecap="round" stroke-dasharray="540.4" stroke-dashoffset="540.4"
+                        transform="rotate(-90 100 100)"/>
+              </svg>
+              <div class="ring-pct-big"><span id="s6-pct">0</span>%</div>
+              <div class="ring-cap-big">complete</div>
+            </div>
+
+            <div class="sheet-checks">
+              <div class="check-row done"><span class="check-mark">✓</span>All sections populated</div>
+              <div class="check-row done"><span class="check-mark">✓</span>Conflict resolved · "right shoulder"</div>
+              <div class="check-row done"><span class="check-mark">✓</span>14/14 claims traceable to source</div>
+            </div>
+
+            <div class="sheet-button">
+              <span class="sheet-btn-icon">
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="#0D1B3E" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12 L10 17 L20 7"/></svg>
+              </span>
+              <span>Approve &amp; Sign</span>
+            </div>
+          </div>
+
+          <!-- Toast that appears post-sign -->
+          <div class="purge-toast">
+            <div class="toast-row"><div class="toast-check">✓</div><span>Raw audio deleted</span></div>
+            <div class="toast-row"><div class="toast-check">✓</div><span>Video frames purged</span></div>
+            <div class="toast-row"><div class="toast-check">✓</div><span>Audit log: confirmed</span></div>
+          </div>
+
+          <div class="phone-home-indicator"></div>
+        </div>
+      </div>
+
+      <div class="s6-foot">Raw data is purged · audit log confirms it.</div>
+    </div>
+
+    <style>
+      [data-composition-id="scene-6-approve"] { width:1080px; height:1920px; }
+      [data-composition-id="scene-6-approve"] .s6-bg {
+        width:100%; height:100%; position:relative;
+        background: radial-gradient(ellipse at 50% 35%, #1A2E5C 0%, #0D1B3E 60%, #070F22 100%); overflow:hidden;
+      }
+      [data-composition-id="scene-6-approve"] .s6-halo {
+        position:absolute; left:50%; top:48%; transform:translate(-50%,-50%);
+        width:980px; height:980px; border-radius:50%;
+        background: radial-gradient(circle, rgba(201,168,76,0.22) 0%, rgba(201,168,76,0) 60%); filter:blur(8px);
+      }
+      [data-composition-id="scene-6-approve"] .s6-caption {
+        position:absolute; top:90px; left:0; right:0; text-align:center; z-index:5;
+      }
+      [data-composition-id="scene-6-approve"] .s6-caption-tag {
+        font-size:18px; font-weight:600; letter-spacing:0.32em; color:#D7BB5F; margin-bottom:8px;
+      }
+      [data-composition-id="scene-6-approve"] .s6-caption-line {
+        font-size:48px; font-weight:700; letter-spacing:-0.02em; color:#FFFFFF;
+      }
+      [data-composition-id="scene-6-approve"] .s6-foot {
+        position:absolute; bottom:60px; left:0; right:0; text-align:center;
+        font-size:24px; font-weight:500; color:rgba(213,219,233,0.75); letter-spacing:-0.005em; z-index:5;
+      }
+
+      [data-composition-id="scene-6-approve"] .phone {
+        position:absolute; left:50%; top:240px; transform:translateX(-50%);
+        width:720px; height:1480px;
+        background:#1A1F2C; border-radius:74px; padding:14px; box-sizing:border-box;
+        box-shadow: 0 40px 80px rgba(0,0,0,0.55), 0 12px 28px rgba(0,0,0,0.32), inset 0 0 0 1.5px rgba(255,255,255,0.06);
+      }
+      [data-composition-id="scene-6-approve"] .phone-btn { position:absolute; background:#2A3044; border-radius:2px; }
+      [data-composition-id="scene-6-approve"] .phone-btn.silent { left:-3px; top:140px; width:5px; height:36px; }
+      [data-composition-id="scene-6-approve"] .phone-btn.vol-up { left:-3px; top:210px; width:5px; height:64px; }
+      [data-composition-id="scene-6-approve"] .phone-btn.vol-down { left:-3px; top:300px; width:5px; height:64px; }
+      [data-composition-id="scene-6-approve"] .phone-btn.power { right:-3px; top:240px; width:5px; height:108px; }
+
+      [data-composition-id="scene-6-approve"] .phone-screen {
+        width:100%; height:100%; border-radius:60px; background:#FFFFFF;
+        position:relative; overflow:hidden;
+      }
+      [data-composition-id="scene-6-approve"] .dynamic-island {
+        position:absolute; left:50%; top:14px; transform:translateX(-50%);
+        width:140px; height:38px; background:#000; border-radius:9999px; z-index:10;
+      }
+      [data-composition-id="scene-6-approve"] .phone-statusbar {
+        position:absolute; top:0; left:0; right:0; height:64px;
+        display:flex; align-items:center; justify-content:space-between;
+        padding:0 36px; z-index:6; pointer-events:none;
+      }
+      [data-composition-id="scene-6-approve"] .phone-statusbar .time { font-size:18px; font-weight:600; color:#0D1B3E; }
+      [data-composition-id="scene-6-approve"] .status-right { display:flex; align-items:center; gap:6px; }
+
+      [data-composition-id="scene-6-approve"] .phone-content {
+        position:absolute; top:64px; left:0; right:0; bottom:30px;
+        padding:14px 24px; overflow:hidden;
+        display:flex; flex-direction:column; gap:10px;
+      }
+      [data-composition-id="scene-6-approve"] .phone-content.dimmed {
+        opacity:0.30; filter: blur(2px);
+      }
+      [data-composition-id="scene-6-approve"] .dim-row {
+        height:48px; background:#EEF0F3; border-radius:12px;
+        margin-bottom:10px;
+      }
+      [data-composition-id="scene-6-approve"] .dim-row.narrow { height:80px; }
+
+      /* Sheet */
+      [data-composition-id="scene-6-approve"] .sheet {
+        position:absolute; left:0; right:0; bottom:0;
+        background:#FFFFFF;
+        border-top-left-radius:32px; border-top-right-radius:32px;
+        padding:14px 28px 100px;
+        box-shadow: 0 -16px 32px rgba(13,27,62,0.18);
+        display:flex; flex-direction:column; align-items:center; gap:14px;
+      }
+      [data-composition-id="scene-6-approve"] .sheet-handle {
+        width:48px; height:5px; border-radius:9999px; background:rgba(13,27,62,0.18);
+        margin-top:6px;
+      }
+      [data-composition-id="scene-6-approve"] .sheet-title {
+        font-size:24px; font-weight:700; color:#0D1B3E; letter-spacing:-0.01em; padding-top:6px;
+      }
+      [data-composition-id="scene-6-approve"] .sheet-sub { font-size:13px; color:#6B7280; }
+      [data-composition-id="scene-6-approve"] .ring-stage {
+        position:relative; width:200px; height:200px;
+        display:flex; align-items:center; justify-content:center;
+      }
+      [data-composition-id="scene-6-approve"] .ring-pct-big {
+        position:absolute;
+        font-size:46px; font-weight:700; color:#0D1B3E; letter-spacing:-0.02em;
+        font-variant-numeric: tabular-nums;
+      }
+      [data-composition-id="scene-6-approve"] .ring-cap-big {
+        position:absolute; bottom:32px;
+        font-size:11px; font-weight:600; letter-spacing:0.20em; color:#8E7330;
+      }
+      [data-composition-id="scene-6-approve"] .sheet-checks {
+        display:flex; flex-direction:column; gap:8px; align-items:flex-start;
+        width:100%;
+      }
+      [data-composition-id="scene-6-approve"] .check-row {
+        display:flex; align-items:center; gap:10px;
+        font-size:14px; color:#0D1B3E; letter-spacing:-0.005em;
+      }
+      [data-composition-id="scene-6-approve"] .check-mark {
+        width:22px; height:22px; border-radius:9999px;
+        background:#E6F5EE; color:#2E9E6A;
+        display:flex; align-items:center; justify-content:center;
+        font-size:13px; font-weight:700;
+      }
+      [data-composition-id="scene-6-approve"] .sheet-button {
+        margin-top:6px; width:100%;
+        background: linear-gradient(180deg, #F2E5B3 0%, #C9A84C 60%, #B5953D 100%);
+        color:#0D1B3E;
+        padding:18px; border-radius:14px;
+        display:flex; align-items:center; justify-content:center; gap:10px;
+        font-size:18px; font-weight:600;
+        box-shadow: 0 0 0 8px rgba(201,168,76,0.16), 0 12px 32px rgba(201,168,76,0.36);
+      }
+      [data-composition-id="scene-6-approve"] .sheet-btn-icon {
+        width:32px; height:32px; border-radius:9999px;
+        background: rgba(13,27,62,0.10);
+        display:flex; align-items:center; justify-content:center;
+      }
+
+      /* Purge toast — shown after approval */
+      [data-composition-id="scene-6-approve"] .purge-toast {
+        position:absolute; left:24px; right:24px; bottom:36px;
+        background:#0D1B3E; color:#FFFFFF;
+        border-radius:16px; padding:18px 18px;
+        display:flex; flex-direction:column; gap:8px;
+        box-shadow: 0 16px 40px rgba(13,27,62,0.42);
+        opacity:0; z-index:12;
+      }
+      [data-composition-id="scene-6-approve"] .toast-row {
+        display:flex; align-items:center; gap:10px;
+        font-size:14px; font-weight:500; letter-spacing:-0.005em;
+      }
+      [data-composition-id="scene-6-approve"] .toast-check {
+        width:24px; height:24px; border-radius:9999px; background:#2E9E6A;
+        display:flex; align-items:center; justify-content:center;
+        font-size:13px; font-weight:700; color:#FFFFFF;
+      }
+
+      [data-composition-id="scene-6-approve"] .phone-home-indicator {
+        position:absolute; bottom:8px; left:50%; transform:translateX(-50%);
+        width:140px; height:5px; background:#0D1B3E; border-radius:9999px; opacity:0.85; z-index:13;
+      }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      const tl = gsap.timeline({ paused: true });
+      const C = '[data-composition-id="scene-6-approve"]';
+      tl.fromTo(C+' .s6-bg', { opacity: 0 }, { opacity: 1, duration: 0.6, ease: 'power2.out' }, 0);
+      tl.fromTo(C+' .phone', { opacity: 0 }, { opacity: 1, duration: 0.7, ease: 'power2.out' }, 0.05);
+      tl.fromTo(C+' .s6-caption-tag', { y: 18, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: 'power3.out' }, 0.25);
+      tl.fromTo(C+' .s6-caption-line', { y: 22, opacity: 0 }, { y: 0, opacity: 1, duration: 0.7, ease: 'expo.out' }, 0.4);
+      tl.fromTo(C+' .s6-foot', { y: 14, opacity: 0 }, { y: 0, opacity: 1, duration: 0.55, ease: 'power3.out' }, 0.6);
+      // Sheet slides up from bottom (iOS modal pattern)
+      tl.fromTo(C+' .sheet', { y: 1480, opacity: 1 }, { y: 0, duration: 0.7, ease: 'power3.out' }, 0.6);
+      // Ring fill 0 → 100% (540.4 stroke length)
+      tl.fromTo(C+' .big-ring', { strokeDashoffset: 540.4 }, { strokeDashoffset: 0, duration: 1.6, ease: 'power2.inOut' }, 1.4);
+      // Number ticks 0 → 100
+      const ticks = [0, 18, 36, 52, 68, 80, 88, 94, 98, 100];
+      ticks.forEach((v, i) => { tl.set(C+' #s6-pct', { textContent: String(v) }, 1.4 + i * 0.16); });
+      // Checks stagger
+      tl.fromTo(C+' .check-row', { x: -10, opacity: 0 }, { x: 0, opacity: 1, duration: 0.4, stagger: 0.18, ease: 'power2.out' }, 3.2);
+      // Approve button press effect
+      tl.fromTo(C+' .sheet-button', { scale: 0.96, opacity: 0 }, { scale: 1, opacity: 1, duration: 0.5, ease: 'power3.out' }, 4.0);
+      tl.to(C+' .sheet-button', { scale: 0.97, duration: 0.16, yoyo: true, repeat: 1, ease: 'power2.inOut' }, 5.0);
+      // Sheet slides down + toast slides up
+      tl.to(C+' .sheet', { y: 200, opacity: 0, duration: 0.5, ease: 'power3.in' }, 5.4);
+      tl.fromTo(C+' .purge-toast', { y: 80, opacity: 0 }, { y: 0, opacity: 1, duration: 0.5, ease: 'power3.out' }, 5.7);
+      tl.fromTo(C+' .toast-row', { x: -10, opacity: 0 }, { x: 0, opacity: 1, duration: 0.35, stagger: 0.18, ease: 'power2.out' }, 5.9);
+      window.__timelines["scene-6-approve"] = tl;
+    </script>
+  </div>
+</template>

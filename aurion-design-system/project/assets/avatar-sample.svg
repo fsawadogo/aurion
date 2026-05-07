@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <radialGradient id="gold-av" cx="0.3" cy="0.3" r="0.9">
+      <stop offset="0%" stop-color="#E5C97A"></stop>
+      <stop offset="100%" stop-color="#B5953D"></stop>
+    </radialGradient>
+  </defs>
+  <circle cx="32" cy="32" r="32" fill="url(#gold-av)"></circle>
+  <text x="32" y="40" text-anchor="middle" font-family="-apple-system, &#39;SF Pro Display&#39;, Inter, sans-serif" font-size="22" font-weight="600" letter-spacing="-0.01em" fill="#FFFFFF">SC</text>
+</svg>

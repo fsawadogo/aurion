@@ -1,0 +1,105 @@
+<template id="scene-2-pair-template">
+  <div data-composition-id="scene-2-pair" data-width="1080" data-height="1920">
+    <div class="s2-bg">
+      <div class="s2-halo"></div>
+
+      <div class="s2-caption">
+        <div class="s2-caption-tag">STEP 01 · WEARABLE</div>
+        <div class="s2-caption-line">Pair your wearable.</div>
+      </div>
+
+      <div class="phone">
+        <div class="phone-btn left silent"></div>
+        <div class="phone-btn left vol-up"></div>
+        <div class="phone-btn left vol-down"></div>
+        <div class="phone-btn right power"></div>
+        <div class="phone-screen">
+          <video
+            id="s2-video"
+            class="clip phone-video"
+            data-start="0"
+            data-duration="7"
+            data-track-index="0"
+            src="../recordings/trimmed/scene-2-pair.mp4"
+            muted
+            playsinline
+          ></video>
+        </div>
+      </div>
+
+      <div class="s2-foot">Ray-Ban Meta · AirPods · or just your phone.</div>
+    </div>
+
+    <style>
+      [data-composition-id="scene-2-pair"] { width:1080px; height:1920px; }
+      [data-composition-id="scene-2-pair"] .s2-bg {
+        width:100%; height:100%; position:relative;
+        background: radial-gradient(ellipse at 50% 35%, #1A2E5C 0%, #0D1B3E 60%, #070F22 100%);
+        overflow:hidden;
+      }
+      [data-composition-id="scene-2-pair"] .s2-halo {
+        position:absolute; left:50%; top:48%; transform:translate(-50%,-50%);
+        width:980px; height:980px; border-radius:50%;
+        background: radial-gradient(circle, rgba(201,168,76,0.16) 0%, rgba(201,168,76,0) 60%);
+        filter:blur(8px);
+      }
+      [data-composition-id="scene-2-pair"] .s2-caption {
+        position:absolute; top:90px; left:0; right:0; text-align:center; z-index:5;
+      }
+      [data-composition-id="scene-2-pair"] .s2-caption-tag {
+        font-size:18px; font-weight:600; letter-spacing:0.32em; color:#D7BB5F; margin-bottom:8px;
+      }
+      [data-composition-id="scene-2-pair"] .s2-caption-line {
+        font-size:48px; font-weight:700; letter-spacing:-0.02em; color:#FFFFFF;
+      }
+      [data-composition-id="scene-2-pair"] .s2-foot {
+        position:absolute; bottom:60px; left:0; right:0; text-align:center;
+        font-size:24px; font-weight:500; color:rgba(213,219,233,0.75); letter-spacing:-0.005em; z-index:5;
+      }
+
+      [data-composition-id="scene-2-pair"] .phone {
+        position:absolute; left:50%; top:240px; transform:translateX(-50%);
+        width:720px; height:1480px;
+        background:#1A1F2C;
+        border-radius:74px;
+        padding:14px;
+        box-sizing:border-box;
+        box-shadow:
+          0 40px 80px rgba(0,0,0,0.55),
+          0 12px 28px rgba(0,0,0,0.32),
+          inset 0 0 0 1.5px rgba(255,255,255,0.06);
+      }
+      [data-composition-id="scene-2-pair"] .phone-btn {
+        position:absolute; background: #2A3044; border-radius:2px;
+      }
+      [data-composition-id="scene-2-pair"] .phone-btn.silent { left:-3px; top:140px; width:5px; height:36px; }
+      [data-composition-id="scene-2-pair"] .phone-btn.vol-up { left:-3px; top:210px; width:5px; height:64px; }
+      [data-composition-id="scene-2-pair"] .phone-btn.vol-down { left:-3px; top:300px; width:5px; height:64px; }
+      [data-composition-id="scene-2-pair"] .phone-btn.power { right:-3px; top:240px; width:5px; height:108px; }
+
+      [data-composition-id="scene-2-pair"] .phone-screen {
+        width:100%; height:100%; border-radius:60px;
+        background:#000;
+        position:relative; overflow:hidden;
+      }
+      [data-composition-id="scene-2-pair"] .phone-video {
+        position:absolute; top:0; left:0;
+        width:100%; height:100%;
+        object-fit:cover;
+        z-index:1;
+      }
+      [data-composition-id="scene-2-pair"] .s2-caption,
+      [data-composition-id="scene-2-pair"] .s2-foot { z-index:6; }
+      [data-composition-id="scene-2-pair"] .phone { z-index:3; }
+      [data-composition-id="scene-2-pair"] .s2-halo { z-index:1; }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      // No GSAP — all elements rely on CSS-default opacity:1.
+      // Scene-level crossfade handled by the parent clip's data-track-index alternation.
+      window.__timelines["scene-2-pair"] = gsap.timeline({ paused: true });
+    </script>
+  </div>
+</template>

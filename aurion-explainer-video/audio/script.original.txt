@@ -1,0 +1,13 @@
+Aurion. An ambient AI scribe for surgical clinics. Auditable. Privacy first.
+
+It begins by pairing your wearable. Ray-Ban Meta, AirPods, or just your phone — Aurion adapts to whatever the clinic already runs.
+
+You enroll your voice once. The recording is processed entirely on-device. Your voice embedding stays in the iPhone's secure Keychain, and never leaves it.
+
+During an encounter, Aurion captures three streams: audio, video, and screen. Tap to start. Tap to pause. Consent is logged before any recording begins.
+
+A first draft of the note is delivered in under thirty seconds. Visual citations land in a second pass. If anything conflicts, Aurion flags it for your review — every claim is traceable to its source.
+
+You approve and sign. The note is exported. Raw audio and video are purged. The audit log confirms it.
+
+Aurion describes — it never diagnoses. Pilot launching at CREOQ and CLLC, two thousand twenty-six.

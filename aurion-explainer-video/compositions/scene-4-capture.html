@@ -1,0 +1,103 @@
+<template id="scene-4-capture-template">
+  <div data-composition-id="scene-4-capture" data-width="1080" data-height="1920">
+    <div class="s4-bg">
+      <div class="s4-halo"></div>
+
+      <div class="s4-caption">
+        <div class="s4-caption-tag">STEP 03 · CAPTURE</div>
+        <div class="s4-caption-line">Three streams. One press.</div>
+      </div>
+
+      <div class="phone">
+        <div class="phone-btn left silent"></div>
+        <div class="phone-btn left vol-up"></div>
+        <div class="phone-btn left vol-down"></div>
+        <div class="phone-btn right power"></div>
+        <div class="phone-screen">
+          <video
+            id="s4-video"
+            class="clip phone-video"
+            data-start="0"
+            data-duration="10"
+            data-track-index="0"
+            src="../recordings/trimmed/scene-4-capture.mp4"
+            muted
+            playsinline
+          ></video>
+        </div>
+      </div>
+
+      <div class="s4-foot">Audio · Video · Screen — captured in sync.</div>
+    </div>
+
+    <style>
+      [data-composition-id="scene-4-capture"] { width:1080px; height:1920px; }
+      [data-composition-id="scene-4-capture"] .s4-bg {
+        width:100%; height:100%; position:relative;
+        background: radial-gradient(ellipse at 50% 32%, #1A2E5C 0%, #0D1B3E 60%, #070F22 100%);
+        overflow:hidden;
+      }
+      [data-composition-id="scene-4-capture"] .s4-halo {
+        position:absolute; left:50%; top:50%; transform:translate(-50%,-50%);
+        width:1100px; height:1100px; border-radius:50%;
+        background: radial-gradient(circle, rgba(218,90,90,0.16) 0%, rgba(218,90,90,0) 60%);
+        filter:blur(8px);
+      }
+      [data-composition-id="scene-4-capture"] .s4-caption {
+        position:absolute; top:90px; left:0; right:0; text-align:center; z-index:5;
+      }
+      [data-composition-id="scene-4-capture"] .s4-caption-tag {
+        font-size:18px; font-weight:600; letter-spacing:0.32em; color:#D7BB5F; margin-bottom:8px;
+      }
+      [data-composition-id="scene-4-capture"] .s4-caption-line {
+        font-size:48px; font-weight:700; letter-spacing:-0.02em; color:#FFFFFF;
+      }
+      [data-composition-id="scene-4-capture"] .s4-foot {
+        position:absolute; bottom:60px; left:0; right:0; text-align:center;
+        font-size:24px; font-weight:500; color:rgba(213,219,233,0.75); letter-spacing:-0.005em; z-index:5;
+      }
+
+      [data-composition-id="scene-4-capture"] .phone {
+        position:absolute; left:50%; top:240px; transform:translateX(-50%);
+        width:720px; height:1480px;
+        background:#1A1F2C;
+        border-radius:74px;
+        padding:14px;
+        box-sizing:border-box;
+        box-shadow:
+          0 40px 80px rgba(0,0,0,0.55),
+          0 12px 28px rgba(0,0,0,0.32),
+          inset 0 0 0 1.5px rgba(255,255,255,0.06);
+      }
+      [data-composition-id="scene-4-capture"] .phone-btn {
+        position:absolute; background: #2A3044; border-radius:2px;
+      }
+      [data-composition-id="scene-4-capture"] .phone-btn.silent { left:-3px; top:140px; width:5px; height:36px; }
+      [data-composition-id="scene-4-capture"] .phone-btn.vol-up { left:-3px; top:210px; width:5px; height:64px; }
+      [data-composition-id="scene-4-capture"] .phone-btn.vol-down { left:-3px; top:300px; width:5px; height:64px; }
+      [data-composition-id="scene-4-capture"] .phone-btn.power { right:-3px; top:240px; width:5px; height:108px; }
+
+      [data-composition-id="scene-4-capture"] .phone-screen {
+        width:100%; height:100%; border-radius:60px;
+        background:#000;
+        position:relative; overflow:hidden;
+      }
+      [data-composition-id="scene-4-capture"] .phone-video {
+        position:absolute; top:0; left:0;
+        width:100%; height:100%;
+        object-fit:cover;
+        z-index:1;
+      }
+      [data-composition-id="scene-4-capture"] .s4-caption,
+      [data-composition-id="scene-4-capture"] .s4-foot { z-index:6; }
+      [data-composition-id="scene-4-capture"] .phone { z-index:3; }
+      [data-composition-id="scene-4-capture"] .s4-halo { z-index:1; }
+    </style>
+
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["scene-4-capture"] = gsap.timeline({ paused: true });
+    </script>
+  </div>
+</template>

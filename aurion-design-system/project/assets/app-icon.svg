@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256" aria-label="Aurion app icon">
+  <defs>
+    <linearGradient id="navy" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#1A2E5C"></stop>
+      <stop offset="100%" stop-color="#0D1B3E"></stop>
+    </linearGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#E5C97A"></stop>
+      <stop offset="100%" stop-color="#C9A84C"></stop>
+    </linearGradient>
+  </defs>
+  
+  <rect x="0" y="0" width="256" height="256" rx="56" fill="url(#navy)"></rect>
+  
+  <g transform="translate(128 128)">
+    <path d="M0 -76 L66 -38 V38 L0 76 L-66 38 V-38 Z" fill="none" stroke="url(#gold)" stroke-width="6" stroke-linejoin="round"></path>
+    <path d="M0 -56 L48 -28 V28 L0 56 L-48 28 V-28 Z" fill="none" stroke="url(#gold)" stroke-width="2" opacity="0.5" stroke-linejoin="round"></path>
+    <path d="M-26 32 L0 -28 L26 32 M-15 12 H15" stroke="#FFFFFF" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+  </g>
+</svg>

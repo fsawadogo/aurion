@@ -1,0 +1,355 @@
+/* ==========================================================================
+   Aurion Design System — Tokens
+   colors_and_type.css
+
+   Source of truth for color, type, spacing, radii, shadow, motion.
+   Light mode is default. Add `data-theme="dark"` on <html> for dark mode.
+   ========================================================================== */
+
+:root {
+  /* ---------------------------------------------------------------
+     COLOR — RAW PALETTE
+     --------------------------------------------------------------- */
+
+  /* Navy — brand primary */
+  --navy-50:  #EEF1F8;
+  --navy-100: #D5DBE9;
+  --navy-200: #A8B3CD;
+  --navy-300: #6B7BA3;
+  --navy-400: #3E517F;
+  --navy-500: #0D1B3E;   /* brand */
+  --navy-600: #0A1530;
+  --navy-700: #070F22;
+  --navy-800: #050A18;
+
+  /* Gold — accent */
+  --gold-50:  #FBF6E6;
+  --gold-100: #F2E5B3;
+  --gold-200: #E5D082;
+  --gold-300: #D7BB5F;
+  --gold-400: #C9A84C;   /* brand */
+  --gold-500: #B5953D;
+  --gold-600: #8E7330;
+  --gold-700: #5C4A1F;
+
+  /* Neutrals (warm-leaning gray) */
+  --gray-0:   #FFFFFF;
+  --gray-50:  #F8F9FA;   /* canvas */
+  --gray-100: #EEF0F3;
+  --gray-200: #DFE2E7;
+  --gray-300: #C6CAD2;
+  --gray-400: #9AA0AC;
+  --gray-500: #6B7280;
+  --gray-600: #4A5160;
+  --gray-700: #2F3543;
+  --gray-800: #1A1F2C;
+
+  /* Semantic raw */
+  --green-500:  #2E9E6A;   /* done */
+  --green-50:   #E6F5EE;
+  --amber-500:  #D9941F;   /* conflict / warning */
+  --amber-50:   #FBF1DC;
+  --red-500:    #D9352B;   /* recording / destructive */
+  --red-50:     #FBE7E5;
+  --blue-500:   #2D6CDF;   /* info section in note review */
+  --blue-50:    #E6EEFA;
+
+  /* ---------------------------------------------------------------
+     COLOR — SEMANTIC TOKENS (light mode)
+     --------------------------------------------------------------- */
+
+  --bg-canvas:        var(--gray-50);
+  --bg-surface:       var(--gray-0);
+  --bg-surface-alt:   var(--gray-100);
+  --bg-inverse:       var(--navy-500);
+  --bg-overlay:       rgba(13, 27, 62, 0.32);
+
+  --fg-1:             var(--navy-500);   /* primary text */
+  --fg-2:             var(--gray-600);   /* secondary */
+  --fg-3:             var(--gray-500);   /* tertiary / placeholder */
+  --fg-4:             var(--gray-400);   /* disabled, captions */
+  --fg-on-dark:       var(--gray-0);
+  --fg-on-gold:       var(--navy-500);
+  --fg-link:          var(--navy-500);
+
+  --accent:           var(--gold-400);
+  --accent-hover:     var(--gold-500);
+  --accent-press:     var(--gold-600);
+  --accent-soft:      var(--gold-50);
+
+  --border-hairline:  rgba(13, 27, 62, 0.06);
+  --border-default:   rgba(13, 27, 62, 0.10);
+  --border-strong:    rgba(13, 27, 62, 0.18);
+  --border-focus:     var(--gold-400);
+
+  /* Status — used on badges, dots, ring colors */
+  --status-done-fg:       var(--green-500);
+  --status-done-bg:       var(--green-50);
+  --status-pending-fg:    var(--gold-600);
+  --status-pending-bg:    var(--gold-50);
+  --status-recording-fg:  var(--red-500);
+  --status-recording-bg:  var(--red-50);
+  --status-archived-fg:   var(--gray-500);
+  --status-archived-bg:   var(--gray-100);
+  --status-conflict-fg:   var(--amber-500);
+  --status-conflict-bg:   var(--amber-50);
+
+  /* Note section accents (left borders in note review) */
+  --section-info:        var(--blue-500);
+  --section-exam:        var(--green-500);
+  --section-assessment:  var(--amber-500);
+  --section-plan:        var(--navy-500);
+
+  /* ---------------------------------------------------------------
+     TYPE
+     --------------------------------------------------------------- */
+
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+  --font-text:    -apple-system, BlinkMacSystemFont, "SF Pro Text",    "Inter", system-ui, sans-serif;
+  --font-mono:    ui-monospace, "SF Mono", "JetBrains Mono", Menlo, Consolas, monospace;
+
+  /* iOS-aligned type scale (pt = px at 1x) */
+  --t-large-title:  34px;
+  --t-title-1:      28px;
+  --t-title-2:      22px;
+  --t-title-3:      20px;
+  --t-headline:     17px;
+  --t-body:         17px;
+  --t-callout:      16px;
+  --t-subheadline:  15px;
+  --t-footnote:     13px;
+  --t-caption-1:    12px;
+  --t-caption-2:    11px;
+
+  /* Weights */
+  --w-regular:  400;
+  --w-medium:   500;
+  --w-semibold: 600;
+  --w-bold:     700;
+
+  /* Line heights */
+  --lh-tight:   1.15;
+  --lh-snug:    1.30;
+  --lh-normal:  1.45;
+  --lh-relaxed: 1.55;
+
+  /* Tracking */
+  --tr-display: -0.02em;
+  --tr-title:   -0.01em;
+  --tr-body:     0em;
+  --tr-caps:     0.08em;
+
+  /* ---------------------------------------------------------------
+     SPACING — 4pt grid
+     --------------------------------------------------------------- */
+  --s-0:   0;
+  --s-0-5: 2px;
+  --s-1:   4px;
+  --s-2:   8px;
+  --s-3:   12px;
+  --s-4:   16px;
+  --s-5:   20px;
+  --s-6:   24px;
+  --s-8:   32px;
+  --s-10:  40px;
+  --s-14:  56px;
+  --s-20:  80px;
+
+  /* Screen edge */
+  --edge-iphone: 20px;
+  --edge-ipad:   32px;
+
+  /* ---------------------------------------------------------------
+     RADII
+     --------------------------------------------------------------- */
+  --r-xs:   6px;
+  --r-sm:   10px;
+  --r-md:   12px;   /* buttons */
+  --r-lg:   16px;   /* cards */
+  --r-xl:   20px;   /* sheets */
+  --r-2xl:  28px;
+  --r-full: 9999px;
+
+  /* ---------------------------------------------------------------
+     SHADOWS / ELEVATION
+     --------------------------------------------------------------- */
+  --sh-0: none;
+  --sh-1: 0 1px 2px rgba(13, 27, 62, 0.04);
+  --sh-2: 0 1px 2px rgba(13, 27, 62, 0.04), 0 4px 16px rgba(13, 27, 62, 0.06);
+  --sh-3: 0 2px 4px rgba(13, 27, 62, 0.06), 0 12px 32px rgba(13, 27, 62, 0.10);
+  --sh-sheet: 0 -8px 32px rgba(13, 27, 62, 0.12);
+  --sh-record-pulse: 0 0 0 8px rgba(201, 168, 76, 0.18), 0 12px 32px rgba(201, 168, 76, 0.36);
+
+  /* ---------------------------------------------------------------
+     MOTION
+     --------------------------------------------------------------- */
+  --ease-ios:    cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-state:  cubic-bezier(0.4, 0, 0.2, 1);
+  --d-micro:     120ms;
+  --d-short:     200ms;
+  --d-medium:    320ms;
+  --d-long:      500ms;
+
+  /* ---------------------------------------------------------------
+     LAYOUT CONSTANTS
+     --------------------------------------------------------------- */
+  --topbar-h:    44px;
+  --topbar-h-pad: 50px;
+  --tabbar-h:    49px;
+  --hit-min:     44px;
+}
+
+/* ==========================================================================
+   DARK MODE
+   ========================================================================== */
+:root[data-theme="dark"] {
+  --bg-canvas:        var(--navy-600);
+  --bg-surface:       #152348;
+  --bg-surface-alt:   #1B2C56;
+  --bg-inverse:       var(--gray-0);
+  --bg-overlay:       rgba(0, 0, 0, 0.48);
+
+  --fg-1:             var(--gray-0);
+  --fg-2:             #B7C0D6;
+  --fg-3:             #8590AE;
+  --fg-4:             #5A6584;
+  --fg-on-dark:       var(--gray-0);
+  --fg-on-gold:       var(--navy-500);
+  --fg-link:          var(--gold-300);
+
+  --border-hairline:  rgba(255, 255, 255, 0.06);
+  --border-default:   rgba(255, 255, 255, 0.12);
+  --border-strong:    rgba(255, 255, 255, 0.22);
+
+  --status-pending-bg:   rgba(201, 168, 76, 0.16);
+  --status-pending-fg:   var(--gold-300);
+  --status-done-bg:      rgba(46, 158, 106, 0.16);
+  --status-done-fg:      #6BD3A2;
+  --status-recording-bg: rgba(217, 53, 43, 0.18);
+  --status-recording-fg: #F47A72;
+  --status-archived-bg:  rgba(255, 255, 255, 0.08);
+  --status-archived-fg:  #B7C0D6;
+  --status-conflict-bg:  rgba(217, 148, 31, 0.18);
+  --status-conflict-fg:  #F0BB5C;
+
+  --sh-1: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --sh-2: 0 1px 2px rgba(0, 0, 0, 0.3), 0 4px 16px rgba(0, 0, 0, 0.4);
+  --sh-3: 0 2px 4px rgba(0, 0, 0, 0.4), 0 12px 32px rgba(0, 0, 0, 0.5);
+}
+
+/* ==========================================================================
+   SEMANTIC ELEMENT STYLES
+   Use as classes (.h1, .body) or extend in components.
+   ========================================================================== */
+
+.h-large-title, .h1 {
+  font-family: var(--font-display);
+  font-size: var(--t-large-title);
+  font-weight: var(--w-bold);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-display);
+  color: var(--fg-1);
+}
+
+.h-title-1, .h2 {
+  font-family: var(--font-display);
+  font-size: var(--t-title-1);
+  font-weight: var(--w-semibold);
+  line-height: var(--lh-tight);
+  letter-spacing: var(--tr-display);
+  color: var(--fg-1);
+}
+
+.h-title-2, .h3 {
+  font-family: var(--font-display);
+  font-size: var(--t-title-2);
+  font-weight: var(--w-semibold);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-title);
+  color: var(--fg-1);
+}
+
+.h-title-3, .h4 {
+  font-family: var(--font-display);
+  font-size: var(--t-title-3);
+  font-weight: var(--w-semibold);
+  line-height: var(--lh-snug);
+  letter-spacing: var(--tr-title);
+  color: var(--fg-1);
+}
+
+.headline {
+  font-family: var(--font-text);
+  font-size: var(--t-headline);
+  font-weight: var(--w-semibold);
+  line-height: var(--lh-snug);
+  color: var(--fg-1);
+}
+
+.body, p {
+  font-family: var(--font-text);
+  font-size: var(--t-body);
+  font-weight: var(--w-regular);
+  line-height: var(--lh-normal);
+  color: var(--fg-1);
+}
+
+.callout {
+  font-family: var(--font-text);
+  font-size: var(--t-callout);
+  font-weight: var(--w-regular);
+  line-height: var(--lh-normal);
+  color: var(--fg-1);
+}
+
+.subheadline {
+  font-family: var(--font-text);
+  font-size: var(--t-subheadline);
+  font-weight: var(--w-medium);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+}
+
+.footnote {
+  font-family: var(--font-text);
+  font-size: var(--t-footnote);
+  font-weight: var(--w-regular);
+  line-height: var(--lh-normal);
+  color: var(--fg-2);
+}
+
+.caption-1 {
+  font-family: var(--font-text);
+  font-size: var(--t-caption-1);
+  font-weight: var(--w-regular);
+  line-height: var(--lh-normal);
+  color: var(--fg-3);
+}
+
+.caption-2, .caps {
+  font-family: var(--font-text);
+  font-size: var(--t-caption-2);
+  font-weight: var(--w-semibold);
+  line-height: var(--lh-normal);
+  letter-spacing: var(--tr-caps);
+  text-transform: uppercase;
+  color: var(--fg-2);
+}
+
+.mono, code, pre, .timer {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Reset minimal */
+* { box-sizing: border-box; }
+body {
+  margin: 0;
+  background: var(--bg-canvas);
+  color: var(--fg-1);
+  font-family: var(--font-text);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}

@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #0A1530;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Inter", system-ui, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+      }
+      .scene-wrap {
+        position: absolute;
+        inset: 0;
+        width: 1080px;
+        height: 1920px;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="56"
+      data-width="1080"
+      data-height="1920"
+    >
+      <!-- Narration audio (Kokoro TTS, 55.5s) -->
+      <audio
+        id="narration"
+        class="clip"
+        data-start="0"
+        data-duration="55.5"
+        data-track-index="0"
+        data-volume="1"
+        src="audio/narration.wav"
+      ></audio>
+
+      <!-- Cut points land in the ~40 ms silences between sentences (per whisper transcript).
+           Each scene overlaps the next by ~0.4s for opacity crossfade. -->
+      <div id="s1" class="clip scene-wrap" style="z-index:1"
+           data-composition-id="scene-1-cover"
+           data-composition-src="compositions/scene-1-cover.html"
+           data-start="0" data-duration="5.6"
+           data-width="1080" data-height="1920" data-track-index="1"></div>
+
+      <div id="s2" class="clip scene-wrap" style="z-index:2"
+           data-composition-id="scene-2-pair"
+           data-composition-src="compositions/scene-2-pair.html"
+           data-start="5.2" data-duration="7.3"
+           data-width="1080" data-height="1920" data-track-index="2"></div>
+
+      <div id="s3" class="clip scene-wrap" style="z-index:3"
+           data-composition-id="scene-3-voice"
+           data-composition-src="compositions/scene-3-voice.html"
+           data-start="12.1" data-duration="9.2"
+           data-width="1080" data-height="1920" data-track-index="1"></div>
+
+      <div id="s4" class="clip scene-wrap" style="z-index:4"
+           data-composition-id="scene-4-capture"
+           data-composition-src="compositions/scene-4-capture.html"
+           data-start="20.9" data-duration="10.3"
+           data-width="1080" data-height="1920" data-track-index="2"></div>
+
+      <div id="s5" class="clip scene-wrap" style="z-index:5"
+           data-composition-id="scene-5-note"
+           data-composition-src="compositions/scene-5-note.html"
+           data-start="30.8" data-duration="11.1"
+           data-width="1080" data-height="1920" data-track-index="1"></div>
+
+      <div id="s6" class="clip scene-wrap" style="z-index:6"
+           data-composition-id="scene-6-approve"
+           data-composition-src="compositions/scene-6-approve.html"
+           data-start="41.5" data-duration="7.3"
+           data-width="1080" data-height="1920" data-track-index="2"></div>
+
+      <div id="s7" class="clip scene-wrap" style="z-index:7"
+           data-composition-id="scene-7-closing"
+           data-composition-src="compositions/scene-7-closing.html"
+           data-start="48.4" data-duration="7.6"
+           data-width="1080" data-height="1920" data-track-index="1"></div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      window.__timelines["main"] = gsap.timeline({ paused: true });
+    </script>
+  </body>
+</html>

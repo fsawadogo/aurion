@@ -1,0 +1,68 @@
+/* Shared styles for preview cards (Design System tab).
+   Each card is a self-contained HTML doc; this file is linked from each. */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap");
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  height: 100%;
+}
+
+body {
+  font-family: "Inter", -apple-system, system-ui, sans-serif;
+  background: #F8F9FA;
+  color: #0D1B3E;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+.card {
+  width: 100%;
+  height: 100%;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  overflow: hidden;
+}
+
+.card.center { justify-content: center; }
+.card.tight  { padding: 16px 20px; gap: 12px; }
+.card.dark   { background: #0D1B3E; color: #FFFFFF; }
+
+.row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.row.wrap { flex-wrap: wrap; }
+.row.between { justify-content: space-between; }
+
+.col {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.muted { color: #6B7280; }
+.muted-dark { color: #B7C0D6; }
+
+.caps {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: #6B7280;
+}
+
+.mono {
+  font-family: "JetBrains Mono", ui-monospace, Menlo, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.swatch {
+  border-radius: 10px;
+  border: 1px solid rgba(13, 27, 62, 0.06);
+}

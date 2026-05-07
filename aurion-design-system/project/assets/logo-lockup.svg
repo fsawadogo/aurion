@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 240 64" width="240" height="64" fill="none" aria-label="Aurion Clinical AI">
+  
+  <g transform="translate(0,0)">
+    <path d="M32 4 L56 18 V46 L32 60 L8 46 V18 Z" fill="none" stroke="#C9A84C" stroke-width="2.5" stroke-linejoin="round"></path>
+    <path d="M32 10 L51 21 V43 L32 54 L13 43 V21 Z" fill="none" stroke="#C9A84C" stroke-width="1" opacity="0.5" stroke-linejoin="round"></path>
+    <path d="M22 42 L32 20 L42 42 M26 35 H38" stroke="#0D1B3E" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" fill="none"></path>
+  </g>
+  
+  <text x="76" y="36" font-family="-apple-system, &#39;SF Pro Display&#39;, Inter, sans-serif" font-size="26" font-weight="600" letter-spacing="-0.01em" fill="#0D1B3E">Aurion</text>
+  <text x="76" y="52" font-family="-apple-system, &#39;SF Pro Text&#39;, Inter, sans-serif" font-size="11" font-weight="600" letter-spacing="0.16em" fill="#6B7280">CLINICAL AI</text>
+</svg>
