@@ -46,6 +46,11 @@ scene-*-at-*.png
 demo/*.mp4
 demo/thumbs/
 
+# Raw video recordings — too large for git, keep local only
+*.mov
+aurion-explainer-video/recordings/
+aurion-explainer-video/renders/
+
 # Coverage
 htmlcov/
 .coverage
