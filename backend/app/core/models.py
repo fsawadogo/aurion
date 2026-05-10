@@ -65,6 +65,13 @@ class SessionModel(Base):
     output_language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
     encounter_type: Mapped[str] = mapped_column(String(50), nullable=False, default="doctor_patient")
     participants_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # `multimodal` (default), `audio_only`, or `smart_dictation`. Chosen at
+    # session creation on the iOS context sheet — drives capture-screen UI
+    # today; the vision pipeline could short-circuit on non-multimodal modes
+    # in a follow-up if we want to skip Stage 2 entirely for those.
+    capture_mode: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="multimodal"
+    )
     consent_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     provider_overrides: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
@@ -102,6 +109,17 @@ class PhysicianProfileModel(Base):
     consultation_types: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     allied_health_team: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     output_language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
+    # Recording preferences set during onboarding's profile setup. These are
+    # UX controls — `auto_upload` decides whether a finished encounter pushes
+    # straight to Stage 1 or waits for an explicit confirm; `retention_days`
+    # caps how long the device keeps the structured note locally before the
+    # cleanup module purges; `consent_reprompt` gates the consent overlay
+    # cadence (every session / daily / weekly).
+    auto_upload: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    retention_days: Mapped[int] = mapped_column(Integer, nullable=False, default=7)
+    consent_reprompt: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="every_session"
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

@@ -1,0 +1,15 @@
+Introducing Orion. A multimodal clinical AI platform designed to reduce documentation burden and enhance clinical workflow.
+
+The first step is creating a personalized physician profile. Orion learns the physician's voice to distinguish between providers during clinical encounters. Each user can customize documentation templates, preferred visit types, languages, recording preferences, and connected devices — including smartphones, smart glasses, or wearable cameras. Physicians can also choose how Orion functions during encounters: smart dictation, audio only, or multimodal audio and video capture.
+
+To begin, the physician starts a new patient encounter. Orion supports collaborative workflows, allowing nurses, physician assistants, residents, and surgeons to contribute to the same encounter while generating a unified note. The physician selects the visit type and adds clinical context through preset options or free text.
+
+Once patient consent is confirmed, the encounter begins. Orion captures the clinical interaction using ambient audio and optional video through a smartphone, smart glasses, or wearable devices. The physician interacts naturally with the patient while Orion documents the encounter passively in the background.
+
+An initial note is generated immediately from ambient audio. Orion structures the encounter into a clinically organized format in real time.
+
+Within minutes, Orion refines the documentation using multimodal inputs. Visual context from the physical examination, reviewed imaging, laboratory results, and procedural findings is incorporated into the note to improve clinical accuracy and reduce physician correction burden.
+
+The final output is a structured clinical note designed to integrate seamlessly into existing workflows and electronic medical records. By combining audio, visual, and contextual understanding, Orion moves beyond transcription toward true clinical intelligence.
+
+Orion. From documentation to clinical understanding.

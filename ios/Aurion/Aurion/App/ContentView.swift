@@ -7,10 +7,14 @@ struct ContentView: View {
     @StateObject private var sessionManager = SessionManager()
     @State private var showRecoveryAlert = false
     @State private var recoveredSession: CaptureSession?
+    @State private var showSplash = true
 
     var body: some View {
         ZStack {
-            if !appState.isAuthenticated {
+            if showSplash {
+                SplashView(isVisible: $showSplash)
+                    .transition(.opacity)
+            } else if !appState.isAuthenticated {
                 AuthView()
                     .transition(.opacity)
             } else if !appState.isOnboardingComplete {
@@ -57,6 +61,7 @@ struct ContentView: View {
                     .environmentObject(sessionManager)
             }
         }
+        .animation(AurionAnimation.smooth, value: showSplash)
         .animation(AurionAnimation.smooth, value: appState.isAuthenticated)
         .animation(AurionAnimation.smooth, value: appState.isOnboardingComplete)
         .animation(AurionAnimation.smooth, value: sessionManager.session?.id)

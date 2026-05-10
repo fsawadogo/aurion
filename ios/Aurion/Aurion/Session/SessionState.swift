@@ -1,6 +1,70 @@
 import Foundation
 import Combine
 
+/// How the physician wants Aurion to capture this encounter. The value is
+/// chosen at session start (per-session, not per-profile — common case is
+/// the same physician switching modes between visits) and surfaced on the
+/// capture screen as a pill so the physician can confirm at a glance.
+///
+/// Behavior:
+/// - `multimodal`  — full audio + video; vision pipeline runs Stage 2.
+/// - `audioOnly`   — audio capture only; video stream suppressed.
+/// - `smartDictation` — audio + live caption-forward UI; intended for short
+///                      free-form dictations rather than ambient encounters.
+///
+/// Backend currently treats all three as a session — the capture-mode value
+/// is iOS-side state today; if/when the backend wants per-mode behavior we
+/// add a `capture_mode` column and pass it through `POST /sessions`.
+enum CaptureMode: String, Codable, CaseIterable, Identifiable {
+    case multimodal
+    case audioOnly = "audio_only"
+    case smartDictation = "smart_dictation"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .multimodal: return "Multimodal"
+        case .audioOnly: return "Audio Only"
+        case .smartDictation: return "Smart Dictation"
+        }
+    }
+
+    var subtitle: String {
+        switch self {
+        case .multimodal: return "Audio + video — full vision enrichment"
+        case .audioOnly: return "Audio only — no camera capture"
+        case .smartDictation: return "Audio + live captions — dictation focus"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .multimodal: return "video.and.waveform"
+        case .audioOnly: return "waveform"
+        case .smartDictation: return "text.viewfinder"
+        }
+    }
+}
+
+/// One non-physician participant in a collaborative encounter — nurse, PA,
+/// resident, fellow, or student. The capture screen renders names so every
+/// person in the room sees themselves on the shared encounter pill.
+struct SessionParticipant: Identifiable, Hashable {
+    let name: String
+    let role: String
+    var id: String { "\(role)-\(name)" }
+
+    /// Title-cased role label for UI display ("nurse" → "Nurse").
+    var displayRole: String {
+        role
+            .replacingOccurrences(of: "_", with: " ")
+            .split(separator: " ")
+            .map { $0.prefix(1).uppercased() + $0.dropFirst() }
+            .joined(separator: " ")
+    }
+}
+
 /// 10-state session machine — mirrors backend exactly.
 /// Every transition requires an audit log entry.
 enum SessionState: String, Codable {
@@ -32,6 +96,19 @@ enum SessionState: String, Codable {
 final class CaptureSession: ObservableObject, Identifiable {
     let id: String
     let specialty: String
+    /// Chosen at session start; defaults to `.multimodal`. Read by `CaptureView`
+    /// to render the mode pill and (eventually) by `CaptureManager` to suppress
+    /// the video stream when the physician picks an audio-only mode.
+    let captureMode: CaptureMode
+    /// Encounter shape selected on the start sheet — `doctor_patient`,
+    /// `doctor_patient_allied`, or `doctor_patient_transitory`. Used by
+    /// `CaptureView` to render the shared-encounter pill when the room
+    /// includes more than the physician.
+    let encounterType: String
+    /// Non-physician collaborators in the same encounter. Empty for
+    /// `doctor_patient`. Surfaced on the capture screen so everyone present
+    /// sees their name on the shared-encounter pill.
+    let participants: [SessionParticipant]
     @Published var state: SessionState = .consentPending
     @Published var isConsentConfirmed = false
     @Published var pausedAt: Date?
@@ -49,9 +126,24 @@ final class CaptureSession: ObservableObject, Identifiable {
         return Date().timeIntervalSince(pausedAt)
     }
 
-    init(id: String = UUID().uuidString, specialty: String) {
+    init(
+        id: String = UUID().uuidString,
+        specialty: String,
+        captureMode: CaptureMode = .multimodal,
+        encounterType: String = "doctor_patient",
+        participants: [SessionParticipant] = []
+    ) {
         self.id = id
         self.specialty = specialty
+        self.captureMode = captureMode
+        self.encounterType = encounterType
+        self.participants = participants
+    }
+
+    /// `true` when there's more than just doctor + patient in the room —
+    /// drives the shared-encounter pill on the capture screen.
+    var isCollaborative: Bool {
+        encounterType != "doctor_patient" || !participants.isEmpty
     }
 
     func confirmConsent() {

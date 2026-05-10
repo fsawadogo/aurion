@@ -35,6 +35,9 @@ class ProfileResponse(BaseModel):
     consultation_types: list[str]
     allied_health_team: list[dict] = []
     output_language: str
+    auto_upload: bool = True
+    retention_days: int = 7
+    consent_reprompt: str = "every_session"
 
     model_config = {"from_attributes": True}
 
@@ -47,6 +50,9 @@ class UpdateProfileRequest(BaseModel):
     consultation_types: Optional[list[str]] = None
     allied_health_team: Optional[list[dict]] = None
     output_language: Optional[str] = None
+    auto_upload: Optional[bool] = None
+    retention_days: Optional[int] = None
+    consent_reprompt: Optional[str] = None
 
 
 # ── Routes ──────────────────────────────────────────────────────────────────
@@ -102,4 +108,7 @@ def _to_response(profile) -> ProfileResponse:
         consultation_types=json.loads(profile.consultation_types),
         allied_health_team=json.loads(profile.allied_health_team),
         output_language=profile.output_language,
+        auto_upload=getattr(profile, "auto_upload", True),
+        retention_days=getattr(profile, "retention_days", 7),
+        consent_reprompt=getattr(profile, "consent_reprompt", "every_session"),
     )

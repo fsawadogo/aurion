@@ -81,6 +81,17 @@ async def update_profile(
         profile.allied_health_team = json.dumps(team)
     if "output_language" in updates:
         profile.output_language = updates["output_language"]
+    if "auto_upload" in updates:
+        profile.auto_upload = bool(updates["auto_upload"])
+    if "retention_days" in updates:
+        # Clamp to the same range the iOS stepper enforces — keeps the
+        # local-retention contract honest if a client sends a bogus value.
+        days = int(updates["retention_days"])
+        profile.retention_days = max(1, min(30, days))
+    if "consent_reprompt" in updates:
+        cadence = updates["consent_reprompt"]
+        if cadence in ("every_session", "daily", "weekly"):
+            profile.consent_reprompt = cadence
 
     await db.flush()
     logger.info("Updated physician profile for clinician=%s", clinician_id)

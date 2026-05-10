@@ -46,6 +46,7 @@ class CreateSessionRequest(BaseModel):
     encounter_type: str = "doctor_patient"
     participants: Optional[list[SessionParticipantRequest]] = None
     provider_overrides: Optional[dict] = None
+    capture_mode: str = "multimodal"
 
 
 class SessionResponse(BaseModel):
@@ -54,6 +55,7 @@ class SessionResponse(BaseModel):
     specialty: str
     state: str
     encounter_type: str = "doctor_patient"
+    capture_mode: str = "multimodal"
     created_at: str
     updated_at: str
 
@@ -78,6 +80,7 @@ async def create_session_route(
         encounter_type=body.encounter_type,
         participants=[p.model_dump() for p in body.participants] if body.participants else None,
         provider_overrides=body.provider_overrides,
+        capture_mode=body.capture_mode,
     )
     audit = get_audit_log_service()
     await audit.write_event(
@@ -230,6 +233,7 @@ def _to_response(session) -> SessionResponse:
         specialty=session.specialty,
         state=session.state.value if isinstance(session.state, SessionState) else session.state,
         encounter_type=session.encounter_type or "doctor_patient",
+        capture_mode=getattr(session, "capture_mode", None) or "multimodal",
         created_at=session.created_at.isoformat() if session.created_at else "",
         updated_at=session.updated_at.isoformat() if session.updated_at else "",
     )

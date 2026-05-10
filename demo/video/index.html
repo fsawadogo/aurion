@@ -1,0 +1,562 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=1080, height=1920" />
+    <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      html, body {
+        margin: 0;
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background: #0a1428;
+      }
+
+      :root {
+        --navy-deep: #0a1428;
+        --navy-mid: #122144;
+        --navy-soft: #1a2c5a;
+        --gold: #d4a64a;
+        --gold-bright: #f3d076;
+        --gold-soft: rgba(212, 166, 74, 0.18);
+        --text: #ffffff;
+        --text-dim: rgba(255, 255, 255, 0.65);
+        --border: rgba(255, 255, 255, 0.10);
+      }
+
+      #root {
+        position: relative;
+        width: 1080px;
+        height: 1920px;
+        overflow: hidden;
+        background:
+          radial-gradient(ellipse at 50% 18%, var(--navy-soft) 0%, var(--navy-deep) 70%),
+          var(--navy-deep);
+        font-family: -apple-system, "SF Pro Display", "Inter", system-ui, sans-serif;
+        color: var(--text);
+      }
+
+      /* ── Intro Logo Card (0–4s) ─────────────────────────────────── */
+      .intro-card {
+        position: absolute;
+        inset: 0;
+        z-index: 100;
+        background:
+          radial-gradient(ellipse at 50% 50%, var(--navy-soft) 0%, var(--navy-deep) 70%),
+          var(--navy-deep);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 64px;
+      }
+      .intro-mark-wrap {
+        position: relative;
+        width: 360px;
+        height: 360px;
+      }
+      .intro-mark-glow {
+        position: absolute;
+        inset: -40px;
+        border-radius: 50%;
+        background: radial-gradient(circle, var(--gold-soft) 0%, transparent 65%);
+        filter: blur(8px);
+      }
+      .intro-mark-ring {
+        position: absolute;
+        inset: 0;
+        border-radius: 50%;
+        border: 1px solid var(--gold);
+        opacity: 0.25;
+      }
+      .intro-mark-svg {
+        position: absolute;
+        inset: 40px;
+        width: calc(100% - 80px);
+        height: calc(100% - 80px);
+      }
+      .intro-name {
+        display: flex;
+        align-items: baseline;
+        gap: 24px;
+      }
+      .intro-name .word {
+        font-size: 96px;
+        font-weight: 600;
+        letter-spacing: -2px;
+        color: var(--text);
+      }
+      .intro-name .tag {
+        font-size: 20px;
+        letter-spacing: 8px;
+        color: var(--gold);
+      }
+      .intro-tagline {
+        font-size: 22px;
+        letter-spacing: 5px;
+        color: var(--text-dim);
+        text-transform: uppercase;
+      }
+
+      /* ── Top brand strip (after intro, on the rest of the comp) ── */
+      .brand-bar {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 110px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 14px;
+        z-index: 4;
+        opacity: 0;
+      }
+      .brand-mark {
+        position: relative;
+        width: 36px;
+        height: 36px;
+      }
+      .brand-mark svg { width: 100%; height: 100%; display: block; }
+      .brand-mark .glow {
+        position: absolute;
+        inset: -8px;
+        border-radius: 50%;
+        background: var(--gold);
+        opacity: 0.18;
+        filter: blur(14px);
+      }
+      .brand-name {
+        font-size: 28px;
+        font-weight: 600;
+        letter-spacing: 4px;
+        color: var(--text);
+      }
+      .brand-tag {
+        font-size: 14px;
+        letter-spacing: 6px;
+        color: var(--gold);
+        margin-left: 4px;
+      }
+
+      .hairline {
+        position: absolute;
+        top: 110px;
+        left: 64px;
+        right: 64px;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, var(--border), transparent);
+        z-index: 2;
+        opacity: 0;
+      }
+
+      /* ── Phone region ───────────────────────────────────────────── */
+      .phone-stage {
+        position: absolute;
+        top: 140px;
+        left: 50%;
+        margin-left: -380px;
+        width: 760px;
+        height: 1490px;
+        border-radius: 56px;
+        background: #000;
+        box-shadow:
+          0 0 0 8px rgba(255, 255, 255, 0.04),
+          0 30px 80px rgba(0, 0, 0, 0.55),
+          0 0 200px rgba(212, 166, 74, 0.05);
+        overflow: hidden;
+        z-index: 2;
+        opacity: 0;
+      }
+      .phone-stage::after {
+        content: "";
+        position: absolute;
+        top: 0; left: 12%; right: 12%;
+        height: 1px;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.18), transparent);
+        pointer-events: none;
+        z-index: 5;
+      }
+      .phone-stage video {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        width: 100%;
+        height: auto;
+        min-height: 100%;
+        object-fit: cover;
+      }
+      /* Black overlay for dip-to-black transitions between scenes */
+      .phone-fade {
+        position: absolute;
+        inset: 0;
+        background: #000;
+        z-index: 4;
+        pointer-events: none;
+        opacity: 0;
+      }
+
+      /* ── Bottom section text ────────────────────────────────────── */
+      .lower {
+        position: absolute;
+        left: 64px;
+        right: 64px;
+        bottom: 100px;
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        opacity: 0;
+      }
+      .section-label {
+        font-size: 14px;
+        letter-spacing: 5px;
+        color: var(--gold);
+        text-transform: uppercase;
+        opacity: 0;
+        font-weight: 600;
+      }
+      .section-label::before {
+        content: "";
+        display: inline-block;
+        width: 28px;
+        height: 1px;
+        background: var(--gold);
+        vertical-align: middle;
+        margin-right: 14px;
+        margin-bottom: 4px;
+      }
+      .section-title {
+        font-size: 44px;
+        line-height: 1.18;
+        letter-spacing: -0.5px;
+        font-weight: 600;
+        opacity: 0;
+        max-width: 880px;
+      }
+      .section-title em {
+        color: var(--gold);
+        font-style: normal;
+      }
+
+      /* ── Ambient gold glow under everything ─────────────────────── */
+      .ambient-glow {
+        position: absolute;
+        bottom: -200px;
+        left: 50%;
+        margin-left: -400px;
+        width: 800px;
+        height: 400px;
+        background: radial-gradient(ellipse, var(--gold-soft) 0%, transparent 60%);
+        pointer-events: none;
+        z-index: 1;
+      }
+
+      /* ── Bottom timeline progress ───────────────────────────────── */
+      .progress {
+        position: absolute;
+        bottom: 0; left: 0; right: 0;
+        height: 3px;
+        background: rgba(255, 255, 255, 0.06);
+        z-index: 5;
+        opacity: 0;
+      }
+      .progress .fill {
+        position: absolute;
+        top: 0; left: 0;
+        height: 100%;
+        background: linear-gradient(90deg, var(--gold), var(--gold-bright));
+        width: 0%;
+      }
+    </style>
+  </head>
+  <body>
+    <div
+      id="root"
+      data-composition-id="main"
+      data-start="0"
+      data-duration="132"
+      data-width="1080"
+      data-height="1920"
+    >
+      <!-- ── Intro logo card (0–4s) — fades out before phone footage starts ── -->
+      <div class="intro-card" id="intro-card">
+        <div class="intro-mark-wrap">
+          <div class="intro-mark-glow" id="intro-glow"></div>
+          <div class="intro-mark-ring" id="intro-ring"></div>
+          <svg class="intro-mark-svg" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <polygon
+              points="50,8 88,30 88,70 50,92 12,70 12,30"
+              fill="none"
+              stroke="#d4a64a"
+              stroke-width="2.5"
+            />
+            <text
+              x="50"
+              y="64"
+              text-anchor="middle"
+              font-family="SF Pro Display, -apple-system, system-ui, sans-serif"
+              font-size="46"
+              font-weight="600"
+              fill="#d4a64a"
+            >
+              A
+            </text>
+          </svg>
+        </div>
+        <div class="intro-name">
+          <span class="word">Aurion</span>
+        </div>
+        <div class="intro-tagline">CLINICAL INTELLIGENCE</div>
+      </div>
+
+      <!-- Ambient backlight -->
+      <div class="ambient-glow"></div>
+
+      <!-- Top brand bar (visible after intro) -->
+      <div class="brand-bar" id="brand-bar">
+        <div class="brand-mark">
+          <div class="glow"></div>
+          <svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
+            <polygon
+              points="50,8 88,30 88,70 50,92 12,70 12,30"
+              fill="none"
+              stroke="#d4a64a"
+              stroke-width="3"
+            />
+            <text
+              x="50"
+              y="62"
+              text-anchor="middle"
+              font-family="SF Pro Display, -apple-system, system-ui, sans-serif"
+              font-size="42"
+              font-weight="600"
+              fill="#d4a64a"
+            >
+              A
+            </text>
+          </svg>
+        </div>
+        <div class="brand-name">AURION</div>
+        <div class="brand-tag">CLINICAL AI</div>
+      </div>
+      <div class="hairline" id="hairline"></div>
+
+      <!-- Phone footage region — clips timed to specific narration phrases.
+           Each clip is on track 0 with a tiny 0.05s frame offset between
+           neighbours so the same-track-no-overlap rule is satisfied while
+           appearing seamless. The .phone-fade overlay handles dip-to-black
+           transitions between scenes. -->
+      <div class="phone-stage" id="phone-stage">
+        <video class="clip" id="vid1"
+               data-start="4.0"   data-duration="8.5"  data-track-index="0"
+               src="clips/s1-intro.mp4" muted playsinline></video>
+        <video class="clip" id="vid2"
+               data-start="12.5"  data-duration="31.0" data-track-index="0"
+               src="clips/s2-profile.mp4" muted playsinline></video>
+        <video class="clip" id="vid3"
+               data-start="43.5"  data-duration="20.0" data-track-index="0"
+               src="clips/s3-encounter.mp4" muted playsinline></video>
+        <video class="clip" id="vid4"
+               data-start="63.5"  data-duration="19.5" data-track-index="0"
+               src="clips/s4-consent.mp4" muted playsinline></video>
+        <video class="clip" id="vid5"
+               data-start="83.0"  data-duration="9.5"  data-track-index="0"
+               src="clips/s5-live-note.mp4" muted playsinline></video>
+        <video class="clip" id="vid6"
+               data-start="92.5"  data-duration="18.5" data-track-index="0"
+               src="clips/s6-multimodal.mp4" muted playsinline></video>
+        <video class="clip" id="vid7"
+               data-start="111.0" data-duration="17.0" data-track-index="0"
+               src="clips/s7-final.mp4" muted playsinline></video>
+        <video class="clip" id="vid8"
+               data-start="128.0" data-duration="4.0"  data-track-index="0"
+               src="clips/s8-ending.mp4" muted playsinline></video>
+        <!-- Black overlay sitting above the videos — used for dip-to-black
+             transitions and to mask the brief frame between clip cuts. -->
+        <div class="phone-fade" id="phone-fade"></div>
+      </div>
+
+      <!-- Narration audio — starts after the 4s intro logo card -->
+      <audio class="clip" id="vo"
+             data-start="4" data-duration="128" data-track-index="1"
+             src="audio/narration.wav" data-volume="1"></audio>
+
+      <!-- Section label + headline -->
+      <div class="lower" id="lower">
+        <div id="section-label" class="section-label">INTRODUCING</div>
+        <div id="section-title" class="section-title">
+          A multimodal <em>clinical AI</em> platform.
+        </div>
+      </div>
+
+      <!-- Progress bar -->
+      <div class="progress" id="progress">
+        <div class="fill" id="progress-fill"></div>
+      </div>
+    </div>
+
+    <script>
+      window.__timelines = window.__timelines || {};
+      const DURATION = 132;
+      const tl = gsap.timeline({ paused: true });
+
+      // ── Intro logo card animation (0–4s) ────────────────────────
+      // Mark + ring + name + tagline cascade in, hold, then fade out
+      // as the phone stage takes over.
+      tl.from("#intro-glow",
+        { scale: 0.6, opacity: 0, duration: 0.9, ease: "power2.out" },
+        0.2
+      );
+      tl.from(".intro-mark-svg",
+        { scale: 0.7, opacity: 0, duration: 0.9, ease: "back.out(1.4)" },
+        0.4
+      );
+      tl.from("#intro-ring",
+        { scale: 0.85, opacity: 0, duration: 1.0, ease: "power3.out" },
+        0.5
+      );
+      tl.from(".intro-name .word",
+        { y: 30, opacity: 0, duration: 0.8, ease: "power3.out" },
+        1.1
+      );
+      tl.from(".intro-tagline",
+        { y: 20, opacity: 0, letterSpacing: "12px", duration: 0.9, ease: "power2.out" },
+        1.5
+      );
+      // Subtle pulse on the glow during the hold
+      tl.to("#intro-glow",
+        { scale: 1.08, opacity: 0.7, duration: 1.0, ease: "sine.inOut", yoyo: true, repeat: 1 },
+        2.0
+      );
+      // Fade out the entire intro card so the phone stage can take over
+      tl.to("#intro-card",
+        { opacity: 0, duration: 0.8, ease: "power2.in" },
+        3.4
+      );
+
+      // ── Brand bar entrance (after intro ends, ~4.0s) ────────────
+      tl.fromTo("#brand-bar",
+        { opacity: 0, y: -20 },
+        { opacity: 1, y: 0, duration: 0.8, ease: "power3.out" },
+        4.0
+      );
+      tl.to("#hairline",
+        { opacity: 1, duration: 0.8, ease: "power3.out" },
+        4.3
+      );
+      tl.fromTo("#hairline",
+        { scaleX: 0 },
+        { scaleX: 1, duration: 0.9, ease: "power3.out" },
+        4.3
+      );
+
+      // ── Phone stage entrance ────────────────────────────────────
+      tl.to("#phone-stage",
+        { opacity: 1, duration: 0.6, ease: "power2.out" },
+        4.0
+      );
+      tl.from("#phone-stage",
+        { scale: 0.94, duration: 1.0, ease: "power3.out" },
+        4.0
+      );
+
+      // ── Progress bar reveal + fill ──────────────────────────────
+      tl.to("#progress",
+        { opacity: 1, duration: 0.6, ease: "power2.out" },
+        4.0
+      );
+      tl.fromTo("#progress-fill",
+        { width: "0%" },
+        { width: "100%", duration: DURATION - 4, ease: "none" },
+        4.0
+      );
+
+      // ── Lower text container reveal ─────────────────────────────
+      tl.to("#lower",
+        { opacity: 1, duration: 0.6, ease: "power2.out" },
+        4.0
+      );
+
+      // ── Section copy + start times — narration sentence boundaries
+      // (audio offset by +4s for the intro card).
+      const sections = [
+        { t:   4.4, label: "INTRODUCING",       title: "A multimodal <em>clinical AI</em> platform." },
+        { t:  12.5, label: "PHYSICIAN PROFILE", title: "Voice. Templates. Languages.<br/>Connected devices." },
+        { t:  43.5, label: "NEW ENCOUNTER",     title: "Visit type, team, and<br/>clinical context." },
+        { t:  63.5, label: "RECORDING",         title: "<em>Ambient</em> capture — audio<br/>and optional video." },
+        { t:  83.0, label: "LIVE NOTE",         title: "Generated <em>immediately</em><br/>from ambient audio." },
+        { t:  92.5, label: "MULTIMODAL",        title: "Refined with visual context<br/>from exam and imaging." },
+        { t: 111.0, label: "FINAL OUTPUT",      title: "A <em>structured</em> clinical note —<br/>cited and EMR-ready." },
+        { t: 128.0, label: "AURION",            title: "From documentation<br/>to <em>clinical understanding</em>." },
+      ];
+
+      // Initial section text entrance
+      tl.fromTo("#section-label",
+        { y: 16, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.85, ease: "power2.out" },
+        sections[0].t
+      );
+      tl.fromTo("#section-title",
+        { y: 22, opacity: 0 },
+        { y: 0, opacity: 1, duration: 0.95, ease: "power3.out" },
+        sections[0].t + 0.2
+      );
+
+      // Per-section transitions: fade out → swap → fade in. Slower than
+      // before (was 0.35/0.5) for a calmer, more deliberate pace.
+      // Plus a dip-to-black on the phone stage at each scene boundary
+      // to mask the hard cut between video clips.
+      for (let i = 1; i < sections.length; i++) {
+        const s = sections[i];
+        // Phone fade dip — peak black at the scene boundary
+        tl.to("#phone-fade",
+          { opacity: 0.85, duration: 0.35, ease: "power2.in", overwrite: "auto" },
+          s.t - 0.35
+        );
+        tl.to("#phone-fade",
+          { opacity: 0, duration: 0.5, ease: "power2.out", overwrite: "auto" },
+          s.t
+        );
+        // Section text fade out
+        tl.to("#section-label",
+          { opacity: 0, y: -10, duration: 0.5, ease: "power2.in", overwrite: "auto" },
+          s.t - 0.7
+        );
+        tl.to("#section-title",
+          { opacity: 0, y: -12, duration: 0.55, ease: "power2.in", overwrite: "auto" },
+          s.t - 0.65
+        );
+        // Swap text mid-fade
+        tl.set("#section-label", { innerHTML: s.label }, s.t - 0.05);
+        tl.set("#section-title", { innerHTML: s.title }, s.t - 0.05);
+        // Section text fade in
+        tl.fromTo("#section-label",
+          { y: 16, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.7, ease: "power2.out", overwrite: "auto" },
+          s.t
+        );
+        tl.fromTo("#section-title",
+          { y: 22, opacity: 0 },
+          { y: 0, opacity: 1, duration: 0.85, ease: "power3.out", overwrite: "auto" },
+          s.t + 0.2
+        );
+      }
+
+      // ── Final fade-out tail
+      tl.to("#section-label",
+        { opacity: 0, y: -12, duration: 0.7, ease: "power2.in", overwrite: "auto" },
+        DURATION - 1.5
+      );
+      tl.to("#section-title",
+        { opacity: 0, y: -14, duration: 0.7, ease: "power2.in", overwrite: "auto" },
+        DURATION - 1.45
+      );
+
+      window.__timelines["main"] = tl;
+    </script>
+  </body>
+</html>

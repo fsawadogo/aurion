@@ -28,10 +28,14 @@ struct CaptureView: View {
 
                     Spacer()
 
-                    // Stream indicators — top right per design
+                    // Stream indicators — top right per design. The "V" pill
+                    // hides for audio-only modes so the physician can confirm
+                    // the chosen capture mode at a glance.
                     HStack(spacing: 6) {
                         streamCircle("A")
-                        streamCircle("V")
+                        if session.captureMode == .multimodal {
+                            streamCircle("V")
+                        }
                         streamCircle("S")
                     }
                 }
@@ -48,10 +52,15 @@ struct CaptureView: View {
                         .tracking(-2)
                         .foregroundColor(.white)
 
-                    Text("Recording \u{00B7} Doctor + Patient")
+                    Text("Recording \u{00B7} \(session.captureMode.displayName)")
                         .font(.system(size: 13))
                         .tracking(0.4)
                         .foregroundColor(Color(red: 183/255, green: 192/255, blue: 214/255))
+
+                    if session.isCollaborative {
+                        collaborationPill
+                            .padding(.top, 4)
+                    }
 
                     // Audio waveform bars
                     if session.state == .recording {
@@ -198,6 +207,41 @@ struct CaptureView: View {
     private func waveHeight(for index: Int) -> CGFloat {
         let heights: [CGFloat] = [10, 18, 26, 14, 22, 30, 16, 8, 22, 28, 12, 18]
         return session.state == .recording ? heights[index] : 4
+    }
+
+    // MARK: - Collaboration Pill
+
+    /// Shared-encounter indicator. Renders when the encounter type isn't
+    /// solo doctor+patient — names every non-physician participant so
+    /// nurses, residents, and PAs see themselves on the capture screen
+    /// and the room understands they're part of one unified note.
+    private var collaborationPill: some View {
+        let names = session.participants.map { $0.name }
+        // When participants are named (allied or trainee), show the names
+        // after a separator. With no named participants (encounter type set
+        // but list empty), the pill falls back to just the static label so
+        // it doesn't read "Shared encounter · Shared encounter".
+        let summary: String? = {
+            if names.isEmpty { return nil }
+            if names.count == 1 { return names[0] }
+            if names.count == 2 { return "\(names[0]) + \(names[1])" }
+            return "\(names[0]) + \(names.count - 1) others"
+        }()
+        let label: String = summary.map { "Shared encounter \u{00B7} \($0)" }
+            ?? "Shared encounter"
+        return HStack(spacing: 6) {
+            Image(systemName: "person.2.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.aurionGold)
+            Text(label)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundColor(.white.opacity(0.92))
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 5)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
     }
 
     // MARK: - Live Captions

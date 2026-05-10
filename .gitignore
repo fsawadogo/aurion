@@ -42,6 +42,10 @@ out/
 live-at-*.png
 scene-*-at-*.png
 
+# Demo capture artifacts — keep the driver scripts but ignore raw recordings
+demo/*.mp4
+demo/thumbs/
+
 # Coverage
 htmlcov/
 .coverage

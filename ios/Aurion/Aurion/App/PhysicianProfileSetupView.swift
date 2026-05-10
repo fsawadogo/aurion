@@ -16,10 +16,15 @@ struct PhysicianProfileSetupView: View {
     @State private var consultationTypes: Set<String> = ["new_patient", "follow_up"]
     @State private var preferredTemplates: Set<String> = []
     @State private var outputLanguage = "en"
+    // Step 5 — recording preferences. Stored locally (UserDefaults) since
+    // the backend doesn't yet have these fields. `RecordingPreferences.load()`
+    // populates from UserDefaults so re-running profile setup keeps prior
+    // choices.
+    @State private var recordingPrefs: RecordingPreferences = .load()
     @State private var isSaving = false
     @State private var error: String?
 
-    private let totalSteps = 5
+    private let totalSteps = 6
 
     private let practiceTypes_options: [(id: String, label: String, sub: String, icon: String)] = [
         ("clinic", "Clinic", "Outpatient practice", "building.2"),
@@ -54,6 +59,7 @@ struct PhysicianProfileSetupView: View {
         case 2: return "Common visit types?"
         case 3: return "Preferred templates?"
         case 4: return "Output language?"
+        case 5: return "Recording preferences?"
         default: return ""
         }
     }
@@ -151,6 +157,7 @@ struct PhysicianProfileSetupView: View {
         case 2: visitTypesStep
         case 3: templatesStep
         case 4: languageStep
+        case 5: recordingPrefsStep
         default: EmptyView()
         }
     }
@@ -214,6 +221,140 @@ struct PhysicianProfileSetupView: View {
                 }
             }
         }
+    }
+
+    private var recordingPrefsStep: some View {
+        VStack(spacing: 16) {
+            // Auto-upload toggle — controls whether the audio + frames are
+            // pushed to the backend immediately on Stop or wait for the
+            // physician to confirm in PostEncounterView.
+            prefsToggleRow(
+                icon: "icloud.and.arrow.up",
+                title: "Auto-upload on stop",
+                subtitle: "Send capture to Aurion as soon as recording ends.",
+                on: $recordingPrefs.autoUpload
+            )
+
+            // Retention window — how long Aurion holds the structured note
+            // on this device before purging. Matches CLAUDE.md's audit-log
+            // expectation that purge is confirmed every session.
+            prefsStepperRow(
+                icon: "clock.arrow.circlepath",
+                title: "Local retention",
+                subtitle: "Keep notes on this device for review.",
+                value: $recordingPrefs.retentionDays,
+                range: 1...30,
+                unit: "days"
+            )
+
+            // Consent re-prompt cadence — how often the consent overlay
+            // re-fires for returning patients.
+            prefsPickerRow(
+                icon: "checkmark.shield",
+                title: "Consent re-prompt",
+                subtitle: "Re-confirm patient consent before recording.",
+                selection: $recordingPrefs.consentReprompt
+            )
+        }
+    }
+
+    private func prefsToggleRow(icon: String, title: String, subtitle: String, on: Binding<Bool>) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(.aurionGoldDark)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.aurionNavy)
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundColor(.aurionTextSecondary)
+            }
+            Spacer(minLength: 8)
+            Toggle("", isOn: on)
+                .labelsHidden()
+                .tint(.aurionGold)
+        }
+        .padding(16)
+        .background(Color.aurionCardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: AurionRadius.md)
+                .stroke(Color.aurionBorder, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
+    }
+
+    private func prefsStepperRow(icon: String, title: String, subtitle: String, value: Binding<Int>, range: ClosedRange<Int>, unit: String) -> some View {
+        HStack(spacing: 14) {
+            Image(systemName: icon)
+                .font(.system(size: 18, weight: .medium))
+                .foregroundColor(.aurionGoldDark)
+                .frame(width: 28)
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundColor(.aurionNavy)
+                Text(subtitle)
+                    .font(.system(size: 13))
+                    .foregroundColor(.aurionTextSecondary)
+            }
+            Spacer(minLength: 8)
+            Stepper(value: value, in: range) {
+                Text("\(value.wrappedValue) \(unit)")
+                    .font(.system(size: 15, weight: .medium))
+                    .foregroundColor(.aurionNavy)
+                    .monospacedDigit()
+            }
+            .labelsHidden()
+            .fixedSize()
+            Text("\(value.wrappedValue) \(unit)")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundColor(.aurionTextSecondary)
+                .monospacedDigit()
+                .frame(minWidth: 60, alignment: .trailing)
+        }
+        .padding(16)
+        .background(Color.aurionCardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: AurionRadius.md)
+                .stroke(Color.aurionBorder, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
+    }
+
+    private func prefsPickerRow(icon: String, title: String, subtitle: String, selection: Binding<ConsentRepromptCadence>) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.aurionGoldDark)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.aurionNavy)
+                    Text(subtitle)
+                        .font(.system(size: 13))
+                        .foregroundColor(.aurionTextSecondary)
+                }
+                Spacer(minLength: 0)
+            }
+            Picker("Consent re-prompt", selection: selection) {
+                ForEach(ConsentRepromptCadence.allCases) { cadence in
+                    Text(cadence.label).tag(cadence)
+                }
+            }
+            .pickerStyle(.segmented)
+        }
+        .padding(16)
+        .background(Color.aurionCardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: AurionRadius.md)
+                .stroke(Color.aurionBorder, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
     }
 
     private var languageStep: some View {
@@ -340,8 +481,14 @@ struct PhysicianProfileSetupView: View {
                 "preferred_templates": Array(preferredTemplates),
                 "consultation_types": Array(consultationTypes),
                 "output_language": outputLanguage,
+                "auto_upload": recordingPrefs.autoUpload,
+                "retention_days": recordingPrefs.retentionDays,
+                "consent_reprompt": recordingPrefs.consentReprompt.rawValue,
             ]
             let profile = try await APIClient.shared.updateProfile(updates)
+            // Mirror to UserDefaults so screens that haven't been refactored
+            // to read from `appState.physicianProfile` still see the prefs.
+            recordingPrefs.persist()
             appState.physicianProfile = profile
             appState.hasCompletedProfileSetup = true
             AurionHaptics.notification(.success)
@@ -349,5 +496,50 @@ struct PhysicianProfileSetupView: View {
             self.error = "Failed to save: \(error.localizedDescription)"
             AurionHaptics.notification(.error)
         }
+    }
+}
+
+// MARK: - Recording Preferences
+
+/// How often Aurion re-confirms patient consent on the capture screen.
+/// Stored locally — purely a UX gate; the backend's consent audit event
+/// fires on every session regardless.
+enum ConsentRepromptCadence: String, CaseIterable, Identifiable, Codable {
+    case everySession = "every_session"
+    case daily
+    case weekly
+
+    var id: String { rawValue }
+
+    var label: String {
+        switch self {
+        case .everySession: return "Every session"
+        case .daily: return "Daily"
+        case .weekly: return "Weekly"
+        }
+    }
+}
+
+/// Per-physician recording preferences set during profile setup. Stored in
+/// `UserDefaults` for now — when/if the backend grows fields for these, the
+/// `persist()` site sends them up too.
+struct RecordingPreferences: Codable {
+    var autoUpload: Bool = true
+    var retentionDays: Int = 7
+    var consentReprompt: ConsentRepromptCadence = .everySession
+
+    private static let key = "aurion.recording_preferences"
+
+    static func load() -> RecordingPreferences {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let prefs = try? JSONDecoder().decode(RecordingPreferences.self, from: data) else {
+            return RecordingPreferences()
+        }
+        return prefs
+    }
+
+    func persist() {
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        UserDefaults.standard.set(data, forKey: Self.key)
     }
 }

@@ -13,6 +13,7 @@ struct SessionStartRequest {
     let outputLanguage: String
     let encounterType: String
     let participants: [[String: Any]]?
+    let captureMode: CaptureMode
 
     init(
         specialty: String,
@@ -20,7 +21,8 @@ struct SessionStartRequest {
         encounterContext: String? = nil,
         outputLanguage: String = "en",
         encounterType: String = "doctor_patient",
-        participants: [[String: Any]]? = nil
+        participants: [[String: Any]]? = nil,
+        captureMode: CaptureMode = .multimodal
     ) {
         self.specialty = specialty
         self.consultationType = consultationType
@@ -28,6 +30,7 @@ struct SessionStartRequest {
         self.outputLanguage = outputLanguage
         self.encounterType = encounterType
         self.participants = participants
+        self.captureMode = captureMode
     }
 }
 
@@ -68,9 +71,21 @@ final class SessionManager: ObservableObject {
                 encounterContext: request.encounterContext,
                 outputLanguage: request.outputLanguage,
                 encounterType: request.encounterType,
-                participants: request.participants
+                participants: request.participants,
+                captureMode: request.captureMode.rawValue
             )
-            let captureSession = CaptureSession(id: response.id, specialty: request.specialty)
+            let participants: [SessionParticipant] = (request.participants ?? []).compactMap { dict in
+                guard let name = dict["name"] as? String,
+                      let role = dict["role"] as? String else { return nil }
+                return SessionParticipant(name: name, role: role)
+            }
+            let captureSession = CaptureSession(
+                id: response.id,
+                specialty: request.specialty,
+                captureMode: request.captureMode,
+                encounterType: request.encounterType,
+                participants: participants
+            )
             captureSession.state = .consentPending
             session = captureSession
             sessionLanguage = request.outputLanguage

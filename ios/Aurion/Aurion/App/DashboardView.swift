@@ -16,6 +16,7 @@ struct DashboardView: View {
     @State private var selectedQuickStart: (specialty: String, consultationType: String)?
     @State private var selectedEncounterType = "doctor_patient"
     @State private var selectedParticipants: [[String: Any]] = []
+    @State private var selectedCaptureMode: CaptureMode = .multimodal
 
     // MARK: - Greeting
 
@@ -477,6 +478,8 @@ struct DashboardView: View {
 
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
+                        captureModePicker
+
                         VStack(alignment: .leading, spacing: 4) {
                             Text("What brings the patient in today?")
                                 .font(.system(size: 22, weight: .semibold))
@@ -540,6 +543,38 @@ struct DashboardView: View {
         .presentationDetents([.large])
     }
 
+    // MARK: - Capture Mode Picker (in context sheet)
+
+    /// Three-option selector for how Aurion captures this encounter. Echoed
+    /// back on the capture screen as a pill so the physician confirms the
+    /// chosen mode at a glance. Per-session, not per-profile — common case
+    /// is the same physician switching between modes.
+    private var captureModePicker: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            VStack(alignment: .leading, spacing: 4) {
+                Text("Capture mode")
+                    .font(.system(size: 22, weight: .semibold))
+                    .tracking(-0.22)
+                    .foregroundColor(.aurionNavy)
+                Text("How should Aurion observe this encounter?")
+                    .font(.system(size: 14))
+                    .foregroundColor(.aurionTextSecondary)
+            }
+            VStack(spacing: 10) {
+                ForEach(CaptureMode.allCases) { mode in
+                    AurionSelectableCard(
+                        icon: mode.icon,
+                        title: mode.displayName,
+                        subtitle: mode.subtitle,
+                        selected: selectedCaptureMode == mode
+                    ) {
+                        selectedCaptureMode = mode
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Actions
 
     private func startSession() {
@@ -550,7 +585,8 @@ struct DashboardView: View {
             encounterContext: encounterContext.isEmpty ? nil : encounterContext,
             outputLanguage: appState.physicianProfile?.outputLanguage ?? "en",
             encounterType: selectedEncounterType,
-            participants: selectedParticipants.isEmpty ? nil : selectedParticipants
+            participants: selectedParticipants.isEmpty ? nil : selectedParticipants,
+            captureMode: selectedCaptureMode
         )
         Task { await sessionManager.startNewSession(request) }
     }

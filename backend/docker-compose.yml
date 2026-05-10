@@ -22,6 +22,14 @@ services:
       - COGNITO_CLIENT_ID=local_client
       - WHISPER_API_URL=http://whisper:9000
       - SCREEN_OCR_LOCAL_MODE=true
+      # Demo-only — bypasses Whisper and uses a canned knee-pain transcript
+      # so the iOS Simulator (which has no mic) can reach Stage 1 + Stage 2.
+      # Set to 0 or unset for normal pilot behaviour.
+      - AURION_DEMO_TRANSCRIPT=1
+      # For demo capture, route note generation through Anthropic — Gemini's
+      # JSON output occasionally truncates on long structured responses,
+      # which makes Stage 1 unreliable for an autonomous take.
+      - AURION_PROVIDER_NOTE_GENERATION=anthropic
     env_file:
       - .env
     volumes:

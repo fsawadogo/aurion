@@ -61,6 +61,9 @@ class ConsentRequiredError(Exception):
 
 # ── Service Functions ──────────────────────────────────────────────────────
 
+VALID_CAPTURE_MODES = {"multimodal", "audio_only", "smart_dictation"}
+
+
 async def create_session(
     db: AsyncSession,
     clinician_id: uuid.UUID,
@@ -71,10 +74,14 @@ async def create_session(
     encounter_type: str = "doctor_patient",
     participants: Optional[list[dict]] = None,
     provider_overrides: Optional[dict] = None,
+    capture_mode: str = "multimodal",
 ) -> SessionModel:
     """Create a new session in CONSENT_PENDING state."""
     import json as _json
     participants_json = _json.dumps(participants) if participants else None
+
+    if capture_mode not in VALID_CAPTURE_MODES:
+        capture_mode = "multimodal"
 
     session = SessionModel(
         clinician_id=clinician_id,
@@ -84,6 +91,7 @@ async def create_session(
         output_language=output_language,
         encounter_type=encounter_type,
         participants_json=participants_json,
+        capture_mode=capture_mode,
         state=SessionState.CONSENT_PENDING,
         provider_overrides=str(provider_overrides) if provider_overrides else None,
     )

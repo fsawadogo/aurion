@@ -62,12 +62,14 @@ final class APIClient: Sendable {
         encounterContext: String? = nil,
         outputLanguage: String = "en",
         encounterType: String = "doctor_patient",
-        participants: [[String: Any]]? = nil
+        participants: [[String: Any]]? = nil,
+        captureMode: String = "multimodal"
     ) async throws -> SessionResponse {
         var body: [String: Any] = [
             "specialty": specialty,
             "output_language": outputLanguage,
             "encounter_type": encounterType,
+            "capture_mode": captureMode,
         ]
         if let consultationType { body["consultation_type"] = consultationType }
         if let encounterContext { body["encounter_context"] = encounterContext }
@@ -307,6 +309,10 @@ struct SessionResponse: Codable, Sendable {
     let specialty: String
     let state: String
     let encounterType: String
+    /// Echo of the `capture_mode` chosen at session creation. Defaults to
+    /// `multimodal` for older sessions that pre-date the column so the iOS
+    /// inbox can still render them without crashing on a missing key.
+    let captureMode: String
     let createdAt: String
     let updatedAt: String
 
@@ -314,8 +320,41 @@ struct SessionResponse: Codable, Sendable {
         case id, specialty, state
         case clinicianId = "clinician_id"
         case encounterType = "encounter_type"
+        case captureMode = "capture_mode"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        clinicianId = try c.decode(String.self, forKey: .clinicianId)
+        specialty = try c.decode(String.self, forKey: .specialty)
+        state = try c.decode(String.self, forKey: .state)
+        encounterType = try c.decodeIfPresent(String.self, forKey: .encounterType) ?? "doctor_patient"
+        captureMode = try c.decodeIfPresent(String.self, forKey: .captureMode) ?? "multimodal"
+        createdAt = try c.decode(String.self, forKey: .createdAt)
+        updatedAt = try c.decode(String.self, forKey: .updatedAt)
+    }
+
+    init(
+        id: String,
+        clinicianId: String,
+        specialty: String,
+        state: String,
+        encounterType: String = "doctor_patient",
+        captureMode: String = "multimodal",
+        createdAt: String,
+        updatedAt: String
+    ) {
+        self.id = id
+        self.clinicianId = clinicianId
+        self.specialty = specialty
+        self.state = state
+        self.encounterType = encounterType
+        self.captureMode = captureMode
+        self.createdAt = createdAt
+        self.updatedAt = updatedAt
     }
 }
 
@@ -385,6 +424,13 @@ struct PhysicianProfileResponse: Codable, Sendable {
     let consultationTypes: [String]
     let alliedHealthTeam: [AlliedHealthMember]
     let outputLanguage: String
+    /// Recording preferences set during onboarding's profile setup. Decoded
+    /// with defaults so a backend running an older schema doesn't break the
+    /// iOS profile fetch — these become authoritative once the column has
+    /// shipped to every environment.
+    let autoUpload: Bool
+    let retentionDays: Int
+    let consentReprompt: String
 
     enum CodingKeys: String, CodingKey {
         case clinicianId = "clinician_id"
@@ -395,6 +441,24 @@ struct PhysicianProfileResponse: Codable, Sendable {
         case consultationTypes = "consultation_types"
         case alliedHealthTeam = "allied_health_team"
         case outputLanguage = "output_language"
+        case autoUpload = "auto_upload"
+        case retentionDays = "retention_days"
+        case consentReprompt = "consent_reprompt"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        clinicianId = try c.decode(String.self, forKey: .clinicianId)
+        displayName = try c.decode(String.self, forKey: .displayName)
+        practiceType = try c.decodeIfPresent(String.self, forKey: .practiceType)
+        primarySpecialty = try c.decode(String.self, forKey: .primarySpecialty)
+        preferredTemplates = try c.decode([String].self, forKey: .preferredTemplates)
+        consultationTypes = try c.decode([String].self, forKey: .consultationTypes)
+        alliedHealthTeam = (try? c.decode([AlliedHealthMember].self, forKey: .alliedHealthTeam)) ?? []
+        outputLanguage = try c.decode(String.self, forKey: .outputLanguage)
+        autoUpload = try c.decodeIfPresent(Bool.self, forKey: .autoUpload) ?? true
+        retentionDays = try c.decodeIfPresent(Int.self, forKey: .retentionDays) ?? 7
+        consentReprompt = try c.decodeIfPresent(String.self, forKey: .consentReprompt) ?? "every_session"
     }
 }
 

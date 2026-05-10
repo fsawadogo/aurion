@@ -1,0 +1,1327 @@
+[
+  {
+    "text": "Introducing",
+    "start": 0.03,
+    "end": 0.98
+  },
+  {
+    "text": "Orion,",
+    "start": 0.98,
+    "end": 1.64
+  },
+  {
+    "text": "a",
+    "start": 1.66,
+    "end": 1.71
+  },
+  {
+    "text": "multimodal",
+    "start": 1.71,
+    "end": 2.44
+  },
+  {
+    "text": "clinical",
+    "start": 2.59,
+    "end": 3.11
+  },
+  {
+    "text": "AI",
+    "start": 3.11,
+    "end": 3.28
+  },
+  {
+    "text": "platform",
+    "start": 3.34,
+    "end": 3.86
+  },
+  {
+    "text": "designed",
+    "start": 4.07,
+    "end": 4.54
+  },
+  {
+    "text": "to",
+    "start": 4.54,
+    "end": 4.65
+  },
+  {
+    "text": "reduce",
+    "start": 4.67,
+    "end": 5
+  },
+  {
+    "text": "documentation",
+    "start": 5.04,
+    "end": 5.84
+  },
+  {
+    "text": "burden",
+    "start": 5.84,
+    "end": 6.24
+  },
+  {
+    "text": "and",
+    "start": 6.27,
+    "end": 6.47
+  },
+  {
+    "text": "enhance",
+    "start": 6.47,
+    "end": 7.01
+  },
+  {
+    "text": "clinical",
+    "start": 7.01,
+    "end": 7.38
+  },
+  {
+    "text": "workflow.",
+    "start": 7.9,
+    "end": 8.48
+  },
+  {
+    "text": "The",
+    "start": 8.51,
+    "end": 8.69
+  },
+  {
+    "text": "first",
+    "start": 8.69,
+    "end": 9.03
+  },
+  {
+    "text": "step",
+    "start": 9.03,
+    "end": 9.32
+  },
+  {
+    "text": "is",
+    "start": 9.32,
+    "end": 9.39
+  },
+  {
+    "text": "creating",
+    "start": 9.39,
+    "end": 9.62
+  },
+  {
+    "text": "a",
+    "start": 9.62,
+    "end": 10.14
+  },
+  {
+    "text": "personalized",
+    "start": 10.14,
+    "end": 10.5
+  },
+  {
+    "text": "physician",
+    "start": 10.55,
+    "end": 11.25
+  },
+  {
+    "text": "profile.",
+    "start": 11.25,
+    "end": 12.08
+  },
+  {
+    "text": "Orion",
+    "start": 12.11,
+    "end": 12.37
+  },
+  {
+    "text": "learns",
+    "start": 12.37,
+    "end": 12.69
+  },
+  {
+    "text": "the",
+    "start": 12.71,
+    "end": 12.88
+  },
+  {
+    "text": "physician's",
+    "start": 12.88,
+    "end": 13.51
+  },
+  {
+    "text": "voice",
+    "start": 13.74,
+    "end": 13.82
+  },
+  {
+    "text": "to",
+    "start": 13.82,
+    "end": 13.92
+  },
+  {
+    "text": "distinguish",
+    "start": 13.92,
+    "end": 14.51
+  },
+  {
+    "text": "between",
+    "start": 14.55,
+    "end": 14.93
+  },
+  {
+    "text": "providers",
+    "start": 14.99,
+    "end": 15.6
+  },
+  {
+    "text": "during",
+    "start": 15.6,
+    "end": 15.66
+  },
+  {
+    "text": "clinical",
+    "start": 16.18,
+    "end": 16.53
+  },
+  {
+    "text": "encounters.",
+    "start": 16.56,
+    "end": 17.43
+  },
+  {
+    "text": "Each",
+    "start": 17.47,
+    "end": 17.67
+  },
+  {
+    "text": "user",
+    "start": 17.71,
+    "end": 17.96
+  },
+  {
+    "text": "can",
+    "start": 17.96,
+    "end": 18.15
+  },
+  {
+    "text": "customize",
+    "start": 18.15,
+    "end": 18.57
+  },
+  {
+    "text": "documentation",
+    "start": 19.1,
+    "end": 19.6
+  },
+  {
+    "text": "templates,",
+    "start": 19.6,
+    "end": 20.35
+  },
+  {
+    "text": "preferred",
+    "start": 20.39,
+    "end": 20.97
+  },
+  {
+    "text": "visit",
+    "start": 20.99,
+    "end": 21.32
+  },
+  {
+    "text": "types,",
+    "start": 21.32,
+    "end": 21.84
+  },
+  {
+    "text": "languages,",
+    "start": 22.02,
+    "end": 22.8
+  },
+  {
+    "text": "recording",
+    "start": 22.8,
+    "end": 23.37
+  },
+  {
+    "text": "preferences,",
+    "start": 23.37,
+    "end": 24.08
+  },
+  {
+    "text": "and",
+    "start": 24.11,
+    "end": 24.31
+  },
+  {
+    "text": "connected",
+    "start": 24.31,
+    "end": 25.04
+  },
+  {
+    "text": "devices,",
+    "start": 25.04,
+    "end": 25.8
+  },
+  {
+    "text": "including",
+    "start": 25.8,
+    "end": 26.39
+  },
+  {
+    "text": "smartphones,",
+    "start": 26.39,
+    "end": 27.28
+  },
+  {
+    "text": "smart",
+    "start": 27.31,
+    "end": 27.69
+  },
+  {
+    "text": "glasses,",
+    "start": 27.72,
+    "end": 28.42
+  },
+  {
+    "text": "or",
+    "start": 28.42,
+    "end": 28.94
+  },
+  {
+    "text": "wearable",
+    "start": 28.94,
+    "end": 29.29
+  },
+  {
+    "text": "cameras.",
+    "start": 29.32,
+    "end": 30.17
+  },
+  {
+    "text": "Physicians",
+    "start": 30.21,
+    "end": 30.79
+  },
+  {
+    "text": "can",
+    "start": 30.81,
+    "end": 31
+  },
+  {
+    "text": "also",
+    "start": 31,
+    "end": 31.23
+  },
+  {
+    "text": "choose",
+    "start": 31.23,
+    "end": 31.32
+  },
+  {
+    "text": "how",
+    "start": 31.32,
+    "end": 31.84
+  },
+  {
+    "text": "Orion",
+    "start": 31.84,
+    "end": 32.28
+  },
+  {
+    "text": "functions",
+    "start": 32.28,
+    "end": 32.88
+  },
+  {
+    "text": "during",
+    "start": 32.91,
+    "end": 33.29
+  },
+  {
+    "text": "encounters,",
+    "start": 33.32,
+    "end": 34.22
+  },
+  {
+    "text": "smart",
+    "start": 34.54,
+    "end": 34.65
+  },
+  {
+    "text": "dictation,",
+    "start": 34.65,
+    "end": 35.59
+  },
+  {
+    "text": "audio",
+    "start": 35.64,
+    "end": 36.16
+  },
+  {
+    "text": "only,",
+    "start": 36.16,
+    "end": 36.64
+  },
+  {
+    "text": "or",
+    "start": 36.67,
+    "end": 36.79
+  },
+  {
+    "text": "multimodal",
+    "start": 36.81,
+    "end": 37.62
+  },
+  {
+    "text": "audio",
+    "start": 37.62,
+    "end": 37.78
+  },
+  {
+    "text": "and",
+    "start": 37.78,
+    "end": 38.3
+  },
+  {
+    "text": "video",
+    "start": 38.3,
+    "end": 38.71
+  },
+  {
+    "text": "capture.",
+    "start": 38.71,
+    "end": 39.6
+  },
+  {
+    "text": "To",
+    "start": 39.63,
+    "end": 39.78
+  },
+  {
+    "text": "begin,",
+    "start": 39.78,
+    "end": 40.44
+  },
+  {
+    "text": "the",
+    "start": 40.44,
+    "end": 40.58
+  },
+  {
+    "text": "physician",
+    "start": 40.58,
+    "end": 40.74
+  },
+  {
+    "text": "starts",
+    "start": 41.26,
+    "end": 41.4
+  },
+  {
+    "text": "a",
+    "start": 41.4,
+    "end": 41.48
+  },
+  {
+    "text": "new",
+    "start": 41.48,
+    "end": 41.73
+  },
+  {
+    "text": "patient",
+    "start": 41.73,
+    "end": 42.31
+  },
+  {
+    "text": "encounter.",
+    "start": 42.31,
+    "end": 43.32
+  },
+  {
+    "text": "Orion",
+    "start": 43.35,
+    "end": 43.68
+  },
+  {
+    "text": "supports",
+    "start": 43.68,
+    "end": 44.24
+  },
+  {
+    "text": "collaborative",
+    "start": 44.24,
+    "end": 45.18
+  },
+  {
+    "text": "workflows,",
+    "start": 45.18,
+    "end": 45.84
+  },
+  {
+    "text": "allowing",
+    "start": 45.87,
+    "end": 46.37
+  },
+  {
+    "text": "nurses,",
+    "start": 46.37,
+    "end": 46.89
+  },
+  {
+    "text": "physician",
+    "start": 46.9,
+    "end": 46.97
+  },
+  {
+    "text": "assistants,",
+    "start": 47.5,
+    "end": 48.28
+  },
+  {
+    "text": "residents,",
+    "start": 48.35,
+    "end": 49.08
+  },
+  {
+    "text": "and",
+    "start": 49.11,
+    "end": 49.27
+  },
+  {
+    "text": "surgeons",
+    "start": 49.27,
+    "end": 49.79
+  },
+  {
+    "text": "to",
+    "start": 49.79,
+    "end": 49.92
+  },
+  {
+    "text": "contribute",
+    "start": 49.92,
+    "end": 50.22
+  },
+  {
+    "text": "to",
+    "start": 50.22,
+    "end": 50.74
+  },
+  {
+    "text": "the",
+    "start": 50.74,
+    "end": 50.89
+  },
+  {
+    "text": "same",
+    "start": 50.89,
+    "end": 51.15
+  },
+  {
+    "text": "encounter",
+    "start": 51.15,
+    "end": 51.76
+  },
+  {
+    "text": "while",
+    "start": 51.79,
+    "end": 52.08
+  },
+  {
+    "text": "generating",
+    "start": 52.08,
+    "end": 52.71
+  },
+  {
+    "text": "a",
+    "start": 52.71,
+    "end": 52.77
+  },
+  {
+    "text": "unified",
+    "start": 52.77,
+    "end": 52.9
+  },
+  {
+    "text": "note.",
+    "start": 53.42,
+    "end": 53.68
+  },
+  {
+    "text": "The",
+    "start": 53.71,
+    "end": 53.87
+  },
+  {
+    "text": "physician",
+    "start": 53.87,
+    "end": 54.45
+  },
+  {
+    "text": "selects",
+    "start": 54.45,
+    "end": 54.81
+  },
+  {
+    "text": "the",
+    "start": 54.81,
+    "end": 55.34
+  },
+  {
+    "text": "visit",
+    "start": 55.34,
+    "end": 55.41
+  },
+  {
+    "text": "type",
+    "start": 55.41,
+    "end": 55.61
+  },
+  {
+    "text": "and",
+    "start": 55.71,
+    "end": 55.88
+  },
+  {
+    "text": "adds",
+    "start": 55.88,
+    "end": 56.09
+  },
+  {
+    "text": "clinical",
+    "start": 56.14,
+    "end": 56.64
+  },
+  {
+    "text": "context",
+    "start": 56.64,
+    "end": 56.82
+  },
+  {
+    "text": "through",
+    "start": 56.82,
+    "end": 57.34
+  },
+  {
+    "text": "preset",
+    "start": 57.34,
+    "end": 57.74
+  },
+  {
+    "text": "options",
+    "start": 57.74,
+    "end": 58.12
+  },
+  {
+    "text": "or",
+    "start": 58.27,
+    "end": 58.45
+  },
+  {
+    "text": "free",
+    "start": 58.45,
+    "end": 58.87
+  },
+  {
+    "text": "text.",
+    "start": 58.87,
+    "end": 59.38
+  },
+  {
+    "text": "Once",
+    "start": 59.69,
+    "end": 59.89
+  },
+  {
+    "text": "patient",
+    "start": 59.93,
+    "end": 60.41
+  },
+  {
+    "text": "consent",
+    "start": 60.41,
+    "end": 60.79
+  },
+  {
+    "text": "is",
+    "start": 60.79,
+    "end": 61.32
+  },
+  {
+    "text": "confirmed,",
+    "start": 61.32,
+    "end": 61.82
+  },
+  {
+    "text": "the",
+    "start": 61.82,
+    "end": 62.08
+  },
+  {
+    "text": "encounter",
+    "start": 62.08,
+    "end": 62.85
+  },
+  {
+    "text": "begins.",
+    "start": 62.85,
+    "end": 63.52
+  },
+  {
+    "text": "Orion",
+    "start": 63.67,
+    "end": 63.94
+  },
+  {
+    "text": "captures",
+    "start": 63.94,
+    "end": 64.42
+  },
+  {
+    "text": "the",
+    "start": 64.42,
+    "end": 64.59
+  },
+  {
+    "text": "clinical",
+    "start": 64.59,
+    "end": 64.78
+  },
+  {
+    "text": "interaction",
+    "start": 65.3,
+    "end": 65.76
+  },
+  {
+    "text": "using",
+    "start": 65.79,
+    "end": 66.13
+  },
+  {
+    "text": "ambient",
+    "start": 66.13,
+    "end": 66.65
+  },
+  {
+    "text": "audio",
+    "start": 66.65,
+    "end": 66.9
+  },
+  {
+    "text": "and",
+    "start": 67.07,
+    "end": 67.15
+  },
+  {
+    "text": "optional",
+    "start": 67.42,
+    "end": 67.84
+  },
+  {
+    "text": "video",
+    "start": 67.84,
+    "end": 68.2
+  },
+  {
+    "text": "through",
+    "start": 68.27,
+    "end": 68.64
+  },
+  {
+    "text": "a",
+    "start": 68.64,
+    "end": 68.65
+  },
+  {
+    "text": "smartphone,",
+    "start": 68.68,
+    "end": 69.38
+  },
+  {
+    "text": "smart",
+    "start": 69.38,
+    "end": 69.9
+  },
+  {
+    "text": "glasses,",
+    "start": 69.9,
+    "end": 70.68
+  },
+  {
+    "text": "or",
+    "start": 70.75,
+    "end": 70.91
+  },
+  {
+    "text": "wearable",
+    "start": 70.91,
+    "end": 71.67
+  },
+  {
+    "text": "devices.",
+    "start": 71.67,
+    "end": 72.64
+  },
+  {
+    "text": "The",
+    "start": 72.67,
+    "end": 72.83
+  },
+  {
+    "text": "physician",
+    "start": 72.83,
+    "end": 73.41
+  },
+  {
+    "text": "interacts",
+    "start": 73.41,
+    "end": 73.77
+  },
+  {
+    "text": "naturally",
+    "start": 74.3,
+    "end": 74.57
+  },
+  {
+    "text": "with",
+    "start": 74.57,
+    "end": 74.83
+  },
+  {
+    "text": "the",
+    "start": 74.83,
+    "end": 75.02
+  },
+  {
+    "text": "patient,",
+    "start": 75.02,
+    "end": 75.5
+  },
+  {
+    "text": "while",
+    "start": 75.53,
+    "end": 75.78
+  },
+  {
+    "text": "Orion",
+    "start": 75.78,
+    "end": 76.06
+  },
+  {
+    "text": "documents",
+    "start": 76.06,
+    "end": 76.55
+  },
+  {
+    "text": "the",
+    "start": 76.55,
+    "end": 76.64
+  },
+  {
+    "text": "encounter",
+    "start": 77.16,
+    "end": 77.28
+  },
+  {
+    "text": "passively",
+    "start": 77.28,
+    "end": 77.94
+  },
+  {
+    "text": "in",
+    "start": 77.99,
+    "end": 78.11
+  },
+  {
+    "text": "the",
+    "start": 78.11,
+    "end": 78.34
+  },
+  {
+    "text": "background.",
+    "start": 78.34,
+    "end": 79.38
+  },
+  {
+    "text": "An",
+    "start": 79.41,
+    "end": 79.51
+  },
+  {
+    "text": "initial",
+    "start": 79.51,
+    "end": 79.98
+  },
+  {
+    "text": "note",
+    "start": 79.99,
+    "end": 80.26
+  },
+  {
+    "text": "is",
+    "start": 80.26,
+    "end": 80.38
+  },
+  {
+    "text": "generated",
+    "start": 80.38,
+    "end": 80.51
+  },
+  {
+    "text": "immediately",
+    "start": 81.04,
+    "end": 81.72
+  },
+  {
+    "text": "from",
+    "start": 81.72,
+    "end": 81.98
+  },
+  {
+    "text": "ambient",
+    "start": 81.98,
+    "end": 82.44
+  },
+  {
+    "text": "audio.",
+    "start": 82.44,
+    "end": 82.88
+  },
+  {
+    "text": "Orion",
+    "start": 83.01,
+    "end": 83.29
+  },
+  {
+    "text": "structures",
+    "start": 83.29,
+    "end": 83.9
+  },
+  {
+    "text": "the",
+    "start": 83.9,
+    "end": 84.08
+  },
+  {
+    "text": "encounter",
+    "start": 84.09,
+    "end": 84.68
+  },
+  {
+    "text": "into",
+    "start": 84.71,
+    "end": 85.01
+  },
+  {
+    "text": "a",
+    "start": 85.01,
+    "end": 85.08
+  },
+  {
+    "text": "clinically",
+    "start": 85.08,
+    "end": 85.81
+  },
+  {
+    "text": "organized",
+    "start": 86.34,
+    "end": 86.69
+  },
+  {
+    "text": "format",
+    "start": 86.69,
+    "end": 87.12
+  },
+  {
+    "text": "in",
+    "start": 87.19,
+    "end": 87.35
+  },
+  {
+    "text": "real",
+    "start": 87.35,
+    "end": 87.68
+  },
+  {
+    "text": "time.",
+    "start": 87.68,
+    "end": 88.32
+  },
+  {
+    "text": "Within",
+    "start": 88.35,
+    "end": 88.73
+  },
+  {
+    "text": "minutes,",
+    "start": 88.76,
+    "end": 89.42
+  },
+  {
+    "text": "Orion",
+    "start": 89.42,
+    "end": 89.46
+  },
+  {
+    "text": "refines",
+    "start": 89.98,
+    "end": 90.25
+  },
+  {
+    "text": "the",
+    "start": 90.33,
+    "end": 90.52
+  },
+  {
+    "text": "documentation",
+    "start": 90.52,
+    "end": 91.52
+  },
+  {
+    "text": "using",
+    "start": 91.55,
+    "end": 91.93
+  },
+  {
+    "text": "multimodal",
+    "start": 91.99,
+    "end": 92.91
+  },
+  {
+    "text": "inputs.",
+    "start": 93.18,
+    "end": 93.78
+  },
+  {
+    "text": "Visual",
+    "start": 93.81,
+    "end": 94.19
+  },
+  {
+    "text": "context",
+    "start": 94.25,
+    "end": 94.76
+  },
+  {
+    "text": "from",
+    "start": 94.76,
+    "end": 94.92
+  },
+  {
+    "text": "the",
+    "start": 94.92,
+    "end": 95.44
+  },
+  {
+    "text": "physical",
+    "start": 95.44,
+    "end": 95.97
+  },
+  {
+    "text": "examination,",
+    "start": 95.97,
+    "end": 96.88
+  },
+  {
+    "text": "reviewed",
+    "start": 96.91,
+    "end": 97.54
+  },
+  {
+    "text": "imaging,",
+    "start": 97.54,
+    "end": 98.28
+  },
+  {
+    "text": "laboratory",
+    "start": 98.54,
+    "end": 99.11
+  },
+  {
+    "text": "results,",
+    "start": 99.11,
+    "end": 99.72
+  },
+  {
+    "text": "and",
+    "start": 99.75,
+    "end": 99.92
+  },
+  {
+    "text": "procedural",
+    "start": 99.92,
+    "end": 100.58
+  },
+  {
+    "text": "findings",
+    "start": 100.58,
+    "end": 100.86
+  },
+  {
+    "text": "is",
+    "start": 101.05,
+    "end": 101.25
+  },
+  {
+    "text": "incorporated",
+    "start": 101.38,
+    "end": 102.03
+  },
+  {
+    "text": "into",
+    "start": 102.05,
+    "end": 102.16
+  },
+  {
+    "text": "the",
+    "start": 102.31,
+    "end": 102.43
+  },
+  {
+    "text": "note",
+    "start": 102.51,
+    "end": 102.68
+  },
+  {
+    "text": "to",
+    "start": 102.71,
+    "end": 102.83
+  },
+  {
+    "text": "improve",
+    "start": 102.85,
+    "end": 103.39
+  },
+  {
+    "text": "clinical",
+    "start": 103.39,
+    "end": 103.81
+  },
+  {
+    "text": "accuracy",
+    "start": 104.34,
+    "end": 104.68
+  },
+  {
+    "text": "and",
+    "start": 104.71,
+    "end": 104.83
+  },
+  {
+    "text": "reduce",
+    "start": 104.85,
+    "end": 105.19
+  },
+  {
+    "text": "physician",
+    "start": 105.19,
+    "end": 105.68
+  },
+  {
+    "text": "correction",
+    "start": 105.69,
+    "end": 105.82
+  },
+  {
+    "text": "burden.",
+    "start": 106.34,
+    "end": 106.8
+  },
+  {
+    "text": "The",
+    "start": 106.83,
+    "end": 107.02
+  },
+  {
+    "text": "final",
+    "start": 107.02,
+    "end": 107.39
+  },
+  {
+    "text": "output",
+    "start": 107.39,
+    "end": 107.82
+  },
+  {
+    "text": "is",
+    "start": 107.83,
+    "end": 107.94
+  },
+  {
+    "text": "a",
+    "start": 107.94,
+    "end": 108.46
+  },
+  {
+    "text": "structured",
+    "start": 108.46,
+    "end": 108.73
+  },
+  {
+    "text": "clinical",
+    "start": 108.8,
+    "end": 109.24
+  },
+  {
+    "text": "note",
+    "start": 109.39,
+    "end": 109.72
+  },
+  {
+    "text": "designed",
+    "start": 109.75,
+    "end": 110.22
+  },
+  {
+    "text": "to",
+    "start": 110.22,
+    "end": 110.33
+  },
+  {
+    "text": "integrate",
+    "start": 110.33,
+    "end": 110.85
+  },
+  {
+    "text": "seamlessly",
+    "start": 111.38,
+    "end": 111.56
+  },
+  {
+    "text": "into",
+    "start": 111.56,
+    "end": 111.84
+  },
+  {
+    "text": "existing",
+    "start": 111.84,
+    "end": 112.41
+  },
+  {
+    "text": "workflows",
+    "start": 112.41,
+    "end": 113
+  },
+  {
+    "text": "and",
+    "start": 113.11,
+    "end": 113.31
+  },
+  {
+    "text": "electronic",
+    "start": 113.34,
+    "end": 114.21
+  },
+  {
+    "text": "medical",
+    "start": 114.21,
+    "end": 114.82
+  },
+  {
+    "text": "records.",
+    "start": 114.82,
+    "end": 115.44
+  },
+  {
+    "text": "By",
+    "start": 115.47,
+    "end": 115.59
+  },
+  {
+    "text": "combining",
+    "start": 115.61,
+    "end": 116.33
+  },
+  {
+    "text": "audio,",
+    "start": 116.33,
+    "end": 116.9
+  },
+  {
+    "text": "visual,",
+    "start": 117.1,
+    "end": 117.6
+  },
+  {
+    "text": "and",
+    "start": 117.6,
+    "end": 117.81
+  },
+  {
+    "text": "contextual",
+    "start": 117.81,
+    "end": 118.53
+  },
+  {
+    "text": "understanding,",
+    "start": 118.53,
+    "end": 119.48
+  },
+  {
+    "text": "Orion",
+    "start": 119.51,
+    "end": 119.84
+  },
+  {
+    "text": "moves",
+    "start": 119.84,
+    "end": 120.2
+  },
+  {
+    "text": "beyond",
+    "start": 120.2,
+    "end": 120.61
+  },
+  {
+    "text": "transcription",
+    "start": 121.14,
+    "end": 121.6
+  },
+  {
+    "text": "toward",
+    "start": 121.63,
+    "end": 122.01
+  },
+  {
+    "text": "true",
+    "start": 122.07,
+    "end": 122.35
+  },
+  {
+    "text": "clinical",
+    "start": 122.35,
+    "end": 122.73
+  },
+  {
+    "text": "intelligence.",
+    "start": 123.26,
+    "end": 124.04
+  },
+  {
+    "text": "Orion,",
+    "start": 124.15,
+    "end": 124.66
+  },
+  {
+    "text": "from",
+    "start": 124.66,
+    "end": 124.97
+  },
+  {
+    "text": "documentation",
+    "start": 124.97,
+    "end": 125.99
+  },
+  {
+    "text": "to",
+    "start": 125.99,
+    "end": 126.13
+  },
+  {
+    "text": "clinical",
+    "start": 126.16,
+    "end": 126.77
+  },
+  {
+    "text": "understanding.",
+    "start": 126.77,
+    "end": 127.98
+  }
+]
