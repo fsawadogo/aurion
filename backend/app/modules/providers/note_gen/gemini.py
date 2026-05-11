@@ -23,7 +23,7 @@ from app.modules.providers.note_gen.shared import (
 logger = logging.getLogger("aurion.providers.note_gen.gemini")
 
 _GOOGLE_AI_API_KEY = os.getenv("GOOGLE_AI_API_KEY", "")
-_MODEL = "gemini-2.5-flash"
+_MODEL = "gemini-2.5-pro"
 
 
 class GeminiNoteGenerationProvider(NoteGenerationProvider):

@@ -5,10 +5,21 @@ import SwiftUI
 struct CaptureView: View {
     @ObservedObject var session: CaptureSession
     @EnvironmentObject var sessionManager: SessionManager
+    /// Observed so the camera preview re-renders the moment the underlying
+    /// AVCaptureSession transitions to .recording — gates the preview-layer
+    /// mount on the actual capture-pipeline ready state, not just
+    /// `session.state` which flips a tick earlier.
+    @ObservedObject private var builtInSource = CaptureSourceRegistry.shared.builtIn
     @State private var elapsedTime: TimeInterval = 0
     @State private var timer: Timer?
     @State private var isPulsing = false
     @State private var recBadgePulsing = false
+    @State private var showingFrameGallery = false
+    /// Persisted across launches via UserDefaults. Default = true so the
+    /// preview shows on first use; physicians can hide it for "background
+    /// recording" — pocket / patient-not-on-camera scenarios — and the
+    /// choice sticks for the next session.
+    @AppStorage("aurion.show_camera_preview") private var showCameraPreview = true
 
     var body: some View {
         ZStack {
@@ -30,17 +41,32 @@ struct CaptureView: View {
 
                     // Stream indicators — top right per design. The "V" pill
                     // hides for audio-only modes so the physician can confirm
-                    // the chosen capture mode at a glance.
+                    // the chosen capture mode at a glance. The preview toggle
+                    // and frame-gallery shortcut sit next to them in
+                    // multimodal mode, since neither has meaning otherwise.
                     HStack(spacing: 6) {
                         streamCircle("A")
                         if session.captureMode == .multimodal {
                             streamCircle("V")
                         }
                         streamCircle("S")
+                        if session.captureMode == .multimodal {
+                            previewToggleButton
+                            framesButton
+                        }
                     }
                 }
                 .padding(.horizontal, AurionSpacing.lg)
                 .padding(.top, AurionSpacing.sm)
+
+                if session.captureMode == .multimodal
+                    && showCameraPreview
+                    && (session.state == .recording || session.state == .paused) {
+                    cameraPreviewCard
+                        .padding(.top, AurionSpacing.md)
+                        .padding(.horizontal, AurionSpacing.lg)
+                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
+                }
 
                 Spacer()
 
@@ -51,6 +77,10 @@ struct CaptureView: View {
                         .monospacedDigit()
                         .tracking(-2)
                         .foregroundColor(.white)
+                        // Each second-tick smoothly morphs the digit instead
+                        // of hard-cutting — iOS 17+ system content-transition.
+                        .contentTransition(.numericText())
+                        .animation(AurionAnimation.smooth, value: elapsedTime)
 
                     Text("Recording \u{00B7} \(session.captureMode.displayName)")
                         .font(.system(size: 13))
@@ -121,6 +151,9 @@ struct CaptureView: View {
                 AurionHaptics.notification(.warning)
             }
         }
+        .sheet(isPresented: $showingFrameGallery) {
+            FrameGalleryView(source: builtInSource)
+        }
     }
 
     // MARK: - Specialty Badge
@@ -161,8 +194,16 @@ struct CaptureView: View {
             Circle()
                 .fill(Color.white)
                 .frame(width: 6, height: 6)
-                .opacity(recBadgePulsing ? 0.4 : 1.0)
-                .animation(AurionAnimation.pulse, value: recBadgePulsing)
+                // Scale + opacity together — feels like a deliberate
+                // heartbeat rather than a strobing dot. Driven by the
+                // existing `recBadgePulsing` toggle so onChange already
+                // owns the rhythm.
+                .scaleEffect(recBadgePulsing ? 0.7 : 1.0)
+                .opacity(recBadgePulsing ? 0.45 : 1.0)
+                .animation(
+                    .easeInOut(duration: 0.9).repeatForever(autoreverses: true),
+                    value: recBadgePulsing
+                )
             Text(L("capture.rec"))
                 .font(.system(size: 11, weight: .bold))
                 .tracking(1)
@@ -170,8 +211,13 @@ struct CaptureView: View {
         }
         .padding(.horizontal, 10)
         .padding(.vertical, 4)
-        .background(Color.aurionRed)
-        .clipShape(Capsule())
+        .background(
+            Capsule()
+                .fill(Color.aurionRed)
+                // Subtle outer glow so the badge reads as "live" without
+                // adding another animated layer.
+                .shadow(color: Color.aurionRed.opacity(0.4), radius: 8, x: 0, y: 0)
+        )
     }
 
     // MARK: - Stream Indicators
@@ -185,28 +231,160 @@ struct CaptureView: View {
             .clipShape(Circle())
     }
 
+    // MARK: - Frames Button
+
+    /// Top-bar shortcut that opens the live `FrameGalleryView` sheet. The
+    /// gold badge shows the current frame count so the physician sees the
+    /// capture pipeline accruing data in real time — a quiet trust signal
+    /// without staring at the preview the whole time. Only shown when a
+    /// `BuiltInCaptureSource` is the active video source (external sources
+    /// like Ray-Ban Meta don't currently expose buffered frames).
+    @ViewBuilder
+    private var framesButton: some View {
+        if let _ = CaptureSourceRegistry.shared.activeVideoSource as? BuiltInCaptureSource {
+            Button {
+                AurionHaptics.selection()
+                showingFrameGallery = true
+            } label: {
+                ZStack(alignment: .topTrailing) {
+                    Image(systemName: "photo.stack")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.aurionGold)
+                        .frame(width: 24, height: 24)
+                        .background(Color.white.opacity(0.10))
+                        .clipShape(Circle())
+
+                    if builtInSource.capturedFrames.count > 0 {
+                        Text("\(min(builtInSource.capturedFrames.count, 99))")
+                            .font(.system(size: 8, weight: .bold))
+                            .foregroundColor(.aurionNavy)
+                            .padding(.horizontal, 4)
+                            .padding(.vertical, 1)
+                            .background(Color.aurionGold)
+                            .clipShape(Capsule())
+                            .offset(x: 6, y: -4)
+                            .contentTransition(.numericText())
+                            .animation(
+                                AurionAnimation.smooth,
+                                value: builtInSource.capturedFrames.count
+                            )
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("View captured frames")
+        }
+    }
+
+    // MARK: - Camera Preview Toggle
+
+    /// Eye/eye-slash button — flips the persisted `showCameraPreview` flag.
+    /// Tapping while recording immediately hides/shows the preview without
+    /// affecting the capture pipeline (the AVCaptureSession keeps running;
+    /// only the preview-layer SwiftUI view is mounted/unmounted).
+    private var previewToggleButton: some View {
+        Button {
+            AurionHaptics.selection()
+            withAnimation(AurionAnimation.smooth) {
+                showCameraPreview.toggle()
+            }
+        } label: {
+            Image(systemName: showCameraPreview ? "eye.fill" : "eye.slash.fill")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.aurionGold)
+                .frame(width: 24, height: 24)
+                .background(Color.white.opacity(0.10))
+                .clipShape(Circle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            showCameraPreview ? "Hide camera preview (background recording)"
+                              : "Show camera preview"
+        )
+    }
+
+    // MARK: - Camera Preview
+
+    /// Live preview card — anchors to the active BuiltInCaptureSource's
+    /// AVCaptureSession so we share inputs/outputs with the frame extractor
+    /// (no second mic claim, no resource conflict). Shown only when the
+    /// underlying AVCaptureSession is actually running (gated on
+    /// `isReadyForPreview`) AND the physician hasn't toggled it off.
+    ///
+    /// Sized to fill the screen width (minus the standard horizontal padding
+    /// applied by the caller) at a 4:3 landscape aspect ratio. The native
+    /// camera capture is portrait, but `videoGravity = .resizeAspectFill`
+    /// on the preview layer crops the top/bottom of that portrait frame so
+    /// the visible card is wide — better for confirming the patient is
+    /// centered in the shot.
+    @ViewBuilder
+    private var cameraPreviewCard: some View {
+        let registry = CaptureSourceRegistry.shared
+        // Only render when the active video source is the built-in camera
+        // AND it has finished bringing up the capture pipeline. The latter
+        // gates out a brief window (a few hundred ms after Start) where
+        // `session.state == .recording` but the AVCaptureSession itself
+        // hasn't yet finished its async configure+startRunning. Attaching
+        // a preview layer during that window caused EXC_BAD_ACCESS on
+        // AVFoundation's render thread.
+        if let builtIn = registry.activeVideoSource as? BuiltInCaptureSource,
+           builtIn.isReadyForPreview {
+            CameraPreviewLayer(session: registry.builtIn.previewSession)
+                .frame(maxWidth: .infinity)
+                .aspectRatio(4.0 / 3.0, contentMode: .fit)
+                .clipShape(RoundedRectangle(cornerRadius: 18))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(Color.aurionGold.opacity(0.35), lineWidth: 1)
+                )
+                .shadow(color: .black.opacity(0.35), radius: 16, x: 0, y: 4)
+        }
+    }
+
     // MARK: - Audio Waveform
 
+    /// Live waveform driven by the active capture source's RMS audio level
+    /// (`builtInSource.audioLevel`, 0…1). 21 bars with a phase-offset
+    /// envelope so the wave appears to ripple across the row in time with
+    /// the mic input. Each bar height = idle baseline + envelope × current
+    /// audio level — so silence shows a thin flat row, loud speech swells.
+    /// Spring animation gives it a soft, organic motion rather than the
+    /// previous random-easing flicker.
     private var audioWaveform: some View {
-        HStack(alignment: .bottom, spacing: 4) {
-            ForEach(0..<12, id: \.self) { i in
-                RoundedRectangle(cornerRadius: 9999)
-                    .fill(Color.aurionGold.opacity(0.8))
-                    .frame(width: 3, height: waveHeight(for: i))
+        let bars = 21
+        return HStack(alignment: .center, spacing: 3) {
+            ForEach(0..<bars, id: \.self) { i in
+                Capsule()
+                    .fill(
+                        LinearGradient(
+                            colors: [.aurionGoldLight, .aurionGold],
+                            startPoint: .top, endPoint: .bottom
+                        )
+                    )
+                    .frame(width: 3, height: waveBarHeight(for: i, of: bars))
                     .animation(
-                        .easeInOut(duration: Double.random(in: 0.8...1.4))
-                        .repeatForever(autoreverses: true)
-                        .delay(Double(i) * 0.05),
-                        value: session.state == .recording
+                        .interpolatingSpring(stiffness: 120, damping: 14),
+                        value: builtInSource.audioLevel
                     )
             }
         }
-        .frame(height: 32)
+        .frame(height: 40)
     }
 
-    private func waveHeight(for index: Int) -> CGFloat {
-        let heights: [CGFloat] = [10, 18, 26, 14, 22, 30, 16, 8, 22, 28, 12, 18]
-        return session.state == .recording ? heights[index] : 4
+    /// Per-bar height as a function of bar index + current audio level. The
+    /// envelope is a soft sine bump centered on the row so middle bars are
+    /// taller than edge bars at the same audio level — same shape an
+    /// equalizer would draw.
+    private func waveBarHeight(for index: Int, of total: Int) -> CGFloat {
+        guard session.state == .recording else { return 4 }
+        let center = Double(total) / 2.0
+        let distance = abs(Double(index) - center)
+        // Sine envelope — 1.0 at center, ~0.35 at edges.
+        let envelope = 0.35 + 0.65 * cos((distance / center) * (.pi / 2))
+        // Smooth audio level — clamp + amplify so the bars never go flat
+        // mid-speech but also can't peg at max constantly.
+        let level = CGFloat(min(1.0, max(0.15, Double(builtInSource.audioLevel) * 1.6)))
+        return 6 + 30 * level * envelope
     }
 
     // MARK: - Collaboration Pill

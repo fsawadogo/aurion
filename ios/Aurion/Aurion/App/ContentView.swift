@@ -30,17 +30,15 @@ struct ContentView: View {
                     .environmentObject(sessionManager)
             } else if let note = sessionManager.note, sessionManager.showingReview {
                 // Physician chose to review now
-                NoteReviewView(sessionId: sessionManager.session?.id ?? "", initialNote: note)
-                    .transition(AurionTransition.fadeSlide)
-                    .overlay(alignment: .topTrailing) {
-                        Button("Done") {
-                            sessionManager.endSession()
-                            appState.currentSession = nil
-                        }
-                        .font(.subheadline.bold())
-                        .foregroundColor(.aurionGold)
-                        .padding()
+                NoteReviewView(
+                    sessionId: sessionManager.session?.id ?? "",
+                    initialNote: note,
+                    onDismiss: {
+                        sessionManager.endSession()
+                        appState.currentSession = nil
                     }
+                )
+                .transition(AurionTransition.fadeSlide)
             } else if sessionManager.showingPostEncounter, let session = sessionManager.session {
                 // Post-encounter — confirm template before pipeline
                 PostEncounterView(currentSpecialty: session.specialty, profileLanguage: appState.physicianProfile?.outputLanguage ?? "en")
@@ -162,14 +160,26 @@ struct LoginView: View {
     @State private var isSigningIn = false
     @State private var loginError: String?
     @FocusState private var focusedField: LoginField?
+    /// Drives the entrance staircase — logo first, then the form card,
+    /// then the footer. Flipped on first appear; the resulting feel is a
+    /// deliberate composition rather than a slam-on render.
+    @State private var loginAppeared = false
+    /// True for ~700 ms after a successful sign-in. The sign-in button
+    /// morphs into a green checkmark before ContentView swaps in the
+    /// dashboard — confirms "you're in" with a beat of visual feedback.
+    @State private var signInSucceeded = false
 
     enum LoginField { case email, password }
 
     var body: some View {
         ZStack {
             // Navy gradient background (design: #1A2E5C → #0D1B3E)
+            // Reversed direction so the upper portion (where the logo
+            // lockup lands) is exactly `aurionNavy` (= Logo.png bg color).
+            // Bottom fades into a slightly darker navy for depth without
+            // letting the logo look like it's pasted on a separate panel.
             LinearGradient(
-                colors: [Color.aurionNavyLight, Color.aurionNavy],
+                colors: [Color.aurionNavy, Color.aurionNavyDark],
                 startPoint: .top, endPoint: .bottom
             ).ignoresSafeArea()
 
@@ -177,6 +187,15 @@ struct LoginView: View {
                 // Logo lockup — matches design/assets/logo-lockup-dark.svg
                 AurionLogoLockup(size: 1.2, dark: true)
                     .padding(.top, 80)
+                    // Spring entrance — slides + scales in for a deliberate
+                    // brand reveal instead of a hard cut.
+                    .opacity(loginAppeared ? 1 : 0)
+                    .scaleEffect(loginAppeared ? 1 : 0.92)
+                    .offset(y: loginAppeared ? 0 : -20)
+                    .animation(
+                        .interpolatingSpring(stiffness: 180, damping: 22),
+                        value: loginAppeared
+                    )
 
                 Spacer()
 
@@ -227,15 +246,30 @@ struct LoginView: View {
                         Task { await signIn() }
                     } label: {
                         HStack(spacing: 8) {
-                            if isSigningIn {
-                                ProgressView().tint(.aurionNavy)
+                            if signInSucceeded {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 16, weight: .bold))
+                                    .foregroundColor(.aurionNavy)
+                                    .transition(.scale.combined(with: .opacity))
+                                Text("Signed in")
+                                    .transition(.opacity)
+                            } else if isSigningIn {
+                                ProgressView()
+                                    .tint(.aurionNavy)
+                                    .transition(.opacity)
+                                Text("Signing in…")
+                                    .transition(.opacity)
+                            } else {
+                                Text(L("login.signIn"))
+                                    .transition(.opacity)
                             }
-                            Text(L("login.signIn"))
                         }
                         .frame(maxWidth: .infinity)
+                        .animation(AurionAnimation.smooth, value: isSigningIn)
+                        .animation(AurionAnimation.smooth, value: signInSucceeded)
                     }
                     .buttonStyle(AurionPrimaryButtonStyle())
-                    .disabled(isSigningIn || email.isEmpty || password.isEmpty)
+                    .disabled(isSigningIn || signInSucceeded || email.isEmpty || password.isEmpty)
 
                     if let loginError {
                         Text(loginError)
@@ -262,6 +296,15 @@ struct LoginView: View {
                         .stroke(Color.white.opacity(0.10), lineWidth: 1)
                 )
                 .padding(.horizontal, 24)
+                // Form card slides up after the logo lands — 180ms delay
+                // gives the logo room to finish its spring.
+                .opacity(loginAppeared ? 1 : 0)
+                .offset(y: loginAppeared ? 0 : 24)
+                .animation(
+                    .interpolatingSpring(stiffness: 200, damping: 24)
+                        .delay(0.18),
+                    value: loginAppeared
+                )
 
                 Spacer()
 
@@ -271,6 +314,13 @@ struct LoginView: View {
                     .tracking(0.4)
                     .foregroundColor(Color(red: 133/255, green: 144/255, blue: 174/255))
                     .padding(.bottom, 40)
+                    .opacity(loginAppeared ? 1 : 0)
+                    .animation(.easeOut(duration: 0.5).delay(0.4), value: loginAppeared)
+            }
+        }
+        .onAppear {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                loginAppeared = true
             }
         }
     }
@@ -279,7 +329,6 @@ struct LoginView: View {
     private func signIn() async {
         isSigningIn = true
         loginError = nil
-        defer { isSigningIn = false }
         do {
             let resp = try await APIClient.shared.login(email: email, password: password)
             KeychainHelper.shared.saveAuthToken(
@@ -288,13 +337,21 @@ struct LoginView: View {
                 role: resp.role,
                 name: resp.fullName
             )
+            AurionHaptics.notification(.success)
+            // Brief "signed in" beat before ContentView swaps in the
+            // dashboard — gives the user a single frame of confirmation
+            // that the credentials worked, not just a jarring scene cut.
+            isSigningIn = false
+            signInSucceeded = true
+            try? await Task.sleep(nanoseconds: 600_000_000)
             let role = UserRole(rawValue: resp.role) ?? .clinician
             appState.applyAuth(userId: resp.userId, role: role)
-            AurionHaptics.notification(.success)
         } catch APIError.unauthorized {
+            isSigningIn = false
             loginError = "Invalid email or password."
             AurionHaptics.notification(.error)
         } catch {
+            isSigningIn = false
             loginError = "Sign-in failed: \(error.localizedDescription)"
             AurionHaptics.notification(.error)
         }
@@ -328,8 +385,12 @@ struct RegisterView: View {
 
     var body: some View {
         ZStack {
+            // Reversed direction so the upper portion (where the logo
+            // lockup lands) is exactly `aurionNavy` (= Logo.png bg color).
+            // Bottom fades into a slightly darker navy for depth without
+            // letting the logo look like it's pasted on a separate panel.
             LinearGradient(
-                colors: [Color.aurionNavyLight, Color.aurionNavy],
+                colors: [Color.aurionNavy, Color.aurionNavyDark],
                 startPoint: .top, endPoint: .bottom
             ).ignoresSafeArea()
 

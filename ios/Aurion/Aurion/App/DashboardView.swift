@@ -17,6 +17,15 @@ struct DashboardView: View {
     @State private var selectedEncounterType = "doctor_patient"
     @State private var selectedParticipants: [[String: Any]] = []
     @State private var selectedCaptureMode: CaptureMode = .multimodal
+    /// Drives the entrance staircase — flipped true on first appear so the
+    /// greeting / quick-start / recent rows spring in 60ms apart instead
+    /// of materializing as one block. Stays true for the lifetime of the
+    /// view (no need to replay on tab return — feels frantic).
+    @State private var dashboardAppeared = false
+    /// Smoothly counts up from 0 to `todayCount` so the dashboard reads
+    /// "0 sessions" → "12 sessions" with a quick spring rather than
+    /// flashing the final value at paint time.
+    @State private var displayedTodayCount = 0
 
     // MARK: - Greeting
 
@@ -105,6 +114,18 @@ struct DashboardView: View {
             .navigationBarHidden(true)
             .task { await loadRecentSessions() }
             .refreshable { await loadRecentSessions() }
+            .onAppear {
+                // Defer the staircase trigger one runloop so the initial
+                // paint is the pre-reveal state — gives the springs a delta.
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                    dashboardAppeared = true
+                }
+            }
+            .onChange(of: todayCount) { _, newCount in
+                withAnimation(.interpolatingSpring(stiffness: 100, damping: 18)) {
+                    displayedTodayCount = newCount
+                }
+            }
             .sheet(isPresented: $showEncounterTypeSheet) { encounterTypeSheet }
             .sheet(isPresented: $showContextPrompt) { encounterContextSheet }
         }
@@ -127,9 +148,11 @@ struct DashboardView: View {
                             .foregroundColor(.aurionTextPrimary)
                     }
                 }
-                Text("\(todayCount) sessions \(L("dashboard.today")) \u{00B7} \(pendingReviewSessions.count) pending review")
+                Text("\(displayedTodayCount) sessions \(L("dashboard.today")) \u{00B7} \(pendingReviewSessions.count) pending review")
                     .font(.system(size: 14))
                     .foregroundColor(.aurionTextSecondary)
+                    .contentTransition(.numericText())
+                    .animation(AurionAnimation.smooth, value: displayedTodayCount)
             }
             Spacer()
             AurionAvatar(initials: avatarInitials, size: 44)
@@ -175,7 +198,7 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Quick Start")
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
-                ForEach(quickStartCards, id: \.type) { card in
+                ForEach(Array(quickStartCards.enumerated()), id: \.element.type) { idx, card in
                     Button {
                         AurionHaptics.impact(.light)
                         selectedQuickStart = (card.specialty, card.type)
@@ -204,6 +227,15 @@ struct DashboardView: View {
                         }
                     }
                     .buttonStyle(.plain)
+                    // Staircase: each card springs in with its own delay so
+                    // the 2×2 grid forms instead of slamming on screen.
+                    .opacity(dashboardAppeared ? 1 : 0)
+                    .offset(y: dashboardAppeared ? 0 : 14)
+                    .animation(
+                        .interpolatingSpring(stiffness: 220, damping: 22)
+                            .delay(0.12 + Double(idx) * 0.08),
+                        value: dashboardAppeared
+                    )
                 }
             }
             if let error = sessionManager.error {

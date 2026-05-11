@@ -86,7 +86,7 @@ Run /reload-plugins when done and confirm no errors.
 | 4 Vision pipeline | **Agent team** — 4 parallel agents |
 | 5–6 Screen + cleanup | Main session + `@compliance-checker` after each module |
 | 7 iOS | **Fresh session** + `@ios-builder` |
-| 8 Infrastructure | Main session — typescript-lsp catches CDK errors |
+| 8 Infrastructure | Main session — `terraform fmt` + `terraform validate` on every change |
 | 9 Web portal | Main session + github for PR workflow |
 
 > **Detailed specs in skills — load when needed:**
@@ -149,7 +149,7 @@ aurion/
 │   └── .env.example
 ├── ios/Aurion/ (App/, Capture/, Masking/, Onboarding/, Session/, NoteReview/, Export/, Network/)
 ├── web/ (Next.js admin portal)
-└── infrastructure/ (AWS CDK TypeScript)
+└── infrastructure/ (Terraform — HCL)
 ```
 
 ---
@@ -357,9 +357,9 @@ Screen schema:
 **Complete when:** Full end-to-end on device — consent → record → pause → resume → stop → Stage 1 → Stage 2 → conflicts → approve → export → purge confirmed.
 
 ### Phase 8 — Infrastructure as Code
-AWS CDK TypeScript: VPC, ECS Fargate, RDS PostgreSQL, DynamoDB, S3 (TTL policies), KMS, Cognito, AppConfig (with schema validator + deployment strategy), CloudWatch dashboards + alarms.
+Terraform (HCL): VPC, ECS Fargate, RDS PostgreSQL, DynamoDB, S3 (TTL policies), KMS, Cognito, AppConfig (with schema validator + deployment strategy), CloudWatch dashboards + alarms. Per-environment tfvars (`dev.tfvars`, `prod.tfvars`); state stored in remote backend (S3 + DynamoDB lock).
 
-**Complete when:** `cdk deploy aurion-dev` provisions everything. AppConfig change live in < 30s.
+**Complete when:** `terraform apply -var-file=environments/dev.tfvars` provisions everything in `ca-central-1`. AppConfig change live in < 30s.
 
 ### Phase 9 — Web Portal
 Next.js 14, TypeScript, Tailwind, AWS Amplify. Calls FastAPI `/api/v1/admin/*`. Same Cognito pool.
@@ -471,5 +471,5 @@ Post-Op/Procedural Mode · EMR/FHIR integration · LLM fine-tuning · French sup
 
 1. **API keys** — OpenAI, Anthropic, Google AI in Secrets Manager before Phase 3.
 2. **Monorepo root** — confirm existing structure fits the layout above.
-3. **AppConfig** — confirm whether an application already exists or needs CDK creation.
+3. **AppConfig** — confirm whether an application already exists or needs Terraform creation.
 4. **Visual trigger keywords** — start with empty lists. Build classifier to work with whatever keywords exist. Population happens post-pilot.

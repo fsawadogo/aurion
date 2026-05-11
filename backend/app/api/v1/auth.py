@@ -37,6 +37,9 @@ _DEV_USERS: dict[str, tuple[str, str, str, UserRole]] = {
     "marie@creoq.ca": ("marie", "00000000-0000-0000-0000-000000000002", "Dr. Marie Gdalevitch", UserRole.CLINICIAN),
     "compliance@aurionclinical.com": ("compliance", "00000000-0000-0000-0000-000000000003", "Compliance Officer", UserRole.COMPLIANCE_OFFICER),
     "eval@aurionclinical.com": ("eval", "00000000-0000-0000-0000-000000000004", "Eval Reviewer", UserRole.EVAL_TEAM),
+    # Dedicated account for capturing the marketing demo video. Profile +
+    # backlog of approved orthopedic sessions seeded via seed_demo.py.
+    "demo@aurion.health": ("demo1234", "00000000-0000-0000-0000-000000000005", "Dr. Antoine Tremblay", UserRole.CLINICIAN),
 }
 
 

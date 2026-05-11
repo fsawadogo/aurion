@@ -20,7 +20,7 @@ from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT, build_fram
 logger = logging.getLogger("aurion.providers.vision.gemini")
 
 _GOOGLE_AI_API_KEY = os.getenv("GOOGLE_AI_API_KEY", "")
-_MODEL = "gemini-2.5-flash"
+_MODEL = "gemini-2.5-pro"
 
 
 class GeminiVisionProvider(VisionProvider):

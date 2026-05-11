@@ -18,9 +18,13 @@ extension Color {
 
 extension Color {
     // Navy ramp
-    static let aurionNavy = Color(red: 13/255, green: 27/255, blue: 62/255)       // #0D1B3E (brand)
-    static let aurionNavyLight = Color(red: 26/255, green: 46/255, blue: 92/255)   // #1A2E5C
-    static let aurionNavyDark = Color(red: 10/255, green: 21/255, blue: 48/255)    // #0A1530
+    // Brand navy retuned to match the Aurion logo PNG's background exactly
+    // (sampled from `Logo.png` corner pixels: RGB(12, 27, 55) = #0C1B37).
+    // Any surface using `aurionNavy` will now blend seamlessly with the
+    // lockup — no visible "logo box" sitting on top.
+    static let aurionNavy = Color(red: 12/255, green: 27/255, blue: 55/255)       // #0C1B37 (brand — matches Logo.png)
+    static let aurionNavyLight = Color(red: 22/255, green: 40/255, blue: 78/255)  // #16284E (lighter shade, kept for accents)
+    static let aurionNavyDark = Color(red: 8/255, green: 18/255, blue: 38/255)    // #081226 (deeper, for gradient base)
 
     // Gold ramp
     static let aurionGold = Color(red: 201/255, green: 168/255, blue: 76/255)      // #C9A84C (brand)
@@ -699,26 +703,29 @@ struct AurionHexLogo: View {
     }
 }
 
-/// Full logo lockup: hex mark + "Aurion" + "CLINICAL AI"
+/// Full Aurion brand lockup — golden A with comet/star mark, "Aurion"
+/// wordmark, and "The gold standard in clinical AI" tagline, all baked
+/// into a single PNG asset (`AurionLogoFull` in Assets.xcassets).
+///
+/// `size` scales the rendered height; the asset's intrinsic aspect ratio
+/// is preserved. The `dark` parameter exists for API compatibility with
+/// the previous hex-mark lockup but is no-op because the lockup image
+/// already ships with its own navy backdrop. On light surfaces, fall
+/// back to `AurionHexLogo` paired with text if a transparent variant is
+/// needed in future.
 struct AurionLogoLockup: View {
     var size: CGFloat = 1.0
     var dark = false
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10 * size) {
-            AurionHexLogo(size: 36 * size, darkBackground: dark)
-
-            VStack(alignment: .leading, spacing: 2) {
-                Text("Aurion")
-                    .font(.system(size: 22 * size, weight: .semibold))
-                    .tracking(-0.2)
-                    .foregroundColor(dark ? .white : .aurionNavy)
-                Text("CLINICAL AI")
-                    .font(.system(size: 9 * size, weight: .semibold))
-                    .tracking(2.5)
-                    .foregroundColor(.aurionGold)
-            }
-        }
+        Image("AurionLogoFull")
+            .resizable()
+            .scaledToFit()
+            // 200pt base height tuned to the previous hex+wordmark footprint
+            // at size=1.0 — login screens that passed size=1.2 now land at
+            // 240pt, matching what they expected visually.
+            .frame(height: 200 * size)
+            .accessibilityLabel("Aurion — the gold standard in clinical AI")
     }
 }
 

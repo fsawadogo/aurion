@@ -8,8 +8,8 @@ enum AppConfig {
     static let apiBaseURL = "http://localhost:8080"
     static let wsBaseURL = "ws://localhost:8080"
     #else
-    static let apiBaseURL = "http://10.0.0.207:8080"
-    static let wsBaseURL = "ws://10.0.0.207:8080"
+    static let apiBaseURL = "http://10.0.0.77:8080"
+    static let wsBaseURL = "ws://10.0.0.77:8080"
     #endif
     #else
     static let apiBaseURL = ProcessInfo.processInfo.environment["API_BASE_URL"] ?? ""

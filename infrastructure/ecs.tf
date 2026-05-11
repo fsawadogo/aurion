@@ -432,7 +432,25 @@ resource "aws_ecs_task_definition" "api" {
         {
           name      = "DATABASE_URL"
           valueFrom = aws_db_instance.main.master_user_secret[0].secret_arn
-        }
+        },
+        # Provider API keys — see secrets.tf. Pulled from Secrets Manager at
+        # task start by the execution role; never in plain env or .env.
+        {
+          name      = "OPENAI_API_KEY"
+          valueFrom = aws_secretsmanager_secret.provider_api_key["openai"].arn
+        },
+        {
+          name      = "ANTHROPIC_API_KEY"
+          valueFrom = aws_secretsmanager_secret.provider_api_key["anthropic"].arn
+        },
+        {
+          name      = "GOOGLE_AI_API_KEY"
+          valueFrom = aws_secretsmanager_secret.provider_api_key["google_ai"].arn
+        },
+        {
+          name      = "ASSEMBLYAI_API_KEY"
+          valueFrom = aws_secretsmanager_secret.provider_api_key["assemblyai"].arn
+        },
       ]
 
       logConfiguration = {

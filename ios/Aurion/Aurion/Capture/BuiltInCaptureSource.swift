@@ -103,12 +103,29 @@ final class BuiltInCaptureSource: CaptureSource {
         set { manager.sampleBufferTap = newValue }
     }
 
+    /// Underlying AVCaptureSession — exposed for CameraPreviewLayer to wire
+    /// an AVCaptureVideoPreviewLayer onto. Same instance the capture pipeline
+    /// uses; the preview is a sibling output, not a fork.
+    var previewSession: AVCaptureSession { manager.previewSession }
+
+    /// True only after the underlying AVCaptureSession is fully running with
+    /// inputs/outputs configured. SwiftUI views should gate the preview on
+    /// this rather than on `status` or `session.state`, both of which can
+    /// flip to "recording" before the capture pipeline is actually live.
+    var isReadyForPreview: Bool {
+        manager.permissionsGranted && status == .recording
+    }
+
     override func start() throws {
         guard manager.permissionsGranted else {
             throw CaptureSourceError.permissionDenied("camera and microphone")
         }
         status = .starting
-        manager.configureCaptureSession(preferBackCamera: false)
+        // Back camera is the right default for the clinical scribe use case —
+        // the physician points the phone at the patient / wound / exam area.
+        // Front camera was the previous default but produced selfie footage,
+        // which is never what we want for Stage 2 visual enrichment.
+        manager.configureCaptureSession(preferBackCamera: true)
         manager.startCapture()
     }
 

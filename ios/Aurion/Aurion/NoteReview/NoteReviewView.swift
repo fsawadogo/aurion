@@ -39,6 +39,7 @@ private extension String {
 struct NoteReviewView: View {
     let sessionId: String
     var initialNote: NoteResponse?
+    let onDismiss: () -> Void
     @StateObject private var wsClient: WebSocketClient
     @State private var note: NoteResponse?
     @State private var activeSectionId: String?
@@ -49,10 +50,21 @@ struct NoteReviewView: View {
     @State private var isEditing = false
     @State private var draftEdits: [String: String] = [:]
     @State private var isSavingEdits = false
+    @State private var isApproving = false
+    @State private var showApprovedToast = false
+    /// Drives the ring + percent count-up on first reveal. Starts at 0 and
+    /// springs to the note's actual completeness when the view appears (or
+    /// the score changes mid-session as Stage 2 enrichment lands).
+    @State private var displayedCompleteness: Double = 0
+    /// Per-section reveal flag — flipped after a small delay on first paint
+    /// so the section cards staircase in instead of all appearing at once.
+    /// Restarts on note (re)load.
+    @State private var sectionsRevealed = false
 
-    init(sessionId: String, initialNote: NoteResponse? = nil) {
+    init(sessionId: String, initialNote: NoteResponse? = nil, onDismiss: @escaping () -> Void = {}) {
         self.sessionId = sessionId
         self.initialNote = initialNote
+        self.onDismiss = onDismiss
         _wsClient = StateObject(wrappedValue: WebSocketClient(sessionId: sessionId))
     }
 
@@ -69,7 +81,7 @@ struct NoteReviewView: View {
     var body: some View {
         VStack(spacing: 0) {
             AurionNavBar(title: "Review Note") {
-                AurionTextButton(label: "Back") {}
+                AurionTextButton(label: "Back") { onDismiss() }
             } trailing: {
                 AurionTextButton(label: isEditing ? "Cancel" : "Edit") {
                     if isEditing {
@@ -106,17 +118,73 @@ struct NoteReviewView: View {
             }
         }
         .background(Color.aurionBackground)
-        .onAppear { loadNote() }
-        .onChange(of: wsClient.latestNote) { _, newNote in
-            if let newNote { note = newNote }
+        .onAppear {
+            loadNote()
+            // Kick off the staircase + ring count-up on the next runloop so
+            // the initial paint is `sectionsRevealed = false / displayed = 0`
+            // and the springs have actual deltas to work with.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+                sectionsRevealed = true
+                if let n = note {
+                    withAnimation(.interpolatingSpring(stiffness: 100, damping: 18)) {
+                        displayedCompleteness = n.completenessScore
+                    }
+                }
+            }
         }
+        .onChange(of: note?.completenessScore) { _, newScore in
+            // If Stage 2 finishes mid-view (or a fresh note version lands
+            // via WebSocket) the ring smoothly re-targets the new score.
+            withAnimation(.interpolatingSpring(stiffness: 100, damping: 18)) {
+                displayedCompleteness = newScore ?? 0
+            }
+        }
+        .onChange(of: wsClient.latestNote) { _, newNote in
+            if let newNote {
+                note = newNote
+                // Replay the staircase for the new section list — feels
+                // intentional rather than a content swap mid-render.
+                sectionsRevealed = false
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    sectionsRevealed = true
+                }
+            }
+        }
+        .overlay(alignment: .center) {
+            if showApprovedToast {
+                approvedToast
+                    .transition(.scale(scale: 0.85).combined(with: .opacity))
+            }
+        }
+        .animation(AurionAnimation.smooth, value: showApprovedToast)
+    }
+
+    private var approvedToast: some View {
+        VStack(spacing: 12) {
+            ZStack {
+                Circle()
+                    .fill(Color.aurionGreen.opacity(0.15))
+                    .frame(width: 64, height: 64)
+                Image(systemName: "checkmark")
+                    .font(.system(size: 28, weight: .bold))
+                    .foregroundColor(.aurionGreen)
+            }
+            Text("Note Approved")
+                .font(.system(size: 16, weight: .semibold))
+                .foregroundColor(.aurionNavy)
+        }
+        .padding(.horizontal, 28)
+        .padding(.vertical, 22)
+        .background(Color.aurionCardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+        .shadow(color: .black.opacity(0.12), radius: 18, x: 0, y: 6)
     }
 
     // MARK: - Section list (4 stacked rows with colored left bars)
 
     private func sectionList(_ note: NoteResponse) -> some View {
         VStack(spacing: 8) {
-            ForEach(note.sections, id: \.id) { s in
+            ForEach(Array(note.sections.enumerated()), id: \.element.id) { idx, s in
                 Button {
                     AurionHaptics.selection()
                     activeSectionId = s.id
@@ -154,8 +222,33 @@ struct NoteReviewView: View {
                             .stroke(activeSection?.id == s.id ? Color.aurionGold : .clear, lineWidth: 2)
                             .padding(-1)
                     )
+                    // Subtle amber breathing on conflict rows — draws the
+                    // eye to what needs resolving without yelling.
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AurionRadius.sm)
+                            .stroke(
+                                s.hasConflicts
+                                    ? Color.aurionAmber.opacity(sectionsRevealed ? 0.55 : 0.20)
+                                    : .clear,
+                                lineWidth: 1.5
+                            )
+                            .animation(
+                                .easeInOut(duration: 1.4).repeatForever(autoreverses: true),
+                                value: sectionsRevealed
+                            )
+                    )
                 }
                 .buttonStyle(.plain)
+                // Staircase entrance — each row picks up its own delay so
+                // they spring in 60ms apart. Reversed when `sectionsRevealed`
+                // flips back to false (e.g. note reload).
+                .opacity(sectionsRevealed ? 1 : 0)
+                .offset(y: sectionsRevealed ? 0 : 12)
+                .animation(
+                    .interpolatingSpring(stiffness: 220, damping: 22)
+                        .delay(Double(idx) * 0.06),
+                    value: sectionsRevealed
+                )
             }
         }
         .padding(.horizontal, AurionSpacing.edgeIPhone)
@@ -350,22 +443,33 @@ struct NoteReviewView: View {
 
         return HStack(spacing: 14) {
             ZStack {
+                // `displayedCompleteness` is driven by onAppear/onChange so
+                // the ring sweeps from 0% up to the note's actual score
+                // rather than snapping. The CircularProgressRing in Theme
+                // already animates internally — we just feed it a value
+                // that ramps over time.
                 CircularProgressRing(
-                    progress: done,
+                    progress: displayedCompleteness,
                     color: blocked ? .aurionAmber : .aurionGreen,
                     lineWidth: 4,
                     size: 48
                 )
-                Text("\(Int(done * 100))%")
+                Text("\(Int(displayedCompleteness * 100))%")
                     .font(.system(size: 12, weight: .bold))
                     .foregroundColor(.aurionNavy)
+                    .contentTransition(.numericText())
+                    .animation(AurionAnimation.smooth, value: displayedCompleteness)
             }
             Text(helpText)
                 .font(.system(size: 13))
                 .foregroundColor(.aurionTextSecondary)
                 .lineSpacing(3)
                 .frame(maxWidth: .infinity, alignment: .leading)
-            AurionGoldButton(label: "Approve & Sign", size: .sm, disabled: blocked) {
+            AurionGoldButton(
+                label: isApproving ? "Signing…" : "Approve & Sign",
+                size: .sm,
+                disabled: blocked || isApproving
+            ) {
                 approveNote()
             }
         }
@@ -393,10 +497,36 @@ struct NoteReviewView: View {
     }
 
     private func approveNote() {
-        AurionHaptics.notification(.success)
+        guard !isApproving else { return }
+        isApproving = true
+        AurionHaptics.impact(.medium)
         Task {
-            _ = try? await APIClient.shared.approveFinalNote(sessionId: sessionId)
-            AuditLogger.log(event: .noteApproved, sessionId: sessionId)
+            do {
+                // Stage 1 review screen sits on a session in AWAITING_REVIEW.
+                // The /approve endpoint requires PROCESSING_STAGE2 or
+                // REVIEW_COMPLETE, so we must first call /approve-stage1
+                // (transitions AWAITING_REVIEW → PROCESSING_STAGE2 and runs
+                // Stage 2 vision inline). Once that returns, /approve is
+                // valid and moves the session to REVIEW_COMPLETE.
+                _ = try await APIClient.shared.approveStage1(sessionId: sessionId)
+                _ = try await APIClient.shared.approveFinalNote(sessionId: sessionId)
+                AuditLogger.log(event: .noteApproved, sessionId: sessionId)
+                await MainActor.run {
+                    AurionHaptics.notification(.success)
+                    showApprovedToast = true
+                }
+                // Brief confirmation hold, then dismiss back to dashboard.
+                try? await Task.sleep(nanoseconds: 900_000_000)
+                await MainActor.run {
+                    isApproving = false
+                    onDismiss()
+                }
+            } catch {
+                await MainActor.run {
+                    isApproving = false
+                    AurionHaptics.notification(.error)
+                }
+            }
         }
     }
 

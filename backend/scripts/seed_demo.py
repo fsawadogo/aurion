@@ -25,14 +25,24 @@ sys.path.insert(0, str(_backend_root))
 from sqlalchemy import select  # noqa: E402
 
 from app.core.database import async_session_factory  # noqa: E402
-from app.core.models import NoteVersionModel, SessionModel  # noqa: E402
+from app.core.models import NoteVersionModel, PhysicianProfileModel, SessionModel  # noqa: E402
 from app.core.types import SessionState  # noqa: E402
 
 # Stable UUID5 namespace so re-runs produce the same session IDs.
 _DEMO_NS = uuid.UUID("11111111-2222-3333-4444-555555555555")
 
-PERRY_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")  # plastic surgery
-MARIE_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")  # orthopedic surgery
+PERRY_ID = uuid.UUID("00000000-0000-0000-0000-000000000001")  # orthopedic surgery (demo)
+MARIE_ID = uuid.UUID("00000000-0000-0000-0000-000000000002")  # plastic surgery (demo)
+DEMO_ID = uuid.UUID("00000000-0000-0000-0000-000000000005")   # demo@aurion.health — clean marketing demo
+# Note: real CREOQ/CLLC roles are inverse (Perry = plastic, Marie = ortho),
+# but the canned demo transcript is a knee-pain orthopedic case, so Perry
+# is configured as orthopedic to keep all 6 sections populated → 100%
+# completeness in the recorded demo flow.
+#
+# DEMO_ID is a dedicated marketing account (Dr. Antoine Tremblay — Quebec
+# clinician) — also orthopedic so the canned knee-pain transcript matches
+# the template, with a small clean backlog of approved sessions for a
+# polished dashboard.
 
 
 def _section(section_id: str, title: str, claims: list[dict], status: str = "populated") -> dict:
@@ -373,6 +383,122 @@ MARIE_CASES = [
 ]
 
 
+# ── Demo account's cases (Dr. Alex Chen — marketing demo) ──────────────────
+
+# A small, deliberately clean backlog so the recorded demo dashboard looks
+# active without competing with the encounter being recorded. All approved.
+DEMO_CASES = [
+    {
+        "key": "demo_knee_followup",
+        "specialty": "orthopedic_surgery",
+        "state": SessionState.EXPORTED,
+        "days_ago": 1,
+        "completeness": 1.0,
+        "approved": True,
+        "sections": [
+            _section("chief_complaint", "Chief Complaint", [
+                _claim(1, "Physician noted patient returning for two-week follow-up after right knee arthroscopic partial meniscectomy.",
+                       "She's back for the two-week follow-up after the arthroscopic partial meniscectomy."),
+            ]),
+            _section("hpi", "History of Present Illness", [
+                _claim(2, "Physician noted significant improvement in pain and return to weight-bearing without an assistive device.",
+                       "Pain is much better, walking without crutches now."),
+            ]),
+            _section("physical_exam", "Physical Examination", [
+                _claim(3, "Physician noted portal incisions well healed without erythema or drainage.",
+                       "The portal sites are well healed, no redness, no drainage."),
+                _claim(4, "Physician noted active range of motion 0 to 120 degrees with mild end-range discomfort.",
+                       "Active range 0 to 120, just a little discomfort at end range."),
+            ]),
+            _section("imaging_review", "Imaging Review", [
+                _claim(5, "Physician noted no new imaging today; postoperative MRI deferred unless clinical concern arises.",
+                       "We don't need new imaging today, we'll only repeat the MRI if symptoms come back."),
+            ]),
+            _section("assessment", "Assessment", [
+                _claim(6, "Physician stated patient is recovering as expected at two weeks postoperative.",
+                       "She's recovering exactly as expected at two weeks post-op."),
+            ]),
+            _section("plan", "Plan", [
+                _claim(7, "Physician advanced physiotherapy program and planned six-week follow-up.",
+                       "We'll move her to phase two physio and see her again at six weeks."),
+            ]),
+        ],
+    },
+    {
+        "key": "demo_acl_new",
+        "specialty": "orthopedic_surgery",
+        "state": SessionState.EXPORTED,
+        "days_ago": 3,
+        "completeness": 1.0,
+        "approved": True,
+        "sections": [
+            _section("chief_complaint", "Chief Complaint", [
+                _claim(1, "Physician noted patient presents with left knee instability following a soccer pivot injury two weeks ago.",
+                       "He hurt his left knee pivoting at soccer two weeks ago and it keeps giving way."),
+            ]),
+            _section("hpi", "History of Present Illness", [
+                _claim(2, "Physician noted immediate swelling, audible pop, and inability to continue play after the injury.",
+                       "Heard a pop, knee swelled up right away, couldn't keep playing."),
+            ]),
+            _section("physical_exam", "Physical Examination", [
+                _claim(3, "Physician noted positive Lachman and pivot shift tests on the left.",
+                       "Lachman positive, pivot shift positive on the left."),
+                _claim(4, "Physician noted moderate effusion with full range of motion.",
+                       "Moderate effusion, otherwise full range of motion."),
+            ]),
+            _section("imaging_review", "Imaging Review", [
+                _claim(5, "Physician noted MRI shows complete ACL tear with bone bruise at the lateral femoral condyle, menisci intact.",
+                       "MRI shows a complete ACL tear with a bone bruise at the lateral femoral condyle, menisci look intact."),
+            ]),
+            _section("assessment", "Assessment", [
+                _claim(6, "Physician stated working diagnosis of complete ACL tear, left knee.",
+                       "Complete ACL tear, left knee."),
+            ]),
+            _section("plan", "Plan", [
+                _claim(7, "Physician planned prehabilitation followed by ACL reconstruction with hamstring autograft in approximately four weeks.",
+                       "Four weeks of prehab, then we'll do an ACL reconstruction with hamstring autograft."),
+            ]),
+        ],
+    },
+    {
+        "key": "demo_ankle_sprain",
+        "specialty": "orthopedic_surgery",
+        "state": SessionState.EXPORTED,
+        "days_ago": 6,
+        "completeness": 1.0,
+        "approved": True,
+        "sections": [
+            _section("chief_complaint", "Chief Complaint", [
+                _claim(1, "Physician noted patient presents with right ankle pain three days after an inversion injury on the trail.",
+                       "Right ankle hurt three days ago, rolled it on the trail."),
+            ]),
+            _section("hpi", "History of Present Illness", [
+                _claim(2, "Physician noted ability to bear weight initially but pain worsened over the following hours.",
+                       "Could walk on it at first but it got worse over a few hours."),
+            ]),
+            _section("physical_exam", "Physical Examination", [
+                _claim(3, "Physician noted tenderness over the anterior talofibular ligament, no bony tenderness at malleoli.",
+                       "Tender over the ATFL, no bony tenderness at the malleoli."),
+                _claim(4, "Physician noted negative anterior drawer and talar tilt tests.",
+                       "Anterior drawer and talar tilt are both negative."),
+            ]),
+            _section("imaging_review", "Imaging Review", [
+                _claim(5, "Physician noted radiographs negative for fracture by Ottawa Ankle Rules criteria.",
+                       "X-rays are negative, no fracture, Ottawa criteria met."),
+            ]),
+            _section("assessment", "Assessment", [
+                _claim(6, "Physician stated working diagnosis of grade II right ankle sprain.",
+                       "Grade two ankle sprain on the right."),
+            ]),
+            _section("plan", "Plan", [
+                _claim(7, "Physician recommended RICE protocol, functional bracing, and gradual return to activity over two to three weeks.",
+                       "RICE, functional brace, gradual return over two to three weeks."),
+            ]),
+        ],
+    },
+]
+
+
 # ── Insertion logic ────────────────────────────────────────────────────────
 
 
@@ -440,19 +566,88 @@ async def _seed_for_user(clinician_id: uuid.UUID, cases: list[dict], label: str)
     return sessions_created, notes_created
 
 
+DEMO_PROFILES = [
+    {
+        "clinician_id": PERRY_ID,
+        "display_name": "Dr. Perry Gdalevitch",
+        "practice_type": "Clinic,Hospital",
+        "primary_specialty": "orthopedic_surgery",
+        "preferred_templates": ["orthopedic_surgery"],
+        "consultation_types": ["new_patient", "follow_up"],
+        "allied_health_team": [{"role": "Nurse", "name": "Sarah Chen"}],
+        "output_language": "en",
+    },
+    {
+        "clinician_id": MARIE_ID,
+        "display_name": "Dr. Marie Gdalevitch",
+        "practice_type": "Clinic,Hospital",
+        "primary_specialty": "plastic_surgery",
+        "preferred_templates": ["plastic_surgery"],
+        "consultation_types": ["new_patient", "follow_up"],
+        "allied_health_team": [],
+        "output_language": "en",
+    },
+    {
+        "clinician_id": DEMO_ID,
+        "display_name": "Dr. Antoine Tremblay",
+        "practice_type": "Clinic",
+        "primary_specialty": "orthopedic_surgery",
+        "preferred_templates": ["orthopedic_surgery"],
+        "consultation_types": ["new_patient", "follow_up"],
+        "allied_health_team": [{"role": "Nurse", "name": "Sophie Lavoie"}],
+        "output_language": "en",
+    },
+]
+
+
+async def _seed_physician_profiles() -> int:
+    """Upsert profiles for Perry + Marie so their specialty / templates
+    persist across DB wipes. Without this, the iOS app's first profile
+    fetch creates a profile with default specialty='general', and the
+    demo dashboard shows the wrong quickstart cards."""
+    updated = 0
+    async with async_session_factory() as db:
+        for spec in DEMO_PROFILES:
+            existing = await db.execute(
+                select(PhysicianProfileModel).where(
+                    PhysicianProfileModel.clinician_id == spec["clinician_id"]
+                )
+            )
+            profile = existing.scalar_one_or_none()
+            if profile is None:
+                profile = PhysicianProfileModel(clinician_id=spec["clinician_id"])
+                db.add(profile)
+            profile.display_name = spec["display_name"]
+            profile.practice_type = spec["practice_type"]
+            profile.primary_specialty = spec["primary_specialty"]
+            profile.preferred_templates = json.dumps(spec["preferred_templates"])
+            profile.consultation_types = json.dumps(spec["consultation_types"])
+            profile.allied_health_team = json.dumps(spec["allied_health_team"])
+            profile.output_language = spec["output_language"]
+            updated += 1
+        await db.commit()
+    print(f"  physician_profiles: {updated} upserted")
+    return updated
+
+
 async def main() -> None:
     print("=" * 60)
     print("Aurion Demo Data Seed")
     print("=" * 60)
     print()
-    print("Seeding sessions and Stage 1 notes for Perry & Marie.")
+    print("Seeding profiles, sessions, and Stage 1 notes for Perry & Marie.")
     print()
-    # Perry = plastic, Marie = ortho (matches CLAUDE.md pilot description).
-    p_sessions, p_notes = await _seed_for_user(PERRY_ID, MARIE_CASES, "perry@creoq.ca (plastic)")
-    m_sessions, m_notes = await _seed_for_user(MARIE_ID, PERRY_CASES, "marie@creoq.ca (orthopedic)")
+    await _seed_physician_profiles()
+    # Perry = orthopedic (demo override), Marie = plastic.
+    # Sessions match each clinician's primary specialty so Recent Sessions
+    # on the dashboard doesn't show cross-specialty cards.
+    p_sessions, p_notes = await _seed_for_user(PERRY_ID, PERRY_CASES, "perry@creoq.ca (orthopedic)")
+    m_sessions, m_notes = await _seed_for_user(MARIE_ID, MARIE_CASES, "marie@creoq.ca (plastic)")
+    d_sessions, d_notes = await _seed_for_user(DEMO_ID, DEMO_CASES, "demo@aurion.health (orthopedic)")
     print()
     print("=" * 60)
-    print(f"Total: {p_sessions + m_sessions} sessions, {p_notes + m_notes} notes")
+    print(f"Total: {p_sessions + m_sessions + d_sessions} sessions, "
+          f"{p_notes + m_notes + d_notes} notes")
     print("Re-run anytime — already-seeded rows are skipped.")
     print("=" * 60)
 

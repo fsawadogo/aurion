@@ -239,12 +239,20 @@ def build_stage1_user_prompt(
         '- "source_type": "transcript"\n'
         '- "source_id": the transcript segment ID (e.g. "seg_001")\n'
         '- "source_quote": the exact text from the transcript segment\n\n'
-        "If a section has no relevant transcript content, set its status to "
-        '"not_captured" with an empty claims array.\n'
-        'If a section has content, set its status to "populated".\n'
-        "For sections that could benefit from visual data (physical exam, imaging, "
-        'wound assessment), set status to "pending_video" if transcript content '
-        "is present but visual enrichment is expected.\n\n"
+        "Choose the status for each section based on what the transcript contains:\n"
+        '- "populated": the transcript directly describes content for this section '
+        "(the physician narrates findings, observations, history, imaging review, "
+        "wound assessment, etc. in their own words). Emit one claim per distinct "
+        'observation with a transcript citation. ALWAYS use "populated" when the '
+        "transcript has direct content for the section — do NOT defer transcript-"
+        "described findings to pending_video.\n"
+        '- "pending_video": the section depends on visual data AND the transcript '
+        "contains no direct narration of the findings. Use this only when no "
+        "transcript claim can be made and the section is expected to be filled by "
+        "Stage 2 vision enrichment. Use an empty claims array.\n"
+        '- "not_captured": the section has no relevant transcript content and is '
+        "not expected to be filled by visual data either. Use an empty claims "
+        "array.\n\n"
         "Return a JSON object with this exact structure:\n"
         "{\n"
         '  "sections": [\n'

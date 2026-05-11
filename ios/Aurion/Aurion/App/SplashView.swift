@@ -17,27 +17,17 @@ struct SplashView: View {
         ZStack {
             AurionGradients.captureBackground.ignoresSafeArea()
 
-            VStack(spacing: 24) {
-                ZStack {
-                    Circle()
-                        .fill(Color.aurionGold.opacity(glow ? 0.18 : 0.08))
-                        .frame(width: 160, height: 160)
-                        .blur(radius: 24)
-                    Image(systemName: "waveform.badge.magnifyingglass")
-                        .font(.system(size: 56, weight: .light))
-                        .foregroundColor(.aurionGold)
-                }
+            // Soft gold halo behind the lockup — breathes (0.18 ↔ 0.08
+            // opacity) so the splash has motion before the lockup itself
+            // arrives. Sits *behind* the lockup image so it reads as glow,
+            // not as a circle on top.
+            ZStack {
+                Circle()
+                    .fill(Color.aurionGold.opacity(glow ? 0.22 : 0.08))
+                    .frame(width: 280, height: 280)
+                    .blur(radius: 48)
 
-                VStack(spacing: 8) {
-                    Text("Aurion")
-                        .font(.system(size: 42, weight: .semibold))
-                        .tracking(-1.2)
-                        .foregroundColor(.white)
-                    Text("Clinical intelligence \u{2014} captured")
-                        .font(.system(size: 14, weight: .regular))
-                        .tracking(0.6)
-                        .foregroundColor(Color(red: 183/255, green: 192/255, blue: 214/255))
-                }
+                AurionLogoLockup(size: 1.3, dark: true)
             }
         }
         .onAppear {

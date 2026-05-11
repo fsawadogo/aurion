@@ -26,10 +26,12 @@ services:
       # so the iOS Simulator (which has no mic) can reach Stage 1 + Stage 2.
       # Set to 0 or unset for normal pilot behaviour.
       - AURION_DEMO_TRANSCRIPT=1
-      # For demo capture, route note generation through Anthropic — Gemini's
-      # JSON output occasionally truncates on long structured responses,
-      # which makes Stage 1 unreliable for an autonomous take.
-      - AURION_PROVIDER_NOTE_GENERATION=anthropic
+      # Note generation routed through OpenAI GPT-4o. Anthropic (Claude
+      # Sonnet 4) and Gemini 2.5 Flash are also wired in `providers/note_gen/`
+      # — swap this value to `anthropic` or `gemini` to compare without code
+      # changes. Gemini's JSON output occasionally truncates on long
+      # structured responses, so prefer openai/anthropic for autonomous runs.
+      - AURION_PROVIDER_NOTE_GENERATION=openai
     env_file:
       - .env
     volumes:

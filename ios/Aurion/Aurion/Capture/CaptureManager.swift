@@ -74,6 +74,11 @@ final class CaptureManager: NSObject, ObservableObject {
     // MARK: - AVFoundation
 
     private nonisolated(unsafe) let captureSession = AVCaptureSession()
+
+    /// The underlying AVCaptureSession, surfaced so a SwiftUI view can attach
+    /// an AVCaptureVideoPreviewLayer for live preview. Read-only from outside
+    /// — callers must not mutate inputs/outputs directly.
+    nonisolated var previewSession: AVCaptureSession { captureSession }
     private nonisolated(unsafe) let audioOutput = AVCaptureAudioDataOutput()
     private nonisolated(unsafe) let videoOutput = AVCaptureVideoDataOutput()
     private let sessionQueue = DispatchQueue(label: "com.aurion.capture.session", qos: .userInitiated)
@@ -156,16 +161,47 @@ final class CaptureManager: NSObject, ObservableObject {
 
     // MARK: - Session Setup
 
+    /// Tracks which camera position the session is currently configured for.
+    /// Used to skip reconfiguration when nothing has changed — important
+    /// because the preview layer (CameraPreviewLayer) may already be
+    /// rendering from this session, and destructively removing + re-adding
+    /// inputs while the render thread is mid-frame causes EXC_BAD_ACCESS.
+    private nonisolated(unsafe) var configuredCameraPosition: AVCaptureDevice.Position?
+
     /// Configures the AVCaptureSession with audio and video inputs/outputs.
-    /// Call this once after permissions are granted, before starting capture.
+    /// Idempotent in the common case — if the session already has the
+    /// requested camera position wired up, this is a no-op. The destructive
+    /// remove-and-rewire path only runs when the camera position actually
+    /// changes (e.g., flip from back to front camera).
+    ///
     /// Defaults to the back camera — clinical use case is the physician's
     /// phone pointing at the patient. Front-camera capture is opt-in.
     func configureCaptureSession(preferBackCamera: Bool = true) {
+        let requestedPosition: AVCaptureDevice.Position = preferBackCamera ? .back : .front
         sessionQueue.async { [weak self] in
             guard let self else { return }
 
+            // Fast path: if the session is already wired for this camera,
+            // there's nothing to do. Returning here avoids the destructive
+            // remove+re-add that races with the preview layer's render
+            // thread when start() is called on a running session.
+            if self.configuredCameraPosition == requestedPosition,
+               !self.captureSession.inputs.isEmpty,
+               !self.captureSession.outputs.isEmpty {
+                return
+            }
+
             self.captureSession.beginConfiguration()
             self.captureSession.sessionPreset = .medium
+
+            // Tear down any stale inputs/outputs from a previous camera
+            // position. Only reachable when the camera actually changes.
+            for input in self.captureSession.inputs {
+                self.captureSession.removeInput(input)
+            }
+            for output in self.captureSession.outputs {
+                self.captureSession.removeOutput(output)
+            }
 
             // --- Audio Input ---
             if let audioDevice = AVCaptureDevice.default(for: .audio),
@@ -180,11 +216,10 @@ final class CaptureManager: NSObject, ObservableObject {
             }
 
             // --- Video Input ---
-            let preferredPosition: AVCaptureDevice.Position = preferBackCamera ? .back : .front
             let videoDevice = AVCaptureDevice.default(
                 .builtInWideAngleCamera,
                 for: .video,
-                position: preferredPosition
+                position: requestedPosition
             ) ?? AVCaptureDevice.default(for: .video)
 
             if let device = videoDevice,
@@ -215,6 +250,7 @@ final class CaptureManager: NSObject, ObservableObject {
             }
 
             self.captureSession.commitConfiguration()
+            self.configuredCameraPosition = requestedPosition
         }
     }
 
@@ -243,8 +279,46 @@ final class CaptureManager: NSObject, ObservableObject {
 
         sessionQueue.async { [weak self] in
             guard let self else { return }
+            // Activate the shared AVAudioSession ON the same serial queue as
+            // startRunning, BEFORE startRunning fires. Without this the
+            // capture source bails with FigCaptureSourceRemote err=-17281
+            // and FigAudioSession err=-19224 (Apple's internal "audio session
+            // not in record state" check).
+            //
+            // First setActive(false) to reset any stale state from a previous
+            // crashed session or from voice enrollment — without the reset,
+            // a sticky inactive-but-not-fully-torn-down session can refuse to
+            // re-activate. Then setCategory(.record) — no playback in this
+            // path so .playAndRecord adds routing complexity for no gain.
+            // No .mixWithOthers / .defaultToSpeaker either — AVCaptureSession
+            // wants primary mic ownership.
+            do {
+                let session = AVAudioSession.sharedInstance()
+                try? session.setActive(false, options: .notifyOthersOnDeactivation)
+                try session.setCategory(
+                    .record,
+                    mode: .default,
+                    options: [.allowBluetoothHFP]
+                )
+                try session.setActive(true, options: .notifyOthersOnDeactivation)
+                NSLog("[Aurion] AVAudioSession ready: cat=%@ mode=%@ sampleRate=%.0f",
+                      session.category.rawValue,
+                      session.mode.rawValue,
+                      session.sampleRate)
+            } catch {
+                NSLog("[Aurion] AVAudioSession activate FAILED: %@",
+                      error.localizedDescription)
+                Task { @MainActor in
+                    self.error = "Audio session activation failed: \(error.localizedDescription)"
+                }
+                return
+            }
+
             if !self.captureSession.isRunning {
                 self.captureSession.startRunning()
+                NSLog("[Aurion] AVCaptureSession started: inputs=%d outputs=%d",
+                      self.captureSession.inputs.count,
+                      self.captureSession.outputs.count)
             }
             Task { @MainActor in
                 self.isCapturing = true
@@ -260,6 +334,13 @@ final class CaptureManager: NSObject, ObservableObject {
             if self.captureSession.isRunning {
                 self.captureSession.stopRunning()
             }
+            // Release the audio session so other apps (Music, FaceTime, etc.)
+            // regain priority. `notifyOthersOnDeactivation` lets paused apps
+            // automatically resume playback. Non-fatal if it fails.
+            try? AVAudioSession.sharedInstance().setActive(
+                false,
+                options: .notifyOthersOnDeactivation
+            )
             Task { @MainActor in
                 self.isCapturing = false
                 self.isPaused = false

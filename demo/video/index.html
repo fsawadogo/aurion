@@ -152,23 +152,90 @@
         opacity: 0;
       }
 
-      /* ── Phone region ───────────────────────────────────────────── */
-      .phone-stage {
+      /* ── Phone region — iPhone 17 Pro mockup ────────────────────── */
+      /* Outer titanium bezel — draws the full device shell. The inner
+         .phone-stage is sized to match the real iPhone 17 Pro screen
+         aspect (1206x2622 ≈ 0.46), so the captured iOS recording fits
+         end-to-end and the tab bar at the bottom of the app is visible
+         without any object-fit cropping. */
+      .phone-frame {
         position: absolute;
-        top: 140px;
+        top: 130px;
         left: 50%;
-        margin-left: -380px;
-        width: 760px;
-        height: 1490px;
-        border-radius: 56px;
-        background: #000;
+        margin-left: -362px;
+        width: 724px;
+        height: 1620px;
+        border-radius: 70px;
+        background:
+          linear-gradient(135deg,
+            #3a3a3c 0%,
+            #1c1c1e 22%,
+            #2a2a2c 50%,
+            #1c1c1e 78%,
+            #3a3a3c 100%);
         box-shadow:
-          0 0 0 8px rgba(255, 255, 255, 0.04),
-          0 30px 80px rgba(0, 0, 0, 0.55),
-          0 0 200px rgba(212, 166, 74, 0.05);
-        overflow: hidden;
+          0 0 0 1px rgba(255, 255, 255, 0.06),
+          inset 0 0 0 1px rgba(255, 255, 255, 0.04),
+          0 38px 90px rgba(0, 0, 0, 0.6),
+          0 0 220px rgba(212, 166, 74, 0.05);
         z-index: 2;
         opacity: 0;
+      }
+      /* Top + bottom rim highlight — subtle metallic sheen */
+      .phone-frame::before {
+        content: "";
+        position: absolute;
+        top: 4px; left: 18%; right: 18%;
+        height: 1px;
+        background: linear-gradient(90deg,
+          transparent,
+          rgba(255, 255, 255, 0.18),
+          transparent);
+        border-radius: 1px;
+        pointer-events: none;
+      }
+      .phone-frame::after {
+        content: "";
+        position: absolute;
+        bottom: 4px; left: 18%; right: 18%;
+        height: 1px;
+        background: linear-gradient(90deg,
+          transparent,
+          rgba(255, 255, 255, 0.08),
+          transparent);
+        border-radius: 1px;
+        pointer-events: none;
+      }
+
+      /* Side buttons — drawn as small absolute children of .phone-frame.
+         Coordinates match a real iPhone 17 Pro: Action button + Vol up +
+         Vol down on the left, Side button (long) on the right. */
+      .phone-btn {
+        position: absolute;
+        background: linear-gradient(180deg, #2c2c2e 0%, #1c1c1e 50%, #2c2c2e 100%);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.10),
+          inset 0 -1px 0 rgba(0, 0, 0, 0.30);
+      }
+      .phone-btn.btn-action { left: -3px; top: 290px;  width: 6px; height: 48px;  border-radius: 2px 0 0 2px; }
+      .phone-btn.btn-vol-up { left: -4px; top: 380px;  width: 7px; height: 118px; border-radius: 3px 0 0 3px; }
+      .phone-btn.btn-vol-dn { left: -4px; top: 520px;  width: 7px; height: 118px; border-radius: 3px 0 0 3px; }
+      .phone-btn.btn-side   { right: -4px; top: 360px; width: 7px; height: 184px; border-radius: 0 3px 3px 0; }
+
+      /* Inner screen region — sized to the iPhone 17 Pro display aspect
+         (≈0.46) so the captured iOS recording fills the screen exactly
+         without cropping. Border-radius matches the iPhone's screen
+         radius (slightly smaller than the outer .phone-frame radius). */
+      .phone-stage {
+        position: absolute;
+        top: 22px;
+        left: 22px;
+        width: 680px;
+        height: 1576px;
+        border-radius: 50px;
+        background: #000;
+        overflow: hidden;
+        z-index: 3;
       }
       .phone-stage::after {
         content: "";
@@ -179,14 +246,15 @@
         pointer-events: none;
         z-index: 5;
       }
+      /* Aspect-correct fill — the stage already matches iPhone 17 Pro
+         aspect, so the video shows the entire screen end-to-end (status
+         bar at top, tab bar at bottom) without any cropping. */
       .phone-stage video {
         position: absolute;
-        top: 50%;
-        left: 50%;
-        transform: translate(-50%, -50%);
+        top: 0;
+        left: 0;
         width: 100%;
-        height: auto;
-        min-height: 100%;
+        height: 100%;
         object-fit: cover;
       }
       /* Black overlay for dip-to-black transitions between scenes */
@@ -253,6 +321,74 @@
         background: radial-gradient(ellipse, var(--gold-soft) 0%, transparent 60%);
         pointer-events: none;
         z-index: 1;
+      }
+
+      /* ── Center-screen scene-transition title card ──────────────── */
+      /* Sits on top of the phone during each scene change. Eyebrow +
+         large headline fade in over a dimmed backdrop, hold ~1 s, then
+         fade out as the next clip starts. This is the "chapter mark"
+         feel the user wants between scenes. */
+      .center-backdrop {
+        position: absolute;
+        inset: 0;
+        background:
+          radial-gradient(ellipse at 50% 50%, rgba(10, 20, 40, 0.88) 0%, rgba(10, 20, 40, 0.6) 55%, transparent 100%);
+        z-index: 6;
+        pointer-events: none;
+        opacity: 0;
+      }
+      .center-title {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 22px;
+        text-align: center;
+        z-index: 7;
+        pointer-events: none;
+        opacity: 0;
+        padding: 0 80px;
+      }
+      .center-eyebrow {
+        font-size: 20px;
+        letter-spacing: 10px;
+        color: var(--gold);
+        text-transform: uppercase;
+        font-weight: 600;
+      }
+      .center-eyebrow::before {
+        content: "";
+        display: inline-block;
+        width: 36px;
+        height: 1px;
+        background: var(--gold);
+        vertical-align: middle;
+        margin-right: 18px;
+        margin-bottom: 4px;
+      }
+      .center-eyebrow::after {
+        content: "";
+        display: inline-block;
+        width: 36px;
+        height: 1px;
+        background: var(--gold);
+        vertical-align: middle;
+        margin-left: 18px;
+        margin-bottom: 4px;
+      }
+      .center-headline {
+        font-size: 76px;
+        line-height: 1.1;
+        letter-spacing: -1.5px;
+        font-weight: 600;
+        color: var(--text);
+        max-width: 900px;
+      }
+      .center-headline em {
+        color: var(--gold);
+        font-style: normal;
       }
 
       /* ── Bottom timeline progress ───────────────────────────────── */
@@ -345,52 +481,68 @@
       </div>
       <div class="hairline" id="hairline"></div>
 
-      <!-- Phone footage region — clips timed to specific narration phrases.
-           Each clip is on track 0 with a tiny 0.05s frame offset between
-           neighbours so the same-track-no-overlap rule is satisfied while
-           appearing seamless. The .phone-fade overlay handles dip-to-black
-           transitions between scenes. -->
-      <div class="phone-stage" id="phone-stage">
+      <!-- Phone mockup — iPhone 17 Pro titanium frame wraps the screen.
+           Side buttons (Action / Vol Up / Vol Down on the left, Side on the
+           right) are pseudo-elements of .phone-frame. The original
+           .phone-stage inside is the actual screen — same 760x1490
+           dimensions so existing video clips and GSAP timeline don't shift. -->
+      <div class="phone-frame" id="phone-frame">
+        <div class="phone-btn btn-action"></div>
+        <div class="phone-btn btn-vol-up"></div>
+        <div class="phone-btn btn-vol-dn"></div>
+        <div class="phone-btn btn-side"></div>
+        <div class="phone-stage" id="phone-stage">
         <video class="clip" id="vid1"
                data-start="4.0"   data-duration="8.5"  data-track-index="0"
                src="clips/s1-intro.mp4" muted playsinline></video>
         <video class="clip" id="vid2"
-               data-start="12.5"  data-duration="31.0" data-track-index="0"
+               data-start="12.5"  data-duration="17.7" data-track-index="0"
                src="clips/s2-profile.mp4" muted playsinline></video>
         <video class="clip" id="vid3"
-               data-start="43.5"  data-duration="20.0" data-track-index="0"
-               src="clips/s3-encounter.mp4" muted playsinline></video>
+               data-start="30.2"  data-duration="13.3" data-track-index="0"
+               src="clips/s3-capture-mode.mp4" muted playsinline></video>
         <video class="clip" id="vid4"
-               data-start="63.5"  data-duration="19.5" data-track-index="0"
-               src="clips/s4-consent.mp4" muted playsinline></video>
+               data-start="43.5"  data-duration="20.0" data-track-index="0"
+               src="clips/s4-encounter.mp4" muted playsinline></video>
         <video class="clip" id="vid5"
-               data-start="83.0"  data-duration="9.5"  data-track-index="0"
-               src="clips/s5-live-note.mp4" muted playsinline></video>
+               data-start="63.5"  data-duration="19.5" data-track-index="0"
+               src="clips/s5-recording.mp4" muted playsinline></video>
         <video class="clip" id="vid6"
-               data-start="92.5"  data-duration="18.5" data-track-index="0"
-               src="clips/s6-multimodal.mp4" muted playsinline></video>
+               data-start="83.0"  data-duration="9.5"  data-track-index="0"
+               src="clips/s6-live-note.mp4" muted playsinline></video>
         <video class="clip" id="vid7"
-               data-start="111.0" data-duration="17.0" data-track-index="0"
-               src="clips/s7-final.mp4" muted playsinline></video>
+               data-start="92.5"  data-duration="18.5" data-track-index="0"
+               src="clips/s7-multimodal.mp4" muted playsinline></video>
         <video class="clip" id="vid8"
+               data-start="111.0" data-duration="17.0" data-track-index="0"
+               src="clips/s8-final.mp4" muted playsinline></video>
+        <video class="clip" id="vid9"
                data-start="128.0" data-duration="4.0"  data-track-index="0"
-               src="clips/s8-ending.mp4" muted playsinline></video>
+               src="clips/s9-ending.mp4" muted playsinline></video>
         <!-- Black overlay sitting above the videos — used for dip-to-black
              transitions and to mask the brief frame between clip cuts. -->
         <div class="phone-fade" id="phone-fade"></div>
-      </div>
+        </div><!-- /.phone-stage -->
+      </div><!-- /.phone-frame -->
 
       <!-- Narration audio — starts after the 4s intro logo card -->
       <audio class="clip" id="vo"
              data-start="4" data-duration="128" data-track-index="1"
              src="audio/narration.wav" data-volume="1"></audio>
 
-      <!-- Section label + headline -->
+      <!-- Section label + headline (lower-third, persistent per scene) -->
       <div class="lower" id="lower">
         <div id="section-label" class="section-label">INTRODUCING</div>
         <div id="section-title" class="section-title">
           A multimodal <em>clinical AI</em> platform.
         </div>
+      </div>
+
+      <!-- Center-screen scene-transition title card -->
+      <div class="center-backdrop" id="center-backdrop"></div>
+      <div class="center-title" id="center-title">
+        <div class="center-eyebrow" id="center-eyebrow">CHAPTER</div>
+        <div class="center-headline" id="center-headline">Title</div>
       </div>
 
       <!-- Progress bar -->
@@ -454,12 +606,12 @@
         4.3
       );
 
-      // ── Phone stage entrance ────────────────────────────────────
-      tl.to("#phone-stage",
+      // ── Phone frame entrance — fades + scales the whole device ──
+      tl.to("#phone-frame",
         { opacity: 1, duration: 0.6, ease: "power2.out" },
         4.0
       );
-      tl.from("#phone-stage",
+      tl.from("#phone-frame",
         { scale: 0.94, duration: 1.0, ease: "power3.out" },
         4.0
       );
@@ -482,10 +634,13 @@
       );
 
       // ── Section copy + start times — narration sentence boundaries
-      // (audio offset by +4s for the intro card).
+      // (audio offset by +4s for the intro card). 9 sections so the
+      // CAPTURE MODE picker has its own beat that lines up with the VO
+      // "smart dictation, audio only, or multimodal".
       const sections = [
         { t:   4.4, label: "INTRODUCING",       title: "A multimodal <em>clinical AI</em> platform." },
         { t:  12.5, label: "PHYSICIAN PROFILE", title: "Voice. Templates. Languages.<br/>Connected devices." },
+        { t:  30.2, label: "CAPTURE MODE",      title: "Smart dictation, audio only,<br/>or <em>multimodal</em>." },
         { t:  43.5, label: "NEW ENCOUNTER",     title: "Visit type, team, and<br/>clinical context." },
         { t:  63.5, label: "RECORDING",         title: "<em>Ambient</em> capture — audio<br/>and optional video." },
         { t:  83.0, label: "LIVE NOTE",         title: "Generated <em>immediately</em><br/>from ambient audio." },
@@ -494,7 +649,7 @@
         { t: 128.0, label: "AURION",            title: "From documentation<br/>to <em>clinical understanding</em>." },
       ];
 
-      // Initial section text entrance
+      // Initial section text entrance (lower third)
       tl.fromTo("#section-label",
         { y: 16, opacity: 0 },
         { y: 0, opacity: 1, duration: 0.85, ease: "power2.out" },
@@ -506,43 +661,115 @@
         sections[0].t + 0.2
       );
 
-      // Per-section transitions: fade out → swap → fade in. Slower than
-      // before (was 0.35/0.5) for a calmer, more deliberate pace.
-      // Plus a dip-to-black on the phone stage at each scene boundary
-      // to mask the hard cut between video clips.
+      // Per-section transitions: this is the "chapter mark" the user
+      // asked for. At each boundary:
+      //   1. Phone dips to black + scales down slightly (slower than
+      //      before — 0.55/0.85 instead of 0.35/0.5).
+      //   2. Center-screen title card fades in (eyebrow + large headline
+      //      at the literal center of the frame), holds ~1.1s.
+      //   3. Center title fades out, lower-third text swaps in, phone
+      //      scales back up + fades from black.
+      // This gives every screen change a deliberate, narrated feel
+      // rather than a hard cut.
+      const T_DIP_IN   = 0.55;   // phone → black
+      const T_TITLE_IN = 0.60;   // center card → visible
+      const T_HOLD     = 1.10;   // center card hold
+      const T_TITLE_OUT= 0.55;   // center card → invisible
+      const T_DIP_OUT  = 0.85;   // phone ← black
+
       for (let i = 1; i < sections.length; i++) {
         const s = sections[i];
-        // Phone fade dip — peak black at the scene boundary
+        // Center card timing — peak around s.t (the actual clip cut point)
+        const dipStart    = s.t - 1.5;
+        const titleStart  = s.t - 1.1;
+        const titleHold   = s.t - 0.5;
+        const titleOutAt  = s.t + 0.35;
+        const dipOutAt    = s.t + 0.55;
+
+        // Phone fade dip (longer ramp, peaks at scene boundary)
         tl.to("#phone-fade",
-          { opacity: 0.85, duration: 0.35, ease: "power2.in", overwrite: "auto" },
-          s.t - 0.35
+          { opacity: 0.95, duration: T_DIP_IN, ease: "power2.in", overwrite: "auto" },
+          dipStart
         );
-        tl.to("#phone-fade",
-          { opacity: 0, duration: 0.5, ease: "power2.out", overwrite: "auto" },
-          s.t
+        tl.to("#phone-frame",
+          { scale: 0.95, duration: T_DIP_IN, ease: "power2.in", overwrite: "auto" },
+          dipStart
         );
-        // Section text fade out
+
+        // Lower-third text fade OUT (before center card appears)
         tl.to("#section-label",
-          { opacity: 0, y: -10, duration: 0.5, ease: "power2.in", overwrite: "auto" },
-          s.t - 0.7
+          { opacity: 0, y: -10, duration: 0.45, ease: "power2.in", overwrite: "auto" },
+          dipStart
         );
         tl.to("#section-title",
-          { opacity: 0, y: -12, duration: 0.55, ease: "power2.in", overwrite: "auto" },
-          s.t - 0.65
+          { opacity: 0, y: -12, duration: 0.50, ease: "power2.in", overwrite: "auto" },
+          dipStart + 0.05
         );
-        // Swap text mid-fade
-        tl.set("#section-label", { innerHTML: s.label }, s.t - 0.05);
-        tl.set("#section-title", { innerHTML: s.title }, s.t - 0.05);
-        // Section text fade in
+
+        // Center backdrop fade in
+        tl.to("#center-backdrop",
+          { opacity: 1, duration: T_TITLE_IN, ease: "power2.out", overwrite: "auto" },
+          titleStart
+        );
+
+        // Swap center-card copy just before fade-in (frozen at hidden state)
+        tl.set("#center-eyebrow",  { innerHTML: s.label }, titleStart - 0.01);
+        tl.set("#center-headline", { innerHTML: s.title }, titleStart - 0.01);
+
+        // Center card fade in + slight rise
+        tl.fromTo("#center-title",
+          { opacity: 0, y: 24 },
+          { opacity: 1, y: 0, duration: T_TITLE_IN, ease: "power3.out", overwrite: "auto" },
+          titleStart
+        );
+        tl.fromTo("#center-eyebrow",
+          { letterSpacing: "16px", opacity: 0 },
+          { letterSpacing: "10px", opacity: 1, duration: T_TITLE_IN + 0.1, ease: "power2.out", overwrite: "auto" },
+          titleStart
+        );
+        tl.fromTo("#center-headline",
+          { y: 28, opacity: 0 },
+          { y: 0, opacity: 1, duration: T_TITLE_IN + 0.15, ease: "power3.out", overwrite: "auto" },
+          titleStart + 0.10
+        );
+
+        // Hold (just dwells — no animation needed, but keep an empty
+        // beat for clarity)
+        tl.to({}, { duration: T_HOLD }, titleHold);
+
+        // Center card fade OUT
+        tl.to("#center-title",
+          { opacity: 0, y: -18, duration: T_TITLE_OUT, ease: "power2.in", overwrite: "auto" },
+          titleOutAt
+        );
+        tl.to("#center-backdrop",
+          { opacity: 0, duration: T_TITLE_OUT + 0.1, ease: "power2.in", overwrite: "auto" },
+          titleOutAt
+        );
+
+        // Phone fade UP from black + scale back to 1
+        tl.to("#phone-fade",
+          { opacity: 0, duration: T_DIP_OUT, ease: "power2.out", overwrite: "auto" },
+          dipOutAt
+        );
+        tl.to("#phone-frame",
+          { scale: 1.0, duration: T_DIP_OUT, ease: "power3.out", overwrite: "auto" },
+          dipOutAt
+        );
+
+        // Swap lower-third text and fade it back in (slightly after the
+        // center card has cleared so it doesn't compete visually)
+        tl.set("#section-label", { innerHTML: s.label }, dipOutAt + 0.05);
+        tl.set("#section-title", { innerHTML: s.title }, dipOutAt + 0.05);
         tl.fromTo("#section-label",
           { y: 16, opacity: 0 },
           { y: 0, opacity: 1, duration: 0.7, ease: "power2.out", overwrite: "auto" },
-          s.t
+          dipOutAt + 0.4
         );
         tl.fromTo("#section-title",
           { y: 22, opacity: 0 },
           { y: 0, opacity: 1, duration: 0.85, ease: "power3.out", overwrite: "auto" },
-          s.t + 0.2
+          dipOutAt + 0.55
         );
       }
 

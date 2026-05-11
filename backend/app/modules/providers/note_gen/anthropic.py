@@ -23,7 +23,7 @@ from app.modules.providers.note_gen.shared import (
 logger = logging.getLogger("aurion.providers.note_gen.anthropic")
 
 _ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
-_MODEL = "claude-sonnet-4-20250514"
+_MODEL = "claude-sonnet-4-6"
 
 
 class AnthropicNoteGenerationProvider(NoteGenerationProvider):

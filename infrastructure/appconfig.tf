@@ -44,6 +44,95 @@ resource "aws_appconfig_configuration_profile" "main" {
   location_uri   = "hosted"
   type           = "AWS.Freeform"
 
+  # JSON Schema validator — mirrors backend/app/modules/config/schema.py
+  # Any deployment with an invalid provider key, out-of-range parameter, or
+  # missing required field is rejected by AppConfig before it reaches the
+  # running app. CLAUDE.md's "Schema validation rejects bad keys" checkpoint
+  # depends on this block.
+  validator {
+    type = "JSON_SCHEMA"
+    content = jsonencode({
+      "$schema"            = "http://json-schema.org/draft-07/schema#"
+      title                = "AurionAppConfig"
+      type                 = "object"
+      required             = ["providers", "model_params", "pipeline", "feature_flags"]
+      additionalProperties = false
+      properties = {
+        providers = {
+          type                 = "object"
+          required             = ["transcription", "note_generation", "vision"]
+          additionalProperties = false
+          properties = {
+            transcription   = { type = "string", enum = ["whisper", "assemblyai"] }
+            note_generation = { type = "string", enum = ["openai", "anthropic", "gemini"] }
+            vision          = { type = "string", enum = ["openai", "anthropic", "gemini"] }
+          }
+        }
+        model_params = {
+          type                 = "object"
+          required             = ["note_generation", "vision"]
+          additionalProperties = false
+          properties = {
+            note_generation = {
+              type                 = "object"
+              required             = ["temperature", "max_tokens"]
+              additionalProperties = false
+              properties = {
+                temperature = { type = "number", minimum = 0.0, maximum = 2.0 }
+                max_tokens  = { type = "integer", minimum = 100, maximum = 16000 }
+              }
+            }
+            vision = {
+              type                 = "object"
+              required             = ["temperature", "max_tokens", "confidence_threshold"]
+              additionalProperties = false
+              properties = {
+                temperature          = { type = "number", minimum = 0.0, maximum = 2.0 }
+                max_tokens           = { type = "integer", minimum = 100, maximum = 4000 }
+                confidence_threshold = { type = "string", enum = ["low", "medium", "high"] }
+              }
+            }
+          }
+        }
+        pipeline = {
+          type = "object"
+          required = [
+            "stage1_skip_window_seconds",
+            "frame_window_clinic_ms",
+            "frame_window_procedural_ms",
+            "screen_capture_fps",
+            "video_capture_fps",
+          ]
+          additionalProperties = false
+          properties = {
+            stage1_skip_window_seconds = { type = "integer", minimum = 10, maximum = 600 }
+            frame_window_clinic_ms     = { type = "integer", minimum = 500, maximum = 30000 }
+            frame_window_procedural_ms = { type = "integer", minimum = 1000, maximum = 60000 }
+            screen_capture_fps         = { type = "integer", minimum = 1, maximum = 10 }
+            video_capture_fps          = { type = "integer", minimum = 1, maximum = 10 }
+          }
+        }
+        feature_flags = {
+          type = "object"
+          required = [
+            "screen_capture_enabled",
+            "note_versioning_enabled",
+            "session_pause_resume_enabled",
+            "per_session_provider_override",
+          ]
+          additionalProperties = false
+          properties = {
+            screen_capture_enabled        = { type = "boolean" }
+            note_versioning_enabled       = { type = "boolean" }
+            session_pause_resume_enabled  = { type = "boolean" }
+            per_session_provider_override = { type = "boolean" }
+            meta_wearables_enabled        = { type = "boolean" }
+          }
+        }
+      }
+    })
+  }
+
   tags = {
     Name = "aurion-appconfig-profile-${var.environment}"
   }
