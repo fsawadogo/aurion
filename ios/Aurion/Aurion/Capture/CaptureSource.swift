@@ -108,6 +108,24 @@ class CaptureSource: ObservableObject, Identifiable {
     /// PCM-derived WAV for the just-completed recording. Returns nil if no
     /// audio was captured (video-only source, or session never started).
     func getRecordedAudioData() -> Data? { nil }
+
+    /// Recorded audio as an `AVAudioPCMBuffer` for downstream on-device
+    /// processing (e.g. speaker tagging). Returns nil for sources that
+    /// don't capture audio or only retain WAV bytes.
+    func getRecordedPCMBuffer() -> AVAudioPCMBuffer? { nil }
+
+    /// Drop any retained audio PCM. Called by `LocalDataPurger.purgeAll`
+    /// when export completes or when an explicit purge is requested.
+    /// Default is a no-op so video-only sources don't need to override.
+    func discardRecordedAudio() {}
+
+    /// Size in bytes of the retained audio PCM, without copying the
+    /// buffer. Subclasses should peek at their backing storage; the
+    /// fallback that builds a WAV just to count bytes is for source
+    /// implementations that haven't been updated yet.
+    func getRecordedAudioByteCount() -> Int {
+        getRecordedAudioData()?.count ?? 0
+    }
 }
 
 enum CaptureSourceError: LocalizedError {

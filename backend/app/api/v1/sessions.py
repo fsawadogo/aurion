@@ -6,15 +6,15 @@ No business logic here — routes call module service functions only.
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._helpers import get_session_or_404, require_state, write_audit
 from app.core.database import get_db
 from app.core.types import SessionState, UserRole
-from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, get_current_user, require_role
 from app.modules.session.service import (
     ConsentRequiredError,
@@ -22,7 +22,6 @@ from app.modules.session.service import (
     confirm_consent,
     create_session,
     get_audit_event_for_state,
-    get_session,
     list_sessions,
     transition_session,
 )
@@ -82,28 +81,35 @@ async def create_session_route(
         provider_overrides=body.provider_overrides,
         capture_mode=body.capture_mode,
     )
-    audit = get_audit_log_service()
-    await audit.write_event(
-        session_id=session.id,
-        event_type="session_created",
+    await write_audit(
+        session.id,
+        "session_created",
         clinician_id=str(user.user_id),
         specialty=body.specialty,
     )
     return _to_response(session)
 
 
+ConsentMethod = Literal["verbal", "paper_form", "digital_form"]
+
+
+class ConfirmConsentRequest(BaseModel):
+    consent_method: ConsentMethod
+
+
 @router.post("/{session_id}/consent", response_model=SessionResponse)
 async def confirm_consent_route(
     session_id: uuid.UUID,
+    body: ConfirmConsentRequest,
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await _get_or_404(db, session_id)
+    session = await get_session_or_404(db, session_id)
     await confirm_consent(db, session)
-    audit = get_audit_log_service()
-    await audit.write_event(
-        session_id=session.id,
-        event_type="consent_confirmed",
+    await write_audit(
+        session.id,
+        "consent_confirmed",
+        consent_method=body.consent_method,
     )
     return _to_response(session)
 
@@ -114,7 +120,7 @@ async def start_recording_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await _get_or_404(db, session_id)
+    session = await get_session_or_404(db, session_id)
     return await _do_transition(db, session, SessionState.RECORDING)
 
 
@@ -124,7 +130,7 @@ async def pause_session_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await _get_or_404(db, session_id)
+    session = await get_session_or_404(db, session_id)
     return await _do_transition(db, session, SessionState.PAUSED)
 
 
@@ -134,7 +140,7 @@ async def resume_session_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await _get_or_404(db, session_id)
+    session = await get_session_or_404(db, session_id)
     return await _do_transition(db, session, SessionState.RECORDING)
 
 
@@ -144,7 +150,7 @@ async def stop_recording_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await _get_or_404(db, session_id)
+    session = await get_session_or_404(db, session_id)
     return await _do_transition(db, session, SessionState.PROCESSING_STAGE1)
 
 
@@ -164,21 +170,12 @@ async def update_session_template(
     Only valid when the session is in PROCESSING_STAGE1 state (audio submitted
     but note not yet generated).
     """
-    session = await _get_or_404(db, session_id)
-    if session.state != SessionState.PROCESSING_STAGE1:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Template can only be changed in PROCESSING_STAGE1 state. Current: {session.state.value}",
-        )
+    session = await get_session_or_404(db, session_id)
+    require_state(session, SessionState.PROCESSING_STAGE1)
     session.specialty = body.specialty
     await db.flush()
 
-    audit = get_audit_log_service()
-    await audit.write_event(
-        session_id=session.id,
-        event_type="template_changed",
-        new_specialty=body.specialty,
-    )
+    await write_audit(session.id, "template_changed", new_specialty=body.specialty)
     return _to_response(session)
 
 
@@ -188,7 +185,7 @@ async def get_session_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await _get_or_404(db, session_id)
+    session = await get_session_or_404(db, session_id)
     return _to_response(session)
 
 
@@ -203,13 +200,6 @@ async def list_sessions_route(
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 
-async def _get_or_404(db: AsyncSession, session_id: uuid.UUID):
-    session = await get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    return session
-
-
 async def _do_transition(db, session, target_state: SessionState) -> SessionResponse:
     try:
         session = await transition_session(db, session, target_state)
@@ -218,11 +208,7 @@ async def _do_transition(db, session, target_state: SessionState) -> SessionResp
     except ConsentRequiredError as e:
         raise HTTPException(status_code=403, detail=str(e))
 
-    audit = get_audit_log_service()
-    await audit.write_event(
-        session_id=session.id,
-        event_type=get_audit_event_for_state(target_state),
-    )
+    await write_audit(session.id, get_audit_event_for_state(target_state))
     return _to_response(session)
 
 

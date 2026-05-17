@@ -65,9 +65,14 @@ final class BLEPairingManager: NSObject, ObservableObject {
     // MARK: - Configuration
 
     /// When true, simulates BLE discovery and pairing for Simulator / no-hardware testing.
-    /// Defaults to true on the simulator (no Bluetooth radio exists there) so the
-    /// pairing UX is testable; on device this is false unless the caller flips it.
-    #if targetEnvironment(simulator)
+    /// - Simulator: forced on (no Bluetooth radio exists there).
+    /// - DEBUG builds on device: on by default. Ray-Ban Meta Smart Glasses use
+    ///   Meta's authenticated BLE protocol — third-party apps can't actually
+    ///   pair, so the onboarding flow would dead-end on real hardware. The
+    ///   synthetic catalog lets the pairing UX complete for demos and lets
+    ///   the device camera take over as the real capture source.
+    /// - Release builds: real radio, real scan.
+    #if targetEnvironment(simulator) || DEBUG
     var simulatedMode = true
     #else
     var simulatedMode = false

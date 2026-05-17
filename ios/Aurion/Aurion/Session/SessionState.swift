@@ -45,6 +45,46 @@ enum CaptureMode: String, Codable, CaseIterable, Identifiable {
         case .smartDictation: return "text.viewfinder"
         }
     }
+
+    /// Whether this mode runs the camera. audioOnly/smartDictation must
+    /// not light the LED — checked at the CaptureManager input level.
+    var includesVideo: Bool {
+        self == .multimodal
+    }
+
+    /// Whether this mode is *eligible* for screen capture. The actual
+    /// runtime gate also requires the `screen_capture_enabled` feature
+    /// flag (RemoteConfig) — eligibility alone isn't enough.
+    var includesScreen: Bool {
+        self == .multimodal
+    }
+}
+
+/// How the patient gave consent for this session. Selected by the
+/// clinician at consent-confirmation time; flows into the audit log so
+/// compliance can prove the method per session.
+enum ConsentMethod: String, Codable, CaseIterable, Identifiable {
+    case verbal
+    case paperForm = "paper_form"
+    case digitalForm = "digital_form"
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .verbal: return "Verbal"
+        case .paperForm: return "Paper form"
+        case .digitalForm: return "Digital form"
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .verbal: return "mic.fill"
+        case .paperForm: return "doc.text.fill"
+        case .digitalForm: return "iphone.gen3"
+        }
+    }
 }
 
 /// One non-physician participant in a collaborative encounter — nurse, PA,
@@ -110,9 +150,15 @@ final class CaptureSession: ObservableObject, Identifiable {
     /// sees their name on the shared-encounter pill.
     let participants: [SessionParticipant]
     @Published var state: SessionState = .consentPending
-    @Published var isConsentConfirmed = false
+    @Published var consentMethod: ConsentMethod?
+    @Published var consentConfirmedAt: Date?
     @Published var pausedAt: Date?
     @Published var isPauseExpired = false
+
+    /// Derived from the consent metadata so the three never desynchronize.
+    /// Setting consent goes through `confirmConsent(method:)`; recovery
+    /// paths assign a placeholder method + timestamp.
+    var isConsentConfirmed: Bool { consentMethod != nil }
 
     /// Maximum pause duration before session times out (30 minutes)
     static let maxPauseDuration: TimeInterval = 1800
@@ -146,11 +192,16 @@ final class CaptureSession: ObservableObject, Identifiable {
         encounterType != "doctor_patient" || !participants.isEmpty
     }
 
-    func confirmConsent() {
+    func confirmConsent(method: ConsentMethod) {
         guard state == .consentPending else { return }
-        isConsentConfirmed = true
+        consentMethod = method
+        consentConfirmedAt = Date()
         persist()
-        AuditLogger.log(event: .consentConfirmed, sessionId: id)
+        AuditLogger.log(
+            event: .consentConfirmed,
+            sessionId: id,
+            extra: ["consent_method": method.rawValue]
+        )
     }
 
     func startRecording() {
@@ -193,7 +244,13 @@ final class CaptureSession: ObservableObject, Identifiable {
     // MARK: - Crash Recovery Persistence
 
     private func persist() {
-        SessionPersistence.save(sessionId: id, specialty: specialty, state: state)
+        SessionPersistence.save(
+            sessionId: id,
+            specialty: specialty,
+            state: state,
+            consentMethod: consentMethod,
+            consentConfirmedAt: consentConfirmedAt
+        )
     }
 
     func clearPersistence() {
@@ -209,26 +266,42 @@ enum SessionPersistence {
     private static let sessionIdKey = "aurion.active_session_id"
     private static let specialtyKey = "aurion.active_session_specialty"
     private static let stateKey = "aurion.active_session_state"
+    private static let consentMethodKey = "aurion.active_session_consent_method"
+    private static let consentAtKey = "aurion.active_session_consent_at"
 
-    static func save(sessionId: String, specialty: String, state: SessionState) {
-        if state.isActive {
-            UserDefaults.standard.set(sessionId, forKey: sessionIdKey)
-            UserDefaults.standard.set(specialty, forKey: specialtyKey)
-            UserDefaults.standard.set(state.rawValue, forKey: stateKey)
-        } else {
-            // Session completed or purged — clear persistence
+    static func save(
+        sessionId: String,
+        specialty: String,
+        state: SessionState,
+        consentMethod: ConsentMethod?,
+        consentConfirmedAt: Date?
+    ) {
+        guard state.isActive else {
             clear()
+            return
         }
+        UserDefaults.standard.set(sessionId, forKey: sessionIdKey)
+        UserDefaults.standard.set(specialty, forKey: specialtyKey)
+        UserDefaults.standard.set(state.rawValue, forKey: stateKey)
+        UserDefaults.standard.set(consentMethod?.rawValue, forKey: consentMethodKey)
+        UserDefaults.standard.set(consentConfirmedAt, forKey: consentAtKey)
     }
 
     static func clear() {
         UserDefaults.standard.removeObject(forKey: sessionIdKey)
         UserDefaults.standard.removeObject(forKey: specialtyKey)
         UserDefaults.standard.removeObject(forKey: stateKey)
+        UserDefaults.standard.removeObject(forKey: consentMethodKey)
+        UserDefaults.standard.removeObject(forKey: consentAtKey)
     }
 
-    /// Check if there's an incomplete session from a previous launch.
-    static func recoverableSession() -> (id: String, specialty: String, state: SessionState)? {
+    /// Restore a CaptureSession from persisted state. Recovered sessions
+    /// must have had consent confirmed to reach an active state — if the
+    /// persisted record is missing the method (older app version), we fall
+    /// back to `.verbal` so the chip renders rather than going silent. The
+    /// real consent event is still in the immutable audit log.
+    @MainActor
+    static func restore() -> CaptureSession? {
         guard let sessionId = UserDefaults.standard.string(forKey: sessionIdKey),
               let specialty = UserDefaults.standard.string(forKey: specialtyKey),
               let stateRaw = UserDefaults.standard.string(forKey: stateKey),
@@ -236,18 +309,15 @@ enum SessionPersistence {
               state.isActive else {
             return nil
         }
-        return (id: sessionId, specialty: specialty, state: state)
-    }
+        let session = CaptureSession(id: sessionId, specialty: specialty)
+        session.state = state
 
-    /// Restore a CaptureSession from persisted state.
-    @MainActor
-    static func restore() -> CaptureSession? {
-        guard let saved = recoverableSession() else { return nil }
-        let session = CaptureSession(id: saved.id, specialty: saved.specialty)
-        session.state = saved.state
-        session.isConsentConfirmed = true // Must have been confirmed to reach active states
-        AuditLogger.log(event: .appCrashDetected, sessionId: saved.id,
-                        extra: ["recovered_state": saved.state.rawValue])
+        let methodRaw = UserDefaults.standard.string(forKey: consentMethodKey)
+        session.consentMethod = methodRaw.flatMap(ConsentMethod.init(rawValue:)) ?? .verbal
+        session.consentConfirmedAt = UserDefaults.standard.object(forKey: consentAtKey) as? Date ?? Date()
+
+        AuditLogger.log(event: .appCrashDetected, sessionId: sessionId,
+                        extra: ["recovered_state": state.rawValue])
         return session
     }
 }

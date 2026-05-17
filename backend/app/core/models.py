@@ -269,3 +269,46 @@ class PilotMetricsModel(Base):
     session_completeness: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False
     )
+
+
+class Stage2JobModel(Base):
+    """Tracks async Stage 2 visual enrichment jobs.
+
+    Created when /approve-stage1 fires; transitions pending → running →
+    completed/failed as the background task progresses. Persisting state
+    here lets iOS poll/recover after backgrounding without trusting an
+    in-memory queue, and lets the dashboard show "Stage 2 in progress"
+    tiles across the session list.
+    """
+
+    __tablename__ = "stage2_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    # pending → running → completed|failed
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Resulting note version after vision merge — null until completion.
+    new_note_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    frames_processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

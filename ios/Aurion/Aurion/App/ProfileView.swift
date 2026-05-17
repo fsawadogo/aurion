@@ -59,32 +59,90 @@ struct ProfileView: View {
             }
 
             // ── Voice Profile ─────────────────────────────────
+            // Card-style row with mic icon, prominent status, and a strong
+            // CTA when not enrolled — this is core to the speaker-separation
+            // pipeline so it shouldn't read as a buried setting.
             Section {
                 if appState.hasVoiceProfile {
-                    Label("Voice profile enrolled", systemImage: "checkmark.circle.fill")
-                        .foregroundColor(.clinicalNormal)
+                    HStack(spacing: 14) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.aurionGreen.opacity(0.15))
+                                .frame(width: 44, height: 44)
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 18, weight: .bold))
+                                .foregroundColor(.aurionGreen)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Voice ID set up")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.aurionNavy)
+                            Text("Aurion can tell your voice apart from your patient's.")
+                                .font(.system(size: 12))
+                                .foregroundColor(.aurionTextSecondary)
+                                .lineLimit(2)
+                        }
+                        Spacer()
+                    }
+                    .padding(.vertical, 6)
 
-                    Button("Re-record Voice Profile") {
+                    Button("Re-record Voice ID") {
                         appState.isOnboardingComplete = false
                     }
+                    .foregroundColor(.aurionNavy)
 
-                    Button("Delete Voice Profile", role: .destructive) {
+                    Button("Delete Voice ID", role: .destructive) {
                         KeychainHelper.shared.deleteVoiceEmbedding()
                         AuditLogger.log(event: .voiceProfileDeleted)
                         appState.checkVoiceEnrollment()
                         AurionHaptics.notification(.success)
                     }
                 } else {
-                    Label("No voice profile", systemImage: "mic.slash")
-                        .foregroundColor(.secondary)
-
-                    Button("Set Up Voice Profile") {
-                        appState.isOnboardingComplete = false
+                    HStack(spacing: 14) {
+                        ZStack {
+                            Circle()
+                                .fill(Color.aurionGold.opacity(0.18))
+                                .frame(width: 44, height: 44)
+                            Image(systemName: "mic.fill")
+                                .font(.system(size: 18, weight: .semibold))
+                                .foregroundColor(.aurionGold)
+                        }
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Set up your Voice ID")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.aurionNavy)
+                            Text("Record 4 short sentences so Aurion knows which voice is yours.")
+                                .font(.system(size: 12))
+                                .foregroundColor(.aurionTextSecondary)
+                                .lineLimit(2)
+                        }
+                        Spacer()
                     }
-                    .foregroundColor(.aurionGold)
+                    .padding(.vertical, 6)
+
+                    Button {
+                        appState.isOnboardingComplete = false
+                    } label: {
+                        HStack {
+                            Text("Start Voice ID")
+                                .font(.system(size: 15, weight: .semibold))
+                                .foregroundColor(.aurionNavy)
+                            Spacer()
+                            Image(systemName: "arrow.right")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundColor(.aurionGold)
+                        }
+                        .padding(.vertical, 12)
+                        .padding(.horizontal, 14)
+                        .background(Color.aurionGold.opacity(0.12))
+                        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.sm))
+                    }
+                    .buttonStyle(.plain)
+                    .listRowInsets(EdgeInsets(top: 4, leading: 16, bottom: 8, trailing: 16))
+                    .listRowBackground(Color.clear)
                 }
             } header: {
-                SectionHeader(title: "Voice Profile")
+                SectionHeader(title: "Voice ID")
             }
 
             // ── Practice Settings ────────────────────────────

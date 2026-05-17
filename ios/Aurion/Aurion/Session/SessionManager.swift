@@ -3,6 +3,30 @@ import Combine
 import SwiftUI
 import UIKit
 
+/// Stage 1 SLA (CLAUDE.md §"MVP Success Criteria"): record-stop → note
+/// delivered within 30 s. The UI surfaces every phase so the clinician
+/// knows whether to wait, retry, or fall back to dictation.
+enum Stage1Status: Equatable {
+    case idle
+    case uploading
+    case generating
+    case ready
+    case timedOut(elapsed: TimeInterval)
+    case failed(reason: String)
+
+    /// When non-nil, ProcessingView shows a retry prompt with this copy.
+    var retryPrompt: (title: String, detail: String)? {
+        switch self {
+        case .timedOut(let elapsed):
+            return ("Stage 1 timed out", "The note didn't generate within \(Int(elapsed))s.")
+        case .failed(let reason):
+            return ("Stage 1 failed", reason)
+        case .idle, .uploading, .generating, .ready:
+            return nil
+        }
+    }
+}
+
 /// Request payload for `SessionManager.startNewSession`. Defaults match the
 /// backend's `POST /sessions` contract so call sites can omit anything
 /// the physician hasn't customized.
@@ -34,6 +58,17 @@ struct SessionStartRequest {
     }
 }
 
+/// A frame that failed on-device masking, tagged with its origin so the
+/// retry path knows which endpoint to re-fire (video → `/frames`, screen →
+/// `/screen`). Conflating them silently routed screen retries to the video
+/// endpoint.
+struct FailedMaskingFrame: Identifiable {
+    enum Kind { case video, screen }
+    let frame: CapturedFrame
+    let kind: Kind
+    var id: UUID { frame.id }
+}
+
 /// Manages the full session lifecycle -- bridges iOS UI to backend API.
 @MainActor
 final class SessionManager: ObservableObject {
@@ -44,6 +79,15 @@ final class SessionManager: ObservableObject {
     @Published var showingReview = false
     @Published var showingPostEncounter = false
     @Published var error: String?
+    @Published var stage1Status: Stage1Status = .idle
+
+    /// Frames whose on-device masking failed during `submitFrames` /
+    /// `submitScreenFrames`. Per CLAUDE.md the pipeline is fail-closed: these
+    /// frames were NOT uploaded. Surfaced to the clinician so they can choose
+    /// to retry or skip; cleared when retrying or when the session is torn
+    /// down. Each entry carries a `kind` so the retry path dispatches to the
+    /// correct upload endpoint.
+    @Published var maskingFailedFrames: [FailedMaskingFrame] = []
 
     /// On-device live captioner — runs alongside the canonical Whisper batch
     /// pipeline so the physician sees text accumulate during the encounter.
@@ -51,9 +95,22 @@ final class SessionManager: ObservableObject {
     /// across pause/resume cycles within a session and discarded on stop.
     @Published var liveTranscriber: LiveTranscriber?
 
+    /// Screen capture co-runs with audio/video in multimodal mode when the
+    /// feature flag is on. ReplayKit lifecycle is independent of the
+    /// AVCaptureSession sources, so it lives outside the registry. `let`,
+    /// not `@Published` — ScreenCaptureManager is itself an ObservableObject;
+    /// views subscribe to it directly.
+    let screenCapture = ScreenCaptureManager()
+
     private let api = APIClient.shared
     private var registry: CaptureSourceRegistry { .shared }
     private var audioSource: CaptureSource { registry.activeAudioSource }
+
+    /// Screen capture eligibility — combines the mode's intent with the
+    /// runtime feature flag. Pure mode capability lives on `CaptureMode`.
+    func wantsScreenCapture(for mode: CaptureMode) -> Bool {
+        mode.includesScreen && RemoteConfig.shared.featureFlags.screenCaptureEnabled
+    }
 
     /// Language for live captions, captured from `SessionStartRequest` so we
     /// don't have to round-trip through AppState. Falls back to "en" if no
@@ -94,11 +151,11 @@ final class SessionManager: ObservableObject {
         }
     }
 
-    func confirmConsent() async {
+    func confirmConsent(method: ConsentMethod) async {
         guard let session else { return }
         do {
-            _ = try await api.confirmConsent(sessionId: session.id)
-            session.confirmConsent()
+            _ = try await api.confirmConsent(sessionId: session.id, method: method)
+            session.confirmConsent(method: method)
         } catch {
             self.error = "Consent failed: \(error.localizedDescription)"
         }
@@ -115,15 +172,43 @@ final class SessionManager: ObservableObject {
         do {
             _ = try await api.startRecording(sessionId: session.id)
             session.startRecording()
-            for source in registry.activeSourcesForSession {
-                try source.start()
-            }
-            await startLiveTranscriber()
+            try await coldStartCapturePipeline(for: session.captureMode)
         } catch let sourceError as CaptureSourceError {
             self.error = sourceError.localizedDescription
         } catch {
             self.error = "Start failed: \(error.localizedDescription)"
         }
+    }
+
+    /// Capture sources to run for the active session, filtered by mode.
+    /// Video-capable sources are dropped in audio-only modes; identity is
+    /// compared via `===` because the registry holds the same instances.
+    private var activeSourcesForCurrentMode: [CaptureSource] {
+        guard let session, !session.captureMode.includesVideo else {
+            return registry.activeSourcesForSession
+        }
+        return registry.activeSourcesForSession.filter { source in
+            source === registry.activeAudioSource
+        }
+    }
+
+    /// Shared cold-start sequence: align builtIn's video flag with the mode,
+    /// start every selected source, attach live captions, kick off screen
+    /// capture when eligible. Used by `startRecording`, `adoptSession`, and
+    /// the offline branch of `validateRecoveredSession`.
+    private func coldStartCapturePipeline(for mode: CaptureMode) async throws {
+        registry.builtIn.includeVideo = mode.includesVideo
+        for source in activeSourcesForCurrentMode {
+            try source.start()
+        }
+        await startLiveTranscriber()
+        if wantsScreenCapture(for: mode) {
+            screenCapture.startCapture()
+        }
+    }
+
+    private func stopScreenCaptureIfRunning() {
+        if screenCapture.isRecording { screenCapture.stopCapture() }
     }
 
     /// Spin up the on-device live captioner and bind it to the audio stream.
@@ -146,7 +231,12 @@ final class SessionManager: ObservableObject {
         // state transition happen async so a slow network doesn't freeze the
         // recording lights. If the backend rejects the transition we surface
         // the error but keep the local pause — better to err on caution.
-        for source in registry.activeSourcesForSession { source.pause() }
+        for source in activeSourcesForCurrentMode { source.pause() }
+        // ReplayKit has no real pause. ScreenCaptureManager.startCapture
+        // wipes capturedScreenFrames on resume, so pre-pause frames are
+        // currently lost — M-12 (audited purge lifecycle) will decide
+        // whether to preserve them across pauses.
+        stopScreenCaptureIfRunning()
         liveTranscriber?.stop()
         session?.pause()
         Task {
@@ -160,7 +250,10 @@ final class SessionManager: ObservableObject {
     }
 
     func resumeRecording() {
-        for source in registry.activeSourcesForSession { source.resume() }
+        for source in activeSourcesForCurrentMode { source.resume() }
+        if let session, wantsScreenCapture(for: session.captureMode) {
+            screenCapture.startCapture()
+        }
         liveTranscriber?.start()
         session?.resume()
         Task {
@@ -177,7 +270,8 @@ final class SessionManager: ObservableObject {
         guard let session else { return }
         // Stop local capture FIRST so getRecordedAudioData has a complete buffer
         // by the time submitProcessing fires.
-        for source in registry.activeSourcesForSession { source.stop() }
+        for source in activeSourcesForCurrentMode { source.stop() }
+        stopScreenCaptureIfRunning()
         // Tear down live captions — the canonical Whisper batch transcript
         // takes over from here. Interim text is intentionally discarded so
         // the UI doesn't show a stale preview alongside the final note.
@@ -205,6 +299,10 @@ final class SessionManager: ObservableObject {
         showingPostEncounter = false
         await submitFrames()
         await submitAudio()
+        // Screen frames merge into the note AFTER Stage 1 generated it,
+        // so this runs last. The screen pipeline is fully on-device for
+        // PHI; the upload carries the masking proof from P0-02.
+        await submitScreenFrames()
     }
 
     // MARK: - Frame Submission
@@ -212,38 +310,206 @@ final class SessionManager: ObservableObject {
     /// Mask each captured video frame and upload to the backend so the Stage 2
     /// vision pipeline can match them to transcript trigger segments. Frames
     /// are uploaded sequentially — the API is per-frame, not batched, so this
-    /// is intentionally simple. Failures on individual frames are logged but
-    /// don't abort the whole submission; a partial upload is better than none.
+    /// is intentionally simple.
+    ///
+    /// Frames whose masking fails are NEVER uploaded (P0-01 fail-closed) and
+    /// are kept in `maskingFailedFrames` so the clinician can retry or skip.
+    /// Network upload failures on a successfully-masked frame are non-fatal —
+    /// we keep uploading the rest.
     private func submitFrames() async {
         guard let session, let videoSource = registry.activeVideoSource else { return }
         let frames = videoSource.capturedFrames
         guard !frames.isEmpty else { return }
 
         processingStatus = "Uploading frames…"
+        // Clear only video-kind failures from a prior attempt — screen
+        // failures (if any) belong to a separate retry path.
+        maskingFailedFrames.removeAll { $0.kind == .video }
         var uploaded = 0
+        var maskingFailed = 0
         for frame in frames {
-            guard let image = UIImage(data: frame.imageData) else { continue }
+            guard let image = UIImage(data: frame.imageData) else {
+                // Cannot decode the captured bytes — treat as a masking failure
+                // so the audit trail and UI both reflect it.
+                maskingFailed += 1
+                maskingFailedFrames.append(FailedMaskingFrame(frame: frame, kind: .video))
+                continue
+            }
 
             // Mask faces before any network egress. MaskingPipeline writes the
-            // masking_confirmed audit event before returning, satisfying the
-            // CLAUDE.md privacy guarantee.
+            // masking_confirmed audit event on success and masking_failed on
+            // any failure path; a failed result MUST NOT be uploaded.
             let result = await MaskingPipeline.shared.maskVideoFrame(image, sessionId: session.id)
-            guard result.success, let maskedData = result.imageData else { continue }
+            guard result.success, let maskedData = result.imageData else {
+                maskingFailed += 1
+                maskingFailedFrames.append(FailedMaskingFrame(frame: frame, kind: .video))
+                continue
+            }
 
             let timestampMs = Int((frame.timestamp * 1000).rounded())
             do {
                 _ = try await api.uploadFrame(
                     sessionId: session.id,
                     jpegData: maskedData,
-                    timestampMs: timestampMs
+                    timestampMs: timestampMs,
+                    frameType: result.frameType.rawValue,
+                    facesDetected: result.facesDetected,
+                    phiRegionsRedacted: result.phiRegionsRedacted
                 )
                 uploaded += 1
             } catch {
-                // Per-frame failure is non-fatal — keep uploading the rest.
+                // Per-frame network failure is non-fatal — keep uploading the
+                // rest. Distinct from masking failure: the frame WAS masked.
                 continue
             }
         }
-        processingStatus = "\(uploaded)/\(frames.count) frames uploaded"
+        if maskingFailed > 0 {
+            processingStatus = "\(uploaded)/\(frames.count) uploaded · \(maskingFailed) failed masking"
+        } else {
+            processingStatus = "\(uploaded)/\(frames.count) frames uploaded"
+        }
+    }
+
+    /// Re-run masking + upload for any frames that previously failed masking.
+    /// Called when the clinician chooses "Retry" on the masking-failure prompt.
+    /// Dispatches by `kind` so video → `/frames` and screen → `/screen` —
+    /// uploading a screen frame to the wrong endpoint would let unredacted
+    /// PHI through to S3.
+    func retryFailedMaskingFrames() async {
+        guard let session, !maskingFailedFrames.isEmpty else { return }
+        let toRetry = maskingFailedFrames
+        maskingFailedFrames = []
+        AuditLogger.log(
+            event: .maskingFailureRetried,
+            sessionId: session.id,
+            extra: ["frame_count": "\(toRetry.count)"]
+        )
+
+        processingStatus = "Retrying masking on \(toRetry.count) frame(s)…"
+        var uploaded = 0
+        var stillFailed = 0
+        for failed in toRetry {
+            guard let image = UIImage(data: failed.frame.imageData) else {
+                stillFailed += 1
+                maskingFailedFrames.append(failed)
+                continue
+            }
+            let timestampMs = Int((failed.frame.timestamp * 1000).rounded())
+            let masked: MaskingResult
+            switch failed.kind {
+            case .video:
+                masked = await MaskingPipeline.shared.maskVideoFrame(image, sessionId: session.id)
+            case .screen:
+                masked = await MaskingPipeline.shared.redactScreenCapture(image, sessionId: session.id)
+            }
+            guard masked.success, let maskedData = masked.imageData else {
+                stillFailed += 1
+                maskingFailedFrames.append(failed)
+                continue
+            }
+            do {
+                switch failed.kind {
+                case .video:
+                    _ = try await api.uploadFrame(
+                        sessionId: session.id,
+                        jpegData: maskedData,
+                        timestampMs: timestampMs,
+                        frameType: masked.frameType.rawValue,
+                        facesDetected: masked.facesDetected,
+                        phiRegionsRedacted: masked.phiRegionsRedacted
+                    )
+                case .screen:
+                    _ = try await api.uploadScreenFrame(
+                        sessionId: session.id,
+                        jpegData: maskedData,
+                        timestampMs: timestampMs,
+                        phiRegionsRedacted: masked.phiRegionsRedacted
+                    )
+                }
+                uploaded += 1
+            } catch {
+                continue
+            }
+        }
+        if stillFailed > 0 {
+            processingStatus = "Retried: \(uploaded) uploaded · \(stillFailed) still failed"
+        } else {
+            processingStatus = "Retried: \(uploaded) frame(s) uploaded"
+        }
+    }
+
+    // MARK: - Screen Frame Submission
+
+    /// Mask + upload each captured screen frame. Failed masking quarantines
+    /// into `maskingFailedFrames` as `.screen`-kind entries so the retry path
+    /// re-fires the correct endpoint. The backend processes each frame
+    /// through OCR and merges the resulting lab values / imaging metadata
+    /// into the note as screen-sourced claims.
+    ///
+    /// The "Note ready" status from `submitAudio` is preserved when no
+    /// screen frames were captured or no claims were added — appending
+    /// "· N screens" rather than overwriting.
+    private func submitScreenFrames() async {
+        guard let session else { return }
+        let frames = screenCapture.capturedScreenFrames
+        guard !frames.isEmpty else { return }
+
+        // Clear only screen-kind failures from a prior run.
+        maskingFailedFrames.removeAll { $0.kind == .screen }
+        let priorStatus = processingStatus
+        var uploaded = 0
+        var integratedClaims = 0
+        var maskingFailed = 0
+        for frame in frames {
+            guard let image = UIImage(data: frame.imageData) else {
+                maskingFailed += 1
+                maskingFailedFrames.append(FailedMaskingFrame(frame: frame, kind: .screen))
+                continue
+            }
+            let result = await MaskingPipeline.shared.redactScreenCapture(image, sessionId: session.id)
+            guard result.success, let redactedData = result.imageData else {
+                maskingFailed += 1
+                maskingFailedFrames.append(FailedMaskingFrame(frame: frame, kind: .screen))
+                continue
+            }
+            let timestampMs = Int((frame.timestamp * 1000).rounded())
+            do {
+                let response = try await api.uploadScreenFrame(
+                    sessionId: session.id,
+                    jpegData: redactedData,
+                    timestampMs: timestampMs,
+                    phiRegionsRedacted: result.phiRegionsRedacted
+                )
+                uploaded += 1
+                integratedClaims += response.claimsAdded
+            } catch {
+                // Per-frame network failure is non-fatal — keep uploading.
+                continue
+            }
+        }
+        if integratedClaims > 0 {
+            // Merged claims write a new note version on the backend —
+            // refresh so the review UI shows the updated sections.
+            try? await fetchNote()
+            processingStatus = "\(priorStatus) · \(integratedClaims) screen claim\(integratedClaims == 1 ? "" : "s") added"
+        } else if uploaded > 0 {
+            processingStatus = "\(priorStatus) · \(uploaded) screens (no extractable data)"
+        }
+    }
+
+    /// Discard frames whose masking failed without uploading them. The frames
+    /// remain absent from Stage 2 visual enrichment — Stage 2 will surface
+    /// reduced coverage in the completeness score.
+    func skipFailedMaskingFrames() {
+        guard let session, !maskingFailedFrames.isEmpty else { return }
+        let skipped = maskingFailedFrames.count
+        maskingFailedFrames = []
+        AuditLogger.log(
+            event: .maskingFailureSkipped,
+            sessionId: session.id,
+            extra: ["frame_count": "\(skipped)"]
+        )
+        processingStatus = "Skipped \(skipped) unmasked frame(s)"
     }
 
     // MARK: - Audio Submission
@@ -255,8 +521,6 @@ final class SessionManager: ObservableObject {
             return
         }
         isProcessing = true
-        processingStatus = "Transcribing audio..."
-        defer { isProcessing = false }
 
         let captured = audioSource.getRecordedAudioData()
         let audioPayload: Data
@@ -264,14 +528,36 @@ final class SessionManager: ObservableObject {
         if let captured, !captured.isEmpty {
             audioPayload = captured
             isDemoFallback = false
-        } else {
+        } else if DemoMode.isEnabled {
+            // Simulator dev path — substitute silence so the pipeline runs
+            // end-to-end without a microphone. NEVER reachable in pilot or
+            // production builds (P0-03).
             audioPayload = WAVBuilder.silence()
             isDemoFallback = true
+        } else {
+            self.error = "No audio captured. Please retry the recording."
+            stage1Status = .failed(reason: "No audio captured")
+            // Stay on ProcessingView so the retry prompt is reachable.
+            return
         }
+
+        stage1Status = .uploading
+        processingStatus = "Uploading audio…"
+        let stage1Start = Date()
 
         do {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
+            // True wall-clock SLA cap. `request.timeoutInterval` is only
+            // an inactivity timer (resets every byte), so a slow trickle
+            // could blow past 30s. The resource timeout below is the
+            // hard cap — set on a per-call configuration.
+            request.timeoutInterval = AppConfig.stage1TimeoutSeconds
+            let config = URLSessionConfiguration.ephemeral
+            config.timeoutIntervalForRequest = AppConfig.stage1TimeoutSeconds
+            config.timeoutIntervalForResource = AppConfig.stage1TimeoutSeconds
+            let session = URLSession(configuration: config)
+
             let boundary = UUID().uuidString
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
             if let token = KeychainHelper.shared.loadAuthToken() {
@@ -286,22 +572,107 @@ final class SessionManager: ObservableObject {
             body.append(Data("\r\n--\(boundary)--\r\n".utf8))
             request.httpBody = body
 
-            processingStatus = "Generating note..."
-            let (_, response) = try await URLSession.shared.data(for: request)
+            stage1Status = .generating
+            processingStatus = "Generating note…"
+            let (data, response) = try await session.data(for: request)
 
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
                 throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? -1)
             }
 
-            // Brief delay to let the backend persist Stage 1 before we GET it.
+            // Speaker tagging is best-effort; the voice embedding stays in
+            // Keychain. Failure here doesn't block note generation.
+            if let transcript = try? JSONDecoder().decode(TranscriptResponse.self, from: data) {
+                await applySpeakerTags(transcript: transcript)
+            }
+
             try await Task.sleep(nanoseconds: 500_000_000)
             try await fetchNote()
-            processingStatus = "Note ready for review"
+            let elapsed = Date().timeIntervalSince(stage1Start)
+            stage1Status = .ready
+            processingStatus = "Note ready for review (\(Int(elapsed))s)"
+            isProcessing = false
+        } catch let urlError as URLError where urlError.code == .timedOut {
+            recordStage1Timeout(sessionId: session.id, since: stage1Start)
+        } catch APIError.timeout {
+            // fetchNote() can also time out; surface as the same state so
+            // the user sees retry, not a generic failure.
+            recordStage1Timeout(sessionId: session.id, since: stage1Start)
         } catch {
-            self.error = isDemoFallback
-                ? "Simulator has no audio. Showing demo note."
-                : "Transcription failed: \(error.localizedDescription)"
-            note = createDemoNote(sessionId: session.id, specialty: session.specialty)
+            // P0-03: NEVER fabricate clinical content in production. The demo
+            // fallback is `#if DEBUG`-stripped so the call site doesn't even
+            // exist in pilot/release binaries — `createDemoNote` is not in
+            // scope outside Debug builds.
+            #if DEBUG
+            if DemoMode.isEnabled {
+                self.error = isDemoFallback
+                    ? "Simulator has no audio. Showing demo note."
+                    : "Transcription failed: \(error.localizedDescription)"
+                stage1Status = .ready
+                note = createDemoNote(sessionId: session.id, specialty: session.specialty)
+                isProcessing = false
+                return
+            }
+            #endif
+            self.error = "Transcription failed: \(error.localizedDescription)"
+            stage1Status = .failed(reason: error.localizedDescription)
+            AuditLogger.log(
+                event: .stage1Failed,
+                sessionId: session.id,
+                extra: ["reason": String(error.localizedDescription.prefix(200))]
+            )
+            // Keep isProcessing true so the retry prompt remains reachable.
+        }
+    }
+
+    private func recordStage1Timeout(sessionId: String, since start: Date) {
+        let elapsed = Date().timeIntervalSince(start)
+        stage1Status = .timedOut(elapsed: elapsed)
+        processingStatus = "Stage 1 timed out after \(Int(elapsed))s"
+        AuditLogger.log(
+            event: .stage1Timeout,
+            sessionId: sessionId,
+            extra: ["stage1_timeout_ms": "\(Int(elapsed * 1000))"]
+        )
+        // Keep isProcessing true so ProcessingView (and the retry prompt) stay on screen.
+    }
+
+    /// Re-fire the Stage 1 pipeline after a timeout/failure. Recorded
+    /// audio is still in memory because the session hasn't been torn down.
+    func retryStage1() async {
+        guard let session else { return }
+        AuditLogger.log(event: .stage1Retried, sessionId: session.id)
+        error = nil
+        await submitAudio()
+    }
+
+    // MARK: - Speaker Tagging
+
+    /// Tag transcript segments on-device using the enrolled physician
+    /// embedding and PATCH the labels back. The biometric embedding stays
+    /// in Keychain — only `(segment_id, speaker, confidence)` crosses the
+    /// wire. Best-effort: no enrollment, no PCM buffer, or PATCH failure
+    /// all short-circuit silently.
+    private func applySpeakerTags(transcript: TranscriptResponse) async {
+        guard SpeakerSeparation.shared.isEnrolled else { return }
+        guard let buffer = audioSource.getRecordedPCMBuffer() else { return }
+        guard !transcript.segments.isEmpty else { return }
+
+        let spans = transcript.segments.map {
+            SpeakerSeparation.SegmentTimespan(id: $0.id, startMs: $0.startMs, endMs: $0.endMs)
+        }
+        let tags = SpeakerSeparation.shared.tagSegments(audio: buffer, segments: spans)
+        guard !tags.isEmpty else { return }
+
+        let payload = tags.map {
+            SpeakerTagRequest(segmentId: $0.id, speaker: $0.speaker.rawValue, confidence: $0.confidence)
+        }
+        do {
+            _ = try await api.patchSpeakerTags(sessionId: transcript.sessionId, tags: payload)
+        } catch {
+            #if DEBUG
+            print("[SpeakerTagging] PATCH failed: \(error.localizedDescription)")
+            #endif
         }
     }
 
@@ -326,6 +697,7 @@ final class SessionManager: ObservableObject {
     func saveForLater() {
         AurionHaptics.notification(.success)
         teardownLiveTranscriber()
+        stopScreenCaptureIfRunning()
         session?.clearPersistence()
         session = nil
         note = nil
@@ -334,10 +706,50 @@ final class SessionManager: ObservableObject {
         showingPostEncounter = false
         processingStatus = ""
         error = nil
+        maskingFailedFrames = []
+        stage1Status = .idle
+    }
+
+    // MARK: - Local data accessors (for LocalDataPurger)
+
+    /// Sum of captured frames across every video capture source in the
+    /// registry. Used by the purger to audit-log how much raw video data
+    /// was held in memory at purge time.
+    var allVideoFrameCount: Int {
+        registry.activeSourcesForSession.reduce(0) { count, source in
+            count + source.capturedFrames.count
+        }
+    }
+
+    /// Same idea for the ReplayKit screen capture buffer.
+    var allScreenFrameCount: Int { screenCapture.capturedScreenFrames.count }
+
+    /// Size in bytes of the audio PCM held in memory by the active audio
+    /// source. Returns 0 if no audio was captured. Goes through the
+    /// cheap path (no WAV construction, no buffer copy) so calling it
+    /// from purge-audit doesn't allocate the full recording.
+    var recordedAudioByteCount: Int {
+        audioSource.getRecordedAudioByteCount()
+    }
+
+    /// Drop every in-memory raw artifact tied to the current capture
+    /// session — video frame arrays, screen frame array, audio PCM. The
+    /// session metadata (id, specialty, audit trail) is intentionally
+    /// untouched; only the raw clinical bytes go away.
+    ///
+    /// Idempotent: safe to call multiple times or with no active session.
+    func clearCapturedArtifacts() {
+        for source in registry.activeSourcesForSession {
+            source.capturedFrames = []
+        }
+        screenCapture.capturedScreenFrames = []
+        audioSource.discardRecordedAudio()
+        maskingFailedFrames = []
     }
 
     func endSession() {
         teardownLiveTranscriber()
+        stopScreenCaptureIfRunning()
         session?.clearPersistence()
         session = nil
         note = nil
@@ -346,24 +758,84 @@ final class SessionManager: ObservableObject {
         showingPostEncounter = false
         processingStatus = ""
         error = nil
+        maskingFailedFrames = []
+        stage1Status = .idle
+    }
+
+    /// Adopt a server-side session row (returned by `/sessions`) as the live
+    /// in-memory session so the user can return to `CaptureView` and continue
+    /// capturing. Used by the dashboard's "Continue Recording" card.
+    ///
+    /// The iOS capture sources are torn down whenever the app is backgrounded,
+    /// so a cold start is required — `pause`/`resume` on the source is a no-op
+    /// when `isCapturing == false`. This method handles the full re-engage:
+    /// permissions → start sources → backend resume → live transcriber.
+    func adoptSession(_ response: SessionResponse) async {
+        error = nil
+        let mode = CaptureMode(rawValue: response.captureMode) ?? .multimodal
+        let captureSession = CaptureSession(
+            id: response.id,
+            specialty: response.specialty,
+            captureMode: mode,
+            encounterType: response.encounterType,
+            participants: []
+        )
+        // Past consent — anything in RECORDING/PAUSED on the backend already
+        // logged consent_confirmed when this session was first started. We
+        // don't know the original method here (backend doesn't expose it
+        // yet), so default to `.verbal` — the audit log still has the real
+        // event with the real method.
+        captureSession.consentMethod = .verbal
+        captureSession.consentConfirmedAt = Date()
+        captureSession.state = .paused
+        session = captureSession
+        sessionLanguage = "en"
+
+        // Cold-start the capture pipeline. Permission prompts here are
+        // no-ops on subsequent runs.
+        await registry.builtIn.ensurePermissions()
+        do {
+            try await coldStartCapturePipeline(for: mode)
+            // Only call backend resume when the server thinks we're paused.
+            // If it still says RECORDING the row is already in the right
+            // state — we just need iOS to rejoin.
+            if SessionState(rawValue: response.state) == .paused {
+                _ = try? await api.resumeSession(sessionId: response.id)
+            }
+            captureSession.startRecording()
+        } catch let sourceError as CaptureSourceError {
+            self.error = sourceError.localizedDescription
+        } catch {
+            self.error = "Resume failed: \(error.localizedDescription)"
+        }
     }
 
     // MARK: - Crash Recovery
 
+    /// Validate a session restored from UserDefaults against the backend.
+    /// If the server agrees the session is still active in a capture state we
+    /// adopt it (cold-start sources, flip to recording, hand off to
+    /// `CaptureView`). If the server has advanced past capture (e.g. already
+    /// in AWAITING_REVIEW) or never heard of the session, we clear the local
+    /// persistence and return false so the caller can route to dashboard.
     func validateRecoveredSession(_ recoveredSession: CaptureSession) async -> Bool {
         do {
             let response = try await api.getSession(sessionId: recoveredSession.id)
-            if let backendState = SessionState(rawValue: response.state) {
-                if backendState.isActive {
-                    recoveredSession.state = backendState
-                    session = recoveredSession
-                    return true
-                } else {
-                    SessionPersistence.clear()
-                    return false
-                }
+            guard let backendState = SessionState(rawValue: response.state) else {
+                SessionPersistence.clear()
+                return false
             }
-            return false
+            // Only RECORDING / PAUSED warrant a return to CaptureView. Other
+            // active states (PROCESSING_STAGE1, AWAITING_REVIEW, etc.) belong
+            // in the dashboard's pending-review / processing flows.
+            guard backendState == .recording || backendState == .paused else {
+                SessionPersistence.clear()
+                return false
+            }
+            await adoptSession(response)
+            // adoptSession surfaces source-start errors via `self.error`; treat
+            // any such error as "recovery failed" so the caller routes away.
+            return self.error == nil
         } catch let error as APIError {
             switch error {
             case .notFound:
@@ -371,8 +843,22 @@ final class SessionManager: ObservableObject {
                 self.error = "Session expired. Starting fresh."
                 return false
             case .offline:
+                // No backend — best-effort offline recovery. Cold-start the
+                // sources locally so the buttons on CaptureView actually
+                // operate on a live pipeline. Backend resume will happen on
+                // the next successful network call. Consent metadata was
+                // restored from UserDefaults by SessionPersistence.restore.
+                recoveredSession.state = .paused
                 session = recoveredSession
-                return true
+                await registry.builtIn.ensurePermissions()
+                do {
+                    try await coldStartCapturePipeline(for: recoveredSession.captureMode)
+                    recoveredSession.startRecording()
+                    return true
+                } catch {
+                    self.error = "Offline recovery failed: \(error.localizedDescription)"
+                    return false
+                }
             default:
                 SessionPersistence.clear()
                 return false
@@ -385,6 +871,10 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Demo Fallback (Simulator with no mic input)
 
+    #if DEBUG
+    /// Fabricated note used only when `DemoMode.isEnabled` (Debug builds in
+    /// the iOS Simulator). Wrapped in `#if DEBUG` so the function cannot be
+    /// compiled into a release/pilot binary. P0-03.
     private func createDemoNote(sessionId: String, specialty: String) -> NoteResponse {
         NoteResponse(
             sessionId: sessionId,
@@ -414,4 +904,5 @@ final class SessionManager: ObservableObject {
             ]
         )
     }
+    #endif
 }

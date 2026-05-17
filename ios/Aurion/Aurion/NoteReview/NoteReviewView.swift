@@ -3,7 +3,24 @@ import SwiftUI
 // MARK: - Conflict / classification helpers
 
 private extension NoteClaimResponse {
-    var isConflict: Bool { id.hasPrefix("conflict_") }
+    /// Unresolved Stage 2 vision conflict. A physician edit (which flips
+    /// `physicianEdited`) is the resolution signal — once edited, the
+    /// claim no longer blocks approval.
+    var isConflict: Bool { id.hasPrefix("conflict_") && !physicianEdited }
+
+    /// One-letter badge per source — surfaces provenance in the SOURCES
+    /// panel so the clinician knows at a glance whether a claim came from
+    /// transcript (T), visual frame (V), screen capture (S), or a manual
+    /// physician edit (E).
+    var sourceBadge: String {
+        switch sourceType {
+        case "transcript": return "T"
+        case "visual": return "V"
+        case "screen": return "S"
+        case "physician_edit": return "E"
+        default: return "?"
+        }
+    }
 }
 
 private extension NoteSectionResponse {
@@ -34,6 +51,15 @@ private extension String {
     }
 }
 
+/// Selection carrier for the conflict edit sheet. Bundling the claim id with
+/// the seed text means the sheet always opens against the same claim it was
+/// summoned for, even if the note refreshes mid-edit.
+private struct ConflictEditTarget: Identifiable {
+    let claimId: String
+    var draft: String
+    var id: String { claimId }
+}
+
 // MARK: - Note Review (pixel-perfect port of screens.jsx → NoteReviewScreen)
 
 struct NoteReviewView: View {
@@ -42,16 +68,29 @@ struct NoteReviewView: View {
     let onDismiss: () -> Void
     @StateObject private var wsClient: WebSocketClient
     @State private var note: NoteResponse?
-    @State private var activeSectionId: String?
-    // Edit mode state. When isEditing is true, the section detail swaps each
-    // section's first claim for a TextEditor bound to draftEdits[section.id].
-    // Saving submits the whole map to PATCH /notes/{id}/edit, which produces
-    // a new immutable note version on the server.
+    /// Which section's source panel is currently expanded inline. nil = none.
+    /// Sections render as continuous prose (one paragraph per section); tapping
+    /// the paragraph toggles the per-section citation list.
+    @State private var expandedSectionId: String?
+    // Edit mode state. In the full-prose layout we keep per-section editing
+    // (one TextEditor per section in a sheet) so saving still produces one
+    // PATCH /notes/{id}/edit per round trip — backend writes a single new
+    // immutable note version on the server.
     @State private var isEditing = false
     @State private var draftEdits: [String: String] = [:]
     @State private var isSavingEdits = false
     @State private var isApproving = false
+    @State private var approveError: String?
     @State private var showApprovedToast = false
+    /// Claim id currently in flight to the conflict-resolution endpoint —
+    /// disables the action row so a double-tap can't double-resolve.
+    @State private var resolvingClaimId: String?
+    /// Claim selected for inline edit. Driving the sheet off an Identifiable
+    /// item value (vs. a bool) keeps the seed-text and target-claim atomic.
+    @State private var conflictBeingEdited: ConflictEditTarget?
+    /// Latest Stage 2 job snapshot. Polled in the background while the
+    /// async job runs so the banner reflects pending → running → completed.
+    @State private var stage2Status: Stage2StatusResponse?
     /// Drives the ring + percent count-up on first reveal. Starts at 0 and
     /// springs to the note's actual completeness when the view appears (or
     /// the score changes mid-session as Stage 2 enrichment lands).
@@ -70,27 +109,20 @@ struct NoteReviewView: View {
 
     private var note_unsafe: NoteResponse? { note }
 
-    private var activeSection: NoteSectionResponse? {
-        guard let n = note else { return nil }
-        if let id = activeSectionId, let s = n.sections.first(where: { $0.id == id }) {
-            return s
-        }
-        return n.sections.first { $0.hasConflicts } ?? n.sections.first
-    }
-
     var body: some View {
         VStack(spacing: 0) {
             AurionNavBar(title: "Review Note") {
                 AurionTextButton(label: "Back") { onDismiss() }
             } trailing: {
-                AurionTextButton(label: isEditing ? "Cancel" : "Edit") {
+                AurionTextButton(label: isEditing ? "Done" : "Edit") {
                     if isEditing {
                         draftEdits.removeAll()
                     } else if let n = note {
-                        // Seed drafts from the current note's first-claim text
-                        // so the editor opens pre-populated.
-                        draftEdits = Dictionary(uniqueKeysWithValues: n.sections.compactMap { s in
-                            s.claims.first(where: { !$0.isConflict }).map { (s.id, $0.text) }
+                        // Seed drafts with the full prose paragraph per section
+                        // (all non-conflict claims joined). Matches what the
+                        // physician sees in read mode.
+                        draftEdits = Dictionary(uniqueKeysWithValues: n.sections.map { s in
+                            (s.id, joinedProse(s))
                         })
                     }
                     isEditing.toggle()
@@ -98,13 +130,24 @@ struct NoteReviewView: View {
             }
 
             if let n = note {
+                stage2Banner
                 ScrollView {
-                    VStack(spacing: 0) {
-                        sectionList(n)
-                        if let s = activeSection {
-                            sectionDetail(s)
-                        }
+                    if isEditing {
+                        editableProseBody(n)
+                    } else {
+                        fullProseBody(n)
                     }
+                }
+                if let approveError {
+                    Text(approveError)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.aurionRed)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: .infinity, alignment: .center)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 10)
+                        .background(Color.aurionRed.opacity(0.08))
+                        .transition(.opacity)
                 }
                 if isEditing {
                     editingBar(n)
@@ -127,16 +170,25 @@ struct NoteReviewView: View {
                 sectionsRevealed = true
                 if let n = note {
                     withAnimation(.interpolatingSpring(stiffness: 100, damping: 18)) {
-                        displayedCompleteness = n.completenessScore
+                        displayedCompleteness = requiredCompleteness(n)
                     }
                 }
             }
         }
-        .onChange(of: note?.completenessScore) { _, newScore in
+        .task(id: sessionId) {
+            // Background poll for Stage 2 job status. Bails out as soon as
+            // the job reaches a terminal state OR the view goes away — the
+            // `.task(id:)` is auto-cancelled when sessionId or the view
+            // disappears.
+            await pollStage2Status()
+        }
+        .onChange(of: note?.sections.count) { _, _ in
             // If Stage 2 finishes mid-view (or a fresh note version lands
-            // via WebSocket) the ring smoothly re-targets the new score.
+            // via WebSocket) the ring smoothly re-targets the new score
+            // computed over required (non-optional) sections.
+            guard let n = note else { return }
             withAnimation(.interpolatingSpring(stiffness: 100, damping: 18)) {
-                displayedCompleteness = newScore ?? 0
+                displayedCompleteness = requiredCompleteness(n)
             }
         }
         .onChange(of: wsClient.latestNote) { _, newNote in
@@ -157,6 +209,115 @@ struct NoteReviewView: View {
             }
         }
         .animation(AurionAnimation.smooth, value: showApprovedToast)
+        .sheet(item: $conflictBeingEdited) { target in
+            conflictEditSheet(target: target)
+        }
+    }
+
+    /// Sheet used when the physician picks "Edit" on a conflict. Saves via
+    /// the same resolve endpoint with `action="edit"` and the new text.
+    private func conflictEditSheet(target: ConflictEditTarget) -> some View {
+        // Local draft mirror so cancel doesn't mutate the carrier until save.
+        let draftBinding = Binding<String>(
+            get: { conflictBeingEdited?.draft ?? target.draft },
+            set: { conflictBeingEdited?.draft = $0 }
+        )
+        return VStack(alignment: .leading, spacing: 16) {
+            Text("Edit conflict")
+                .font(.system(size: 20, weight: .bold))
+                .foregroundColor(.aurionNavy)
+            Text("Replace the conflicting claim. The original text is preserved in the audit log.")
+                .font(.system(size: 13))
+                .foregroundColor(.aurionTextSecondary)
+            TextEditor(text: draftBinding)
+                .font(.system(size: 15))
+                .foregroundColor(.aurionNavy)
+                .frame(minHeight: 140)
+                .padding(8)
+                .background(Color.aurionBackground)
+                .clipShape(RoundedRectangle(cornerRadius: AurionRadius.xs))
+                .overlay(
+                    RoundedRectangle(cornerRadius: AurionRadius.xs)
+                        .stroke(Color.aurionBorder, lineWidth: 1)
+                )
+            HStack(spacing: 12) {
+                Button("Cancel") { conflictBeingEdited = nil }
+                    .buttonStyle(.bordered)
+                Spacer()
+                Button("Save") {
+                    let draft = conflictBeingEdited?.draft ?? target.draft
+                    let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+                    guard !trimmed.isEmpty,
+                          let claim = note?.sections.flatMap({ $0.claims }).first(where: { $0.id == target.claimId })
+                    else { return }
+                    conflictBeingEdited = nil
+                    Task { await resolveConflict(claim, action: .edit, text: trimmed) }
+                }
+                .buttonStyle(.borderedProminent)
+                .disabled((conflictBeingEdited?.draft ?? target.draft).trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
+        }
+        .padding(24)
+        .presentationDetents([.medium, .large])
+    }
+
+    /// Strip across the top of the note when Stage 2 is still running.
+    /// Hidden when the job hasn't started yet, completed, or failed (errors
+    /// surface in approveError instead). Returns an EmptyView when there's
+    /// nothing to show — @ViewBuilder + the implicit `if` handles that.
+    @ViewBuilder
+    private var stage2Banner: some View {
+        if let status = stage2Status, status.isInProgress {
+            HStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.small)
+                Text("Visual enrichment in progress…")
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundColor(.aurionNavy)
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color.aurionAmberBg.opacity(0.6))
+        }
+    }
+
+    /// Poll the Stage 2 job until it reaches a terminal state. Polling
+    /// stops automatically when the view disappears (`.task(id:)` is
+    /// cancelled), so there's no manual teardown needed.
+    private func pollStage2Status() async {
+        // 2s while a job is actively running keeps the banner snappy;
+        // 4s when idle (no job yet, or after a network blip) saves
+        // battery while we're effectively waiting on the user.
+        let activePollInterval: UInt64 = 2_000_000_000  // 2s
+        let idlePollInterval: UInt64 = 4_000_000_000    // 4s
+
+        while !Task.isCancelled {
+            let status: Stage2StatusResponse
+            do {
+                status = try await APIClient.shared.getStage2Status(sessionId: sessionId)
+            } catch {
+                // Network blip — back off and retry. Stage 2 is best-effort
+                // so we don't surface this to the UI.
+                try? await Task.sleep(nanoseconds: idlePollInterval)
+                continue
+            }
+            await MainActor.run { stage2Status = status }
+
+            if status.isCompleted {
+                // Refresh the note so any new conflict claims surface.
+                loadNote()
+                return
+            }
+            if status.isFailed {
+                await MainActor.run {
+                    approveError = "Stage 2 failed: \(status.errorMessage ?? "unknown error"). You can still approve the Stage 1 note."
+                }
+                return
+            }
+            let nextInterval = status.hasStarted ? activePollInterval : idlePollInterval
+            try? await Task.sleep(nanoseconds: nextInterval)
+        }
     }
 
     private var approvedToast: some View {
@@ -180,229 +341,288 @@ struct NoteReviewView: View {
         .shadow(color: .black.opacity(0.12), radius: 18, x: 0, y: 6)
     }
 
-    // MARK: - Section list (4 stacked rows with colored left bars)
+    // MARK: - Full-prose body (Word-doc-style, single scroll)
 
-    private func sectionList(_ note: NoteResponse) -> some View {
-        VStack(spacing: 8) {
-            ForEach(Array(note.sections.enumerated()), id: \.element.id) { idx, s in
+    /// Renders the note as one continuous prose document — bold section
+    /// headings, each section body as a single flowing paragraph (all
+    /// non-conflict claims joined). Tap a paragraph to reveal the per-section
+    /// source citations. Conflicts surface inline below the paragraph.
+    private func fullProseBody(_ note: NoteResponse) -> some View {
+        VStack(alignment: .leading, spacing: 18) {
+            ForEach(Array(note.sections.enumerated()), id: \.element.id) { idx, section in
+                proseSection(section, index: idx)
+            }
+            Spacer(minLength: 8)
+        }
+        // Cap prose width on big iPads — past ~720pt the line length
+        // outpaces what a clinician can scan comfortably. iPhone is
+        // always under the cap so this is a no-op there.
+        .frame(maxWidth: 720, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .aurionScreenEdge()
+        .padding(.top, 16)
+        .padding(.bottom, 24)
+    }
+
+    /// Joins all non-conflict claim texts for a section into one prose
+    /// paragraph. Empty sections render an italic placeholder.
+    private func joinedProse(_ s: NoteSectionResponse) -> String {
+        s.claims
+            .filter { !$0.isConflict }
+            .map { $0.text.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .filter { !$0.isEmpty }
+            .joined(separator: " ")
+    }
+
+    /// Completeness over required sections only. pending_video and pending
+    /// are optional and excluded from both numerator and denominator so a
+    /// Stage 1 note with imaging not shown can still read 100%.
+    private func requiredCompleteness(_ n: NoteResponse) -> Double {
+        let required = n.sections.filter { $0.status != "pending_video" && $0.status != "pending" }
+        guard !required.isEmpty else { return 0 }
+        let populated = required.filter { s in
+            s.status == "populated" && s.claims.contains(where: { !$0.isConflict })
+        }.count
+        return Double(populated) / Double(required.count)
+    }
+
+    private func proseSection(_ s: NoteSectionResponse, index: Int) -> some View {
+        let body = joinedProse(s)
+        let isExpanded = expandedSectionId == s.id
+        let sourceClaims = s.claims.filter { !$0.isConflict && !$0.sourceQuote.isEmpty }
+
+        return VStack(alignment: .leading, spacing: 6) {
+            // Section title — bold, similar to a Word heading
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(s.title)
+                    .font(.system(size: 18, weight: .bold))
+                    .foregroundColor(.aurionNavy)
+                if s.hasConflicts {
+                    Text("CONFLICT")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(0.6)
+                        .foregroundColor(.aurionStatusConflict)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.aurionAmberBg)
+                        .clipShape(Capsule())
+                } else if s.status == "pending_video" || s.status == "pending" {
+                    // Soft "OPTIONAL" chip — pending_video sections never
+                    // block approval; Stage 2 vision fills them only if
+                    // imaging was actually reviewed during the encounter.
+                    Text("OPTIONAL")
+                        .font(.system(size: 10, weight: .bold))
+                        .tracking(0.6)
+                        .foregroundColor(.aurionTextSecondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.aurionSurfaceAlt)
+                        .clipShape(Capsule())
+                }
+            }
+
+            // Body — one continuous prose paragraph per section. Tap to
+            // reveal the citation list under this section.
+            if body.isEmpty {
+                Text(s.status == "pending_video"
+                     ? "Optional — fills only if imaging was shown during the encounter."
+                     : "No content captured for this section.")
+                    .font(.system(size: 14).italic())
+                    .foregroundColor(.aurionTextSecondary)
+            } else {
                 Button {
+                    guard !sourceClaims.isEmpty else { return }
                     AurionHaptics.selection()
-                    activeSectionId = s.id
-                } label: {
-                    HStack(spacing: 0) {
-                        // 3pt accent bar
-                        Rectangle()
-                            .fill(s.id.sectionAccent)
-                            .frame(width: 3)
-
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(s.title)
-                                .font(.system(size: 14, weight: .semibold))
-                                .foregroundColor(.aurionNavy)
-                            Text(claimSummary(for: s))
-                                .font(.system(size: 12))
-                                .foregroundColor(.aurionTextSecondary)
-                        }
-                        .padding(.leading, 12)
-
-                        Spacer()
-
-                        AurionStatusPill(kind: kindFor(s), labelOverride: pillLabel(for: s))
+                    withAnimation(AurionAnimation.smooth) {
+                        expandedSectionId = isExpanded ? nil : s.id
                     }
-                    .padding(.vertical, 10)
-                    .padding(.trailing, 12)
-                    .background(Color.aurionCardBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: AurionRadius.sm))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AurionRadius.sm)
-                            .stroke(Color.aurionBorder, lineWidth: 1)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AurionRadius.sm)
-                            .stroke(activeSection?.id == s.id ? Color.aurionGold : .clear, lineWidth: 2)
-                            .padding(-1)
-                    )
-                    // Subtle amber breathing on conflict rows — draws the
-                    // eye to what needs resolving without yelling.
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AurionRadius.sm)
-                            .stroke(
-                                s.hasConflicts
-                                    ? Color.aurionAmber.opacity(sectionsRevealed ? 0.55 : 0.20)
-                                    : .clear,
-                                lineWidth: 1.5
-                            )
-                            .animation(
-                                .easeInOut(duration: 1.4).repeatForever(autoreverses: true),
-                                value: sectionsRevealed
-                            )
-                    )
+                } label: {
+                    Text(body)
+                        .font(.system(size: 15))
+                        .foregroundColor(.aurionNavy)
+                        .lineSpacing(5)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .buttonStyle(.plain)
-                // Staircase entrance — each row picks up its own delay so
-                // they spring in 60ms apart. Reversed when `sectionsRevealed`
-                // flips back to false (e.g. note reload).
-                .opacity(sectionsRevealed ? 1 : 0)
-                .offset(y: sectionsRevealed ? 0 : 12)
-                .animation(
-                    .interpolatingSpring(stiffness: 220, damping: 22)
-                        .delay(Double(idx) * 0.06),
-                    value: sectionsRevealed
-                )
-            }
-        }
-        .padding(.horizontal, AurionSpacing.edgeIPhone)
-        .padding(.top, 4)
-        .padding(.bottom, 12)
-    }
 
-    private func claimSummary(for s: NoteSectionResponse) -> String {
-        let total = s.claims.count
-        let valid = s.claims.filter { !$0.isConflict }.count
-        if s.conflictCount > 0 {
-            return "\(valid)/\(total) claims · \(s.conflictCount) conflict"
-        }
-        if total == 0 { return "Empty" }
-        return "\(total) claims · clean"
-    }
-
-    private func kindFor(_ s: NoteSectionResponse) -> AurionStatusKind {
-        if s.hasConflicts { return .conflict }
-        switch s.status {
-        case "populated": return .done
-        case "processing_failed": return .archived
-        default: return .pending
-        }
-    }
-
-    private func pillLabel(for s: NoteSectionResponse) -> String? {
-        if s.hasConflicts { return "Review" }
-        switch s.status {
-        case "populated": return "Done"
-        case "pending_video", "pending": return "Pending"
-        case "processing_failed": return "Failed"
-        default: return nil
-        }
-    }
-
-    // MARK: - Section detail (conflict card + claim cards)
-
-    private func sectionDetail(_ s: NoteSectionResponse) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text(s.title).aurionTitle3().padding(.top, 8)
-
-            if s.hasConflicts {
-                conflictCard(s)
-            }
-
-            if isEditing {
-                sectionEditor(s)
-            } else {
-                ForEach(s.claims.filter { !$0.isConflict }, id: \.id) { claim in
-                    claimCard(claim)
+                if isExpanded && !sourceClaims.isEmpty {
+                    sourcesPanel(sourceClaims)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
                 }
             }
-        }
-        .padding(.horizontal, AurionSpacing.edgeIPhone)
-        .padding(.bottom, 16)
-    }
 
-    private func sectionEditor(_ s: NoteSectionResponse) -> some View {
-        AurionCard(padding: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text("EDIT")
-                    .font(.system(size: 11, weight: .semibold))
-                    .tracking(0.66)
-                    .foregroundColor(.aurionTextSecondary)
-                TextEditor(text: Binding(
-                    get: { draftEdits[s.id] ?? "" },
-                    set: { draftEdits[s.id] = $0 }
-                ))
-                .font(.system(size: 14))
-                .foregroundColor(.aurionNavy)
-                .frame(minHeight: 120)
-                .padding(8)
-                .background(Color.aurionBackground)
-                .clipShape(RoundedRectangle(cornerRadius: AurionRadius.xs))
+            // Conflicts surfaced separately at the end of the section
+            ForEach(s.claims.filter { $0.isConflict }, id: \.id) { conflict in
+                inlineConflict(conflict)
             }
         }
-    }
-
-    private func conflictCard(_ s: NoteSectionResponse) -> some View {
-        let detail = s.claims.first(where: { $0.isConflict })?.text ?? "Conflict detected — confirm before approval."
-        return VStack(alignment: .leading, spacing: 0) {
-            HStack(alignment: .top, spacing: 10) {
-                Image(systemName: "exclamationmark.circle")
-                    .font(.system(size: 18, weight: .semibold))
-                    .foregroundColor(.aurionAmber)
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("CONFLICT")
-                        .font(.system(size: 11, weight: .semibold))
-                        .tracking(0.66)
-                        .foregroundColor(.aurionStatusConflict)
-                    Text(detail)
-                        .font(.system(size: 14))
-                        .foregroundColor(.aurionNavy)
-                        .lineSpacing(3)
-                    HStack(spacing: 8) {
-                        conflictPill("Right")
-                        conflictPill("Left")
-                    }
-                    .padding(.top, 4)
-                }
-            }
-        }
-        .padding(14)
-        .background(Color.aurionAmberBg)
-        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
-        .overlay(
-            RoundedRectangle(cornerRadius: AurionRadius.md)
-                .stroke(Color.aurionAmber.opacity(0.30), lineWidth: 1)
+        .opacity(sectionsRevealed ? 1 : 0)
+        .offset(y: sectionsRevealed ? 0 : 10)
+        .animation(
+            .interpolatingSpring(stiffness: 220, damping: 24)
+                .delay(Double(index) * 0.05),
+            value: sectionsRevealed
         )
     }
 
-    private func conflictPill(_ label: String) -> some View {
-        Button { AurionHaptics.selection() } label: {
-            Text(label)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundColor(.aurionNavy)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 6)
-                .background(Color.aurionCardBackground)
-                .clipShape(Capsule())
-                .overlay(Capsule().stroke(Color.aurionNavy.opacity(0.18), lineWidth: 1))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func claimCard(_ claim: NoteClaimResponse) -> some View {
-        AurionCard(padding: 14) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(claim.text)
-                    .font(.system(size: 14))
-                    .foregroundColor(.aurionNavy)
-                    .lineSpacing(3)
-
-                if !claim.sourceQuote.isEmpty {
-                    HStack(spacing: 0) {
-                        Rectangle().fill(Color.aurionGold).frame(width: 2)
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("SOURCE · \(claim.sourceId)")
-                                .font(.system(size: 11, weight: .semibold))
-                                .tracking(0.66)
+    /// Collapsed source citation list shown under a section's prose paragraph.
+    private func sourcesPanel(_ claims: [NoteClaimResponse]) -> some View {
+        HStack(spacing: 0) {
+            Rectangle().fill(Color.aurionGold).frame(width: 2)
+            VStack(alignment: .leading, spacing: 10) {
+                Text("SOURCES")
+                    .font(.system(size: 10, weight: .semibold))
+                    .tracking(0.6)
+                    .foregroundColor(.aurionTextSecondary)
+                ForEach(claims, id: \.id) { claim in
+                    VStack(alignment: .leading, spacing: 2) {
+                        HStack(spacing: 6) {
+                            Text(claim.sourceBadge)
+                                .font(.system(size: 9, weight: .bold))
+                                .foregroundColor(.aurionBackground)
+                                .frame(width: 14, height: 14)
+                                .background(Color.aurionTextSecondary)
+                                .clipShape(RoundedRectangle(cornerRadius: 3))
+                            Text(claim.sourceId)
+                                .font(.system(size: 10, weight: .semibold))
+                                .tracking(0.4)
                                 .foregroundColor(.aurionTextSecondary)
+                            if claim.physicianEdited {
+                                Text("EDITED")
+                                    .font(.system(size: 9, weight: .bold))
+                                    .tracking(0.5)
+                                    .foregroundColor(.aurionGold)
+                            }
+                        }
+                        if !claim.sourceQuote.isEmpty {
                             Text("\u{201C}\(claim.sourceQuote)\u{201D}")
                                 .font(.system(size: 13).italic())
                                 .foregroundColor(.aurionTextSecondary)
+                                .lineSpacing(2)
                         }
-                        .padding(.leading, 8)
                     }
-                    .padding(8)
-                    .background(Color.aurionBackground)
-                    .clipShape(RoundedRectangle(cornerRadius: AurionRadius.xs))
+                }
+            }
+            .padding(.leading, 10)
+        }
+        .padding(.vertical, 10)
+        .padding(.horizontal, 10)
+        .background(Color.aurionBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.xs))
+    }
+
+    private func inlineConflict(_ claim: NoteClaimResponse) -> some View {
+        let inFlight = resolvingClaimId == claim.id
+        return VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 14))
+                    .foregroundColor(.aurionAmber)
+                    .padding(.top, 2)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("Visual vs audio conflict — resolve before approval.")
+                        .font(.system(size: 11, weight: .semibold))
+                        .tracking(0.4)
+                        .foregroundColor(.aurionStatusConflict)
+                    Text(claim.text)
+                        .font(.system(size: 14))
+                        .foregroundColor(.aurionNavy)
+                        .lineSpacing(3)
+                }
+            }
+            HStack(spacing: 8) {
+                conflictActionButton("Accept visual", inFlight: inFlight) {
+                    Task { await resolveConflict(claim, action: .acceptVisual) }
+                }
+                conflictActionButton("Reject visual", inFlight: inFlight) {
+                    Task { await resolveConflict(claim, action: .rejectVisual) }
+                }
+                conflictActionButton("Edit", inFlight: inFlight) {
+                    conflictBeingEdited = ConflictEditTarget(claimId: claim.id, draft: claim.text)
                 }
             }
         }
+        .padding(12)
+        .background(Color.aurionAmberBg)
+        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.sm))
+        .overlay(
+            RoundedRectangle(cornerRadius: AurionRadius.sm)
+                .stroke(Color.aurionAmber.opacity(0.35), lineWidth: 1)
+        )
+    }
+
+    private func conflictActionButton(_ label: String, inFlight: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 12, weight: .semibold))
+                .padding(.horizontal, 10)
+                .padding(.vertical, 6)
+                .background(Color.aurionBackground)
+                .foregroundColor(.aurionNavy)
+                .clipShape(RoundedRectangle(cornerRadius: 6))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 6)
+                        .stroke(Color.aurionBorder, lineWidth: 1)
+                )
+        }
+        .disabled(inFlight)
+        .opacity(inFlight ? 0.5 : 1)
+    }
+
+    /// Fire one resolution action and replace the local note with the new
+    /// version the backend returns. On failure we surface the error inline
+    /// and leave the conflict claim untouched so the clinician can retry.
+    private func resolveConflict(_ claim: NoteClaimResponse, action: ConflictResolutionAction, text: String? = nil) async {
+        resolvingClaimId = claim.id
+        defer { resolvingClaimId = nil }
+        do {
+            let updated = try await APIClient.shared.resolveConflict(
+                sessionId: sessionId,
+                claimId: claim.id,
+                action: action,
+                resolutionText: text
+            )
+            note = updated
+            AuditLogger.log(
+                event: .conflictResolved,
+                sessionId: sessionId,
+                extra: ["claim_id": claim.id, "action": action.rawValue]
+            )
+        } catch {
+            approveError = "Conflict resolution failed: \(error.localizedDescription)"
+        }
+    }
+
+    // MARK: - Editable prose body — same layout, swap claim text for TextEditors
+
+    private func editableProseBody(_ note: NoteResponse) -> some View {
+        VStack(alignment: .leading, spacing: 20) {
+            ForEach(note.sections, id: \.id) { section in
+                VStack(alignment: .leading, spacing: 8) {
+                    Text(section.title)
+                        .font(.system(size: 18, weight: .bold))
+                        .foregroundColor(.aurionNavy)
+                    TextEditor(text: Binding(
+                        get: { draftEdits[section.id] ?? "" },
+                        set: { draftEdits[section.id] = $0 }
+                    ))
+                    .font(.system(size: 15))
+                    .foregroundColor(.aurionNavy)
+                    .frame(minHeight: 90)
+                    .padding(8)
+                    .background(Color.aurionBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: AurionRadius.xs))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AurionRadius.xs)
+                            .stroke(Color.aurionBorder, lineWidth: 1)
+                    )
+                }
+            }
+        }
+        .aurionScreenEdge()
+        .padding(.top, 16)
+        .padding(.bottom, 24)
     }
 
     // MARK: - Editing bar (shown instead of approvalBar while isEditing)
@@ -421,7 +641,7 @@ struct NoteReviewView: View {
                 saveEdits()
             }
         }
-        .padding(.horizontal, AurionSpacing.edgeIPhone)
+        .aurionScreenEdge()
         .padding(.vertical, 14)
         .background(
             VStack(spacing: 0) {
@@ -434,7 +654,15 @@ struct NoteReviewView: View {
     // MARK: - Approval bar (always-visible bottom bar)
 
     private func approvalBar(_ n: NoteResponse) -> some View {
-        let done = n.completenessScore
+        // pending_video sections are optional — Stage 2 fills them only if
+        // imaging was actually reviewed. Exclude them from both numerator
+        // and denominator so the ring / "X of Y" reflects required-only
+        // sections and a Stage 1 note can read as 100% complete.
+        let required = n.sections.filter { $0.status != "pending_video" && $0.status != "pending" }
+        let populated = required.filter { s in
+            s.status == "populated" && s.claims.contains(where: { !$0.isConflict })
+        }.count
+        let totalSections = required.count
         let conflicts = n.sections.filter { $0.hasConflicts }.count
         let blocked = conflicts > 0
         let helpText: String = blocked
@@ -445,9 +673,7 @@ struct NoteReviewView: View {
             ZStack {
                 // `displayedCompleteness` is driven by onAppear/onChange so
                 // the ring sweeps from 0% up to the note's actual score
-                // rather than snapping. The CircularProgressRing in Theme
-                // already animates internally — we just feed it a value
-                // that ramps over time.
+                // rather than snapping.
                 CircularProgressRing(
                     progress: displayedCompleteness,
                     color: blocked ? .aurionAmber : .aurionGreen,
@@ -460,11 +686,18 @@ struct NoteReviewView: View {
                     .contentTransition(.numericText())
                     .animation(AurionAnimation.smooth, value: displayedCompleteness)
             }
-            Text(helpText)
-                .font(.system(size: 13))
-                .foregroundColor(.aurionTextSecondary)
-                .lineSpacing(3)
-                .frame(maxWidth: .infinity, alignment: .leading)
+            VStack(alignment: .leading, spacing: 2) {
+                // Numerator/denominator — the missing "5 of 6 sections" hint
+                // so the percentage isn't the only signal.
+                Text("\(populated) of \(totalSections) sections")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundColor(.aurionNavy)
+                Text(helpText)
+                    .font(.system(size: 12))
+                    .foregroundColor(.aurionTextSecondary)
+                    .lineSpacing(2)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
             AurionGoldButton(
                 label: isApproving ? "Signing…" : "Approve & Sign",
                 size: .sm,
@@ -473,7 +706,7 @@ struct NoteReviewView: View {
                 approveNote()
             }
         }
-        .padding(.horizontal, AurionSpacing.edgeIPhone)
+        .aurionScreenEdge()
         .padding(.vertical, 14)
         .background(
             VStack(spacing: 0) {
@@ -499,45 +732,135 @@ struct NoteReviewView: View {
     private func approveNote() {
         guard !isApproving else { return }
         isApproving = true
+        approveError = nil
         AurionHaptics.impact(.medium)
         Task {
-            do {
-                // Stage 1 review screen sits on a session in AWAITING_REVIEW.
-                // The /approve endpoint requires PROCESSING_STAGE2 or
-                // REVIEW_COMPLETE, so we must first call /approve-stage1
-                // (transitions AWAITING_REVIEW → PROCESSING_STAGE2 and runs
-                // Stage 2 vision inline). Once that returns, /approve is
-                // valid and moves the session to REVIEW_COMPLETE.
-                _ = try await APIClient.shared.approveStage1(sessionId: sessionId)
-                _ = try await APIClient.shared.approveFinalNote(sessionId: sessionId)
-                AuditLogger.log(event: .noteApproved, sessionId: sessionId)
-                await MainActor.run {
-                    AurionHaptics.notification(.success)
-                    showApprovedToast = true
-                }
-                // Brief confirmation hold, then dismiss back to dashboard.
-                try? await Task.sleep(nanoseconds: 900_000_000)
+            // Stage 1 review screen typically sits on a session in
+            // AWAITING_REVIEW. /approve-stage1 transitions to
+            // PROCESSING_STAGE2 (runs Stage 2 vision inline), and /approve
+            // then transitions to REVIEW_COMPLETE.
+            //
+            // If the session is already past those states (REVIEW_COMPLETE,
+            // EXPORTED, PURGED — common when reviewing seeded demo sessions),
+            // the backend returns 400. We treat that as "already approved":
+            // play the success toast and dismiss, since there's nothing more
+            // for the physician to do.
+            let stage1Result = await runApprovalStep {
+                try await APIClient.shared.approveStage1(sessionId: sessionId)
+            }
+            // Even if stage1 returned "already past" we still try /approve —
+            // the session may be in PROCESSING_STAGE2/REVIEW_COMPLETE which
+            // /approve accepts.
+            let approveResult = await runApprovalStep {
+                try await APIClient.shared.approveFinalNote(sessionId: sessionId)
+            }
+
+            // Surface only real failures (network, 5xx). State mismatches
+            // mean the session was already approved — treat as success.
+            if let err = stage1Result.realFailure ?? approveResult.realFailure {
                 await MainActor.run {
                     isApproving = false
-                    onDismiss()
-                }
-            } catch {
-                await MainActor.run {
-                    isApproving = false
+                    approveError = err
                     AurionHaptics.notification(.error)
                 }
+                return
+            }
+
+            AuditLogger.log(event: .noteApproved, sessionId: sessionId)
+            await MainActor.run {
+                AurionHaptics.notification(.success)
+                showApprovedToast = true
+            }
+            try? await Task.sleep(nanoseconds: 900_000_000)
+            await MainActor.run {
+                isApproving = false
+                onDismiss()
             }
         }
     }
 
+    /// Result of one approval API call. `realFailure` is non-nil only when
+    /// the error is something the user can act on (network, 5xx). State
+    /// mismatches (already-approved) collapse to a no-op success.
+    private struct ApprovalStepResult {
+        let realFailure: String?
+    }
+
+    private func runApprovalStep(
+        _ step: () async throws -> Any
+    ) async -> ApprovalStepResult {
+        do {
+            _ = try await step()
+            return ApprovalStepResult(realFailure: nil)
+        } catch let APIError.conflict(body) {
+            // 409 from the approval endpoints means a state mismatch. The
+            // FastAPI body says which state the session is in. Map known
+            // states to clean copy:
+            //   - PROCESSING_STAGE1/2 → "still processing, try again"
+            //   - REVIEW_COMPLETE / EXPORTED / PURGED → already approved
+            //     (treat as success and dismiss)
+            //   - anything else → use the parsed FastAPI detail string
+            let state = sessionStateFromConflict(body)
+            switch state {
+            case .stillProcessing:
+                return ApprovalStepResult(realFailure: "Note is still processing. Try again in a moment.")
+            case .alreadyApproved:
+                return ApprovalStepResult(realFailure: nil)
+            case .other(let message):
+                return ApprovalStepResult(realFailure: message)
+            }
+        } catch let APIError.serverError(code) where (400...499).contains(code) {
+            // 4xx (other than 409 above) → invalid state; suppress so
+            // approval flow falls through to success.
+            return ApprovalStepResult(realFailure: nil)
+        } catch APIError.notFound {
+            return ApprovalStepResult(realFailure: "Note not found on server.")
+        } catch APIError.unauthorized {
+            return ApprovalStepResult(realFailure: "Session expired — please sign in again.")
+        } catch let APIError.serverError(code) {
+            return ApprovalStepResult(realFailure: "Server error (\(code)). Try again.")
+        } catch {
+            return ApprovalStepResult(realFailure: error.localizedDescription)
+        }
+    }
+
+    private enum ConflictKind {
+        case stillProcessing
+        case alreadyApproved
+        case other(String)
+    }
+
+    /// Pull the human-readable detail out of FastAPI's
+    /// `{"detail":"..."}` body and classify by the server state name it
+    /// reports. Falls back to the raw detail (or the whole body) if we
+    /// can't parse it.
+    private func sessionStateFromConflict(_ body: String) -> ConflictKind {
+        let detail: String = {
+            if let data = body.data(using: .utf8),
+               let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+               let d = json["detail"] as? String {
+                return d
+            }
+            return body
+        }()
+
+        let upper = detail.uppercased()
+        if upper.contains("PROCESSING_STAGE1") || upper.contains("PROCESSING_STAGE2") {
+            return .stillProcessing
+        }
+        if upper.contains("REVIEW_COMPLETE") || upper.contains("EXPORTED") || upper.contains("PURGED") {
+            return .alreadyApproved
+        }
+        return .other(detail)
+    }
+
     private func saveEdits() {
-        // Submit only sections whose draft text differs from the current
-        // first-claim text. Backend creates one new note version per call.
+        // Submit only sections whose draft text differs from the joined prose
+        // currently displayed. Backend creates one new note version per call.
         guard let n = note else { return }
         let changed = draftEdits.filter { sectionId, draftText in
-            let current = n.sections.first(where: { $0.id == sectionId })?
-                .claims.first(where: { !$0.isConflict })?.text ?? ""
-            return current != draftText
+            guard let s = n.sections.first(where: { $0.id == sectionId }) else { return false }
+            return joinedProse(s) != draftText
         }
         guard !changed.isEmpty else {
             isEditing = false

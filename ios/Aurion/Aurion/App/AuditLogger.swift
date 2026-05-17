@@ -16,9 +16,17 @@ enum AuditEvent: String {
     case sessionResumed = "session_resumed"
     case recordingStopped = "recording_stopped"
     case maskingConfirmed = "masking_confirmed"
+    case maskingFailed = "masking_failed"
+    case maskingFailureRetried = "masking_failure_retried"
+    case maskingFailureSkipped = "masking_failure_skipped"
+    case stage1Timeout = "stage1_timeout"
+    case stage1Failed = "stage1_failed"
+    case stage1Retried = "stage1_retried"
     case deviceFailover = "device_failover"
+    case conflictResolved = "conflict_resolved"
     case noteApproved = "note_approved"
     case noteExported = "note_exported"
+    case localDataPurged = "local_data_purged"
     case appCrashDetected = "app_crash_detected"
 }
 

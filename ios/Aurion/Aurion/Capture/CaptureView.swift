@@ -39,18 +39,18 @@ struct CaptureView: View {
 
                     Spacer()
 
-                    // Stream indicators — top right per design. The "V" pill
-                    // hides for audio-only modes so the physician can confirm
-                    // the chosen capture mode at a glance. The preview toggle
-                    // and frame-gallery shortcut sit next to them in
-                    // multimodal mode, since neither has meaning otherwise.
+                    // Stream indicators reflect what SessionManager actually
+                    // orchestrated — audio-only modes keep the V pill and
+                    // camera preview hidden because the camera is never lit.
                     HStack(spacing: 6) {
                         streamCircle("A")
-                        if session.captureMode == .multimodal {
+                        if session.captureMode.includesVideo {
                             streamCircle("V")
                         }
-                        streamCircle("S")
-                        if session.captureMode == .multimodal {
+                        if sessionManager.screenCapture.isRecording {
+                            streamCircle("S")
+                        }
+                        if session.captureMode.includesVideo {
                             previewToggleButton
                             framesButton
                         }
@@ -59,7 +59,7 @@ struct CaptureView: View {
                 .padding(.horizontal, AurionSpacing.lg)
                 .padding(.top, AurionSpacing.sm)
 
-                if session.captureMode == .multimodal
+                if session.captureMode.includesVideo
                     && showCameraPreview
                     && (session.state == .recording || session.state == .paused) {
                     cameraPreviewCard
@@ -86,6 +86,11 @@ struct CaptureView: View {
                         .font(.system(size: 13))
                         .tracking(0.4)
                         .foregroundColor(Color(red: 183/255, green: 192/255, blue: 214/255))
+
+                    if let method = session.consentMethod, let timestamp = session.consentConfirmedAt {
+                        consentChip(method: method, at: timestamp)
+                            .padding(.top, 6)
+                    }
 
                     if session.isCollaborative {
                         collaborationPill
@@ -459,15 +464,41 @@ struct CaptureView: View {
         )
     }
 
+    // MARK: - Consent Audit Chip
+
+    private static let consentTimeFormatter: DateFormatter = {
+        let f = DateFormatter()
+        f.dateFormat = "HH:mm:ss"
+        return f
+    }()
+
+    /// Always-visible record of how and when consent was given. Compliance
+    /// can see at a glance that the session was opened with patient consent
+    /// and which method was used.
+    private func consentChip(method: ConsentMethod, at timestamp: Date) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: method.icon)
+                .font(.system(size: 10, weight: .semibold))
+            Text("Consent: \(method.displayName) \u{00B7} \(Self.consentTimeFormatter.string(from: timestamp))")
+                .font(.system(size: 12, weight: .medium))
+        }
+        .foregroundColor(.aurionGold)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 5)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+    }
+
     // MARK: - Consent Overlay
+
+    /// Selected method persists across re-renders within this consent step.
+    @State private var pendingConsentMethod: ConsentMethod = .verbal
 
     private var consentOverlay: some View {
         ZStack {
-            // Blurred navy overlay
             Color(red: 13/255, green: 27/255, blue: 62/255).opacity(0.78)
                 .ignoresSafeArea()
 
-            // Centered white card
             VStack(spacing: 14) {
                 ZStack {
                     RoundedRectangle(cornerRadius: 16)
@@ -489,8 +520,10 @@ struct CaptureView: View {
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
 
+                consentMethodPicker
+
                 AurionGoldButton(label: "Patient Has Consented", full: true) {
-                    Task { await sessionManager.confirmConsent() }
+                    Task { await sessionManager.confirmConsent(method: pendingConsentMethod) }
                 }
 
                 Button("Cancel") {}
@@ -504,6 +537,23 @@ struct CaptureView: View {
         }
     }
 
+    /// Segmented picker so the clinician records HOW consent was obtained.
+    /// The selection flows into the audit log via SessionManager.
+    private var consentMethodPicker: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text("How was consent given?")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundColor(.aurionTextSecondary)
+            Picker("How was consent given?", selection: $pendingConsentMethod) {
+                ForEach(ConsentMethod.allCases) { method in
+                    Text(method.displayName).tag(method)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+        }
+    }
+
     // MARK: - Control Bar
 
     private var controlBar: some View {
@@ -512,6 +562,8 @@ struct CaptureView: View {
 
             // Left button: Pause/Resume (56px circle)
             Button(action: {
+                print("[AURION] pause/resume tapped. state=\(session.state) consent=\(session.isConsentConfirmed)")
+                AurionHaptics.impact(.light)
                 if session.state == .recording { sessionManager.pauseRecording() }
                 else if session.state == .paused { sessionManager.resumeRecording() }
             }) {
@@ -530,6 +582,8 @@ struct CaptureView: View {
 
             // Center: Gold record/stop button (78px)
             Button(action: {
+                print("[AURION] record/stop tapped. state=\(session.state) consent=\(session.isConsentConfirmed) enabled=\(session.recordButtonEnabled)")
+                AurionHaptics.impact(.medium)
                 Task {
                     if session.state == .consentPending && session.isConsentConfirmed {
                         await sessionManager.startRecording()
@@ -579,6 +633,8 @@ struct CaptureView: View {
 
             // Right button: Stop (56px circle)
             Button(action: {
+                print("[AURION] stop tapped. state=\(session.state)")
+                AurionHaptics.impact(.medium)
                 Task { await sessionManager.stopRecording() }
             }) {
                 Circle()

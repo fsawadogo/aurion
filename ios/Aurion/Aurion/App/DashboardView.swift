@@ -69,6 +69,13 @@ struct DashboardView: View {
         recentSessions.filter { $0.state == "AWAITING_REVIEW" }
     }
 
+    /// Sessions on the backend still in an active capture state. Surfaced at
+    /// the top of the dashboard with a Resume CTA so the physician can hop
+    /// straight back into `CaptureView` after backgrounding the app.
+    private var resumableSessions: [SessionResponse] {
+        recentSessions.filter { $0.state == "RECORDING" || $0.state == "PAUSED" }
+    }
+
     private var quickStartCards: [(specialty: String, type: String, label: String, icon: String)] {
         let profile = appState.physicianProfile
         let specialty = profile?.primarySpecialty ?? "general"
@@ -102,11 +109,12 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     greetingHeader
+                    if !resumableSessions.isEmpty { resumableSection }
                     if !pendingReviewSessions.isEmpty { pendingReviewSection }
                     quickStartSection
                     recentSessionsSection
                 }
-                .padding(.horizontal, AurionSpacing.edgeIPhone)
+                .aurionScreenEdge()
                 .padding(.top, 8)
                 .padding(.bottom, 24)
             }
@@ -156,6 +164,57 @@ struct DashboardView: View {
             }
             Spacer()
             AurionAvatar(initials: avatarInitials, size: 44)
+        }
+    }
+
+    // MARK: - Continue Recording (active session — RECORDING / PAUSED)
+
+    /// Gold-accent card surfaced when a session is still mid-capture on the
+    /// backend. Common path: physician started recording, backgrounded the
+    /// app, came back — iOS lost the capture sources but the server row is
+    /// still PAUSED/RECORDING. Tap loads it into `SessionManager` and
+    /// `ContentView` routes back to `CaptureView`.
+    private var resumableSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "Continue Recording")
+            ForEach(resumableSessions, id: \.id) { session in
+                Button {
+                    AurionHaptics.impact(.light)
+                    Task { await sessionManager.adoptSession(session) }
+                } label: {
+                    AurionCard(padding: 16, accent: true) {
+                        HStack(spacing: 12) {
+                            ZStack {
+                                Circle()
+                                    .fill(Color.aurionGold.opacity(0.18))
+                                    .frame(width: 36, height: 36)
+                                Image(systemName: "record.circle")
+                                    .font(.system(size: 18, weight: .semibold))
+                                    .foregroundColor(.aurionGold)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(session.specialty.displayFormatted)
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundColor(.aurionNavy)
+                                Text(session.state == "PAUSED"
+                                     ? "Paused \(formatRelativeTime(session.updatedAt))"
+                                     : "Recording \(formatRelativeTime(session.updatedAt))")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.aurionTextSecondary)
+                            }
+                            Spacer()
+                            Text("Resume")
+                                .font(.system(size: 13, weight: .semibold))
+                                .foregroundColor(.aurionNavy)
+                                .padding(.horizontal, 14)
+                                .padding(.vertical, 6)
+                                .background(Color.aurionGold)
+                                .clipShape(Capsule())
+                        }
+                    }
+                }
+                .buttonStyle(.plain)
+            }
         }
     }
 
@@ -384,7 +443,7 @@ struct DashboardView: View {
                             }
                         }
                     }
-                    .padding(.horizontal, AurionSpacing.edgeIPhone)
+                    .aurionScreenEdge()
                     .padding(.bottom, 20)
                 }
 
@@ -394,7 +453,7 @@ struct DashboardView: View {
                         showEncounterTypeSheet = false
                         showContextPrompt = true
                     }
-                    .padding(.horizontal, AurionSpacing.edgeIPhone)
+                    .aurionScreenEdge()
                     .padding(.vertical, 12)
                     .padding(.bottom, 8)
                 }
@@ -513,11 +572,16 @@ struct DashboardView: View {
                         captureModePicker
 
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("What brings the patient in today?")
-                                .font(.system(size: 22, weight: .semibold))
-                                .tracking(-0.22)
-                                .foregroundColor(.aurionNavy)
-                            Text("Optional. Improves note accuracy.")
+                            HStack(spacing: 6) {
+                                Text("What brings the patient in today?")
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .tracking(-0.22)
+                                    .foregroundColor(.aurionNavy)
+                                Text("•")
+                                    .font(.system(size: 22, weight: .semibold))
+                                    .foregroundColor(.aurionGold)
+                            }
+                            Text("Required. Aurion uses this to focus the note on the right specialty template.")
                                 .font(.system(size: 14))
                                 .foregroundColor(.aurionTextSecondary)
                         }
@@ -542,31 +606,31 @@ struct DashboardView: View {
                         .background(Color.aurionGoldBg)
                         .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
                     }
-                    .padding(.horizontal, AurionSpacing.edgeIPhone)
+                    .aurionScreenEdge()
                     .padding(.top, 8)
                     .padding(.bottom, 20)
                 }
 
                 VStack(spacing: 8) {
                     Rectangle().fill(Color.aurionBorder).frame(height: 1)
-                    AurionGoldButton(label: "Start Session", full: true) {
+                    AurionGoldButton(
+                        label: "Start Session",
+                        full: true,
+                        disabled: !hasMinimumContext
+                    ) {
                         showContextPrompt = false
                         startSession()
                     }
                     .padding(.top, 4)
-                    Button {
-                        encounterContext = ""
-                        showContextPrompt = false
-                        startSession()
-                    } label: {
-                        Text("Skip Context")
-                            .font(.system(size: 15, weight: .medium))
-                            .foregroundColor(.aurionNavy)
-                            .padding(8)
+                    if !hasMinimumContext {
+                        Text("Enter at least a few words of context to start the session.")
+                            .font(.system(size: 12))
+                            .foregroundColor(.aurionTextSecondary)
+                            .multilineTextAlignment(.center)
+                            .padding(.horizontal, 8)
                     }
-                    .buttonStyle(.plain)
                 }
-                .padding(.horizontal, AurionSpacing.edgeIPhone)
+                .aurionScreenEdge()
                 .padding(.bottom, 16)
                 .background(Color.aurionCardBackground)
             }
@@ -607,14 +671,28 @@ struct DashboardView: View {
         }
     }
 
+    // MARK: - Validation
+
+    /// Encounter context is required before a session can start. We enforce
+    /// a minimum trimmed length (3 chars) so the field can't be bypassed
+    /// with a single space — physicians must give Aurion something to anchor
+    /// the note template against.
+    private var hasMinimumContext: Bool {
+        encounterContext.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3
+    }
+
     // MARK: - Actions
 
     private func startSession() {
         guard let qs = selectedQuickStart else { return }
+        // Defensive — UI already blocks Start Session when context is empty,
+        // but if somehow we get here without it, bail rather than ship a
+        // contextless session to the backend.
+        guard hasMinimumContext else { return }
         let request = SessionStartRequest(
             specialty: qs.specialty,
             consultationType: qs.consultationType,
-            encounterContext: encounterContext.isEmpty ? nil : encounterContext,
+            encounterContext: encounterContext.trimmingCharacters(in: .whitespacesAndNewlines),
             outputLanguage: appState.physicianProfile?.outputLanguage ?? "en",
             encounterType: selectedEncounterType,
             participants: selectedParticipants.isEmpty ? nil : selectedParticipants,

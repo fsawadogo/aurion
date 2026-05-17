@@ -21,13 +21,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.models import TranscriptModel
 from app.core.types import Note, SessionState, Transcript
-from app.modules.audit_log.service import get_audit_log_service
+from app.api.v1._helpers import get_session_or_404, require_state, write_audit
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.note_gen.service import (
     create_note_version,
     get_latest_note,
 )
-from app.modules.session.service import get_session
 from app.modules.vision.service import (
     caption_frames,
     classify_conflicts,
@@ -82,8 +81,6 @@ async def run_stage2_vision(
     Returns a per-call summary. Called from both the public route and from
     /notes/{id}/approve-stage1 so the wiring is identical in both paths.
     """
-    audit = get_audit_log_service()
-
     # 1. Transcript
     result = await db.execute(
         select(TranscriptModel).where(TranscriptModel.session_id == session_id)
@@ -93,11 +90,7 @@ async def run_stage2_vision(
         # No transcript persisted — likely no audio was uploaded. Vision can't
         # run without trigger segments; return an empty result so the state
         # machine can move forward without hanging.
-        await audit.write_event(
-            session_id=str(session_id),
-            event_type="stage2_skipped",
-            reason="no_transcript",
-        )
+        await write_audit(session_id, "stage2_skipped", reason="no_transcript")
         return VisionProcessingResponse(
             session_id=str(session_id),
             frames_processed=0, frames_discarded=0,
@@ -117,9 +110,9 @@ async def run_stage2_vision(
 
     # If there are no triggers, skip the expensive S3+vision-provider work.
     if not trigger_segments:
-        await audit.write_event(
-            session_id=str(session_id),
-            event_type="stage2_complete",
+        await write_audit(
+            session_id,
+            "stage2_complete",
             frames=0, conflicts=0,
             reason="no_visual_triggers",
         )
@@ -151,9 +144,9 @@ async def run_stage2_vision(
     repeats = sum(1 for c in captions if c.integration_status == "REPEATS")
     conflicts = sum(1 for c in captions if c.integration_status == "CONFLICTS")
 
-    await audit.write_event(
-        session_id=str(session_id),
-        event_type="stage2_complete",
+    await write_audit(
+        session_id,
+        "stage2_complete",
         frames_processed=len(frames),
         frames_discarded=discarded,
         enriches=enriches,
@@ -200,12 +193,6 @@ async def process_vision_frames(
     db: AsyncSession = Depends(get_db),
 ):
     """Process masked frames for a session through the vision pipeline."""
-    session = await get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
-    if session.state != SessionState.PROCESSING_STAGE2:
-        raise HTTPException(
-            status_code=409,
-            detail=f"Session must be in PROCESSING_STAGE2 state, currently: {session.state.value}",
-        )
+    session = await get_session_or_404(db, session_id)
+    require_state(session, SessionState.PROCESSING_STAGE2)
     return await run_stage2_vision(session_id, db)

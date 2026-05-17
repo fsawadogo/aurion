@@ -21,8 +21,8 @@ import json, os, subprocess, sys, time
 UDID = os.environ.get("AURION_UDID", "64B2A3A9-1943-4BEA-8FF8-6C4E8AF51111")
 BUNDLE = "com.faical.aurion"
 APP = "/Users/fsawadogo/Library/Developer/Xcode/DerivedData/Aurion-dublmqatvhuacuevthwsymtdcdtk/Build/Products/Debug-iphonesimulator/Aurion.app"
-EMAIL = "perry@creoq.ca"
-PASSWORD = "perry"
+EMAIL = "demo@aurion.health"
+PASSWORD = "demo1234"
 
 # Wall-clock anchor for Phase 2 — set when the recordVideo subprocess
 # attaches, then every milestone in phase2_record is paced against it via
@@ -319,7 +319,7 @@ def phase2_record():
 
     # ── s3-capture-mode window — pick capture mode in encounter sheet ─
     # Target window: M28.2–M41.5 (13.3s). Navigate Home → New Patient →
-    # With Team Member → Sarah → Continue → Context sheet, then dwell on
+    # With Team Member → Sophie → Continue → Context sheet, then dwell on
     # the capture mode picker tapping Audio Only → Smart Dictation →
     # Multimodal so each option is briefly highlighted as the VO names it.
     section("Capture mode picker")
@@ -330,9 +330,9 @@ def phase2_record():
     idb("ui", "swipe", "540", "1400", "540", "400", "--duration", "0.7")
     tap_label("New Patient")
     tap_label("With Team Member")
-    sarah = find("Sarah")
-    if sarah:
-        f = sarah["frame"]
+    teammate = find("Sophie") or find("Sarah")  # demo account = Sophie, fallback to Sarah
+    if teammate:
+        f = teammate["frame"]
         tap(int(f["x"] + f["width"] / 2), int(f["y"] + f["height"] / 2))
     tap_label("Continue", exact=True)
     wait_for("Capture mode")

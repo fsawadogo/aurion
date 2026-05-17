@@ -125,6 +125,14 @@ async def test_edit_note_creates_new_version():
     pe_section = result.get_section("physical_exam")
     assert pe_section is not None
     assert pe_section.claims[0].text == "Updated physical exam text."
+    # Provenance preserved: transcript anchor untouched, edit flag flipped,
+    # original text stashed for the audit trail.
+    assert pe_section.claims[0].source_type == "transcript"
+    assert pe_section.claims[0].source_id == "seg_001"
+    assert pe_section.claims[0].physician_edited is True
+    assert pe_section.claims[0].original_text == (
+        "Physician noted tenderness on palpation at the medial joint line."
+    )
 
 
 @pytest.mark.asyncio
@@ -261,7 +269,10 @@ async def test_edit_note_creates_claim_for_empty_section():
     assert imaging is not None
     assert len(imaging.claims) == 1
     assert imaging.claims[0].text == "No fracture visible on X-ray."
-    assert imaging.claims[0].source_id == "physician_edit"
+    # Net-new physician claim — source provenance is the edit itself, not a transcript.
+    assert imaging.claims[0].source_type == "physician_edit"
+    assert imaging.claims[0].source_id == "pedit_imaging_review"
+    assert imaging.claims[0].physician_edited is True
     assert imaging.status == "populated"
 
 

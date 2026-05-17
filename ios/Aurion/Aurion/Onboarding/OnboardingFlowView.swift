@@ -23,9 +23,14 @@ struct OnboardingFlowView: View {
         OnboardingStep.allCases.firstIndex(of: currentStep) ?? 0
     }
 
-    /// Progress fraction: (current step index + 1) / total steps.
+    /// Progress fraction: the fill terminates at the center of the
+    /// currently active step's label. Each label slot is 1/total of the
+    /// bar width, so the center of step N sits at (N + 0.5)/total.
+    /// On the first step the fill reaches the middle of "Pair" rather
+    /// than overshooting past it.
     private var progressFraction: CGFloat {
-        CGFloat(currentStepIndex + 1) / CGFloat(OnboardingStep.allCases.count)
+        let total = CGFloat(OnboardingStep.allCases.count)
+        return (CGFloat(currentStepIndex) + 0.5) / total
     }
 
     var body: some View {

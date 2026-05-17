@@ -81,8 +81,11 @@ final class APIClient: Sendable {
         return try await patch(path: "/sessions/\(sessionId)/template", body: ["specialty": specialty])
     }
 
-    func confirmConsent(sessionId: String) async throws -> SessionResponse {
-        return try await post(path: "/sessions/\(sessionId)/consent")
+    func confirmConsent(sessionId: String, method: ConsentMethod) async throws -> SessionResponse {
+        return try await post(
+            path: "/sessions/\(sessionId)/consent",
+            body: ["consent_method": method.rawValue]
+        )
     }
 
     func startRecording(sessionId: String) async throws -> SessionResponse {
@@ -109,6 +112,13 @@ final class APIClient: Sendable {
 
     func approveStage1(sessionId: String) async throws -> NoteApprovalResponse {
         return try await post(path: "/notes/\(sessionId)/approve-stage1")
+    }
+
+    /// Poll the async Stage 2 job status. The endpoint always returns 200;
+    /// status is `no_job` until Stage 1 is approved, then transitions
+    /// through `pending` → `running` → `completed` | `failed`.
+    func getStage2Status(sessionId: String) async throws -> Stage2StatusResponse {
+        return try await get(path: "/notes/\(sessionId)/stage2-status")
     }
 
     func getFullNote(sessionId: String) async throws -> NoteResponse {
@@ -151,11 +161,21 @@ final class APIClient: Sendable {
 
     /// Upload a single masked JPEG frame to the backend. Backend persists it
     /// to S3 at `frames/{session_id}/{timestamp_ms}.jpg` so the Stage 2 vision
-    /// pipeline can match it against transcript trigger segments. Frames must
-    /// be masked client-side first; iOS writes the masking_confirmed audit
-    /// event before this call.
+    /// pipeline can match it against transcript trigger segments.
+    ///
+    /// P0-02: every upload carries a masking proof (`frame_type`,
+    /// `masking_status`, counts). The backend rejects uploads without it.
+    /// `masking_status` is fixed to `"success"` because failed/skipped
+    /// frames are quarantined on-device and never reach this method.
     @discardableResult
-    func uploadFrame(sessionId: String, jpegData: Data, timestampMs: Int) async throws -> FrameUploadResponse {
+    func uploadFrame(
+        sessionId: String,
+        jpegData: Data,
+        timestampMs: Int,
+        frameType: String,
+        facesDetected: Int,
+        phiRegionsRedacted: Int
+    ) async throws -> FrameUploadResponse {
         let url = URL(string: "\(baseURL)/frames/\(sessionId)")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
@@ -168,13 +188,19 @@ final class APIClient: Sendable {
         var body = Data()
         let crlf = "\r\n".data(using: .utf8)!
 
-        // timestamp_ms field
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"timestamp_ms\"\r\n\r\n".data(using: .utf8)!)
-        body.append("\(timestampMs)".data(using: .utf8)!)
-        body.append(crlf)
+        func appendField(_ name: String, _ value: String) {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+            body.append(value.data(using: .utf8)!)
+            body.append(crlf)
+        }
 
-        // frame_file field
+        appendField("timestamp_ms", "\(timestampMs)")
+        appendField("frame_type", frameType)
+        appendField("masking_status", "success")
+        appendField("faces_detected", "\(facesDetected)")
+        appendField("phi_regions_redacted", "\(phiRegionsRedacted)")
+
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"frame_file\"; filename=\"frame.jpg\"\r\n".data(using: .utf8)!)
         body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
@@ -189,14 +215,120 @@ final class APIClient: Sendable {
         return try JSONDecoder().decode(FrameUploadResponse.self, from: data)
     }
 
+    // MARK: - Screen Capture (M-08)
+
+    /// Upload a single redacted screen JPEG to the backend OCR pipeline.
+    /// Backend persists to S3, runs OCR + classification, and merges any
+    /// extracted lab values / imaging metadata into the session's note
+    /// as screen-sourced claims. Same masking-proof contract as
+    /// `uploadFrame` (P0-02).
+    @discardableResult
+    func uploadScreenFrame(
+        sessionId: String,
+        jpegData: Data,
+        timestampMs: Int,
+        phiRegionsRedacted: Int
+    ) async throws -> ScreenUploadResponse {
+        let url = URL(string: "\(baseURL)/screen/\(sessionId)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        addAuth(&request)
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+
+        var body = Data()
+        let crlf = "\r\n".data(using: .utf8)!
+
+        func appendField(_ name: String, _ value: String) {
+            body.append("--\(boundary)\r\n".data(using: .utf8)!)
+            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+            body.append(value.data(using: .utf8)!)
+            body.append(crlf)
+        }
+
+        appendField("timestamp_ms", "\(timestampMs)")
+        appendField("frame_type", "screen")
+        appendField("masking_status", "success")
+        appendField("faces_detected", "0")
+        appendField("phi_regions_redacted", "\(phiRegionsRedacted)")
+
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"frame_file\"; filename=\"screen.jpg\"\r\n".data(using: .utf8)!)
+        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
+        body.append(jpegData)
+        body.append(crlf)
+
+        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        request.httpBody = body
+
+        let (data, response) = try await performRequest(request)
+        try validateResponse(response, data: data)
+        return try JSONDecoder().decode(ScreenUploadResponse.self, from: data)
+    }
+
+    // MARK: - Speaker Tags
+
+    /// Apply on-device speaker tags to a session's persisted transcript.
+    /// The voice embedding stays in Keychain — only labels and
+    /// confidences cross the wire.
+    @discardableResult
+    func patchSpeakerTags(
+        sessionId: String,
+        tags: [SpeakerTagRequest]
+    ) async throws -> SpeakerTagApplyResponse {
+        let url = URL(string: "\(baseURL)/transcription/\(sessionId)/speakers")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "PATCH"
+        request.timeoutInterval = 30
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        addAuth(&request)
+        request.httpBody = try JSONEncoder().encode(SpeakerTagBatch(tags: tags))
+        let (data, response) = try await performRequest(request)
+        try validateResponse(response, data: data)
+        return try JSONDecoder().decode(SpeakerTagApplyResponse.self, from: data)
+    }
+
+    /// Resolve a single Stage 2 visual conflict. The new note version is
+    /// returned so the UI can render the resolved state without a refetch.
+    @discardableResult
+    func resolveConflict(
+        sessionId: String,
+        claimId: String,
+        action: ConflictResolutionAction,
+        resolutionText: String? = nil
+    ) async throws -> NoteResponse {
+        var body: [String: Any] = ["action": action.rawValue]
+        if let text = resolutionText { body["resolution_text"] = text }
+        return try await patch(path: "/notes/\(sessionId)/conflicts/\(claimId)/resolve", body: body)
+    }
+
     // MARK: - Export
 
+    /// Server-side DOCX generation. Kept for the web portal flow; the
+    /// mobile MVP path uses on-device generation + `recordExportAudit`
+    /// instead so nothing crosses the wire on export.
     func exportNote(sessionId: String) async throws -> Data {
         let url = URL(string: "\(baseURL)/notes/\(sessionId)/export")!
         var request = URLRequest(url: url)
         request.httpMethod = "POST"
         let (data, _) = try await URLSession.shared.data(for: request)
         return data
+    }
+
+    /// Record an on-device export. Called after the local file has been
+    /// generated and offered to the share sheet — no bytes are sent.
+    @discardableResult
+    func recordExportAudit(
+        sessionId: String,
+        format: String,
+        bytesProduced: Int
+    ) async throws -> ExportAuditResponse {
+        return try await post(
+            path: "/notes/\(sessionId)/export-audit",
+            body: ["format": format, "bytes_produced": bytesProduced]
+        )
     }
 
     // MARK: - Generic HTTP
@@ -388,14 +520,109 @@ struct NoteClaimResponse: Codable, Equatable, Sendable {
     let sourceType: String
     let sourceId: String
     let sourceQuote: String
+    let physicianEdited: Bool
+    let originalText: String?
+
+    init(
+        id: String,
+        text: String,
+        sourceType: String,
+        sourceId: String,
+        sourceQuote: String,
+        physicianEdited: Bool = false,
+        originalText: String? = nil
+    ) {
+        self.id = id
+        self.text = text
+        self.sourceType = sourceType
+        self.sourceId = sourceId
+        self.sourceQuote = sourceQuote
+        self.physicianEdited = physicianEdited
+        self.originalText = originalText
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, text
         case sourceType = "source_type"
         case sourceId = "source_id"
         case sourceQuote = "source_quote"
+        case physicianEdited = "physician_edited"
+        case originalText = "original_text"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        text = try c.decode(String.self, forKey: .text)
+        sourceType = try c.decode(String.self, forKey: .sourceType)
+        sourceId = try c.decode(String.self, forKey: .sourceId)
+        sourceQuote = try c.decodeIfPresent(String.self, forKey: .sourceQuote) ?? ""
+        // Default-false / nil so older Stage 1 payloads still decode.
+        physicianEdited = try c.decodeIfPresent(Bool.self, forKey: .physicianEdited) ?? false
+        originalText = try c.decodeIfPresent(String.self, forKey: .originalText)
     }
 }
+
+/// Wire response from POST /notes/{id}/export-audit. The endpoint is
+/// no-bytes; iOS uses the returned `sessionState` to know that the
+/// server flipped to EXPORTED.
+struct ExportAuditResponse: Codable, Sendable {
+    let sessionId: String
+    let sessionState: String
+    let auditWritten: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case sessionState = "session_state"
+        case auditWritten = "audit_written"
+    }
+}
+
+
+/// Wire enum for the conflict resolution endpoint. Mirrors the backend
+/// `ConflictResolutionRequest.action` literal; any new action must be
+/// added here AND in `note_gen.service.resolve_conflict`.
+enum ConflictResolutionAction: String, Sendable {
+    case acceptVisual = "accept_visual"
+    case rejectVisual = "reject_visual"
+    case edit
+}
+
+
+/// Snapshot of an async Stage 2 job. iOS polls this on the dashboard to
+/// know whether a session is still processing, ready for final review,
+/// or stuck on a vision failure.
+struct Stage2StatusResponse: Codable, Sendable, Equatable {
+    let sessionId: String
+    let jobId: String?
+    /// One of "no_job", "pending", "running", "completed", "failed".
+    let status: String
+    let startedAt: String?
+    let completedAt: String?
+    let newNoteVersion: Int?
+    let framesProcessed: Int
+    let errorMessage: String?
+
+    enum CodingKeys: String, CodingKey {
+        case status
+        case sessionId = "session_id"
+        case jobId = "job_id"
+        case startedAt = "started_at"
+        case completedAt = "completed_at"
+        case newNoteVersion = "new_note_version"
+        case framesProcessed = "frames_processed"
+        case errorMessage = "error_message"
+    }
+
+    /// Convenience flags for UI dispatch. Anything outside the known set
+    /// (e.g. an older client + newer backend) collapses to "in progress"
+    /// so the UI never silently drops a Stage 2 in flight.
+    var isCompleted: Bool { status == "completed" }
+    var isFailed: Bool { status == "failed" }
+    var isInProgress: Bool { status == "pending" || status == "running" }
+    var hasStarted: Bool { status != "no_job" }
+}
+
 
 struct NoteApprovalResponse: Codable, Sendable {
     let sessionId: String
@@ -477,6 +704,87 @@ struct TemplateResponse: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case key, sections
         case displayName = "display_name"
+    }
+}
+
+// MARK: - Transcription / Speaker Tagging
+
+struct TranscriptSegmentResponse: Codable, Sendable {
+    let id: String
+    let startMs: Int
+    let endMs: Int
+    let text: String
+    let speaker: String?
+    let speakerConfidence: Float?
+    let isVisualTrigger: Bool?
+    let triggerType: String?
+
+    enum CodingKeys: String, CodingKey {
+        case id, text, speaker
+        case startMs = "start_ms"
+        case endMs = "end_ms"
+        case speakerConfidence = "speaker_confidence"
+        case isVisualTrigger = "is_visual_trigger"
+        case triggerType = "trigger_type"
+    }
+}
+
+struct TranscriptResponse: Codable, Sendable {
+    let sessionId: String
+    let providerUsed: String
+    let segments: [TranscriptSegmentResponse]
+
+    enum CodingKeys: String, CodingKey {
+        case segments
+        case sessionId = "session_id"
+        case providerUsed = "provider_used"
+    }
+}
+
+struct SpeakerTagRequest: Codable, Sendable {
+    let segmentId: String
+    let speaker: String
+    let confidence: Float
+
+    enum CodingKeys: String, CodingKey {
+        case speaker, confidence
+        case segmentId = "segment_id"
+    }
+}
+
+struct SpeakerTagBatch: Codable, Sendable {
+    let tags: [SpeakerTagRequest]
+}
+
+struct SpeakerTagApplyResponse: Codable, Sendable {
+    let sessionId: String
+    let segmentsUpdated: Int
+    let segmentsUnknown: [String]
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case segmentsUpdated = "segments_updated"
+        case segmentsUnknown = "segments_unknown"
+    }
+}
+
+struct ScreenUploadResponse: Codable, Sendable {
+    let sessionId: String
+    let frameId: String
+    let screenType: String
+    let integrationStatus: String
+    let noteSectionTarget: String?
+    let claimsAdded: Int
+    let newNoteVersion: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case frameId = "frame_id"
+        case screenType = "screen_type"
+        case integrationStatus = "integration_status"
+        case noteSectionTarget = "note_section_target"
+        case claimsAdded = "claims_added"
+        case newNoteVersion = "new_note_version"
     }
 }
 

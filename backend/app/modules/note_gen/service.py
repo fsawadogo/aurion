@@ -15,12 +15,13 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
-from sqlalchemy import select, func
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import NoteVersionModel
 from app.core.types import Note, NoteSection, NoteClaim, Template, TemplateSection, Transcript
 from app.modules.config.provider_registry import get_registry
+from app.modules.note_gen import repository as note_repo
 
 logger = logging.getLogger("aurion.note_gen")
 
@@ -386,17 +387,8 @@ async def get_latest_note(
     The clinician always sees and edits the latest version. Previous
     versions are retained silently in the audit trail.
     """
-    result = await db.execute(
-        select(NoteVersionModel)
-        .where(NoteVersionModel.session_id == uuid.UUID(session_id))
-        .order_by(NoteVersionModel.version.desc())
-        .limit(1)
-    )
-    version_record = result.scalar_one_or_none()
-    if not version_record:
-        return None
-
-    return _deserialize_note(version_record)
+    version_record = await note_repo.get_latest_version(db, session_id)
+    return _deserialize_note(version_record) if version_record else None
 
 
 async def get_note_by_stage(
@@ -405,20 +397,8 @@ async def get_note_by_stage(
     db: AsyncSession,
 ) -> Optional[Note]:
     """Retrieve the latest note version for a specific stage."""
-    result = await db.execute(
-        select(NoteVersionModel)
-        .where(
-            NoteVersionModel.session_id == uuid.UUID(session_id),
-            NoteVersionModel.stage == stage,
-        )
-        .order_by(NoteVersionModel.version.desc())
-        .limit(1)
-    )
-    version_record = result.scalar_one_or_none()
-    if not version_record:
-        return None
-
-    return _deserialize_note(version_record)
+    version_record = await note_repo.get_latest_version(db, session_id, stage=stage)
+    return _deserialize_note(version_record) if version_record else None
 
 
 async def approve_note(
@@ -430,13 +410,7 @@ async def approve_note(
     Creates a new approved version record. Returns the approved Note.
     Raises ValueError if no note exists for the session.
     """
-    result = await db.execute(
-        select(NoteVersionModel)
-        .where(NoteVersionModel.session_id == uuid.UUID(session_id))
-        .order_by(NoteVersionModel.version.desc())
-        .limit(1)
-    )
-    version_record = result.scalar_one_or_none()
+    version_record = await note_repo.get_latest_version(db, session_id)
 
     if not version_record:
         raise ValueError(f"No note found for session {session_id}")
@@ -499,15 +473,27 @@ async def edit_note(
             continue
 
         if section.claims:
-            section.claims[0].text = new_text
+            # Preserve provenance: keep the original source_type and source_id,
+            # mark physician_edited=True, and stash the pre-edit text on the
+            # first edit only. Re-editing a previously edited claim leaves
+            # `original_text` pointing at the original (Stage 1) text, which
+            # is what the audit trail wants.
+            claim = section.claims[0]
+            if not claim.physician_edited:
+                claim.original_text = claim.text
+                claim.physician_edited = True
+            claim.text = new_text
         else:
+            # Net-new physician claim — no Stage 1 anchor exists, so the
+            # source provenance is the edit itself.
             section.claims.append(
                 NoteClaim(
-                    id=f"claim_{uuid.uuid4().hex[:8]}",
+                    id=f"pclaim_{uuid.uuid4().hex[:8]}",
                     text=new_text,
-                    source_type="transcript",
-                    source_id="physician_edit",
+                    source_type="physician_edit",
+                    source_id=f"pedit_{section_id}",
                     source_quote="",
+                    physician_edited=True,
                 )
             )
             section.status = "populated"
@@ -522,6 +508,78 @@ async def edit_note(
     )
 
     return edited_note
+
+
+CONFLICT_RESOLUTION_ACTIONS = ("accept_visual", "reject_visual", "edit")
+
+
+async def resolve_conflict(
+    session_id: str,
+    claim_id: str,
+    action: str,
+    resolution_text: str | None,
+    db: AsyncSession,
+) -> Note:
+    """Resolve a single Stage 2 visual conflict, writing a new note version.
+
+    Actions:
+        - "accept_visual": keep the visual claim as-is; mark it physician_edited
+          so the approval gate stops blocking. Use when the visual evidence is
+          right and the audio narration was wrong/incomplete.
+        - "reject_visual": remove the conflict claim from the section. Use when
+          the audio was correct and the visual frame was misleading.
+        - "edit": replace the claim text with `resolution_text`. Original text
+          is stashed; physician_edited is True.
+
+    Each action writes a new immutable note version; the original conflict
+    claim is preserved in version history.
+
+    Raises:
+        ValueError: no note for session, claim not found, unknown action, or
+            "edit" called without resolution_text.
+    """
+    if action not in CONFLICT_RESOLUTION_ACTIONS:
+        raise ValueError(f"Unknown resolution action: {action!r}")
+    if action == "edit" and not (resolution_text and resolution_text.strip()):
+        raise ValueError("'edit' action requires non-empty resolution_text")
+
+    latest = await get_latest_note(session_id, db)
+    if not latest:
+        raise ValueError(f"No note found for session {session_id}")
+
+    updated = latest.model_copy(deep=True)
+
+    target = next(
+        ((section, claim) for section in updated.sections for claim in section.claims if claim.id == claim_id),
+        None,
+    )
+    if target is None:
+        raise ValueError(f"Claim {claim_id} not found in latest note for session {session_id}")
+    target_section, target_claim = target
+
+    if action == "accept_visual":
+        if not target_claim.physician_edited:
+            target_claim.original_text = target_claim.text
+        target_claim.physician_edited = True
+    elif action == "reject_visual":
+        target_section.claims = [c for c in target_section.claims if c.id != claim_id]
+    else:  # action == "edit" — validated above, resolution_text is non-empty
+        if not target_claim.physician_edited:
+            target_claim.original_text = target_claim.text
+        target_claim.text = resolution_text or ""
+        target_claim.physician_edited = True
+
+    await create_note_version(session_id, updated, db)
+
+    logger.info(
+        "Conflict resolved: session=%s claim=%s action=%s new_version=%d",
+        session_id,
+        claim_id,
+        action,
+        updated.version,
+    )
+
+    return updated
 
 
 async def is_note_approved(session_id: str, db: AsyncSession) -> bool:
@@ -542,12 +600,7 @@ async def get_all_versions(
     db: AsyncSession,
 ) -> list[NoteVersionModel]:
     """Get all note versions for a session, ordered by version number."""
-    result = await db.execute(
-        select(NoteVersionModel)
-        .where(NoteVersionModel.session_id == uuid.UUID(session_id))
-        .order_by(NoteVersionModel.version.asc())
-    )
-    return list(result.scalars().all())
+    return await note_repo.get_all_versions(db, session_id)
 
 
 # ── Deserialization ───────────────────────────────────────────────────────

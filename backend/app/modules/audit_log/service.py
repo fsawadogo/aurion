@@ -10,12 +10,13 @@ from __future__ import annotations
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
 from decimal import Decimal
 from typing import Any, Optional
 
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
+
+from app.core.clock import utcnow
 
 logger = logging.getLogger("aurion.audit")
 
@@ -54,7 +55,7 @@ class AuditLogService:
         Returns:
             The written audit record.
         """
-        timestamp = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+        timestamp = utcnow().isoformat(timespec="milliseconds")
         record = {
             "session_id": str(session_id),
             "event_timestamp": timestamp,

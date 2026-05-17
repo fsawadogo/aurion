@@ -45,12 +45,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
-async def init_db() -> None:
-    """Create all tables. Called on startup."""
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-
-
 async def close_db() -> None:
     """Dispose engine. Called on shutdown."""
     await engine.dispose()

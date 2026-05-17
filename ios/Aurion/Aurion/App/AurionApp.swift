@@ -4,6 +4,7 @@ import SwiftUI
 struct AurionApp: App {
     @StateObject private var appState = AppState()
     @StateObject private var remoteConfig = RemoteConfig.shared
+    @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
         WindowGroup {
@@ -26,6 +27,17 @@ struct AurionApp: App {
                         await remoteConfig.refresh()
                     }
                 }
+        }
+        .onChange(of: scenePhase) { _, newPhase in
+            // M-12 stale sweep — every time the app comes to foreground we
+            // check the iOS temp dir for Aurion artifacts older than 24h
+            // and delete them. Cheap (a single directory scan) and runs
+            // outside any active session so it never races with capture.
+            if newPhase == .active {
+                Task { @MainActor in
+                    LocalDataPurger.purgeStaleArtifacts()
+                }
+            }
         }
     }
 }

@@ -108,10 +108,12 @@ struct VoiceProcessingView: View {
         }
     }
 
-    /// Reads the recorded audio file, extracts a 256-dim voice fingerprint
-    /// on-device, saves it to the Keychain, and deletes the raw audio file.
-    /// Per CLAUDE.md, the raw recording must NEVER be persisted to disk
-    /// past this point and the embedding NEVER leaves the device.
+    /// Reads the recorded audio file, extracts an on-device voice
+    /// fingerprint (128-dim MFCC embedding, matching the session-time
+    /// speaker tagger), saves it to the Keychain, and deletes the raw
+    /// audio file. Per CLAUDE.md, the raw recording must NEVER be
+    /// persisted to disk past this point and the embedding NEVER leaves
+    /// the device.
     private func extractAndStoreEmbedding() {
         guard let url = audioFileURL else {
             failureMessage = "No recording found."

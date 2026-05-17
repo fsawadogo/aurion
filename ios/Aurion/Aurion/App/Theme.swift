@@ -350,6 +350,35 @@ enum AurionSpacing {
     static let hitMin: CGFloat = 44
     static let topBar: CGFloat = 44
     static let tabBar: CGFloat = 49
+
+    /// Resolve the right screen-edge padding for the current size class.
+    /// iPad regular width gets the wider edge; everything else (iPhone,
+    /// iPad Slide Over, split view at compact) gets the tighter one.
+    static func screenEdge(for sizeClass: UserInterfaceSizeClass?) -> CGFloat {
+        sizeClass == .regular ? edgeIPad : edgeIPhone
+    }
+}
+
+
+/// View modifier that applies the size-class-adaptive screen edge as
+/// horizontal padding. Replaces hardcoded `.padding(.horizontal,
+/// AurionSpacing.edgeIPhone)` at the screen-edge layer.
+struct AurionEdgePadding: ViewModifier {
+    @Environment(\.horizontalSizeClass) private var sizeClass
+
+    func body(content: Content) -> some View {
+        content.padding(.horizontal, AurionSpacing.screenEdge(for: sizeClass))
+    }
+}
+
+extension View {
+    /// Apply screen-edge horizontal padding adaptive to size class. Use
+    /// this at the outermost layout layer of any view that should sit
+    /// against the screen edge — `.aurionScreenEdge()` keeps iPhone and
+    /// iPad layouts consistent without per-view sizeClass plumbing.
+    func aurionScreenEdge() -> some View {
+        modifier(AurionEdgePadding())
+    }
 }
 
 // MARK: - Radii

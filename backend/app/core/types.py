@@ -50,11 +50,28 @@ class Template(BaseModel):
 # ── Note Types ─────────────────────────────────────────────────────────────
 
 class NoteClaim(BaseModel):
+    """A single factual claim in a note section.
+
+    Every claim must be traceable to a source. `source_type` says where the
+    text came from; `source_id` is the anchor (transcript segment id, frame
+    id, screen frame id, or — for physician-authored claims — a stable
+    sentinel like `pedit_{section_id}`). Empty `source_id` is rejected so
+    Stage 1 / Stage 2 outputs can't ship an unanchored claim.
+
+    Physician edits preserve provenance: a claim originating from a
+    transcript segment keeps its `source_type="transcript"` and `source_id`,
+    but `physician_edited` flips True and `original_text` captures the
+    pre-edit text. Brand-new physician-authored claims use
+    `source_type="physician_edit"` directly.
+    """
+
     id: str
     text: str
-    source_type: Literal["transcript", "visual", "screen"]
-    source_id: str
+    source_type: Literal["transcript", "visual", "screen", "physician_edit"]
+    source_id: str = Field(..., min_length=1, description="Non-empty source anchor id")
     source_quote: str = ""
+    physician_edited: bool = False
+    original_text: Optional[str] = None
 
 
 class NoteSection(BaseModel):
@@ -126,6 +143,22 @@ class ScreenCaptureResult(BaseModel):
     extracted_data: Optional[ScreenExtractedData] = None
     note_section_target: Optional[str] = None
     integration_status: Literal["injected", "skipped", "discarded"]
+
+
+# ── Masking Proof ─────────────────────────────────────────────────────────
+
+class MaskingProof(BaseModel):
+    """Client-side masking proof attached to every frame upload.
+
+    Mirrors the iOS `MaskingResult` struct. Only `masking_status == "success"`
+    is acceptable — failed/skipped results MUST NOT reach the backend because
+    iOS fail-closes the upload path.
+    """
+
+    frame_type: Literal["video", "screen"] = Field(..., description="'video' or 'screen'")
+    masking_status: Literal["success"] = Field(..., description="Must be 'success'")
+    faces_detected: int = Field(..., ge=0)
+    phi_regions_redacted: int = Field(..., ge=0)
 
 
 # ── Encounter Types ───────────────────────────────────────────────────────

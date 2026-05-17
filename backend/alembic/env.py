@@ -41,27 +41,13 @@ if config.config_file_name is not None:
 # The MetaData object that Alembic compares against the database.
 target_metadata = Base.metadata
 
-# ---------------------------------------------------------------------------
-# Override sqlalchemy.url from the DATABASE_URL environment variable.
-# For Alembic (sync migrations), we replace the async driver with the
-# sync equivalent so that standard ``engine_from_config`` works.
-# ---------------------------------------------------------------------------
+# Alembic uses a synchronous driver; the app uses asyncpg. Swap one for the
+# other so DATABASE_URL works for both.
 _database_url = os.getenv(
     "DATABASE_URL",
     "postgresql+asyncpg://aurion:aurion@localhost:5432/aurion",
 )
-
-# Alembic requires a synchronous driver.  Replace asyncpg with psycopg2.
-_sync_url = _database_url.replace("+asyncpg", "+psycopg2").replace(
-    "postgresql://", "postgresql+psycopg2://"
-    if "+psycopg2" not in _database_url.replace("+asyncpg", "+psycopg2")
-    else "postgresql://"
-)
-
-# Simpler replacement: just swap asyncpg for psycopg2
-_sync_url = _database_url.replace("asyncpg", "psycopg2")
-
-config.set_main_option("sqlalchemy.url", _sync_url)
+config.set_main_option("sqlalchemy.url", _database_url.replace("asyncpg", "psycopg2"))
 
 
 def run_migrations_offline() -> None:

@@ -11,7 +11,7 @@ import csv
 import io
 import json
 import uuid
-from datetime import datetime, timezone
+from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -20,12 +20,15 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import utcnow
 from app.core.database import get_db
-from app.core.models import NoteVersionModel, PilotMetricsModel, SessionModel
+from app.core.models import PilotMetricsModel, SessionModel
 from app.core.types import SessionState, UserRole
+from app.api.v1._helpers import get_session_or_404, write_audit
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, require_role
 from app.modules.config.appconfig_client import get_config
+from app.modules.note_gen import repository as note_repo
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -123,11 +126,27 @@ class PaginatedAuditResponse(BaseModel):
 
 
 class MaskingSessionResult(BaseModel):
+    """Per-session masking breakdown for the PHI masking report.
+
+    `total_frames` is the number of masking attempts (success + failed).
+    `masked_frames` counts confirmed-masked attempts. `failed_frames`
+    counts on-device masking failures (P0-01 fail-closed: those bytes
+    never left the device). `skipped_frames` counts frames the clinician
+    explicitly skipped after a masking failure. `uploaded_frames` counts
+    frames that reached the backend with a valid P0-02 masking proof.
+
+    The session passes when no masking attempt failed and no frame was
+    uploaded without proof.
+    """
+
     session_id: str
     clinician_name: str
     date: str
     total_frames: int
     masked_frames: int
+    failed_frames: int = 0
+    skipped_frames: int = 0
+    uploaded_frames: int = 0
     passed: bool = Field(alias="pass", serialization_alias="pass")
 
 
@@ -240,16 +259,14 @@ async def create_user(
         "role": body.role.value,
         "is_active": True,
         "voice_enrolled": False,
-        "created_at": datetime.now(timezone.utc).isoformat(),
+        "created_at": utcnow().isoformat(),
         "last_login_at": None,
     }
     _MOCK_USERS[new_id] = new_user
 
-    # Audit log
-    audit = get_audit_log_service()
-    await audit.write_event(
-        session_id="system",
-        event_type="user_created",
+    await write_audit(
+        "system",
+        "user_created",
         target_user_id=new_id,
         target_email=body.email,
         target_role=body.role,
@@ -285,10 +302,9 @@ async def update_user(
         target["is_active"] = body.is_active
 
     if changes:
-        audit = get_audit_log_service()
-        await audit.write_event(
-            session_id="system",
-            event_type="user_updated",
+        await write_audit(
+            "system",
+            "user_updated",
             target_user_id=user_id,
             changes=str(changes),
             updated_by=str(user.user_id),
@@ -423,20 +439,35 @@ async def get_masking_report(
         require_role(UserRole.COMPLIANCE_OFFICER, UserRole.ADMIN)
     ),
 ):
-    """Per-session masking pass/fail report. COMPLIANCE_OFFICER or ADMIN.
+    """Per-session masking report. COMPLIANCE_OFFICER or ADMIN.
 
-    Queries the audit log for masking_confirmed events and aggregates
-    pass/fail status per session.
+    Per P0-02 acceptance: distinguishes masked / failed / skipped / uploaded
+    counts per session. The report consumes four audit event types:
+
+    - ``masking_confirmed`` — on-device masking succeeded for a frame.
+    - ``masking_failed`` — on-device masking failed; the frame was
+      quarantined (never uploaded). Counts toward `failed_frames`.
+    - ``masking_failure_skipped`` — clinician explicitly skipped one or
+      more quarantined frames. The event's `frame_count` is summed into
+      `skipped_frames`.
+    - ``frame_uploaded`` — backend received a frame with a valid masking
+      proof; counts toward `uploaded_frames`.
+
+    A session passes when no `masking_failed` events exist.
     """
     audit = get_audit_log_service()
     all_events = await _scan_audit_events(audit)
 
-    # Filter to masking-related events
+    relevant_event_types = (
+        "masking_confirmed",
+        "masking_failed",
+        "masking_failure_skipped",
+        "frame_uploaded",
+    )
     masking_events = [
-        e for e in all_events if e.get("event_type") in ("masking_confirmed", "masking_failed")
+        e for e in all_events if e.get("event_type") in relevant_event_types
     ]
 
-    # Apply date and clinician filters
     masking_events = _apply_audit_filters(
         masking_events,
         clinician_id=clinician_id,
@@ -444,7 +475,6 @@ async def get_masking_report(
         date_to=date_to,
     )
 
-    # Aggregate per session
     sessions_map: dict[str, dict[str, Any]] = {}
     for evt in masking_events:
         sid = evt.get("session_id", "")
@@ -455,13 +485,29 @@ async def get_masking_report(
                 "date": evt.get("event_timestamp", "")[:10],
                 "total_frames": 0,
                 "masked_frames": 0,
+                "failed_frames": 0,
+                "skipped_frames": 0,
+                "uploaded_frames": 0,
                 "pass": True,
             }
-        sessions_map[sid]["total_frames"] += 1
-        if evt.get("event_type") == "masking_confirmed":
-            sessions_map[sid]["masked_frames"] += 1
-        else:
-            sessions_map[sid]["pass"] = False
+        bucket = sessions_map[sid]
+        event_type = evt.get("event_type")
+        if event_type == "masking_confirmed":
+            bucket["masked_frames"] += 1
+            bucket["total_frames"] += 1
+        elif event_type == "masking_failed":
+            bucket["failed_frames"] += 1
+            bucket["total_frames"] += 1
+            bucket["pass"] = False
+        elif event_type == "masking_failure_skipped":
+            # The mobile client emits one event covering N quarantined frames.
+            try:
+                count = int(evt.get("frame_count", 1))
+            except (TypeError, ValueError):
+                count = 1
+            bucket["skipped_frames"] += count
+        elif event_type == "frame_uploaded":
+            bucket["uploaded_frames"] += 1
 
     sessions_list = list(sessions_map.values())
     pass_count = sum(1 for s in sessions_list if s["pass"])
@@ -674,30 +720,9 @@ async def get_admin_sessions(
 
     # Batch-load latest note versions for all sessions in a single query
     # to avoid N+1 (one query per session in the loop).
-    session_ids = [s.id for s in sessions]
-    notes_by_session: dict[uuid.UUID, NoteVersionModel] = {}
-
-    if session_ids:
-        max_version_sub = (
-            select(
-                NoteVersionModel.session_id,
-                func.max(NoteVersionModel.version).label("max_ver"),
-            )
-            .where(NoteVersionModel.session_id.in_(session_ids))
-            .group_by(NoteVersionModel.session_id)
-            .subquery()
-        )
-        notes_stmt = (
-            select(NoteVersionModel)
-            .join(
-                max_version_sub,
-                (NoteVersionModel.session_id == max_version_sub.c.session_id)
-                & (NoteVersionModel.version == max_version_sub.c.max_ver),
-            )
-        )
-        notes_result = await db.execute(notes_stmt)
-        for nv in notes_result.scalars().all():
-            notes_by_session[nv.session_id] = nv
+    notes_by_session = await note_repo.get_latest_versions_by_session(
+        db, (s.id for s in sessions)
+    )
 
     items = []
     for s in sessions:
@@ -777,30 +802,9 @@ async def get_eval_sessions(
     sessions = result.scalars().all()
 
     # Batch-load latest note versions for all sessions to avoid N+1 queries.
-    session_ids = [s.id for s in sessions]
-    notes_by_session: dict[uuid.UUID, NoteVersionModel] = {}
-
-    if session_ids:
-        max_version_sub = (
-            select(
-                NoteVersionModel.session_id,
-                func.max(NoteVersionModel.version).label("max_ver"),
-            )
-            .where(NoteVersionModel.session_id.in_(session_ids))
-            .group_by(NoteVersionModel.session_id)
-            .subquery()
-        )
-        notes_stmt = (
-            select(NoteVersionModel)
-            .join(
-                max_version_sub,
-                (NoteVersionModel.session_id == max_version_sub.c.session_id)
-                & (NoteVersionModel.version == max_version_sub.c.max_ver),
-            )
-        )
-        notes_result = await db.execute(notes_stmt)
-        for nv in notes_result.scalars().all():
-            notes_by_session[nv.session_id] = nv
+    notes_by_session = await note_repo.get_latest_versions_by_session(
+        db, (s.id for s in sessions)
+    )
 
     # Batch-load masking status from audit log for all sessions at once,
     # instead of one DynamoDB query per session.
@@ -853,11 +857,7 @@ async def submit_eval_score(
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid session ID format")
 
-    stmt = select(SessionModel).where(SessionModel.id == sid_uuid)
-    result = await db.execute(stmt)
-    session = result.scalar_one_or_none()
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    session = await get_session_or_404(db, sid_uuid)
 
     # Calculate overall score
     overall = round(
@@ -872,16 +872,14 @@ async def submit_eval_score(
         "overall": overall,
         "notes": body.notes,
         "scored_by": user.email,
-        "scored_at": datetime.now(timezone.utc).isoformat(),
+        "scored_at": utcnow().isoformat(),
     }
 
     _EVAL_SCORES[session_id] = scores
 
-    # Audit log
-    audit = get_audit_log_service()
-    await audit.write_event(
-        session_id=session_id,
-        event_type="eval_score_submitted",
+    await write_audit(
+        session_id,
+        "eval_score_submitted",
         overall_score=overall,
         scored_by=user.email,
     )

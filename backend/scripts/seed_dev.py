@@ -20,7 +20,7 @@ from pathlib import Path
 _backend_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_backend_root))
 
-from app.core.database import engine, async_session_factory, Base  # noqa: E402
+from app.core.database import engine, async_session_factory  # noqa: E402
 from app.core.models import SessionModel, NoteVersionModel, PilotMetricsModel  # noqa: E402
 
 
@@ -30,18 +30,20 @@ from app.core.models import SessionModel, NoteVersionModel, PilotMetricsModel  #
 TEMPLATE_DIR = _backend_root / "app" / "modules" / "note_gen" / "templates"
 
 
-async def create_tables() -> int:
-    """Create all tables defined on Base.metadata.
+def run_migrations() -> None:
+    """Run ``alembic upgrade head`` so the schema is current before seeding.
 
-    Returns the number of tables created (or already present).
-    Uses ``create_all`` which is a no-op for tables that already exist,
-    making this safe to call repeatedly.
+    Uses ``sys.executable -m alembic`` instead of bare ``alembic`` so this
+    works in a venv-less shell or a slim CI image where alembic isn't on
+    PATH but is importable.
     """
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-    # Report the total number of tables in the metadata — all guaranteed
-    # to exist after ``create_all``.
-    return len(Base.metadata.tables)
+    import subprocess
+
+    subprocess.run(
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
+        cwd=str(_backend_root),
+        check=True,
+    )
 
 
 def load_templates() -> list[dict]:
@@ -76,10 +78,9 @@ async def seed() -> None:
     print("Aurion Dev Seed")
     print("=" * 60)
 
-    # --- Tables ----------------------------------------------------------
-    print("\n--- Creating database tables ---")
-    table_count = await create_tables()
-    print(f"  Tables ensured: {table_count}")
+    # --- Schema ----------------------------------------------------------
+    print("\n--- Running alembic migrations ---")
+    run_migrations()
 
     # --- Templates -------------------------------------------------------
     print("\n--- Loading specialty templates ---")
@@ -87,10 +88,7 @@ async def seed() -> None:
 
     # --- Summary ---------------------------------------------------------
     print("\n" + "=" * 60)
-    print(
-        f"Seed complete: {table_count} tables created, "
-        f"{len(templates)} templates loaded"
-    )
+    print(f"Seed complete: schema migrated, {len(templates)} templates loaded")
     print("=" * 60)
 
 

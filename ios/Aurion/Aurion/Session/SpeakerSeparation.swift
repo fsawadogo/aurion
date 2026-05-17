@@ -2,26 +2,22 @@ import Foundation
 import AVFoundation
 import Accelerate
 
-// MARK: - Speaker Separation
+/// Speaker label produced by on-device tagging. Aurion does not perform
+/// multi-speaker diarization (CLAUDE.md §"What NOT to Build") — only the
+/// enrolled physician is distinguished from everyone else.
+enum Speaker: String, Codable, Sendable {
+    case physician
+    case other
+}
 
-/// On-device speaker separation using MFCC-based voice embeddings.
-///
-/// Enrollment: generates a 128-dimension voice embedding from the physician's speech sample.
-/// Session-time: compares each transcript segment's audio against the enrollment embedding
-/// using cosine similarity. Score > 0.85 tags as "physician", otherwise "other".
-///
-/// Privacy: voice embedding stored exclusively in Keychain via KeychainHelper.
-/// Raw audio deleted immediately after embedding generation. Embedding never transmitted to backend.
-///
-/// Production note: this simplified MFCC approach is suitable for MVP speaker verification.
-/// Phase 7 evaluation will compare against SpeechBrain Core ML and Apple SFSpeakerRecognition.
+/// On-device speaker verification. MFCC-derived 128-dim embedding;
+/// cosine similarity > 0.85 against the enrolled physician embedding
+/// tags the segment as physician. Phase 7 will evaluate SpeechBrain
+/// Core ML and Apple SFSpeakerRecognition as drop-in replacements.
 final class SpeakerSeparation {
     static let shared = SpeakerSeparation()
 
-    /// Cosine similarity threshold: > 0.85 = physician, <= 0.85 = other.
     let similarityThreshold: Float = 0.85
-
-    /// Embedding dimension. Must match between enrollment and segment comparison.
     let embeddingDimension: Int = 128
 
     // MARK: - MFCC Configuration
@@ -49,7 +45,20 @@ final class SpeakerSeparation {
         sampleRate: targetSampleRate
     )
 
+    /// vDSP_create_fftsetup allocates non-trivially; cached so per-segment
+    /// MFCC extraction during `tagSegments` doesn't pay it 100+ times.
+    private lazy var cachedFFTSetup: FFTSetup? = vDSP_create_fftsetup(
+        vDSP_Length(log2f(Float(fftLength))),
+        FFTRadix(FFT_RADIX2)
+    )
+
     private init() {}
+
+    deinit {
+        if let setup = cachedFFTSetup {
+            vDSP_destroy_fftsetup(setup)
+        }
+    }
 
     // MARK: - Voice Embedding Generation
 
@@ -75,6 +84,21 @@ final class SpeakerSeparation {
 
         guard embedding.count == embeddingDimension else { return nil }
         return embedding
+    }
+
+    /// Generate a 128-dim embedding from an audio file on disk. Used by
+    /// onboarding, where the enrollment recording lives as a WAV file
+    /// before being deleted. Same pipeline as `generateEmbedding(from:)`
+    /// — there is only ONE embedding shape in the app (M-01).
+    func generateEmbedding(from fileURL: URL) -> [Float]? {
+        guard let file = try? AVAudioFile(forReading: fileURL) else { return nil }
+        let frameCapacity = AVAudioFrameCount(file.length)
+        guard frameCapacity > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: file.processingFormat, frameCapacity: frameCapacity) else {
+            return nil
+        }
+        do { try file.read(into: buffer) } catch { return nil }
+        return generateEmbedding(from: buffer)
     }
 
     // MARK: - Speaker Comparison
@@ -104,37 +128,81 @@ final class SpeakerSeparation {
 
     // MARK: - Segment Tagging
 
-    /// Tag a transcript segment's speaker by comparing its audio against the enrollment embedding.
-    ///
-    /// - Parameters:
-    ///   - segmentAudio: PCM audio buffer for the transcript segment.
-    ///   - enrollmentEmbedding: The physician's stored voice embedding.
-    /// - Returns: Tuple of speaker label ("physician" or "other") and confidence score.
-    func tagSpeaker(segmentAudio: AVAudioPCMBuffer, enrollmentEmbedding: [Float]) -> (speaker: String, confidence: Float) {
+    /// Tag a transcript segment by comparing its audio against the
+    /// enrolled physician embedding. Returns `.other` with confidence 0
+    /// when the segment is too short or feature extraction fails.
+    func tagSpeaker(segmentAudio: AVAudioPCMBuffer, enrollmentEmbedding: [Float]) -> (speaker: Speaker, confidence: Float) {
         guard let segmentEmbedding = generateEmbedding(from: segmentAudio) else {
-            return (speaker: "other", confidence: 0.0)
+            return (.other, 0.0)
         }
 
         let similarity = cosineSimilarity(segmentEmbedding, enrollmentEmbedding)
+        return similarity > similarityThreshold
+            ? (.physician, similarity)
+            : (.other, 1.0 - similarity)
+    }
 
-        if similarity > similarityThreshold {
-            return (speaker: "physician", confidence: similarity)
-        } else {
-            return (speaker: "other", confidence: 1.0 - similarity)
+    // MARK: - Batch Segment Tagging
+
+    struct SegmentTimespan {
+        let id: String
+        let startMs: Int
+        let endMs: Int
+    }
+
+    struct SegmentTag {
+        let id: String
+        let speaker: Speaker
+        let confidence: Float
+    }
+
+    /// Tag each segment by slicing the recording to its time window and
+    /// comparing the slice's embedding to the enrolled physician
+    /// embedding. Segments shorter than the FFT window are skipped (nil
+    /// not in the returned array) — too little signal to reliably tag,
+    /// and an `.other`/0 placeholder would be indistinguishable from a
+    /// real low-confidence result on the server.
+    ///
+    /// Returns an empty array if no embedding is enrolled.
+    func tagSegments(audio: AVAudioPCMBuffer, segments: [SegmentTimespan]) -> [SegmentTag] {
+        guard let enrollmentEmbedding = loadEmbedding() else { return [] }
+        guard let channelData = audio.floatChannelData?[0] else { return [] }
+        let totalFrames = Int(audio.frameLength)
+        let sampleRate = audio.format.sampleRate
+        guard totalFrames > 0, sampleRate > 0 else { return [] }
+
+        var results: [SegmentTag] = []
+        results.reserveCapacity(segments.count)
+
+        for segment in segments {
+            let startFrame = max(0, Int(Double(segment.startMs) / 1000.0 * sampleRate))
+            let endFrame = min(totalFrames, Int(Double(segment.endMs) / 1000.0 * sampleRate))
+            let length = endFrame - startFrame
+
+            guard length > fftLength,
+                  let sliceBuffer = AVAudioPCMBuffer(pcmFormat: audio.format, frameCapacity: AVAudioFrameCount(length)),
+                  let sliceChannel = sliceBuffer.floatChannelData?[0] else {
+                continue
+            }
+            sliceBuffer.frameLength = AVAudioFrameCount(length)
+            for i in 0..<length {
+                sliceChannel[i] = channelData[startFrame + i]
+            }
+            let (speaker, confidence) = tagSpeaker(segmentAudio: sliceBuffer, enrollmentEmbedding: enrollmentEmbedding)
+            results.append(SegmentTag(id: segment.id, speaker: speaker, confidence: confidence))
         }
+        return results
     }
 
     // MARK: - Keychain Integration
 
-    /// Serialize and save a voice embedding to Keychain via KeychainHelper.
-    /// Embedding is stored under key `aurion.physician.voice_embedding`.
+    /// CLAUDE.md privacy invariant: the embedding is stored ONLY in the
+    /// Keychain. It must never be written to disk or transmitted.
     func saveEmbedding(_ embedding: [Float]) {
         let data = embedding.withUnsafeBytes { Data($0) }
         KeychainHelper.shared.saveVoiceEmbedding(data)
     }
 
-    /// Load and deserialize the physician's voice embedding from Keychain.
-    /// Returns nil if no embedding has been enrolled.
     func loadEmbedding() -> [Float]? {
         guard let data = KeychainHelper.shared.loadVoiceEmbedding() else { return nil }
         let count = data.count / MemoryLayout<Float>.size
@@ -144,13 +212,10 @@ final class SpeakerSeparation {
         }
     }
 
-    /// Delete the physician's voice embedding from Keychain.
-    /// Called when physician revokes enrollment or deletes voice profile from Settings.
     func deleteEmbedding() {
         KeychainHelper.shared.deleteVoiceEmbedding()
     }
 
-    /// Check whether a voice embedding is currently enrolled.
     var isEnrolled: Bool {
         KeychainHelper.shared.hasVoiceEmbedding()
     }
@@ -175,10 +240,8 @@ final class SpeakerSeparation {
         var window = [Float](repeating: 0, count: fftLength)
         vDSP_hann_window(&window, vDSP_Length(fftLength), Int32(vDSP_HANN_NORM))
 
-        // Set up FFT
         let log2n = vDSP_Length(log2f(Float(fftLength)))
-        guard let fftSetup = vDSP_create_fftsetup(log2n, FFTRadix(FFT_RADIX2)) else { return nil }
-        defer { vDSP_destroy_fftsetup(fftSetup) }
+        guard let fftSetup = cachedFFTSetup else { return nil }
 
         // Use the cached Mel filter bank instead of recomputing per call.
         let melFilters = cachedMelFilters

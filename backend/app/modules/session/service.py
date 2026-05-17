@@ -7,12 +7,12 @@ Invalid transitions are rejected. No session ends without an audit trail.
 from __future__ import annotations
 
 import uuid
-from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import utcnow
 from app.core.models import SessionModel
 from app.core.types import SessionState
 
@@ -129,7 +129,7 @@ async def transition_session(
             raise ConsentRequiredError()
 
     session.state = target_state
-    session.updated_at = datetime.now(timezone.utc)
+    session.updated_at = utcnow()
     await db.flush()
     return session
 
@@ -151,7 +151,7 @@ async def confirm_consent(
     if session.state != SessionState.CONSENT_PENDING:
         raise InvalidTransitionError(session.state, SessionState.RECORDING)
     session.consent_confirmed = True
-    session.updated_at = datetime.now(timezone.utc)
+    session.updated_at = utcnow()
     await db.flush()
     return session
 

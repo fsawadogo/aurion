@@ -123,7 +123,7 @@ struct PostEncounterView: View {
                 AurionGoldButton(label: isConfirming ? "Generating…" : "Generate Note", full: true, disabled: isConfirming) {
                     Task { await confirmAndProcess() }
                 }
-                .padding(.horizontal, AurionSpacing.edgeIPhone)
+                .aurionScreenEdge()
                 .padding(.vertical, 12)
             }
             .background(Color.aurionCardBackground)

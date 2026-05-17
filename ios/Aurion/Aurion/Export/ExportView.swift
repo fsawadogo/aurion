@@ -1,13 +1,23 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Export view -- generates DOCX on-device or triggers backend export.
-/// Triggers cleanup pipeline on export completion.
+/// Export view -- generates DOCX / plain text fully on-device. The
+/// backend is only told that an export happened (via /export-audit) so
+/// no clinical bytes leave the phone. Triggers the cleanup pipeline on
+/// the same audit hook the server-side flow uses.
+///
+/// PDF is intentionally deferred — DOCX opens in Pages/Word and the
+/// pilot doesn't require a separate PDF path.
 struct ExportView: View {
     let sessionId: String
+    @EnvironmentObject var sessionManager: SessionManager
+    @State private var note: NoteResponse?
+    /// Most recent purge result — drives the "Local data purged" status
+    /// chip in the completion view. nil until purge fires.
+    @State private var purgeReport: LocalDataPurger.PurgeReport?
     @State private var isExporting = false
     @State private var exportComplete = false
-    @State private var exportData: Data?
+    @State private var exportFileURL: URL?
     @State private var showShareSheet = false
     @State private var errorMessage: String?
     @State private var exportProgress: Double = 0
@@ -18,7 +28,7 @@ struct ExportView: View {
         case pdf = "PDF"
         case text = "Text"
 
-        var isAvailable: Bool { self == .docx }
+        var isAvailable: Bool { self != .pdf }
 
         var icon: String {
             switch self {
@@ -33,6 +43,23 @@ struct ExportView: View {
             case .docx: return "Microsoft Word Document"
             case .pdf: return "Portable Document Format"
             case .text: return "Plain Text File"
+            }
+        }
+
+        /// Server-side `format` value for the audit POST.
+        var auditFormatName: String {
+            switch self {
+            case .docx: return "docx"
+            case .text: return "plain_text"
+            case .pdf: return "pdf"  // unreachable per isAvailable
+            }
+        }
+
+        var fileExtension: String {
+            switch self {
+            case .docx: return "docx"
+            case .text: return "txt"
+            case .pdf: return "pdf"
             }
         }
     }
@@ -58,9 +85,19 @@ struct ExportView: View {
         }
         .padding(AurionSpacing.xl)
         .background(Color.aurionBackground.ignoresSafeArea())
+        .task {
+            // Fetch the LATEST note version once — `getFullNote` returns
+            // the Stage 2-enriched version when available so the export
+            // includes visual citations. Stage 1 only is the wrong source
+            // if vision finished after approval. The exporter is pure;
+            // bytes are produced locally from this snapshot.
+            if note == nil {
+                note = try? await APIClient.shared.getFullNote(sessionId: sessionId)
+            }
+        }
         .sheet(isPresented: $showShareSheet) {
-            if let data = exportData {
-                ShareSheet(items: [data])
+            if let url = exportFileURL {
+                ShareSheet(items: [url])
             }
         }
     }
@@ -256,7 +293,7 @@ struct ExportView: View {
                     .padding(.horizontal, AurionSpacing.xl)
             }
 
-            if exportData != nil {
+            if let url = exportFileURL {
                 VStack(spacing: AurionSpacing.sm) {
                     Button {
                         showShareSheet = true
@@ -268,12 +305,28 @@ struct ExportView: View {
                     }
                     .buttonStyle(AurionPrimaryButtonStyle())
 
-                    // File info
-                    if let data = exportData {
-                        Text("\(selectedFormat.rawValue) -- \(ByteCountFormatter.string(fromByteCount: Int64(data.count), countStyle: .file))")
+                    if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                        Text("\(selectedFormat.rawValue) -- \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))")
                             .aurionCaption()
                     }
                 }
+            }
+
+            // M-12: visible confirmation that the local raw bytes were
+            // purged. Surfaces the artifact count so the clinician can
+            // see *what* was cleaned up, not just that something happened.
+            if let report = purgeReport {
+                HStack(spacing: AurionSpacing.xs) {
+                    Image(systemName: "checkmark.shield.fill")
+                        .foregroundColor(.clinicalNormal)
+                    Text("Local raw data purged · \(report.totalArtifactsPurged) artifact\(report.totalArtifactsPurged == 1 ? "" : "s")")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundColor(.aurionTextSecondary)
+                }
+                .padding(.horizontal, AurionSpacing.md)
+                .padding(.vertical, AurionSpacing.xs)
+                .background(Color.clinicalNormal.opacity(0.08))
+                .clipShape(Capsule())
             }
         }
     }
@@ -297,37 +350,89 @@ struct ExportView: View {
     // MARK: - Export Action
 
     private func exportNote() {
+        guard let note else {
+            errorMessage = "Note not loaded yet — please retry."
+            return
+        }
         isExporting = true
         exportProgress = 0
         errorMessage = nil
 
         Task {
-            // Simulate determinate progress steps
+            // Smooth determinate progress for UX; the actual generation
+            // is synchronous and instant on-device, so the steps are
+            // cosmetic but match the user's expectation of "working".
             for step in stride(from: 0.1, through: 0.7, by: 0.15) {
-                try? await Task.sleep(nanoseconds: 200_000_000)
+                try? await Task.sleep(nanoseconds: 120_000_000)
                 await MainActor.run { exportProgress = step }
             }
 
             do {
-                let data = try await APIClient.shared.exportNote(sessionId: sessionId)
-                exportData = data
+                let data: Data
+                switch selectedFormat {
+                case .docx:
+                    data = try NoteDocumentBuilder.makeDocx(note, sessionId: sessionId)
+                case .text:
+                    data = NoteDocumentBuilder.makePlainText(note, sessionId: sessionId)
+                case .pdf:
+                    throw NSError(
+                        domain: "Aurion.Export",
+                        code: 1,
+                        userInfo: [NSLocalizedDescriptionKey: "PDF export is not in the MVP."]
+                    )
+                }
+
+                let url = try writeToTempFile(data: data, format: selectedFormat)
+                exportFileURL = url
 
                 await MainActor.run { exportProgress = 0.9 }
-                try? await Task.sleep(nanoseconds: 200_000_000)
-                await MainActor.run { exportProgress = 1.0 }
 
-                try? await Task.sleep(nanoseconds: 300_000_000)
+                // Audit BEFORE finalising the UI — if the backend rejects
+                // the state transition (e.g., note not approved), we want
+                // to surface that, not silently succeed locally.
+                _ = try await APIClient.shared.recordExportAudit(
+                    sessionId: sessionId,
+                    format: selectedFormat.auditFormatName,
+                    bytesProduced: data.count
+                )
+
+                await MainActor.run { exportProgress = 1.0 }
+                try? await Task.sleep(nanoseconds: 200_000_000)
 
                 withAnimation(AurionAnimation.smooth) {
                     exportComplete = true
                 }
                 AurionHaptics.notification(.success)
-                AuditLogger.log(event: .noteExported, sessionId: sessionId)
+                AuditLogger.log(
+                    event: .noteExported,
+                    sessionId: sessionId,
+                    extra: ["format": selectedFormat.auditFormatName]
+                )
+
+                // M-12: the export-triggered purge is the canonical
+                // local-data cleanup hook. We run it AFTER the audit
+                // event is written so the timeline reads
+                // exported → purged in the right order.
+                let report = LocalDataPurger.purgeAll(
+                    sessionManager: sessionManager,
+                    reason: "post_export"
+                )
+                await MainActor.run { purgeReport = report }
             } catch {
                 errorMessage = "Export failed: \(error.localizedDescription)"
             }
             isExporting = false
         }
+    }
+
+    /// Stage the bytes as a temporary file so the share sheet shows the
+    /// right filename + extension instead of a generic Data preview.
+    private func writeToTempFile(data: Data, format: ExportFormat) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+        let filename = "aurion_note_\(sessionId).\(format.fileExtension)"
+        let url = dir.appendingPathComponent(filename)
+        try data.write(to: url, options: [.atomic])
+        return url
     }
 }
 

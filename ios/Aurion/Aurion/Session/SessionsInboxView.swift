@@ -87,7 +87,7 @@ struct SessionsInboxView: View {
             }
             .buttonStyle(.plain)
         }
-        .padding(.horizontal, AurionSpacing.edgeIPhone)
+        .aurionScreenEdge()
         .padding(.top, 10)
         .padding(.bottom, 6)
     }
@@ -101,7 +101,7 @@ struct SessionsInboxView: View {
                     }
                 }
             }
-            .padding(.horizontal, AurionSpacing.edgeIPhone)
+            .aurionScreenEdge()
             .padding(.vertical, 4)
         }
     }
@@ -123,7 +123,7 @@ struct SessionsInboxView: View {
                     }
                 }
             }
-            .padding(.horizontal, AurionSpacing.edgeIPhone)
+            .aurionScreenEdge()
             .padding(.top, 12)
             .padding(.bottom, 20)
         }

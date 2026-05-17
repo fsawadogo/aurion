@@ -36,7 +36,7 @@ struct DeviceHubView: View {
                         permissionsGrid
                     }
                 }
-                .padding(.horizontal, AurionSpacing.edgeIPhone)
+                .aurionScreenEdge()
                 .padding(.top, 10)
                 .padding(.bottom, 20)
             }

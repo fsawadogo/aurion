@@ -47,6 +47,7 @@ struct ContentView: View {
             } else if sessionManager.isProcessing {
                 // Processing state — after stop, before note arrives
                 ProcessingView(status: sessionManager.processingStatus)
+                    .environmentObject(sessionManager)
                     .transition(.opacity)
             } else if let session = sessionManager.session ?? appState.currentSession {
                 // Active capture session
@@ -73,8 +74,16 @@ struct ContentView: View {
         }
         .alert("Incomplete Session Detected", isPresented: $showRecoveryAlert) {
             Button("Recover") {
-                if let session = recoveredSession {
-                    appState.currentSession = session
+                guard let session = recoveredSession else { return }
+                Task {
+                    // Validates against the backend, cold-starts sources,
+                    // wires the session into SessionManager so the capture
+                    // controls (pause/resume/stop) actually have a target.
+                    let ok = await sessionManager.validateRecoveredSession(session)
+                    if !ok {
+                        SessionPersistence.clear()
+                        recoveredSession = nil
+                    }
                 }
             }
             Button("Discard", role: .destructive) {
@@ -100,6 +109,7 @@ struct ContentView: View {
 
 struct ProcessingView: View {
     let status: String
+    @EnvironmentObject var sessionManager: SessionManager
 
     var body: some View {
         ZStack {
@@ -119,9 +129,89 @@ struct ProcessingView: View {
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, 40)
 
+                // Recorded audio stays in memory while the prompt is
+                // visible, so the clinician can re-fire without losing
+                // the encounter.
+                if let prompt = sessionManager.stage1Status.retryPrompt {
+                    Stage1RetryPrompt(
+                        title: prompt.title,
+                        detail: prompt.detail,
+                        onRetry: { Task { await sessionManager.retryStage1() } }
+                    )
+                    .padding(.horizontal, 32)
+                }
+
+                if !sessionManager.maskingFailedFrames.isEmpty {
+                    MaskingRetryPrompt(
+                        failedCount: sessionManager.maskingFailedFrames.count,
+                        onRetry: { Task { await sessionManager.retryFailedMaskingFrames() } },
+                        onSkip: { sessionManager.skipFailedMaskingFrames() }
+                    )
+                    .padding(.horizontal, 32)
+                }
+
                 Spacer()
             }
         }
+    }
+}
+
+private struct Stage1RetryPrompt: View {
+    let title: String
+    let detail: String
+    let onRetry: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text(title)
+                .font(.subheadline.weight(.semibold))
+                .foregroundColor(.primary)
+            Text(detail)
+                .font(.footnote)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+            Button("Retry", action: onRetry)
+                .buttonStyle(.borderedProminent)
+        }
+        .padding(16)
+        .background(Color.aurionBackground.opacity(0.9))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.aurionGold.opacity(0.4), lineWidth: 1)
+        )
+        .cornerRadius(12)
+    }
+}
+
+/// Banner shown during processing when one or more frames could not be
+/// masked on-device. Bytes are held locally — never transmitted — until the
+/// clinician chooses retry or skip.
+private struct MaskingRetryPrompt: View {
+    let failedCount: Int
+    let onRetry: () -> Void
+    let onSkip: () -> Void
+
+    var body: some View {
+        VStack(spacing: 12) {
+            Text("\(failedCount) frame\(failedCount == 1 ? "" : "s") could not be masked on-device and were not uploaded.")
+                .font(.subheadline)
+                .foregroundColor(.primary)
+                .multilineTextAlignment(.center)
+
+            HStack(spacing: 12) {
+                Button("Retry", action: onRetry)
+                    .buttonStyle(.borderedProminent)
+                Button("Skip", role: .destructive, action: onSkip)
+                    .buttonStyle(.bordered)
+            }
+        }
+        .padding(16)
+        .background(Color.aurionBackground.opacity(0.9))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(Color.aurionGold.opacity(0.4), lineWidth: 1)
+        )
+        .cornerRadius(12)
     }
 }
 

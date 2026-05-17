@@ -168,6 +168,12 @@ final class CaptureManager: NSObject, ObservableObject {
     /// inputs while the render thread is mid-frame causes EXC_BAD_ACCESS.
     private nonisolated(unsafe) var configuredCameraPosition: AVCaptureDevice.Position?
 
+    /// Tracks whether the active capture session has the video input/output
+    /// wired up. Audio-only modes set this to false so the camera stays
+    /// dark and the LED never lights — a real privacy signal to the
+    /// patient and clinician.
+    private nonisolated(unsafe) var configuredCaptureVideo: Bool = true
+
     /// Configures the AVCaptureSession with audio and video inputs/outputs.
     /// Idempotent in the common case — if the session already has the
     /// requested camera position wired up, this is a no-op. The destructive
@@ -176,16 +182,18 @@ final class CaptureManager: NSObject, ObservableObject {
     ///
     /// Defaults to the back camera — clinical use case is the physician's
     /// phone pointing at the patient. Front-camera capture is opt-in.
-    func configureCaptureSession(preferBackCamera: Bool = true) {
+    func configureCaptureSession(preferBackCamera: Bool = true, captureVideo: Bool = true) {
         let requestedPosition: AVCaptureDevice.Position = preferBackCamera ? .back : .front
         sessionQueue.async { [weak self] in
             guard let self else { return }
 
-            // Fast path: if the session is already wired for this camera,
-            // there's nothing to do. Returning here avoids the destructive
-            // remove+re-add that races with the preview layer's render
-            // thread when start() is called on a running session.
+            // Fast path: if the session is already wired for this camera and
+            // matches the current video toggle, there's nothing to do.
+            // Returning here avoids the destructive remove+re-add that
+            // races with the preview layer's render thread when start() is
+            // called on a running session.
             if self.configuredCameraPosition == requestedPosition,
+               self.configuredCaptureVideo == captureVideo,
                !self.captureSession.inputs.isEmpty,
                !self.captureSession.outputs.isEmpty {
                 return
@@ -194,8 +202,6 @@ final class CaptureManager: NSObject, ObservableObject {
             self.captureSession.beginConfiguration()
             self.captureSession.sessionPreset = .medium
 
-            // Tear down any stale inputs/outputs from a previous camera
-            // position. Only reachable when the camera actually changes.
             for input in self.captureSession.inputs {
                 self.captureSession.removeInput(input)
             }
@@ -215,21 +221,23 @@ final class CaptureManager: NSObject, ObservableObject {
                 }
             }
 
-            // --- Video Input ---
-            let videoDevice = AVCaptureDevice.default(
-                .builtInWideAngleCamera,
-                for: .video,
-                position: requestedPosition
-            ) ?? AVCaptureDevice.default(for: .video)
+            // --- Video Input + Output (skipped when audio-only) ---
+            if captureVideo {
+                let videoDevice = AVCaptureDevice.default(
+                    .builtInWideAngleCamera,
+                    for: .video,
+                    position: requestedPosition
+                ) ?? AVCaptureDevice.default(for: .video)
 
-            if let device = videoDevice,
-               let videoInput = try? AVCaptureDeviceInput(device: device) {
-                if self.captureSession.canAddInput(videoInput) {
-                    self.captureSession.addInput(videoInput)
-                }
-            } else {
-                Task { @MainActor in
-                    self.error = "No video device available."
+                if let device = videoDevice,
+                   let videoInput = try? AVCaptureDeviceInput(device: device) {
+                    if self.captureSession.canAddInput(videoInput) {
+                        self.captureSession.addInput(videoInput)
+                    }
+                } else {
+                    Task { @MainActor in
+                        self.error = "No video device available."
+                    }
                 }
             }
 
@@ -240,17 +248,20 @@ final class CaptureManager: NSObject, ObservableObject {
             }
 
             // --- Video Output ---
-            self.videoOutput.setSampleBufferDelegate(self, queue: self.videoProcessingQueue)
-            self.videoOutput.alwaysDiscardsLateVideoFrames = true
-            self.videoOutput.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
-            ]
-            if self.captureSession.canAddOutput(self.videoOutput) {
-                self.captureSession.addOutput(self.videoOutput)
+            if captureVideo {
+                self.videoOutput.setSampleBufferDelegate(self, queue: self.videoProcessingQueue)
+                self.videoOutput.alwaysDiscardsLateVideoFrames = true
+                self.videoOutput.videoSettings = [
+                    kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+                ]
+                if self.captureSession.canAddOutput(self.videoOutput) {
+                    self.captureSession.addOutput(self.videoOutput)
+                }
             }
 
             self.captureSession.commitConfiguration()
             self.configuredCameraPosition = requestedPosition
+            self.configuredCaptureVideo = captureVideo
         }
     }
 
@@ -379,6 +390,64 @@ final class CaptureManager: NSObject, ObservableObject {
         )
     }
 
+    /// Drop the in-memory audio PCM. Called by `LocalDataPurger` after
+    /// export — the WAV bytes never need to outlive the upload + export.
+    func discardRecordedAudio() {
+        audioPCMLock.lock()
+        audioPCMData = Data()
+        audioPCMLock.unlock()
+    }
+
+    /// Cheap byte-count for the audit log — no WAV construction, no
+    /// PCM copy. The lock protects against concurrent writes from the
+    /// audio delegate queue.
+    func getRecordedAudioByteCount() -> Int {
+        audioPCMLock.lock()
+        let count = audioPCMData.count
+        audioPCMLock.unlock()
+        return count
+    }
+
+    /// Recorded audio as an `AVAudioPCMBuffer` of floats so downstream
+    /// consumers can slice by timestamps without re-parsing WAV bytes.
+    func getRecordedPCMBuffer() -> AVAudioPCMBuffer? {
+        audioPCMLock.lock()
+        let pcmData = audioPCMData
+        audioPCMLock.unlock()
+
+        guard !pcmData.isEmpty,
+              let format = AVAudioFormat(
+                  commonFormat: .pcmFormatFloat32,
+                  sampleRate: audioSampleRate,
+                  channels: AVAudioChannelCount(audioChannels),
+                  interleaved: false
+              ) else {
+            return nil
+        }
+
+        let bytesPerSample = Int(audioBitsPerSample) / 8
+        let frameCount = pcmData.count / bytesPerSample / Int(audioChannels)
+        guard frameCount > 0,
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frameCount)) else {
+            return nil
+        }
+        buffer.frameLength = AVAudioFrameCount(frameCount)
+
+        // Convert int16-LE PCM bytes into normalized float samples on the
+        // single channel. We capture at 16 kHz mono int16 (see audioSampleRate
+        // and audioBitsPerSample above); if those constants change this
+        // conversion must be revisited.
+        guard let channelPtr = buffer.floatChannelData?[0] else { return nil }
+        pcmData.withUnsafeBytes { rawBuffer in
+            guard let int16Ptr = rawBuffer.bindMemory(to: Int16.self).baseAddress else { return }
+            let scale: Float = 1.0 / Float(Int16.max)
+            for i in 0..<frameCount {
+                channelPtr[i] = Float(int16Ptr[i]) * scale
+            }
+        }
+        return buffer
+    }
+
     // MARK: - Interruption Handling
 
     private func registerInterruptionObservers() {
@@ -461,12 +530,28 @@ extension CaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptur
 
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        // Use the shared CIContext instead of allocating a new one per frame.
-        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return }
+        // AVFoundation recycles pixel buffers aggressively when alwaysDiscardsLateVideoFrames
+        // is on. Lock the base address while we read so the bytes can't be reclaimed mid-encode.
+        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
+        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
 
-        let uiImage = UIImage(cgImage: cgImage)
-        guard let jpegData = uiImage.jpegData(compressionQuality: 0.85) else { return }
+        let sourceImage = CIImage(cvPixelBuffer: pixelBuffer)
+
+        // Vision providers don't need 12 MP — clamp the long edge to keep JPEG encode fast
+        // enough to finish before the next sample buffer arrives.
+        let maxEdge: CGFloat = 1280
+        let longest = max(sourceImage.extent.width, sourceImage.extent.height)
+        let scale: CGFloat = longest > maxEdge ? maxEdge / longest : 1.0
+        let scaled = scale < 1.0
+            ? sourceImage.transformed(by: CGAffineTransform(scaleX: scale, y: scale))
+            : sourceImage
+
+        let colorSpace = CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB()
+        guard let jpegData = ciContext.jpegRepresentation(
+            of: scaled,
+            colorSpace: colorSpace,
+            options: [kCGImageDestinationLossyCompressionQuality as CIImageRepresentationOption: 0.85]
+        ) else { return }
 
         let relativeTimestamp = now - sessionStartTime
         let frame = CapturedFrame(timestamp: relativeTimestamp, imageData: jpegData)

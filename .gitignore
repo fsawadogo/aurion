@@ -51,6 +51,12 @@ demo/thumbs/
 aurion-explainer-video/recordings/
 aurion-explainer-video/renders/
 
+# Demo build artifacts — driver scripts checked in, generated content ignored
+demo/.take8-build/
+demo/take8_frames/
+demo/t8_fine/
+demo/video/renders/
+
 # Coverage
 htmlcov/
 .coverage
@@ -64,9 +70,11 @@ localstack_data/
 # iOS
 ios/Aurion.xcodeproj/xcuserdata/
 ios/Aurion.xcworkspace/xcuserdata/
+ios/Aurion/Aurion.xcodeproj/xcuserdata/
 ios/build/
 ios/DerivedData/
 *.xcuserstate
+**/xcuserdata/
 
 # CDK
 infrastructure/cdk.out/

@@ -15,6 +15,7 @@ from app.api.v1.config import router as config_router
 from app.api.v1.export import router as export_router
 from app.api.v1.frames import router as frames_router
 from app.api.v1.health import router as health_router
+from app.api.v1.screen import router as screen_router
 from app.api.v1.notes import router as notes_router
 from app.api.v1.privacy import router as privacy_router
 from app.api.v1.profile import router as profile_router
@@ -22,16 +23,16 @@ from app.api.v1.sessions import router as sessions_router
 from app.api.v1.transcription import router as transcription_router
 from app.api.v1.vision import router as vision_router
 from app.api.v1.websocket import router as ws_router
-from app.core.database import close_db, init_db
+from app.core.database import close_db
 from app.core.logging import setup_logging
 from app.modules.config.appconfig_client import get_appconfig_client
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup
+    # Startup. Schema is owned by alembic — migrations run via the container
+    # entrypoint before this code is reached.
     setup_logging()
-    await init_db()
     await seed_dev_users()
     appconfig = get_appconfig_client()
     await appconfig.start_polling()
@@ -66,6 +67,7 @@ app.include_router(privacy_router, prefix="/api/v1")
 app.include_router(sessions_router, prefix="/api/v1")
 app.include_router(transcription_router, prefix="/api/v1")
 app.include_router(frames_router, prefix="/api/v1")
+app.include_router(screen_router, prefix="/api/v1")
 app.include_router(notes_router, prefix="/api/v1")
 app.include_router(vision_router, prefix="/api/v1")
 app.include_router(export_router, prefix="/api/v1")

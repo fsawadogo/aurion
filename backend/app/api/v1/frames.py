@@ -6,9 +6,10 @@ transcription. The Stage 2 vision pipeline reads from this exact key
 pattern to anchor frames against transcript trigger segments.
 
 Per CLAUDE.md: "Raw video frames never leave iOS unmasked — masking status
-logged before any upload." iOS confirms masking via the AuditLogger before
-calling this endpoint, so we trust the iOS-side audit trail and write the
-frame to the masked-frames bucket.
+logged before any upload." The endpoint enforces this by REQUIRING a
+masking proof on every upload (P0-02). Any request missing the proof
+fields, or asserting a non-success masking status, is rejected before the
+bytes touch S3.
 """
 
 from __future__ import annotations
@@ -20,11 +21,14 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._helpers import (
+    get_session_or_404,
+    parse_masking_proof,
+    write_audit,
+)
 from app.core.database import get_db
 from app.core.s3 import FRAMES_BUCKET, get_s3_client
-from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, get_current_user
-from app.modules.session.service import get_session
 
 logger = logging.getLogger("aurion.api.frames")
 
@@ -42,13 +46,26 @@ async def upload_frame(
     session_id: uuid.UUID,
     timestamp_ms: int = Form(...),
     frame_file: UploadFile = File(...),
+    frame_type: str = Form(..., description="'video' or 'screen'"),
+    masking_status: str = Form(..., description="Must be 'success'"),
+    faces_detected: int = Form(..., ge=0),
+    phi_regions_redacted: int = Form(..., ge=0),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Persist a single masked frame to S3 for later Stage 2 enrichment."""
-    session = await get_session(db, session_id)
-    if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+    """Persist a single masked frame to S3 for later Stage 2 enrichment.
+
+    P0-02: rejects uploads without a verifiable masking proof. The proof
+    fields are recorded on the `frame_uploaded` audit event so the PHI
+    masking report can prove 100% on-device masking before transmission.
+    """
+    proof = parse_masking_proof(
+        frame_type=frame_type,
+        masking_status=masking_status,
+        faces_detected=faces_detected,
+        phi_regions_redacted=phi_regions_redacted,
+    )
+    await get_session_or_404(db, session_id)
 
     body = await frame_file.read()
     if not body:
@@ -70,12 +87,15 @@ async def upload_frame(
         )
         raise HTTPException(status_code=500, detail=f"Frame upload failed: {exc}")
 
-    audit = get_audit_log_service()
-    await audit.write_event(
-        session_id=str(session_id),
-        event_type="frame_uploaded",
+    await write_audit(
+        session_id,
+        "frame_uploaded",
         timestamp_ms=timestamp_ms,
         bytes=len(body),
+        frame_type=proof.frame_type,
+        masking_status=proof.masking_status,
+        faces_detected=proof.faces_detected,
+        phi_regions_redacted=proof.phi_regions_redacted,
     )
 
     return FrameUploadResponse(

@@ -116,6 +116,10 @@ final class BuiltInCaptureSource: CaptureSource {
         manager.permissionsGranted && status == .recording
     }
 
+    /// Set by SessionManager before `start()` to gate the camera input.
+    /// False keeps the LED dark in audio-only modes.
+    var includeVideo: Bool = true
+
     override func start() throws {
         guard manager.permissionsGranted else {
             throw CaptureSourceError.permissionDenied("camera and microphone")
@@ -125,7 +129,7 @@ final class BuiltInCaptureSource: CaptureSource {
         // the physician points the phone at the patient / wound / exam area.
         // Front camera was the previous default but produced selfie footage,
         // which is never what we want for Stage 2 visual enrichment.
-        manager.configureCaptureSession(preferBackCamera: true)
+        manager.configureCaptureSession(preferBackCamera: true, captureVideo: includeVideo)
         manager.startCapture()
     }
 
@@ -135,5 +139,17 @@ final class BuiltInCaptureSource: CaptureSource {
 
     override func getRecordedAudioData() -> Data? {
         manager.getRecordedAudioData()
+    }
+
+    override func getRecordedPCMBuffer() -> AVAudioPCMBuffer? {
+        manager.getRecordedPCMBuffer()
+    }
+
+    override func discardRecordedAudio() {
+        manager.discardRecordedAudio()
+    }
+
+    override func getRecordedAudioByteCount() -> Int {
+        manager.getRecordedAudioByteCount()
     }
 }

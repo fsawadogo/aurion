@@ -72,7 +72,7 @@ struct PhysicianProfileSetupView: View {
                     Text(stepTitle).aurionDisplay()
                     stepContent
                 }
-                .padding(.horizontal, AurionSpacing.edgeIPhone)
+                .aurionScreenEdge()
                 .padding(.top, 4)
                 .padding(.bottom, 20)
             }
@@ -98,7 +98,7 @@ struct PhysicianProfileSetupView: View {
             }
             AurionProgressBar(value: Double(step + 1) / Double(totalSteps))
         }
-        .padding(.horizontal, AurionSpacing.edgeIPhone)
+        .aurionScreenEdge()
         .padding(.top, 12)
         .padding(.bottom, AurionSpacing.md)
     }
@@ -127,7 +127,7 @@ struct PhysicianProfileSetupView: View {
                 .frame(maxWidth: .infinity)
                 .layoutPriority(2)
             }
-            .padding(.horizontal, AurionSpacing.edgeIPhone)
+            .aurionScreenEdge()
             .padding(.vertical, 12)
             .padding(.bottom, 8)
         }

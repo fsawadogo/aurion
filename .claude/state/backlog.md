@@ -1,0 +1,62 @@
+# Aurion Autonomous Loop — Backlog
+
+Canonical task list. The driver loop reads top-to-bottom and works the
+topmost Active item matching its lane. Format per line:
+
+    - [ ] {ID} {one-line description} — {effort}d — lane: {backend|ios} — {dependencies}
+
+When a task moves through states, the loop edits this file in place:
+Active → In flight → Done (or → Blocked on triple failure).
+
+Last seeded: 2026-05-14.
+
+## Active
+
+- [ ] P0-04 Alembic migrations — 8d — lane: backend — no blockers
+- [ ] P0-06 Persistent users + admin refactor — 8d — lane: backend — depends on P0-04
+- [ ] B-08 Eval persistence — 3d — lane: backend — depends on P0-04
+- [ ] P0-07 E2E smoke test — 3d — lane: backend — depends on P0-06, B-08
+- [ ] M-07-DASH Dashboard Stage 2 tile — 3d — lane: ios — no blockers
+- [ ] M-04-MP MediaPipe face-detection cross-check verification — 1d — lane: ios — no blockers
+- [ ] Q-01 AuditEventType StrEnum — replace 15+ event_type literals; type-safe write_audit kwargs via TypedDict — 2d — lane: backend — no blockers
+- [ ] Q-02 privacy.py:267 _purge_session_prefix extraction — flatten 5-level nesting in delete_my_account — 1d — lane: backend — no blockers
+- [ ] Q-03 write_audit kwarg whitelist — pair with Q-01; tighten **fields to known keys per event_type — 1d — lane: backend — depends on Q-01
+
+## In flight
+
+(driver moves the top Active item here when starting; logs PR # when opened)
+
+## Blocked
+
+(driver moves items here after 3 failed fix attempts; appends reason)
+
+## Done
+
+(driver moves here after auto-merge; keeps newest at top with merge date)
+
+---
+
+## Notes
+
+### Dependency rules
+- A task with `depends on X` cannot be picked by `/next-task` until X is in Done.
+- `/next-task` skips dependency-blocked items and picks the next unblocked one.
+- If no unblocked Active items exist for a lane, the loop pauses and posts
+  to `alerts.md` rather than failing.
+
+### Lane assignment
+- `lane: backend` — touches `backend/**`, `infrastructure/**`, or migrations.
+- `lane: ios` — touches `ios/**` or `demo/**`.
+- Vertical slices (both at once) get tagged with the larger lane and stay
+  sequential. The remaining backlog items are deliberately split so no
+  vertical slice is needed.
+
+### Effort estimates
+Mirror the complexity scale in §10 of `AURION-CODING-WORKFLOW.md`:
+S=1d, M=3d, L=8d, XL=15d. These are conservative for a single developer
+or a single autonomous lane. Override only with prior-spike data.
+
+### Acceptance criteria
+Acceptance criteria are NOT pre-written here — `/plan-task` writes them
+on the feature branch as the first commit. This file is the menu, not
+the recipe.
