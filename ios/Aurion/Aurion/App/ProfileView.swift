@@ -36,6 +36,12 @@ struct ProfileView: View {
     }
 
     var body: some View {
+        NavigationStack {
+            content
+        }
+    }
+
+    private var content: some View {
         List {
             // ── Account Info ──────────────────────────────────
             Section {
