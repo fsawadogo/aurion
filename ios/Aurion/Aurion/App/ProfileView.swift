@@ -42,6 +42,14 @@ struct ProfileView: View {
     }
 
     private var content: some View {
+        // `.contentMargins(.bottom, 24, for: .scrollContent)` keeps the
+        // last row breathing-room above the translucent tab bar so the
+        // final cell doesn't read as clipped under the bar.
+        listBody
+            .contentMargins(.bottom, 24, for: .scrollContent)
+    }
+
+    private var listBody: some View {
         List {
             // ── Account Info ──────────────────────────────────
             Section {
@@ -354,7 +362,8 @@ struct ProfileView: View {
             }
         }
         .navigationTitle("Profile")
-        .aurionNavBar()
+        .navigationBarTitleDisplayMode(.inline)
+        .toolbarBackground(.automatic, for: .navigationBar)
         .onAppear { loadConsentHistory(); loadSessionHistory() }
         .task { await loadProfile() }
         .alert("Delete Account", isPresented: $showDeleteConfirmation) {
