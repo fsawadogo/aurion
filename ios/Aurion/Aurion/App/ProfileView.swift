@@ -58,7 +58,7 @@ struct ProfileView: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(appState.physicianProfile?.displayName ?? "Physician")
                             .font(.system(size: 18, weight: .semibold))
-                            .foregroundColor(.aurionNavy)
+                            .foregroundColor(.aurionTextPrimary)
                         Text(displaySpecialty)
                             .font(.system(size: 13))
                             .foregroundColor(.aurionTextSecondary)
@@ -83,7 +83,7 @@ struct ProfileView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Voice ID set up")
                                 .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.aurionNavy)
+                                .foregroundColor(.aurionTextPrimary)
                             Text("Aurion can tell your voice apart from your patient's.")
                                 .font(.system(size: 12))
                                 .foregroundColor(.aurionTextSecondary)
@@ -96,7 +96,7 @@ struct ProfileView: View {
                     Button("Re-record Voice ID") {
                         appState.isOnboardingComplete = false
                     }
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
 
                     Button("Delete Voice ID", role: .destructive) {
                         KeychainHelper.shared.deleteVoiceEmbedding()
@@ -110,7 +110,7 @@ struct ProfileView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Set up your Voice ID")
                                 .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.aurionNavy)
+                                .foregroundColor(.aurionTextPrimary)
                             Text("Record 4 short sentences so Aurion knows which voice is yours.")
                                 .font(.system(size: 12))
                                 .foregroundColor(.aurionTextSecondary)
@@ -126,7 +126,7 @@ struct ProfileView: View {
                         HStack {
                             Text("Start Voice ID")
                                 .font(.system(size: 15, weight: .semibold))
-                                .foregroundColor(.aurionNavy)
+                                .foregroundColor(.aurionTextPrimary)
                             Spacer()
                             Image(systemName: "arrow.right")
                                 .font(.system(size: 14, weight: .semibold))

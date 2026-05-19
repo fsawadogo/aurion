@@ -131,7 +131,7 @@ struct SessionsInboxView: View {
             Text("Sessions")
                 .font(.system(size: 28, weight: .bold))
                 .tracking(-0.56)
-                .foregroundColor(.aurionNavy)
+                .foregroundColor(.aurionTextPrimary)
             Spacer()
             Button {
                 withAnimation(.aurionIOS) { sortNewestFirst.toggle() }
@@ -219,7 +219,7 @@ struct SessionsInboxView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(s.specialty.displayFormatted)
                     .font(.system(size: 15, weight: .semibold))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                     .lineLimit(1)
                 Text(formatRelativeTime(s.createdAt))
                     .font(.system(size: 12))
@@ -230,6 +230,7 @@ struct SessionsInboxView: View {
             if isPending(s) {
                 Text(L("sessions.resume"))
                     .font(.system(size: 12, weight: .semibold))
+                    // Brand-navy on gold pill — fixed in both modes.
                     .foregroundColor(.aurionNavy)
                     .padding(.horizontal, 12)
                     .padding(.vertical, 6)

@@ -30,7 +30,12 @@ extension Color {
     static let aurionGold = Color(red: 201/255, green: 168/255, blue: 76/255)      // #C9A84C (brand)
     static let aurionGoldLight = Color(red: 229/255, green: 208/255, blue: 130/255) // #E5D082
     static let aurionGoldDark = Color(red: 181/255, green: 149/255, blue: 61/255)  // #B5953D
-    static let aurionGoldBg = Color(red: 251/255, green: 246/255, blue: 230/255)   // #FBF6E6
+    // Soft cream surface on light; warm-tinted dark slate on dark so
+    // gold-accent cards still read as "warmer than canvas".
+    static let aurionGoldBg = Color(
+        light: Color(red: 251/255, green: 246/255, blue: 230/255),  // #FBF6E6
+        dark:  Color(red: 44/255, green: 38/255, blue: 26/255)       // #2C261A
+    )
 
     // Semantic — foreground
     static let aurionAmber = Color(red: 217/255, green: 148/255, blue: 31/255)     // #D9941F
@@ -39,20 +44,55 @@ extension Color {
     static let aurionBlue = Color(red: 45/255, green: 108/255, blue: 223/255)      // #2D6CDF
 
     // Semantic — soft backgrounds (used by status pills, conflict cards, etc.)
-    static let aurionAmberBg = Color(red: 251/255, green: 241/255, blue: 220/255)  // #FBF1DC
-    static let aurionGreenBg = Color(red: 230/255, green: 245/255, blue: 238/255)  // #E6F5EE
-    static let aurionRedBg = Color(red: 251/255, green: 231/255, blue: 229/255)    // #FBE7E5
-    static let aurionBlueBg = Color(red: 230/255, green: 238/255, blue: 250/255)   // #E6EEFA
+    // Light: pastel tints. Dark: low-chroma slate tints in the same hue so
+    // pill chips still read as "an amber thing" without flash-bang pastels.
+    static let aurionAmberBg = Color(
+        light: Color(red: 251/255, green: 241/255, blue: 220/255),
+        dark:  Color(red: 58/255, green: 47/255, blue: 26/255)
+    )
+    static let aurionGreenBg = Color(
+        light: Color(red: 230/255, green: 245/255, blue: 238/255),
+        dark:  Color(red: 31/255, green: 53/255, blue: 40/255)
+    )
+    static let aurionRedBg = Color(
+        light: Color(red: 251/255, green: 231/255, blue: 229/255),
+        dark:  Color(red: 58/255, green: 33/255, blue: 30/255)
+    )
+    static let aurionBlueBg = Color(
+        light: Color(red: 230/255, green: 238/255, blue: 250/255),
+        dark:  Color(red: 30/255, green: 42/255, blue: 64/255)
+    )
 
-    // Status text (matches AURION.* in components.jsx)
-    static let aurionStatusDone = Color(red: 31/255, green: 122/255, blue: 79/255)     // #1F7A4F
-    static let aurionStatusPending = Color(red: 142/255, green: 115/255, blue: 48/255) // #8E7330
-    static let aurionStatusConflict = Color(red: 154/255, green: 110/255, blue: 20/255) // #9A6E14
-    static let aurionStatusExported = Color(red: 33/255, green: 78/255, blue: 156/255)  // #214E9C
-    static let aurionStatusArchived = Color(red: 74/255, green: 81/255, blue: 96/255)   // #4A5160
+    // Status text (matches AURION.* in components.jsx).
+    // Light: WCAG AA on cream. Dark: lifted ~40% brightness to clear the
+    // muted-slate canvas at the same AA threshold.
+    static let aurionStatusDone = Color(
+        light: Color(red: 31/255, green: 122/255, blue: 79/255),   // #1F7A4F
+        dark:  Color(red: 91/255, green: 204/255, blue: 147/255)   // #5BCC93
+    )
+    static let aurionStatusPending = Color(
+        light: Color(red: 142/255, green: 115/255, blue: 48/255),  // #8E7330
+        dark:  Color(red: 212/255, green: 185/255, blue: 106/255)  // #D4B96A
+    )
+    static let aurionStatusConflict = Color(
+        light: Color(red: 154/255, green: 110/255, blue: 20/255),  // #9A6E14
+        dark:  Color(red: 232/255, green: 184/255, blue: 90/255)   // #E8B85A
+    )
+    static let aurionStatusExported = Color(
+        light: Color(red: 33/255, green: 78/255, blue: 156/255),   // #214E9C
+        dark:  Color(red: 122/255, green: 168/255, blue: 242/255)  // #7AA8F2
+    )
+    static let aurionStatusArchived = Color(
+        light: Color(red: 74/255, green: 81/255, blue: 96/255),    // #4A5160
+        dark:  Color(red: 156/255, green: 163/255, blue: 176/255)  // #9CA3B0
+    )
 
-    // Field surface (slightly warmer than canvas)
-    static let aurionSurfaceAlt = Color(red: 238/255, green: 240/255, blue: 243/255)  // #EEF0F3
+    // Surface alt — slightly distinct from `aurionFieldBackground` because
+    // it's used for row-grouped surfaces, not form inputs.
+    static let aurionSurfaceAlt = Color(
+        light: Color(red: 238/255, green: 240/255, blue: 243/255),  // #EEF0F3
+        dark:  Color(red: 31/255, green: 36/255, blue: 46/255)       // #1F242E
+    )
 
     // ── On-navy text colors ──────────────────────────────────────────────
     // For text/labels rendered on the dark navy gradient (login, register).
@@ -70,13 +110,21 @@ extension Color {
 
     // ── Light-bg neutrals ────────────────────────────────────────────────
 
-    /// Muted gray for caption/timestamps on light bg. Lighter than
-    /// ``aurionTextSecondary`` (107,114,128) — used when the secondary
-    /// text already carries enough weight and a tertiary is needed.
-    static let aurionMutedGray = Color(red: 154/255, green: 160/255, blue: 172/255) // #9AA0AC
+    /// Muted gray for caption/timestamps. Light: #9AA0AC. Dark: slate-400
+    /// — one stop darker than ``aurionTextSecondary`` so the tertiary
+    /// hierarchy stays visible against the muted-slate canvas.
+    static let aurionMutedGray = Color(
+        light: Color(red: 154/255, green: 160/255, blue: 172/255),  // #9AA0AC
+        dark:  Color(red: 107/255, green: 115/255, blue: 135/255)   // #6B7387
+    )
 
-    /// Unselected option box / checkbox border on light bg.
-    static let aurionInputBorder = Color(red: 198/255, green: 202/255, blue: 210/255) // #C6CAD2
+    /// Unselected option box / checkbox border. Light: #C6CAD2.
+    /// Dark: white@16% — readable on the slate canvas without the
+    /// hairline-on-paper feel of border@8%.
+    static let aurionInputBorder = Color(
+        light: Color(red: 198/255, green: 202/255, blue: 210/255),  // #C6CAD2
+        dark:  Color.white.opacity(0.16)
+    )
 
     // Note section accents (left-border tints in note review)
     static let aurionSectionInfo = Color(red: 45/255, green: 108/255, blue: 223/255)   // blue-500
@@ -86,37 +134,47 @@ extension Color {
 }
 
 // MARK: - Adaptive Colors (Light/Dark)
+//
+// Dark mode palette: **muted slate** (desaturated blue-gray) rather than
+// pure black or navy-shifted dark. Earlier prototypes used navy as the
+// dark canvas and got navy-on-navy text collapses (which is what pinned
+// `.preferredColorScheme(.light)` in AurionApp until AUR-DESIGN-DARK).
+// The palette below stays clearly *not navy* so the brand navy gradient
+// (login lockup, toolbar) reads as a distinct foreground surface
+// against the canvas, not as the canvas itself.
 
 extension Color {
-    // Canvas — #F8F9FA light, #0A1530 dark
+    // Canvas — #F8F9FA light, slate-950 #11151B dark
     static let aurionBackground = Color(
         light: Color(red: 248/255, green: 249/255, blue: 250/255),
-        dark: Color(red: 10/255, green: 21/255, blue: 48/255)
+        dark:  Color(red: 17/255, green: 21/255, blue: 27/255)
     )
-    // Surface — white light, #152348 dark
+    // Surface (elevated card) — white light, slate-900 #1A1F28 dark
     static let aurionCardBackground = Color(
         light: .white,
-        dark: Color(red: 21/255, green: 35/255, blue: 72/255)
+        dark:  Color(red: 26/255, green: 31/255, blue: 40/255)
     )
-    // Primary text — navy light, white dark
+    // Primary text — brand navy light, soft off-white dark (E8ECF2)
+    // Off-white rather than pure white — harsh-white on slate has a
+    // dental-X-ray vibe; this reads as paper-ink on slate instead.
     static let aurionTextPrimary = Color(
         light: Color.aurionNavy,
-        dark: .white
+        dark:  Color(red: 232/255, green: 236/255, blue: 242/255)
     )
-    // Secondary text — #6B7280 light, #B7C0D6 dark
+    // Secondary text — #6B7280 light, slate-300 #9AA3B4 dark
     static let aurionTextSecondary = Color(
         light: Color(red: 107/255, green: 114/255, blue: 128/255),
-        dark: Color(red: 183/255, green: 192/255, blue: 214/255)
+        dark:  Color(red: 154/255, green: 163/255, blue: 180/255)
     )
-    // Field background — #EEF0F3 light, #1B2C56 dark
+    // Field background (form inputs) — #EEF0F3 light, slate-800 #232834 dark
     static let aurionFieldBackground = Color(
         light: Color(red: 238/255, green: 240/255, blue: 243/255),
-        dark: Color(red: 27/255, green: 44/255, blue: 86/255)
+        dark:  Color(red: 35/255, green: 40/255, blue: 52/255)
     )
-    // Hairline border
+    // Hairline border — navy@6% light, white@8% dark
     static let aurionBorder = Color(
         light: Color.aurionNavy.opacity(0.06),
-        dark: Color.white.opacity(0.06)
+        dark:  Color.white.opacity(0.08)
     )
 }
 
@@ -262,6 +320,7 @@ struct AurionPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 16, weight: .semibold))
+            // Brand-navy on gold — fixed in both modes.
             .foregroundColor(.aurionNavy)
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
@@ -280,7 +339,7 @@ struct AurionSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 16, weight: .semibold))
-            .foregroundColor(.aurionNavy)
+            .foregroundColor(.aurionTextPrimary)
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
             .background(Color.aurionCardBackground)

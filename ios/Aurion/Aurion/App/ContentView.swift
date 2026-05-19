@@ -338,7 +338,7 @@ struct LoginView: View {
                             if signInSucceeded {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.aurionNavy)
+                                    .foregroundColor(.aurionTextPrimary)
                                     .transition(.scale.combined(with: .opacity))
                                 Text("Signed in")
                                     .transition(.opacity)

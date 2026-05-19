@@ -20,7 +20,7 @@ struct DeviceHubView: View {
                     Text("Devices")
                         .font(.system(size: 28, weight: .bold))
                         .tracking(-0.56)
-                        .foregroundColor(.aurionNavy)
+                        .foregroundColor(.aurionTextPrimary)
                         .padding(.bottom, -4)
 
                     activeSummary
@@ -201,10 +201,10 @@ struct DeviceHubView: View {
                     HStack(spacing: 10) {
                         Image(systemName: icon)
                             .font(.system(size: 20))
-                            .foregroundColor(.aurionNavy)
+                            .foregroundColor(.aurionTextPrimary)
                         Text(label)
                             .font(.system(size: 14, weight: .medium))
-                            .foregroundColor(.aurionNavy)
+                            .foregroundColor(.aurionTextPrimary)
                             .lineLimit(1)
                     }
                     AurionStatusPill(

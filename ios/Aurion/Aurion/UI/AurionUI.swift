@@ -90,6 +90,8 @@ struct AurionGoldButton: View {
                 if let icon { Image(systemName: icon).font(.system(size: 18, weight: .semibold)) }
                 Text(label).font(.system(size: fontSize, weight: .semibold))
             }
+            // Brand-navy on gold — must stay fixed in both modes.
+            // `aurionTextPrimary` (off-white on dark) would lose contrast.
             .foregroundColor(.aurionNavy)
             .padding(.horizontal, hPad)
             .padding(.vertical, vPad)
@@ -116,7 +118,7 @@ struct AurionGhostButton: View {
         Button(action: action) {
             Text(label)
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.aurionNavy)
+                .foregroundColor(.aurionTextPrimary)
                 .padding(.horizontal, 22)
                 .padding(.vertical, 14)
                 .frame(maxWidth: full ? .infinity : nil)
@@ -300,12 +302,12 @@ struct AurionListItem: View {
                     if let icon {
                         Image(systemName: icon)
                             .font(.system(size: 18, weight: .regular))
-                            .foregroundColor(.aurionNavy)
+                            .foregroundColor(.aurionTextPrimary)
                             .frame(width: 24)
                     }
                     Text(title)
                         .font(.system(size: 16))
-                        .foregroundColor(.aurionNavy)
+                        .foregroundColor(.aurionTextPrimary)
                     Spacer()
                     if let value {
                         Text(value)
@@ -371,7 +373,7 @@ struct AurionField: View {
             }
             .focused($focused)
             .font(.system(size: 16))
-            .foregroundColor(.aurionNavy)
+            .foregroundColor(.aurionTextPrimary)
             .padding(.horizontal, 14)
             .padding(.vertical, multiline ? 8 : 12)
             .background(Color.aurionCardBackground)
@@ -408,7 +410,7 @@ struct AurionNavBar<Leading: View, Trailing: View>: View {
             Spacer(minLength: 0)
             Text(title)
                 .font(.system(size: 17, weight: .semibold))
-                .foregroundColor(.aurionNavy)
+                .foregroundColor(.aurionTextPrimary)
             Spacer(minLength: 0)
             HStack { trailing() }
                 .frame(width: 80, alignment: .trailing)
@@ -604,7 +606,7 @@ struct AurionSelectableCard<Trailing: View>: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 17, weight: .semibold))
-                        .foregroundColor(.aurionNavy)
+                        .foregroundColor(.aurionTextPrimary)
                     Text(subtitle)
                         .font(.system(size: 13))
                         .foregroundColor(.aurionTextSecondary)

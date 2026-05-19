@@ -257,7 +257,7 @@ struct PhysicianProfileSetupView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                 Text(subtitle)
                     .font(.system(size: 13))
                     .foregroundColor(.aurionTextSecondary)
@@ -285,7 +285,7 @@ struct PhysicianProfileSetupView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                 Text(subtitle)
                     .font(.system(size: 13))
                     .foregroundColor(.aurionTextSecondary)
@@ -294,7 +294,7 @@ struct PhysicianProfileSetupView: View {
             Stepper(value: value, in: range) {
                 Text("\(value.wrappedValue) \(unit)")
                     .font(.system(size: 15, weight: .medium))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                     .monospacedDigit()
             }
             .labelsHidden()
@@ -324,7 +324,7 @@ struct PhysicianProfileSetupView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .font(.system(size: 16, weight: .semibold))
-                        .foregroundColor(.aurionNavy)
+                        .foregroundColor(.aurionTextPrimary)
                     Text(subtitle)
                         .font(.system(size: 13))
                         .foregroundColor(.aurionTextSecondary)
@@ -359,7 +359,7 @@ struct PhysicianProfileSetupView: View {
                         VStack(alignment: .leading, spacing: 2) {
                             Text(o.label)
                                 .font(.system(size: 17, weight: .semibold))
-                                .foregroundColor(.aurionNavy)
+                                .foregroundColor(.aurionTextPrimary)
                             Text(o.sub)
                                 .font(.system(size: 13))
                                 .foregroundColor(.aurionTextSecondary)
@@ -404,7 +404,7 @@ struct PhysicianProfileSetupView: View {
                 }
                 Text(label)
                     .font(.system(size: 16))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16)
@@ -436,12 +436,12 @@ struct PhysicianProfileSetupView: View {
                     if on {
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.aurionNavy)
+                            .foregroundColor(.aurionTextPrimary)
                     }
                 }
                 Text(label)
                     .font(.system(size: fontSize))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                 Spacer(minLength: 0)
             }
             .padding(.horizontal, 16)

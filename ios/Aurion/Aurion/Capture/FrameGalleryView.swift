@@ -127,7 +127,7 @@ struct FrameGalleryView: View {
                 .symbolEffect(.pulse, options: .repeating)
             Text("No frames yet")
                 .font(.system(size: 18, weight: .semibold))
-                .foregroundColor(.aurionNavy)
+                .foregroundColor(.aurionTextPrimary)
             Text("Frames appear here as they're captured.\nDefault rate is 1 per second.")
                 .font(.system(size: 13))
                 .foregroundColor(.aurionTextSecondary)
