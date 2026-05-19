@@ -27,6 +27,21 @@ struct AurionApp: App {
                         await remoteConfig.refresh()
                     }
                 }
+                // Spotlight result tap. The donation lives in SessionNoteView;
+                // here we just translate the activity back into the cross-
+                // cutting nav bus. ContentView's "active session in flight"
+                // branch swallows MainTabView, so the bus values stay buffered
+                // on AppNavigation until the inbox is back on screen — no
+                // dropped deep-links if the user happens to be mid-capture.
+                .onContinueUserActivity(AppNavigation.sessionActivityType) { activity in
+                    guard
+                        let info = activity.userInfo,
+                        let sessionID = info["session_id"] as? String,
+                        !sessionID.isEmpty
+                    else { return }
+                    AppNavigation.shared.requestTab(.sessions)
+                    AppNavigation.shared.requestNote(sessionID: sessionID)
+                }
         }
         .onChange(of: scenePhase) { _, newPhase in
             // M-12 stale sweep — every time the app comes to foreground we

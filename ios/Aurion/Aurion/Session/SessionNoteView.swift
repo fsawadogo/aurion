@@ -88,6 +88,21 @@ struct SessionNoteView: View {
         }
         .navigationTitle(displaySpecialty)
         .aurionNavBar()
+        // Donate a Spotlight-eligible activity so the physician can later
+        // find this note via system search. We intentionally index only
+        // specialty + relative date — never PHI. The session UUID is the
+        // persistentIdentifier; AurionApp.onContinueUserActivity matches
+        // on it and routes the user back here.
+        .userActivity(AppNavigation.sessionActivityType, isActive: !isLoading) { activity in
+            activity.title = "Aurion · \(displaySpecialty)"
+            activity.userInfo = ["session_id": session.id]
+            activity.persistentIdentifier = session.id
+            activity.isEligibleForSearch = true
+            activity.isEligibleForPrediction = false
+            // Strictly device-local — disable Handoff so this never
+            // surfaces on another device or syncs through iCloud.
+            activity.isEligibleForHandoff = false
+        }
         .toolbar {
             ToolbarItemGroup(placement: .navigationBarTrailing) {
                 Button {

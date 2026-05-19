@@ -31,6 +31,10 @@ struct DashboardView: View {
     /// "0 sessions" → "12 sessions" with a quick spring rather than
     /// flashing the final value at paint time.
     @State private var displayedTodayCount = 0
+    /// Cross-cutting nav bus — ``StartSessionIntent`` publishes a
+    /// ``PendingQuickStart`` here when the user invokes "Start an Aurion
+    /// session" from Siri / Shortcuts / Spotlight.
+    @ObservedObject private var navigation = AppNavigation.shared
 
     // MARK: - Greeting
 
@@ -160,6 +164,20 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showEncounterTypeSheet) { encounterTypeSheet }
             .sheet(isPresented: $showContextPrompt) { encounterContextSheet }
+            .onChange(of: navigation.pendingQuickStart) { _, request in
+                // App Intent or Spotlight asked us to start a session for a
+                // specific specialty. Mirror the Quick Start card tap so the
+                // encounter-type sheet flow stays the only entry point —
+                // consent and encounter context still need their human gate.
+                guard let request else { return }
+                AurionHaptics.impact(.light)
+                selectedQuickStart = (request.specialty, request.consultationType)
+                selectedEncounterType = "doctor_patient"
+                selectedParticipants = []
+                encounterContext = ""
+                showEncounterTypeSheet = true
+                navigation.clearPendingQuickStart()
+            }
         }
     }
 
