@@ -31,7 +31,7 @@ Last seeded: 2026-05-14.
 
 ## Done
 
-- [x] M-04-MP MediaPipe face-detection cross-check verification — 1d — lane: ios — merged: 2026-05-19 (commit pending)
+- [x] M-04-MP MediaPipe face-detection cross-check verification — 1d — lane: ios — merged: 2026-05-19 (commit ca938d0)
 - [x] P0-07 E2E smoke test — 3d — lane: backend — merged: 2026-05-19 (commit 3835704)
 - [x] M-07-DASH Dashboard Stage 2 tile — 3d — lane: ios — merged: 2026-05-18 (commit 7f024fa)
 - [x] B-08 Eval persistence — 3d — lane: backend — merged: 2026-05-18 (commit pending)
