@@ -13,7 +13,6 @@ Last seeded: 2026-05-14.
 ## Active
 
 - [ ] AUR-MP-CROSSCHECK Add MediaPipe as independent second face detector for Apple Vision (pilot follow-up; revisit only if clinical safety committee asks) — 5d — lane: ios — no blockers
-- [ ] Q-03 write_audit kwarg whitelist — pair with Q-01; tighten **fields to known keys per event_type — 1d — lane: backend — no blockers (Q-01 done)
 - [ ] Q-04 SessionUIState cleanup — drop isProcessing/showingReview/showingPostEncounter computed shims; migrate ContentView branches to switch on uiState — 1d — lane: ios — no blockers
 - [ ] AUR-DESIGN-NAVY — design decision on canonical navy (#0C1B37 vs #0D1B3E); collapse aurionNavyLegacy once chosen — 0.5d — lane: ios — no blockers
 - [ ] Q-05 Consolidate _to_uuid coercion — same idiom now duplicated in note_gen/repository.py, users_repository.py, _helpers.py, admin/_shared.py; promote to core/uuids.py — 0.5d — lane: backend — no blockers
@@ -29,6 +28,7 @@ Last seeded: 2026-05-14.
 
 ## Done
 
+- [x] Q-03 write_audit kwarg whitelist + strict-mode — 1d — lane: backend — merged: 2026-05-19 (commit d539a57)
 - [x] Q-02 privacy.py _purge_session_prefix extraction + latent bug fix — 1d — lane: backend — merged: 2026-05-19 (commit ec3a318)
 - [x] Q-01 AuditEventType StrEnum — 2d — lane: backend — merged: 2026-05-19 (commit 5c26052)
 - [x] M-04-MP MediaPipe face-detection cross-check verification — 1d — lane: ios — merged: 2026-05-19 (commit ca938d0)
