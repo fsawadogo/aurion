@@ -138,6 +138,10 @@ struct DashboardView: View {
                 .frame(maxWidth: horizontalSizeClass == .regular ? 720 : .infinity)
                 .frame(maxWidth: .infinity)
             }
+            // Keeps the recent-sessions card breathing-room above the
+            // translucent (iOS 26 glass) tab bar — otherwise the last
+            // row reads as clipped under the bar.
+            .contentMargins(.bottom, 24, for: .scrollContent)
             .background(Color.aurionBackground)
             .navigationBarHidden(true)
             .task { await loadRecentSessions() }

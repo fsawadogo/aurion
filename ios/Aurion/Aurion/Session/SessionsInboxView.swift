@@ -141,6 +141,9 @@ struct SessionsInboxView: View {
             .padding(.top, 12)
             .padding(.bottom, 20)
         }
+        // Breathing room above the translucent (iOS 26 glass) tab bar
+        // so the last session row doesn't read as clipped.
+        .contentMargins(.bottom, 24, for: .scrollContent)
         .refreshable { await loadSessions() }
     }
 

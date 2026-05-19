@@ -40,6 +40,10 @@ struct DeviceHubView: View {
                 .padding(.top, 10)
                 .padding(.bottom, 20)
             }
+            // Breathing room above the translucent (iOS 26 glass)
+            // tab bar so the last permission tile / source row
+            // doesn't read as clipped under the bar.
+            .contentMargins(.bottom, 24, for: .scrollContent)
             .background(Color.aurionBackground)
             .navigationBarHidden(true)
             .onAppear {
