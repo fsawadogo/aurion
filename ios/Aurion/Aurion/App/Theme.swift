@@ -357,6 +357,12 @@ struct CircularProgressRing: View {
                 .rotationEffect(.degrees(-90))
                 .animation(AurionAnimation.smooth, value: progress)
         }
+        // Without a value, VoiceOver reads progress rings as just
+        // "image" — surface the actual percentage so accessibility users
+        // hear the same information sighted users see at the trim.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Progress")
+        .accessibilityValue("\(Int(max(0, min(1, progress)) * 100)) percent")
     }
 }
 
