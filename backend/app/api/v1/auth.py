@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -31,7 +32,11 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _APP_ENV = os.getenv("APP_ENV", "local")
 
 # Dev seed accounts — written to the users table on startup if absent.
-class _DevUser(BaseModel):
+# Frozen dataclass rather than Pydantic: no I/O, no validation needed,
+# no field aliasing — just an inert config record. Pydantic would pay
+# for a schema registry + JSON encoder we never use.
+@dataclass(frozen=True, slots=True)
+class _DevUser:
     password: str
     user_id: str
     full_name: str
