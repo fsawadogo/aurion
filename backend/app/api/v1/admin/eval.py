@@ -1,13 +1,11 @@
 """Eval team interface — list reviewable sessions and submit quality scores.
 
-EVAL_TEAM or ADMIN. Scores are held in-memory today (``_EVAL_SCORES``);
-migrates to a persistent ``eval_scores`` table when B-08 lands.
+EVAL_TEAM or ADMIN. Scores persist in the ``eval_scores`` table (B-08).
 """
 
 from __future__ import annotations
 
 import uuid
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
@@ -20,19 +18,32 @@ from app.api.v1.admin._shared import (
     resolve_clinician_names,
     scan_audit_events,
 )
-from app.core.clock import utcnow
 from app.core.database import get_db
-from app.core.models import SessionModel
+from app.core.models import EvalScoreModel, SessionModel
 from app.core.types import SessionState, UserRole
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, require_role
+from app.modules.eval import repository as eval_repo
 from app.modules.note_gen import repository as note_repo
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-# In-memory eval scores — migrates to PostgreSQL table in production (B-08).
-_EVAL_SCORES: dict[str, dict[str, Any]] = {}
+def _score_payload(row: EvalScoreModel) -> dict:
+    """Serialize an EvalScoreModel into the legacy response dict shape.
+
+    The shape is preserved verbatim so the web portal (and any other
+    client reading ``scores``) keeps working without a frontend change.
+    """
+    return {
+        "transcript_accuracy": row.transcript_accuracy,
+        "citation_correctness": row.citation_correctness,
+        "descriptive_mode_compliance": row.descriptive_mode_compliance,
+        "overall": row.overall,
+        "notes": row.notes,
+        "scored_by": row.scored_by,
+        "scored_at": row.scored_at.isoformat() if row.scored_at else "",
+    }
 
 
 @router.get("/eval/sessions", response_model=list[EvalSessionResponse])
@@ -59,13 +70,15 @@ async def get_eval_sessions(
     result = await db.execute(stmt)
     sessions = result.scalars().all()
 
-    # Batch-load latest note versions + clinician names for all sessions
-    # in single queries each to avoid N+1.
+    # Batch-load notes, clinician names, and eval scores in single queries.
     notes_by_session = await note_repo.get_latest_versions_by_session(
         db, (s.id for s in sessions)
     )
     names_by_id = await resolve_clinician_names(
         db, (s.clinician_id for s in sessions)
+    )
+    scores_by_session = await eval_repo.get_scores_by_sessions(
+        db, (s.id for s in sessions)
     )
 
     # One DynamoDB scan instead of N per-session queries — pilot scale
@@ -83,7 +96,7 @@ async def get_eval_sessions(
     for s in sessions:
         sid = str(s.id)
         clinician_name = names_by_id[str(s.clinician_id)]
-        scores = _EVAL_SCORES.get(sid)
+        score_row = scores_by_session.get(s.id)
         latest_note = notes_by_session.get(s.id)
         note_version = latest_note.version if latest_note else 0
 
@@ -95,8 +108,8 @@ async def get_eval_sessions(
             transcript_masked=True,  # All transcripts are masked by policy
             frames_masked=sid in sessions_with_masking_confirmed,
             note_version=note_version,
-            scored=scores is not None,
-            scores=scores,
+            scored=score_row is not None,
+            scores=_score_payload(score_row) if score_row else None,
             created_at=s.created_at.isoformat() if s.created_at else "",
         ))
 
@@ -112,7 +125,7 @@ async def submit_eval_score(
     ),
     db: AsyncSession = Depends(get_db),
 ):
-    """Submit quality scores for a session. EVAL_TEAM or ADMIN."""
+    """Submit (or re-submit) quality scores for a session. EVAL_TEAM or ADMIN."""
     try:
         sid_uuid = uuid.UUID(session_id)
     except ValueError:
@@ -125,17 +138,16 @@ async def submit_eval_score(
         1,
     )
 
-    scores = {
-        "transcript_accuracy": body.transcript_accuracy,
-        "citation_correctness": body.citation_correctness,
-        "descriptive_mode_compliance": body.descriptive_mode_compliance,
-        "overall": overall,
-        "notes": body.notes,
-        "scored_by": user.email,
-        "scored_at": utcnow().isoformat(),
-    }
-
-    _EVAL_SCORES[session_id] = scores
+    row = await eval_repo.upsert_score(
+        db,
+        session_id=sid_uuid,
+        transcript_accuracy=body.transcript_accuracy,
+        citation_correctness=body.citation_correctness,
+        descriptive_mode_compliance=body.descriptive_mode_compliance,
+        overall=overall,
+        notes=body.notes,
+        scored_by=user.email,
+    )
 
     await write_audit(
         session_id,
@@ -156,6 +168,6 @@ async def submit_eval_score(
         frames_masked=True,
         note_version=0,
         scored=True,
-        scores=scores,
+        scores=_score_payload(row),
         created_at=session.created_at.isoformat() if session.created_at else "",
     )

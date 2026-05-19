@@ -317,3 +317,32 @@ class Stage2JobModel(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class EvalScoreModel(Base):
+    """Eval team quality scores submitted per session.
+
+    One row per session — re-scoring overwrites in place (the audit log
+    keeps the history). The session_id is the primary key because a
+    session can only have one canonical score at a time; if the eval
+    workflow ever grows multi-reviewer support, this becomes a
+    (session_id, reviewer_id) composite and the model is updated then.
+    """
+
+    __tablename__ = "eval_scores"
+
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True
+    )
+    transcript_accuracy: Mapped[float] = mapped_column(Float, nullable=False)
+    citation_correctness: Mapped[float] = mapped_column(Float, nullable=False)
+    descriptive_mode_compliance: Mapped[float] = mapped_column(Float, nullable=False)
+    overall: Mapped[float] = mapped_column(Float, nullable=False)
+    notes: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    scored_by: Mapped[str] = mapped_column(String(255), nullable=False)
+    scored_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

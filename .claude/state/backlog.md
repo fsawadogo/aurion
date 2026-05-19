@@ -12,7 +12,6 @@ Last seeded: 2026-05-14.
 
 ## Active
 
-- [ ] B-08 Eval persistence — 3d — lane: backend — depends on P0-04
 - [ ] P0-07 E2E smoke test — 3d — lane: backend — depends on P0-06, B-08
 - [ ] M-07-DASH Dashboard Stage 2 tile — 3d — lane: ios — no blockers
 - [ ] M-04-MP MediaPipe face-detection cross-check verification — 1d — lane: ios — no blockers
@@ -26,7 +25,7 @@ Last seeded: 2026-05-14.
 
 ## In flight
 
-- [~] P0-06 Persistent users + admin refactor — 8d — lane: backend — started: 2026-05-18
+(no active in-flight tasks)
 
 ## Blocked
 
@@ -34,6 +33,8 @@ Last seeded: 2026-05-14.
 
 ## Done
 
+- [x] B-08 Eval persistence — 3d — lane: backend — merged: 2026-05-18 (commit pending)
+- [x] P0-06 Persistent users + admin refactor — 8d — lane: backend — merged: 2026-05-18 (commit e7a5a90)
 - [x] P0-04 Alembic migrations — 8d — lane: backend — merged: 2026-05-17 (commit e330675)
 - [x] CQR-1 Backend route helpers DRY (Phase 1) — lane: backend — merged: 2026-05-17 (commit e330675)
 - [x] CQR-2 utcnow + NoteVersion repository (Phase 2) — lane: backend — merged: 2026-05-17 (commit e330675)
