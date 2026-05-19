@@ -227,13 +227,15 @@ was blocked, what's next.
 Invocable via the `Skill` tool. Each is a `.claude/skills/<name>/SKILL.md`
 with frontmatter + instructions.
 
+### 6a. Workflow skills (custom)
+
 | Skill | Responsibility |
 |---|---|
 | `/next-task` | Read `backlog.md`, filter by current lane, pick top Active item, move to In flight, return descriptor. |
 | `/plan-task` | Spawn the `Plan` subagent with the descriptor. Output MUST include acceptance criteria and security implications. Commit the plan as the first commit on the feature branch. |
 | `/implement` | Run the plan; delegate to `@backend-builder` or `@ios-builder`; commit after each green test. |
 | `/verify-acceptance` | Mandatory gate before `/open-pr`. See §8. |
-| `/simplify` | Three parallel review agents (reuse, quality, efficiency). Auto-fix Priority-1 findings. |
+| `/simplify` | Three parallel review agents (reuse, quality, efficiency). Auto-fix Priority-1 findings. Enforces the DRY / SOLID rules in §6c. |
 | `/open-pr` | `gh pr create --body-file` using the structured PR template. See §9. |
 | `/await-ci` | `ScheduleWakeup` 5 min, then poll `gh pr checks`. Green → `/auto-merge`. Red → `/diagnose-ci`. |
 | `/diagnose-ci` | Pull failed-job logs via `gh run view`, identify the failure, fix, push, re-await. Max 3 retries before flagging. |
@@ -244,6 +246,56 @@ with frontmatter + instructions.
 Skills are the unit of orchestration. The driver `/loop` chains them; cron
 fires monitor/digest skills directly.
 
+### 6b. External design / engineering skills
+
+Installed via `npx skills add <repo-url> --skill <name>` and surfaced as
+`.agents/skills/<name>/` (symlinked into Claude Code). The loop should
+invoke these from the relevant subagent — they bring domain knowledge
+that the workflow skills don't carry on their own.
+
+| Skill | When to invoke | Lane |
+|---|---|---|
+| `mobile-ios-design` | Before `@ios-builder` writes or restyles a SwiftUI view, before authoring any new component in `ios/Aurion/Aurion/App/AurionUI.swift`, and during `/plan-task` for any iOS task that touches UI surface. Brings Apple HIG + SwiftUI patterns. | iOS |
+
+Add new external skills here as the workflow needs them; do NOT load them
+into the driver loop's context unless a task actually triggers their
+matcher.
+
+### 6c. Engineering principles every skill / subagent must honour
+
+DRY and SOLID are not optional — they are pass/fail gates inside
+`/simplify` and inside `/plan-task`'s acceptance criteria. Every skill
+that writes code must:
+
+- **DRY**: refuse to introduce a third copy of a pattern. Before writing
+  new helpers, grep for an existing one (`get_session_or_404`,
+  `write_audit`, `note_repo.get_latest_version`, `users_repo.*`,
+  `eval_repo.upsert_score`, `MultipartBuilder`, `utcnow`,
+  `SessionUIState`). If two occurrences exist, the third must extract.
+- **SRP** (Single Responsibility): a function does one thing; a route
+  handler does only HTTP boundary work (auth, parse, call service,
+  serialize). Business logic lives in `app/modules/*`. iOS views are
+  presentation-only — workflow state lives on `SessionManager` / a
+  view-model.
+- **OCP** (Open / Closed): add new behavior via the provider registry,
+  not by branching `if provider == "openai"`. New audit events extend
+  the enum (see Q-01); new specialty templates land as JSON, not Python
+  conditionals.
+- **LSP** (Liskov): every provider returns the same schema. Vision
+  outputs from openai / anthropic / gemini are interchangeable at the
+  type boundary.
+- **ISP** (Interface Segregation): the FastAPI dependency surface stays
+  narrow — `get_session_or_404`, `require_state`, `require_role` are
+  single-purpose. Don't bundle them into one mega-dependency.
+- **DIP** (Dependency Inversion): provider access via `get_registry()`,
+  audit via `get_audit_log_service()`, clock via `utcnow()`. Never
+  instantiate a concrete provider in a route or module-service.
+
+The Plan template (§8) requires a "DRY / SOLID check" line. `/simplify`
+flags violations and either auto-fixes (extract helper, swap to
+registry, collapse duplicate) or — if the fix would change the
+acceptance contract — halts and posts to `alerts.md` for human review.
+
 ---
 
 ## 7. Subagents
@@ -253,9 +305,9 @@ context window clean — each subagent gets a fresh window per task.
 
 | Subagent | Spawned by | Job |
 |---|---|---|
-| `Plan` (built-in) | `/plan-task` | Architectural design + acceptance criteria. |
-| `@backend-builder` | `/implement` (backend tasks) | FastAPI modules per CLAUDE.md patterns. |
-| `@ios-builder` | `/implement` (iOS tasks) | SwiftUI; runs xcodebuild for verification. |
+| `Plan` (built-in) | `/plan-task` | Architectural design + acceptance criteria. Loads `mobile-ios-design` for iOS UI tasks; checks the DRY/SOLID gates from §6c before returning. |
+| `@backend-builder` | `/implement` (backend tasks) | FastAPI modules per CLAUDE.md patterns. Must reuse existing helpers (§6c DRY list) before introducing new ones. |
+| `@ios-builder` | `/implement` (iOS tasks) | SwiftUI; runs xcodebuild for verification. Loads `mobile-ios-design` on every invocation so HIG / SwiftUI patterns frame the diff. |
 | `@test-writer` | After every builder run | Writes pytest / Swift Testing cases that verify each AC. |
 | `@compliance-checker` | After every module touch | Scans for PHI in logs/errors/responses; descriptive-mode violations. |
 | `@schema-validator` | When touching JSON schemas or Pydantic models | Verifies template + AppConfig schemas. |
@@ -288,6 +340,16 @@ Each criterion must be objectively verifiable — pass/fail, not "looks good".
 - [ ] AC-1: {specific behavior}, verified by {pytest test name | curl command}
 - [ ] AC-2: ...
 - [ ] AC-3: ...
+
+## DRY / SOLID check
+- **Existing helpers to reuse**: {list the grep results that proved we
+  already have what we need, e.g. `get_session_or_404`, `write_audit`,
+  `note_repo.get_latest_version`, `users_repo.*`, `eval_repo.upsert_score`,
+  `MultipartBuilder`, `SessionUIState`}.
+- **New helper introduced?**: {y/n. If yes, this must be the THIRD copy
+  of the pattern OR cross a clear boundary that justifies the abstraction.}
+- **iOS UI tasks only — `mobile-ios-design` consulted**: {y/n + 1-line
+  summary of the HIG pattern applied or the SwiftUI primitive chosen}.
 
 ## Out of scope
 {What this PR explicitly does NOT do. Forces deferral decisions upfront.}
@@ -361,6 +423,15 @@ constraint or success-criteria line this PR satisfies.}
 - [ ] **iOS Keychain only for voice embedding**: no biometric data crosses the wire
 - [ ] **Stage 1 < 30s / Stage 2 < 5min SLA**: any new sync work in the hot path measured and within budget
 - [ ] **Fail-closed masking (P0-01)**: any new image upload path rejects on masking failure, never falls back to raw bytes
+
+## Code quality checklist (DRY / SOLID — §6c)
+- [ ] **DRY**: no third copy of an existing pattern. Listed the helpers reused: {…}
+- [ ] **SRP**: route handlers stay HTTP-only; business logic lives in `app/modules/*`; SwiftUI views are presentation-only
+- [ ] **OCP**: new behavior extends the provider registry / enum / template JSON — no new `if provider == ...` branches
+- [ ] **LSP**: provider outputs share the documented schema; vision / transcription / note-gen are interchangeable at the type boundary
+- [ ] **ISP**: FastAPI dependencies stay single-purpose (`get_session_or_404`, `require_state`, `require_role`)
+- [ ] **DIP**: registry / audit / clock accessed via injected helpers (`get_registry`, `get_audit_log_service`, `utcnow`)
+- [ ] **iOS UI only — `mobile-ios-design` consulted**: applied {HIG / SwiftUI pattern} to {file:line}
 
 ## Out of scope
 {What this PR explicitly does NOT do — taken verbatim from the plan.}
@@ -868,8 +939,11 @@ Honest list of limitations so expectations stay calibrated.
   demo date.
 - `memory/MEMORY.md` + `memory/autonomous_authority.md` — durable
   cross-session state.
+- `.agents/skills/mobile-ios-design/` — Apple HIG + SwiftUI patterns
+  pulled in via `npx skills add`. Loaded by `@ios-builder` and by the
+  `Plan` subagent on iOS UI tasks (see §6b).
 
 ---
 
-Last reviewed: 2026-05-14. Update this document when the workflow changes,
+Last reviewed: 2026-05-18. Update this document when the workflow changes,
 not the other way around.

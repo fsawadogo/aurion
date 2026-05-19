@@ -49,6 +49,12 @@
       "skillPath": "skills/lottie/SKILL.md",
       "computedHash": "42174a1de29225618166626ed113bfd311a6b53083ddd514ab50991816f77b19"
     },
+    "mobile-ios-design": {
+      "source": "wshobson/agents",
+      "sourceType": "github",
+      "skillPath": "plugins/ui-design/skills/mobile-ios-design/SKILL.md",
+      "computedHash": "3902f919488d8ddc983e157bbcd5f16b739b84eeaab57002bf52b7f9601ed6ad"
+    },
     "remotion-to-hyperframes": {
       "source": "heygen-com/hyperframes",
       "sourceType": "github",
