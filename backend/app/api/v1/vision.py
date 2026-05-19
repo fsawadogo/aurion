@@ -18,10 +18,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._helpers import get_session_or_404, require_state, write_audit
+from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import TranscriptModel
 from app.core.types import Note, SessionState, Transcript
-from app.api.v1._helpers import get_session_or_404, require_state, write_audit
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.note_gen.service import (
     create_note_version,
@@ -90,7 +91,7 @@ async def run_stage2_vision(
         # No transcript persisted — likely no audio was uploaded. Vision can't
         # run without trigger segments; return an empty result so the state
         # machine can move forward without hanging.
-        await write_audit(session_id, "stage2_skipped", reason="no_transcript")
+        await write_audit(session_id, AuditEventType.STAGE2_SKIPPED, reason="no_transcript")
         return VisionProcessingResponse(
             session_id=str(session_id),
             frames_processed=0, frames_discarded=0,
@@ -112,7 +113,7 @@ async def run_stage2_vision(
     if not trigger_segments:
         await write_audit(
             session_id,
-            "stage2_complete",
+            AuditEventType.STAGE2_COMPLETE,
             frames=0, conflicts=0,
             reason="no_visual_triggers",
         )
@@ -146,7 +147,7 @@ async def run_stage2_vision(
 
     await write_audit(
         session_id,
-        "stage2_complete",
+        AuditEventType.STAGE2_COMPLETE,
         frames_processed=len(frames),
         frames_discarded=discarded,
         enriches=enriches,

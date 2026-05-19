@@ -18,6 +18,7 @@ from app.api.v1.admin._shared import (
     resolve_clinician_names,
     scan_audit_events,
 )
+from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import EvalScoreModel, SessionModel
 from app.core.types import SessionState, UserRole
@@ -151,7 +152,7 @@ async def submit_eval_score(
 
     await write_audit(
         session_id,
-        "eval_score_submitted",
+        AuditEventType.EVAL_SCORE_SUBMITTED,
         overall_score=overall,
         scored_by=user.email,
     )

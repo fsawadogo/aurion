@@ -12,6 +12,7 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_events import AuditEventType
 from app.core.clock import utcnow
 from app.core.models import SessionModel
 from app.core.types import SessionState
@@ -33,17 +34,17 @@ VALID_TRANSITIONS: dict[SessionState, list[SessionState]] = {
 
 # ── Audit Event Mapping ──────────��────────────────────────────────────────
 
-STATE_AUDIT_EVENTS: dict[SessionState, str] = {
-    SessionState.IDLE: "session_created",
-    SessionState.CONSENT_PENDING: "session_created",
-    SessionState.RECORDING: "recording_started",
-    SessionState.PAUSED: "session_paused",
-    SessionState.PROCESSING_STAGE1: "stage1_started",
-    SessionState.AWAITING_REVIEW: "stage1_delivered",
-    SessionState.PROCESSING_STAGE2: "stage2_started",
-    SessionState.REVIEW_COMPLETE: "full_note_delivered",
-    SessionState.EXPORTED: "note_exported",
-    SessionState.PURGED: "session_purged",
+STATE_AUDIT_EVENTS: dict[SessionState, AuditEventType] = {
+    SessionState.IDLE: AuditEventType.SESSION_CREATED,
+    SessionState.CONSENT_PENDING: AuditEventType.SESSION_CREATED,
+    SessionState.RECORDING: AuditEventType.RECORDING_STARTED,
+    SessionState.PAUSED: AuditEventType.SESSION_PAUSED,
+    SessionState.PROCESSING_STAGE1: AuditEventType.STAGE1_STARTED,
+    SessionState.AWAITING_REVIEW: AuditEventType.STAGE1_DELIVERED,
+    SessionState.PROCESSING_STAGE2: AuditEventType.STAGE2_STARTED,
+    SessionState.REVIEW_COMPLETE: AuditEventType.FULL_NOTE_DELIVERED,
+    SessionState.EXPORTED: AuditEventType.NOTE_EXPORTED,
+    SessionState.PURGED: AuditEventType.SESSION_PURGED,
 }
 
 
@@ -134,8 +135,14 @@ async def transition_session(
     return session
 
 
-def get_audit_event_for_state(state: SessionState) -> str:
-    """Return the audit event type for a given state."""
+def get_audit_event_for_state(state: SessionState) -> AuditEventType | str:
+    """Return the audit event type for a given state.
+
+    Returns an ``AuditEventType`` member for known states; falls back to
+    a raw ``str`` for unknown ones (a SessionState added without
+    updating ``STATE_AUDIT_EVENTS``). The fallback is a development
+    guard — production should never hit it.
+    """
     return STATE_AUDIT_EVENTS.get(state, f"state_changed_{state.value.lower()}")
 
 

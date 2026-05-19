@@ -11,6 +11,7 @@ import logging
 
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.core.audit_events import AuditEventType
 from app.core.retry import with_retry
 from app.core.s3 import AUDIO_BUCKET, EVAL_BUCKET, FRAMES_BUCKET, get_s3_client
 from app.modules.audit_log.service import get_audit_log_service
@@ -54,7 +55,7 @@ async def purge_audio(session_id: str, s3_key: str) -> None:
         )
         await audit.write_event(
             session_id=session_id,
-            event_type="cleanup_partial_failure",
+            event_type=AuditEventType.CLEANUP_PARTIAL_FAILURE,
             bucket=AUDIO_BUCKET,
             s3_key=s3_key,
             error_message=str(exc),
@@ -63,7 +64,7 @@ async def purge_audio(session_id: str, s3_key: str) -> None:
 
     await audit.write_event(
         session_id=session_id,
-        event_type="audio_purged",
+        event_type=AuditEventType.AUDIO_PURGED,
         bucket=AUDIO_BUCKET,
         s3_key=s3_key,
     )
@@ -138,14 +139,14 @@ async def purge_frames(session_id: str) -> None:
     if failed_keys:
         await audit.write_event(
             session_id=session_id,
-            event_type="cleanup_partial_failure",
+            event_type=AuditEventType.CLEANUP_PARTIAL_FAILURE,
             bucket=FRAMES_BUCKET,
             failed_count=len(failed_keys),
         )
 
     await audit.write_event(
         session_id=session_id,
-        event_type="frames_purged",
+        event_type=AuditEventType.FRAMES_PURGED,
         bucket=FRAMES_BUCKET,
         frame_count=len(keys_deleted),
     )
@@ -255,14 +256,14 @@ async def migrate_eval_frames(session_id: str) -> None:
     if failed_keys:
         await audit.write_event(
             session_id=session_id,
-            event_type="cleanup_partial_failure",
+            event_type=AuditEventType.CLEANUP_PARTIAL_FAILURE,
             bucket=FRAMES_BUCKET,
             failed_count=len(failed_keys),
         )
 
     await audit.write_event(
         session_id=session_id,
-        event_type="eval_frames_migrated",
+        event_type=AuditEventType.EVAL_FRAMES_MIGRATED,
         source_bucket=FRAMES_BUCKET,
         dest_bucket=EVAL_BUCKET,
         frame_count=len(migrated_keys),

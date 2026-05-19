@@ -28,6 +28,7 @@ from app.core.types import (
     ProviderError,
     TranscriptSegment,
 )
+from app.core.audit_events import AuditEventType
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
@@ -154,7 +155,7 @@ async def caption_frames(
                 caption = await fallback_provider.caption_frame(frame, anchor)
                 await audit.write_event(
                     session_id=frame.session_id,
-                    event_type="provider_fallback",
+                    event_type=AuditEventType.PROVIDER_FALLBACK,
                     frame_id=frame.frame_id,
                     original_error=str(e),
                     fallback_provider=caption.provider_used,
@@ -169,7 +170,7 @@ async def caption_frames(
                 )
                 await audit.write_event(
                     session_id=frame.session_id,
-                    event_type="vision_frame_failed",
+                    event_type=AuditEventType.VISION_FRAME_FAILED,
                     frame_id=frame.frame_id,
                     error_message=str(fallback_err),
                 )
@@ -198,7 +199,7 @@ async def caption_frames(
     if frames and failed_count == len(frames):
         await audit.write_event(
             session_id=session_id,
-            event_type="stage2_failed",
+            event_type=AuditEventType.STAGE2_FAILED,
             total_frames=len(frames),
             failed_frames=failed_count,
         )

@@ -14,6 +14,7 @@ from docx import Document
 from docx.shared import Pt, RGBColor
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_events import AuditEventType
 from app.core.types import Note
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.cleanup.service import (
@@ -129,7 +130,7 @@ async def export_note_docx(
     # ── Audit log ─────────────────────────────────────────────────────
     await audit.write_event(
         session_id=session_id,
-        event_type="note_exported",
+        event_type=AuditEventType.NOTE_EXPORTED,
         format="docx",
         version=note.version,
         stage=note.stage,

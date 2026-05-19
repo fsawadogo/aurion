@@ -13,6 +13,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import get_session_or_404, require_state, write_audit
+from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.types import SessionState, UserRole
 from app.modules.auth.service import CurrentUser, get_current_user, require_role
@@ -83,7 +84,7 @@ async def create_session_route(
     )
     await write_audit(
         session.id,
-        "session_created",
+        AuditEventType.SESSION_CREATED,
         clinician_id=str(user.user_id),
         specialty=body.specialty,
     )
@@ -108,7 +109,7 @@ async def confirm_consent_route(
     await confirm_consent(db, session)
     await write_audit(
         session.id,
-        "consent_confirmed",
+        AuditEventType.CONSENT_CONFIRMED,
         consent_method=body.consent_method,
     )
     return _to_response(session)
@@ -175,7 +176,7 @@ async def update_session_template(
     session.specialty = body.specialty
     await db.flush()
 
-    await write_audit(session.id, "template_changed", new_specialty=body.specialty)
+    await write_audit(session.id, AuditEventType.TEMPLATE_CHANGED, new_specialty=body.specialty)
     return _to_response(session)
 
 

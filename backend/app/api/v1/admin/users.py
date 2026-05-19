@@ -16,6 +16,7 @@ from app.api.v1.admin._shared import (
     UserResponse,
     user_to_response,
 )
+from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.types import UserRole
 from app.modules.auth import users_repository as users_repo
@@ -58,7 +59,7 @@ async def create_user(
 
     await write_audit(
         "system",
-        "user_created",
+        AuditEventType.USER_CREATED,
         target_user_id=str(new_user.id),
         target_email=new_user.email,
         target_role=new_user.role.value,
@@ -89,7 +90,7 @@ async def update_user(
     if changes:
         await write_audit(
             "system",
-            "user_updated",
+            AuditEventType.USER_UPDATED,
             target_user_id=user_id,
             changes=str(changes),
             updated_by=str(user.user_id),

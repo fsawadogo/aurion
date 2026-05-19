@@ -13,6 +13,7 @@ from typing import Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.core.audit_events import AuditEventType
 from app.core.retry import with_retry
 from app.core.s3 import AUDIO_BUCKET, get_s3_client
 from app.core.types import ProviderError, Transcript, TranscriptSegment
@@ -124,7 +125,7 @@ async def upload_audio_to_s3(
         audit = get_audit_log_service()
         await audit.write_event(
             session_id=str(session_id),
-            event_type="s3_upload_failed",
+            event_type=AuditEventType.S3_UPLOAD_FAILED,
             error_message=str(e),
         )
         raise ProviderError("s3", f"Audio upload failed: {e}", e)
@@ -176,7 +177,7 @@ async def transcribe_audio(
         audit = get_audit_log_service()
         await audit.write_event(
             session_id=str(session_id),
-            event_type="transcription_failed",
+            event_type=AuditEventType.TRANSCRIPTION_FAILED,
             error_message="Provider raised ProviderError",
         )
         raise
@@ -184,7 +185,7 @@ async def transcribe_audio(
         audit = get_audit_log_service()
         await audit.write_event(
             session_id=str(session_id),
-            event_type="transcription_failed",
+            event_type=AuditEventType.TRANSCRIPTION_FAILED,
             error_message=str(e),
         )
         raise ProviderError(
