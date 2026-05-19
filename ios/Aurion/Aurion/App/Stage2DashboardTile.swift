@@ -102,7 +102,7 @@ struct Stage2DashboardTile: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(session.specialty.displayFormatted)
                             .font(.headline)
-                            .foregroundColor(.aurionNavy)
+                            .foregroundColor(.aurionTextPrimary)
                         Text(statusLine)
                             .font(.subheadline)
                             .foregroundColor(.aurionTextSecondary)

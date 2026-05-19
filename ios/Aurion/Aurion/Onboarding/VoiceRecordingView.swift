@@ -33,7 +33,7 @@ struct VoiceRecordingView: View {
             Text("Read aloud in your normal clinical voice")
                 .font(.title3)
                 .fontWeight(.semibold)
-                .foregroundColor(.aurionNavy)
+                .foregroundColor(.aurionTextPrimary)
                 .aurionStagger(order: 0, baseDelay: 0.05)
 
             sentenceList
@@ -48,7 +48,7 @@ struct VoiceRecordingView: View {
                     Text(String(format: "%.0fs", recorder.duration))
                         .font(.title2)
                         .monospacedDigit()
-                        .foregroundColor(.aurionNavy)
+                        .foregroundColor(.aurionTextPrimary)
                 }
                 .transition(.opacity)
             }
@@ -70,7 +70,7 @@ struct VoiceRecordingView: View {
 
             Button("Re-record") { resetRecording() }
                 .font(.caption)
-                .foregroundColor(.aurionNavy)
+                .foregroundColor(.aurionTextPrimary)
                 .opacity(canProceed ? 1 : 0)
 
             Spacer().frame(height: 20)

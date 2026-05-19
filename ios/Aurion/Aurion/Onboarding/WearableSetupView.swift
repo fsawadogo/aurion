@@ -135,7 +135,7 @@ struct WearableSetupView: View {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(device.name)
                         .font(.system(size: 15, weight: .semibold))
-                        .foregroundColor(.aurionNavy)
+                        .foregroundColor(.aurionTextPrimary)
                         .lineLimit(1)
                     Text(rssiLabel(device.rssi))
                         .font(.system(size: 11))

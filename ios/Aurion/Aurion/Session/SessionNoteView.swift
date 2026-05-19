@@ -81,7 +81,7 @@ struct SessionNoteView: View {
                         Text("Copied to clipboard")
                             .font(.system(size: 14, weight: .semibold))
                     }
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                     .padding(.horizontal, AurionSpacing.xl)
                     .padding(.vertical, AurionSpacing.sm)
                     // `.regularMaterial` is iOS's native confirmation-

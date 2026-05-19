@@ -230,7 +230,7 @@ struct DashboardView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(session.specialty.displayFormatted)
                                     .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.aurionNavy)
+                                    .foregroundColor(.aurionTextPrimary)
                                 Text(session.state == "PAUSED"
                                      ? "Paused \(formatRelativeTime(session.updatedAt))"
                                      : "Recording \(formatRelativeTime(session.updatedAt))")
@@ -240,6 +240,7 @@ struct DashboardView: View {
                             Spacer()
                             Text("Resume")
                                 .font(.system(size: 13, weight: .semibold))
+                                // Brand-navy on gold pill — fixed in both modes.
                                 .foregroundColor(.aurionNavy)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 6)
@@ -265,7 +266,7 @@ struct DashboardView: View {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(session.specialty.displayFormatted)
                                     .font(.system(size: 16, weight: .semibold))
-                                    .foregroundColor(.aurionNavy)
+                                    .foregroundColor(.aurionTextPrimary)
                                 Text("Recorded \(formatRelativeTime(session.createdAt))")
                                     .font(.system(size: 13))
                                     .foregroundColor(.aurionTextSecondary)
@@ -273,6 +274,7 @@ struct DashboardView: View {
                             Spacer()
                             Text(L("sessions.resume"))
                                 .font(.system(size: 13, weight: .semibold))
+                                // Brand-navy on gold pill — fixed in both modes.
                                 .foregroundColor(.aurionNavy)
                                 .padding(.horizontal, 14)
                                 .padding(.vertical, 6)
@@ -333,7 +335,7 @@ struct DashboardView: View {
                                         .foregroundColor(.aurionTextSecondary)
                                     Text(card.label)
                                         .font(.system(size: 16, weight: .semibold))
-                                        .foregroundColor(.aurionNavy)
+                                        .foregroundColor(.aurionTextPrimary)
                                         .lineLimit(2)
                                 }
                             }
@@ -419,7 +421,7 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(session.specialty.displayFormatted)
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                     .lineLimit(1)
                 Text(formatRelativeTime(session.createdAt))
                     .font(.system(size: 12))
@@ -453,7 +455,7 @@ struct DashboardView: View {
                             Text("Who\u{2019}s in the room?")
                                 .font(.system(size: 22, weight: .semibold))
                                 .tracking(-0.22)
-                                .foregroundColor(.aurionNavy)
+                                .foregroundColor(.aurionTextPrimary)
                             Text("Aurion will adjust capture and consent accordingly.")
                                 .font(.system(size: 14))
                                 .foregroundColor(.aurionTextSecondary)
@@ -554,12 +556,12 @@ struct DashboardView: View {
                                 if isChecked {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.aurionNavy)
+                                        .foregroundColor(.aurionTextPrimary)
                                 }
                             }
                             Text("\(member.role.displayFormatted) — \(member.name)")
                                 .font(.system(size: 14))
-                                .foregroundColor(.aurionNavy)
+                                .foregroundColor(.aurionTextPrimary)
                             Spacer()
                         }
                     }
@@ -631,7 +633,7 @@ struct DashboardView: View {
                                 Text("What brings the patient in today?")
                                     .font(.system(size: 22, weight: .semibold))
                                     .tracking(-0.22)
-                                    .foregroundColor(.aurionNavy)
+                                    .foregroundColor(.aurionTextPrimary)
                                 Text("•")
                                     .font(.system(size: 22, weight: .semibold))
                                     .foregroundColor(.aurionGold)
@@ -706,7 +708,7 @@ struct DashboardView: View {
                 Text("Capture mode")
                     .font(.system(size: 22, weight: .semibold))
                     .tracking(-0.22)
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                 Text("How should Aurion observe this encounter?")
                     .font(.system(size: 14))
                     .foregroundColor(.aurionTextSecondary)

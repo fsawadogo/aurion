@@ -239,13 +239,13 @@ struct NoteReviewView: View {
         return VStack(alignment: .leading, spacing: 16) {
             Text("Edit conflict")
                 .font(.system(size: 20, weight: .bold))
-                .foregroundColor(.aurionNavy)
+                .foregroundColor(.aurionTextPrimary)
             Text("Replace the conflicting claim. The original text is preserved in the audit log.")
                 .font(.system(size: 13))
                 .foregroundColor(.aurionTextSecondary)
             TextEditor(text: draftBinding)
                 .font(.system(size: 15))
-                .foregroundColor(.aurionNavy)
+                .foregroundColor(.aurionTextPrimary)
                 .frame(minHeight: 140)
                 .padding(8)
                 .background(Color.aurionBackground)
@@ -342,7 +342,7 @@ struct NoteReviewView: View {
                     .controlSize(.small)
                 Text("Visual enrichment in progress…")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                 Spacer()
             }
             .padding(.horizontal, 16)
@@ -394,7 +394,7 @@ struct NoteReviewView: View {
             AurionIconBubble(symbol: "checkmark", tint: .aurionGreen, size: 64, symbolWeight: .bold)
             Text("Note Approved")
                 .font(.system(size: 16, weight: .semibold))
-                .foregroundColor(.aurionNavy)
+                .foregroundColor(.aurionTextPrimary)
         }
         .padding(.horizontal, 28)
         .padding(.vertical, 22)
@@ -461,7 +461,7 @@ struct NoteReviewView: View {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(s.title)
                     .font(.system(size: 18, weight: .bold))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                 if s.hasConflicts {
                     Text("CONFLICT")
                         .font(.system(size: 10, weight: .bold))
@@ -504,7 +504,7 @@ struct NoteReviewView: View {
                 } label: {
                     Text(body)
                         .font(.system(size: 15))
-                        .foregroundColor(.aurionNavy)
+                        .foregroundColor(.aurionTextPrimary)
                         .lineSpacing(5)
                         .multilineTextAlignment(.leading)
                         .frame(maxWidth: .infinity, alignment: .leading)
@@ -592,7 +592,7 @@ struct NoteReviewView: View {
                         .foregroundColor(.aurionStatusConflict)
                     Text(claim.text)
                         .font(.system(size: 14))
-                        .foregroundColor(.aurionNavy)
+                        .foregroundColor(.aurionTextPrimary)
                         .lineSpacing(3)
                 }
             }
@@ -624,7 +624,7 @@ struct NoteReviewView: View {
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(Color.aurionBackground)
-                .foregroundColor(.aurionNavy)
+                .foregroundColor(.aurionTextPrimary)
                 .clipShape(RoundedRectangle(cornerRadius: 6))
                 .overlay(
                     RoundedRectangle(cornerRadius: 6)
@@ -667,13 +667,13 @@ struct NoteReviewView: View {
                 VStack(alignment: .leading, spacing: 8) {
                     Text(section.title)
                         .font(.system(size: 18, weight: .bold))
-                        .foregroundColor(.aurionNavy)
+                        .foregroundColor(.aurionTextPrimary)
                     TextEditor(text: Binding(
                         get: { draftEdits[section.id] ?? "" },
                         set: { draftEdits[section.id] = $0 }
                     ))
                     .font(.system(size: 15))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                     .frame(minHeight: 90)
                     .padding(8)
                     .background(Color.aurionBackground)
@@ -763,7 +763,7 @@ struct NoteReviewView: View {
                 )
                 Text("\(Int(displayedCompleteness * 100))%")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                     .contentTransition(.numericText())
                     .animation(AurionAnimation.smooth, value: displayedCompleteness)
             }
@@ -772,7 +772,7 @@ struct NoteReviewView: View {
                 // so the percentage isn't the only signal.
                 Text("\(populated) of \(totalSections) sections")
                     .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                 Text(helpText)
                     .font(.system(size: 12))
                     .foregroundColor(.aurionTextSecondary)

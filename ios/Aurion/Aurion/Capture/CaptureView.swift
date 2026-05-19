@@ -268,6 +268,7 @@ struct CaptureView: View {
                     if builtInSource.capturedFrames.count > 0 {
                         Text("\(min(builtInSource.capturedFrames.count, 99))")
                             .font(.system(size: 8, weight: .bold))
+                            // Brand-navy on gold pill — stays fixed in both modes.
                             .foregroundColor(.aurionNavy)
                             .padding(.horizontal, 4)
                             .padding(.vertical, 1)
@@ -521,7 +522,7 @@ struct CaptureView: View {
 
                 Text("Confirm Patient Consent")
                     .font(.system(size: 20, weight: .semibold))
-                    .foregroundColor(.aurionNavy)
+                    .foregroundColor(.aurionTextPrimary)
                     .multilineTextAlignment(.center)
 
                 Text("Confirm the patient has been informed and consents to recording for note generation.")

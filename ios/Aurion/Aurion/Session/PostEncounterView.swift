@@ -48,7 +48,7 @@ struct PostEncounterView: View {
                                     HStack {
                                         Text(template.displayName)
                                             .font(.system(size: 15))
-                                            .foregroundColor(.aurionNavy)
+                                            .foregroundColor(.aurionTextPrimary)
                                         Spacer()
                                         if selectedTemplate == template.key {
                                             Image(systemName: "checkmark")
@@ -88,7 +88,7 @@ struct PostEncounterView: View {
                                     Text(flag).font(.system(size: 22))
                                     Text(name)
                                         .font(.system(size: 15))
-                                        .foregroundColor(.aurionNavy)
+                                        .foregroundColor(.aurionTextPrimary)
                                     Spacer()
                                     if selectedLanguage == key {
                                         Image(systemName: "checkmark")
