@@ -15,10 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import UserModel
 from app.core.types import UserRole
-
-
-def _to_uuid(user_id: str | uuid.UUID) -> uuid.UUID:
-    return user_id if isinstance(user_id, uuid.UUID) else uuid.UUID(str(user_id))
+from app.core.uuids import to_uuid
 
 
 async def list_users(db: AsyncSession) -> list[UserModel]:
@@ -30,7 +27,7 @@ async def list_users(db: AsyncSession) -> list[UserModel]:
 async def get_user(
     db: AsyncSession, user_id: str | uuid.UUID
 ) -> UserModel | None:
-    return await db.get(UserModel, _to_uuid(user_id))
+    return await db.get(UserModel, to_uuid(user_id))
 
 
 async def create_user(
