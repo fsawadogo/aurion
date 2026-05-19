@@ -6,7 +6,22 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		01AA1E3FEB61FA71031EF68F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E9F46EEC9C4EB3FC14372E7 /* Foundation.framework */; };
+		10ACCED7207D123E1E9C1973 /* AurionCaptureActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D63FB6B5BBB0763268C0D86 /* AurionCaptureActivityWidget.swift */; };
+		1A4DA75A37227283741D7C99 /* AurionCaptureActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4CE963AFD574EFA97CB3466 /* AurionCaptureActivityAttributes.swift */; };
+		4C183FB4289BCA09922C1437 /* AurionWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43904B14883B880D0B18827A /* AurionWidgetsBundle.swift */; };
+		5F1BAE9AE2B82F774453681C /* AurionWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = EDFC027F24A3EF463400D8F3 /* AurionWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+/* End PBXBuildFile section */
+
 /* Begin PBXContainerItemProxy section */
+		AFA784FCEAE192237DC04AB3 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = F7BD2FE02F8B528A000E70A0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = DD800677623DD8903CA3DB6F;
+			remoteInfo = AurionWidgets;
+		};
 		F7BD2FF62F8B528B000E70A0 /* PBXContainerItemProxy */ = {
 			isa = PBXContainerItemProxy;
 			containerPortal = F7BD2FE02F8B528A000E70A0 /* Project object */;
@@ -23,7 +38,27 @@
 		};
 /* End PBXContainerItemProxy section */
 
+/* Begin PBXCopyFilesBuildPhase section */
+		80B1A4B2A4D437C6D8981A7A /* Embed App Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				5F1BAE9AE2B82F774453681C /* AurionWidgets.appex in Embed App Extensions */,
+			);
+			name = "Embed App Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXCopyFilesBuildPhase section */
+
 /* Begin PBXFileReference section */
+		0E9F46EEC9C4EB3FC14372E7 /* Foundation.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = Foundation.framework; path = Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.0.sdk/System/Library/Frameworks/Foundation.framework; sourceTree = DEVELOPER_DIR; };
+		3D63FB6B5BBB0763268C0D86 /* AurionCaptureActivityWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AurionCaptureActivityWidget.swift; sourceTree = "<group>"; };
+		43904B14883B880D0B18827A /* AurionWidgetsBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AurionWidgetsBundle.swift; sourceTree = "<group>"; };
+		A5745FEA7549A814BD6B3023 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+		D4CE963AFD574EFA97CB3466 /* AurionCaptureActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AurionCaptureActivityAttributes.swift; path = Aurion/Session/AurionCaptureActivityAttributes.swift; sourceTree = "<group>"; };
+		EDFC027F24A3EF463400D8F3 /* AurionWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AurionWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7BD2FE82F8B528A000E70A0 /* Aurion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aurion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7BD2FF52F8B528B000E70A0 /* AurionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AurionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7BD2FFF2F8B528B000E70A0 /* AurionUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AurionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -48,6 +83,14 @@
 /* End PBXFileSystemSynchronizedRootGroup section */
 
 /* Begin PBXFrameworksBuildPhase section */
+		B66649F3E0D8273E7C9E64C7 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				01AA1E3FEB61FA71031EF68F /* Foundation.framework in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F7BD2FE52F8B528A000E70A0 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
@@ -72,6 +115,32 @@
 /* End PBXFrameworksBuildPhase section */
 
 /* Begin PBXGroup section */
+		3522090724D031EE1DA1CF78 /* AurionWidgets */ = {
+			isa = PBXGroup;
+			children = (
+				43904B14883B880D0B18827A /* AurionWidgetsBundle.swift */,
+				3D63FB6B5BBB0763268C0D86 /* AurionCaptureActivityWidget.swift */,
+				A5745FEA7549A814BD6B3023 /* Info.plist */,
+			);
+			path = AurionWidgets;
+			sourceTree = "<group>";
+		};
+		B6C8D6144F7F121E8F470BD2 /* iOS */ = {
+			isa = PBXGroup;
+			children = (
+				0E9F46EEC9C4EB3FC14372E7 /* Foundation.framework */,
+			);
+			name = iOS;
+			sourceTree = "<group>";
+		};
+		D6C9F21CA4FD9B1D2204044C /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				B6C8D6144F7F121E8F470BD2 /* iOS */,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
 		F7BD2FDF2F8B528A000E70A0 = {
 			isa = PBXGroup;
 			children = (
@@ -79,6 +148,9 @@
 				F7BD2FF82F8B528B000E70A0 /* AurionTests */,
 				F7BD30022F8B528B000E70A0 /* AurionUITests */,
 				F7BD2FE92F8B528A000E70A0 /* Products */,
+				D6C9F21CA4FD9B1D2204044C /* Frameworks */,
+				3522090724D031EE1DA1CF78 /* AurionWidgets */,
+				D4CE963AFD574EFA97CB3466 /* AurionCaptureActivityAttributes.swift */,
 			);
 			sourceTree = "<group>";
 		};
@@ -88,6 +160,7 @@
 				F7BD2FE82F8B528A000E70A0 /* Aurion.app */,
 				F7BD2FF52F8B528B000E70A0 /* AurionTests.xctest */,
 				F7BD2FFF2F8B528B000E70A0 /* AurionUITests.xctest */,
+				EDFC027F24A3EF463400D8F3 /* AurionWidgets.appex */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -95,6 +168,23 @@
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
+		DD800677623DD8903CA3DB6F /* AurionWidgets */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = E5AE314440EF7AD355B460C7 /* Build configuration list for PBXNativeTarget "AurionWidgets" */;
+			buildPhases = (
+				AF1229DDA34C08B311D46F62 /* Sources */,
+				B66649F3E0D8273E7C9E64C7 /* Frameworks */,
+				841722CF9D9E912B9B1DE38E /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = AurionWidgets;
+			productName = AurionWidgets;
+			productReference = EDFC027F24A3EF463400D8F3 /* AurionWidgets.appex */;
+			productType = "com.apple.product-type.app-extension";
+		};
 		F7BD2FE72F8B528A000E70A0 /* Aurion */ = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = F7BD30092F8B528B000E70A0 /* Build configuration list for PBXNativeTarget "Aurion" */;
@@ -102,17 +192,17 @@
 				F7BD2FE42F8B528A000E70A0 /* Sources */,
 				F7BD2FE52F8B528A000E70A0 /* Frameworks */,
 				F7BD2FE62F8B528A000E70A0 /* Resources */,
+				80B1A4B2A4D437C6D8981A7A /* Embed App Extensions */,
 			);
 			buildRules = (
 			);
 			dependencies = (
+				8269663E2353C1E3B4726C9F /* PBXTargetDependency */,
 			);
 			fileSystemSynchronizedGroups = (
 				F7BD2FEA2F8B528A000E70A0 /* Aurion */,
 			);
 			name = Aurion;
-			packageProductDependencies = (
-			);
 			productName = Aurion;
 			productReference = F7BD2FE82F8B528A000E70A0 /* Aurion.app */;
 			productType = "com.apple.product-type.application";
@@ -134,8 +224,6 @@
 				F7BD2FF82F8B528B000E70A0 /* AurionTests */,
 			);
 			name = AurionTests;
-			packageProductDependencies = (
-			);
 			productName = AurionTests;
 			productReference = F7BD2FF52F8B528B000E70A0 /* AurionTests.xctest */;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -157,8 +245,6 @@
 				F7BD30022F8B528B000E70A0 /* AurionUITests */,
 			);
 			name = AurionUITests;
-			packageProductDependencies = (
-			);
 			productName = AurionUITests;
 			productReference = F7BD2FFF2F8B528B000E70A0 /* AurionUITests.xctest */;
 			productType = "com.apple.product-type.bundle.ui-testing";
@@ -204,11 +290,19 @@
 				F7BD2FE72F8B528A000E70A0 /* Aurion */,
 				F7BD2FF42F8B528B000E70A0 /* AurionTests */,
 				F7BD2FFE2F8B528B000E70A0 /* AurionUITests */,
+				DD800677623DD8903CA3DB6F /* AurionWidgets */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
+		841722CF9D9E912B9B1DE38E /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F7BD2FE62F8B528A000E70A0 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -233,6 +327,16 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
+		AF1229DDA34C08B311D46F62 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				4C183FB4289BCA09922C1437 /* AurionWidgetsBundle.swift in Sources */,
+				10ACCED7207D123E1E9C1973 /* AurionCaptureActivityWidget.swift in Sources */,
+				1A4DA75A37227283741D7C99 /* AurionCaptureActivityAttributes.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 		F7BD2FE42F8B528A000E70A0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -257,6 +361,12 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin PBXTargetDependency section */
+		8269663E2353C1E3B4726C9F /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = AurionWidgets;
+			target = DD800677623DD8903CA3DB6F /* AurionWidgets */;
+			targetProxy = AFA784FCEAE192237DC04AB3 /* PBXContainerItemProxy */;
+		};
 		F7BD2FF72F8B528B000E70A0 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
 			target = F7BD2FE72F8B528A000E70A0 /* Aurion */;
@@ -270,6 +380,59 @@
 /* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
+		3B9079E40191691423F0EF4B /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S5N6XHH7AQ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AurionWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACH_O_TYPE = mh_execute;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.faical.aurion.AurionWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		F341CE0D2025DECC9D4C429D /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_OBJC_WEAK = NO;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S5N6XHH7AQ;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = AurionWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MACH_O_TYPE = mh_execute;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.faical.aurion.AurionWidgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = iphoneos;
+				SKIP_INSTALL = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+				VALIDATE_PRODUCT = YES;
+			};
+			name = Release;
+		};
 		F7BD30072F8B528B000E70A0 /* Debug */ = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
@@ -405,6 +568,7 @@
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Aurion communicates with the local Aurion backend on your network during development.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Aurion records audio during clinical encounters to generate structured notes. Recording requires patient consent and stops when you end the session.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Aurion uses on-device speech recognition for voice enrollment and to display live captions during clinical encounters. Audio stays on this device — never sent to Apple servers.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -443,6 +607,7 @@
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Aurion communicates with the local Aurion backend on your network during development.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Aurion records audio during clinical encounters to generate structured notes. Recording requires patient consent and stops when you end the session.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Aurion uses on-device speech recognition for voice enrollment and to display live captions during clinical encounters. Audio stays on this device — never sent to Apple servers.";
+				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
 				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
@@ -548,6 +713,15 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
+		E5AE314440EF7AD355B460C7 /* Build configuration list for PBXNativeTarget "AurionWidgets" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				F341CE0D2025DECC9D4C429D /* Release */,
+				3B9079E40191691423F0EF4B /* Debug */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 		F7BD2FE32F8B528A000E70A0 /* Build configuration list for PBXProject "Aurion" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (

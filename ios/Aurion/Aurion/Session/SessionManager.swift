@@ -100,6 +100,11 @@ final class SessionManager: ObservableObject {
     /// views subscribe to it directly.
     let screenCapture = ScreenCaptureManager()
 
+    /// Drives the lock-screen + Dynamic Island Live Activity for the
+    /// in-flight session. Fail-soft: if Live Activities are disabled,
+    /// the coordinator is a no-op and capture continues normally.
+    private let liveActivity = LiveActivityCoordinator()
+
     private let api = APIClient.shared
     private var registry: CaptureSourceRegistry { .shared }
     private var audioSource: CaptureSource { registry.activeAudioSource }
@@ -171,6 +176,10 @@ final class SessionManager: ObservableObject {
             _ = try await api.startRecording(sessionId: session.id)
             session.startRecording()
             try await coldStartCapturePipeline(for: session.captureMode)
+            // Lock-screen + Dynamic Island Live Activity. Fires after
+            // the backend transition succeeded — no point starting an
+            // activity for a session the server rejected.
+            liveActivity.start(sessionID: session.id, specialty: session.specialty)
         } catch let sourceError as CaptureSourceError {
             self.error = sourceError.localizedDescription
         } catch {
@@ -230,6 +239,7 @@ final class SessionManager: ObservableObject {
         // recording lights. If the backend rejects the transition we surface
         // the error but keep the local pause — better to err on caution.
         for source in activeSourcesForCurrentMode { source.pause() }
+        liveActivity.setPaused(true)
         // ReplayKit has no real pause. ScreenCaptureManager.startCapture
         // wipes capturedScreenFrames on resume, so pre-pause frames are
         // currently lost — M-12 (audited purge lifecycle) will decide
@@ -249,6 +259,7 @@ final class SessionManager: ObservableObject {
 
     func resumeRecording() {
         for source in activeSourcesForCurrentMode { source.resume() }
+        liveActivity.setPaused(false)
         if let session, wantsScreenCapture(for: session.captureMode) {
             screenCapture.startCapture()
         }
@@ -270,6 +281,11 @@ final class SessionManager: ObservableObject {
         // by the time submitProcessing fires.
         for source in activeSourcesForCurrentMode { source.stop() }
         stopScreenCaptureIfRunning()
+        // Drop the Live Activity now (not after Stage 1) — the lock-
+        // screen pill is a "still recording" affordance; once capture
+        // stops, the activity is misleading. Re-entry happens via the
+        // Sessions inbox.
+        liveActivity.end()
         // Tear down live captions — the canonical Whisper batch transcript
         // takes over from here. Interim text is intentionally discarded so
         // the UI doesn't show a stale preview alongside the final note.
@@ -756,6 +772,10 @@ final class SessionManager: ObservableObject {
     func endSession() {
         teardownLiveTranscriber()
         stopScreenCaptureIfRunning()
+        // Belt-and-suspenders end of the Live Activity. `stopRecording`
+        // already ends it on the normal path; covers the abort cases
+        // (review dismissed, crash recovery discard, etc.).
+        liveActivity.end()
         session?.clearPersistence()
         session = nil
         note = nil
@@ -807,6 +827,10 @@ final class SessionManager: ObservableObject {
                 _ = try? await api.resumeSession(sessionId: response.id)
             }
             captureSession.startRecording()
+            // Resume the Live Activity so the lock-screen pill reflects
+            // the recovered session — same UX whether the user is on a
+            // cold start or a Continue Recording adopt.
+            liveActivity.start(sessionID: response.id, specialty: response.specialty)
         } catch let sourceError as CaptureSourceError {
             self.error = sourceError.localizedDescription
         } catch {
