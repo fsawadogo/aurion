@@ -8,11 +8,10 @@ topmost Active item matching its lane. Format per line:
 When a task moves through states, the loop edits this file in place:
 Active → In flight → Done (or → Blocked on triple failure).
 
-Last seeded: 2026-05-14. Last updated: 2026-05-19 (post AUR-DESIGN-DARK).
+Last seeded: 2026-05-14. Last updated: 2026-05-19 (post UI-P4b).
 
 ## Active
 
-- [ ] UI-P4b Live Activity + Widget — 1d — lane: ios — **blocked on manual Xcode step**: requires File → New → Target → Widget Extension (name AurionWidgets, include Live Activity). Per AURION-CODING-WORKFLOW.md §11, project-target surgery is not on the auto-approval allow-list. Resume by prompting "UI-P4b ready" once target exists.
 - [ ] AUR-MP-CROSSCHECK Add MediaPipe as independent second face detector for Apple Vision (pilot follow-up; revisit only if clinical safety committee asks) — 5d — lane: ios — no blockers
 
 ## In flight
@@ -25,6 +24,7 @@ Last seeded: 2026-05-14. Last updated: 2026-05-19 (post AUR-DESIGN-DARK).
 
 ## Done
 
+- [x] UI-P4b Live Activity (Lock Screen + Dynamic Island) — AurionWidgets target added via xcodeproj gem — 1d — lane: ios — merged: 2026-05-19 (commit ba4900c)
 - [x] AUR-DESIGN-DARK Muted-slate dark mode rollout (palette retune + adaptive tokens + bulk navy-text → adaptive swap) — 5d — lane: ios — merged: 2026-05-19 (commit 0cf99c8)
 - [x] AUR-DESIGN-NAVY Collapse aurionNavyLegacy → aurionNavy (brand-sampled #0C1B37 wins) — 0.5d — lane: ios — merged: 2026-05-19 (commit d6a88d3)
 - [x] Q-06 _DevUser → frozen @dataclass — 0.5d — lane: backend — merged: 2026-05-19 (commit 5c5f1e9)
