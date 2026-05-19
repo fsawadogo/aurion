@@ -39,6 +39,36 @@ struct AurionApp: App {
                     AppNavigation.shared.requestTab(.sessions)
                     AppNavigation.shared.requestNote(sessionID: sessionID)
                 }
+                // Deep-link entry points:
+                //   aurion://start-session              ← home-screen widget
+                //   aurion://session/{uuid}             ← Live Activity tap
+                // Both flow into AppNavigation so the existing dashboard /
+                // sessions consumers handle them with no new code paths.
+                .onOpenURL { url in
+                    guard url.scheme == "aurion" else { return }
+                    switch url.host {
+                    case "start-session":
+                        // Default specialty/consultation type match the
+                        // dashboard's first Quick Start card. The user can
+                        // still adjust in the encounter-type sheet.
+                        let profile = appState.physicianProfile
+                        let specialty = profile?.primarySpecialty ?? "general"
+                        let firstType = profile?.consultationTypes.first ?? "new_patient"
+                        AppNavigation.shared.requestQuickStart(
+                            specialty: specialty,
+                            consultationType: firstType
+                        )
+                    case "session":
+                        let sessionID = url.pathComponents
+                            .dropFirst()
+                            .first ?? ""
+                        guard !sessionID.isEmpty else { return }
+                        AppNavigation.shared.requestTab(.sessions)
+                        AppNavigation.shared.requestNote(sessionID: sessionID)
+                    default:
+                        break
+                    }
+                }
         }
         .onChange(of: scenePhase) { _, newPhase in
             // M-12 stale sweep — every time the app comes to foreground we
