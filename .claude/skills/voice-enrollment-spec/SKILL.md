@@ -192,7 +192,7 @@ Non-enrolled sessions: `speaker` field omitted. Trigger classifier runs on all s
 | iPad (soft minimum) | iPad Air 5 (M1), iPadOS 16 | — | ✓ Full performance |
 | iPad (not recommended) | iPad 9th gen (A13), iPadOS 16 | — | ⚠ Masking pipeline slow |
 
-A15 Bionic is the practical minimum for acceptable MediaPipe face detection latency and CoreML speaker embedding generation. A13 devices run the app but on-device ML degrades — not recommended for clinical use.
+A15 Bionic is the practical minimum for acceptable Apple Vision face detection latency and CoreML speaker embedding generation. A13 devices run the app but on-device ML degrades — not recommended for clinical use.
 
 ### Adaptive Layout
 
@@ -234,7 +234,7 @@ Common workflow: capture on iPhone (paired with glasses), review and approve not
 | Physical test device (iPad) | iPad mini 6 (A15) or iPad Air 5 (M1) | iPad Pro M2 or M3 |
 | Local Whisper testing | Apple M1 16GB or NVIDIA RTX 3070 (8GB VRAM) | Apple M3 Pro 32GB or NVIDIA RTX 4070 (12GB VRAM) |
 
-**iOS Simulator cannot test: AVFoundation capture, BLE pairing, on-device CoreML, or MediaPipe masking. Physical devices are mandatory for meaningful capture and masking pipeline testing.**
+**iOS Simulator cannot test: AVFoundation capture, BLE pairing, on-device CoreML, or Apple Vision masking. Physical devices are mandatory for meaningful capture and masking pipeline testing.**
 
 ### Pilot Hardware — CREOQ/CLLC
 

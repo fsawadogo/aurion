@@ -44,7 +44,7 @@ The pilot deployment is at CREOQ/CLLC with 3-5 clinicians in Clinic Mode only.
 3. Video frames are captured from the wearable camera or device camera.
 4. Screen captures are taken when the physician views EMR/lab/imaging screens.
 5. On-device PHI masking runs before any data leaves the device:
-   - MediaPipe face detection masks all faces in video frames.
+   - Apple Vision face detection (`VNDetectFaceRectanglesRequest`, revision 3) masks all faces in video frames with a Gaussian blur. Runs entirely on-device; no network calls.
    - Apple Vision OCR identifies and redacts patient names, MRN, DOB, and health card numbers in screen captures.
 6. Masking status is confirmed in the audit log before any upload proceeds.
 
@@ -178,8 +178,9 @@ The pilot deployment is at CREOQ/CLLC with 3-5 clinicians in Clinic Mode only.
 
 ### 7.2 On-Device PHI Masking
 
-- MediaPipe face detection runs on every video frame before upload.
+- Apple Vision face detection (`VNDetectFaceRectanglesRequest`, revision 3) runs on every video frame before upload. Detected face regions are blurred with a 30-pt Gaussian kernel; failures are fail-closed (frame is dropped, never uploaded unmasked).
 - Apple Vision OCR identifies and redacts patient identifiers on screen captures before upload.
+- Both detectors run on-device using Apple's Neural Engine; no frame data ever leaves the device unmasked.
 - Masking status is confirmed in the audit log. No frame is processed by an AI provider without confirmed masking.
 
 ### 7.3 Audit Logging
