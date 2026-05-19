@@ -12,7 +12,7 @@ Last seeded: 2026-05-14.
 
 ## Active
 
-- [ ] M-04-MP MediaPipe face-detection cross-check verification — 1d — lane: ios — no blockers
+- [ ] AUR-MP-CROSSCHECK Add MediaPipe as independent second face detector for Apple Vision (pilot follow-up; revisit only if clinical safety committee asks) — 5d — lane: ios — no blockers
 - [ ] Q-01 AuditEventType StrEnum — replace 15+ event_type literals; type-safe write_audit kwargs via TypedDict — 2d — lane: backend — no blockers
 - [ ] Q-02 privacy.py:267 _purge_session_prefix extraction — flatten 5-level nesting in delete_my_account — 1d — lane: backend — no blockers
 - [ ] Q-03 write_audit kwarg whitelist — pair with Q-01; tighten **fields to known keys per event_type — 1d — lane: backend — depends on Q-01
@@ -31,6 +31,7 @@ Last seeded: 2026-05-14.
 
 ## Done
 
+- [x] M-04-MP MediaPipe face-detection cross-check verification — 1d — lane: ios — merged: 2026-05-19 (commit pending)
 - [x] P0-07 E2E smoke test — 3d — lane: backend — merged: 2026-05-19 (commit 3835704)
 - [x] M-07-DASH Dashboard Stage 2 tile — 3d — lane: ios — merged: 2026-05-18 (commit 7f024fa)
 - [x] B-08 Eval persistence — 3d — lane: backend — merged: 2026-05-18 (commit pending)

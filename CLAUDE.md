@@ -349,7 +349,7 @@ Screen schema:
 ### Phase 7 — iOS App
 1. `Onboarding/` — voice enrollment flow (load `/voice-enrollment-spec` for full details)
 2. `Capture/` — AVFoundation 3 streams, BLE pairing, pause/resume, device failover
-3. `Masking/` — MediaPipe face detection, Apple Vision screen redaction, status logged before upload
+3. `Masking/` — Apple Vision face detection (VNDetectFaceRectanglesRequest), Apple Vision OCR screen redaction, status logged before upload
 4. `Network/` — URLSession API client, WebSocket
 5. `NoteReview/` — section cards, amber CONFLICTS mandatory, tap-to-source, note versioning, two-tap approval
 6. `Export/` — on-device DOCX, plain text, purge trigger
