@@ -9,6 +9,9 @@ struct SessionsInboxView: View {
     @State private var isLoading = true
     @State private var sortNewestFirst = true
     @State private var filter: Filter = .all
+    /// Searchable text — matches against specialty display name and
+    /// state. Empty string → no text filter applied.
+    @State private var searchText: String = ""
 
     private enum Filter: String, CaseIterable, Hashable {
         case all = "All"
@@ -17,13 +20,23 @@ struct SessionsInboxView: View {
         case exported = "Exported"
     }
 
+    /// Sessions after (1) sort, (2) status filter, (3) text search.
+    /// Composing in that order keeps the chip counts accurate when
+    /// the user has typed a search query.
     private var filtered: [SessionResponse] {
         let sorted = sortNewestFirst ? sessions : sessions.reversed()
+        let statusFiltered: [SessionResponse]
         switch filter {
-        case .all: return sorted
-        case .pending: return sorted.filter(isPending)
-        case .completed: return sorted.filter { $0.state == "REVIEW_COMPLETE" }
-        case .exported: return sorted.filter { $0.state == "EXPORTED" || $0.state == "PURGED" }
+        case .all: statusFiltered = sorted
+        case .pending: statusFiltered = sorted.filter(isPending)
+        case .completed: statusFiltered = sorted.filter { $0.state == "REVIEW_COMPLETE" }
+        case .exported: statusFiltered = sorted.filter { $0.state == "EXPORTED" || $0.state == "PURGED" }
+        }
+        let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
+        guard !query.isEmpty else { return statusFiltered }
+        return statusFiltered.filter { session in
+            session.specialty.displayFormatted.lowercased().contains(query)
+                || session.state.lowercased().contains(query)
         }
     }
 
@@ -64,6 +77,7 @@ struct SessionsInboxView: View {
             }
             .background(Color.aurionBackground)
             .navigationBarHidden(true)
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search by specialty or status")
             .task { await loadSessions() }
         }
     }
