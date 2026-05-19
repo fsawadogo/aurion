@@ -256,6 +256,38 @@ async def _build_dsar_payload(
     ).model_dump()
 
 
+def _purge_session_prefix(s3, bucket: str, prefix: str) -> int:
+    """Delete every S3 object under ``s3://{bucket}/{prefix}``.
+
+    Returns the count of objects deleted. Errors are logged and
+    swallowed — account deletion is best-effort against S3 because the
+    audit log + DB rows are the authoritative record of what was
+    removed; a failed S3 purge gets reconciled by the bucket TTL
+    policy and the next compliance sweep.
+    """
+    deleted = 0
+    try:
+        paginator = s3.get_paginator("list_objects_v2")
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
+            objects = page.get("Contents", [])
+            if not objects:
+                continue
+            keys = [{"Key": obj["Key"]} for obj in objects]
+            s3.delete_objects(
+                Bucket=bucket,
+                Delete={"Objects": keys, "Quiet": True},
+            )
+            deleted += len(keys)
+    except Exception:
+        logger.warning(
+            "S3 purge error: bucket=%s prefix=%s",
+            bucket,
+            prefix,
+            exc_info=True,
+        )
+    return deleted
+
+
 def _purge_s3_objects_for_sessions(session_ids: list[uuid.UUID]) -> int:
     """Delete all S3 objects belonging to the given sessions.
 
@@ -263,33 +295,11 @@ def _purge_s3_objects_for_sessions(session_ids: list[uuid.UUID]) -> int:
     Returns the total number of objects deleted.
     """
     s3 = get_s3_client()
-    deleted_count = 0
-
-    for bucket in (AUDIO_BUCKET, FRAMES_BUCKET):
-        for sid in session_ids:
-            prefix = str(sid)
-            try:
-                paginator = s3.get_paginator("list_objects_v2")
-                for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
-                    objects = page.get("Contents", [])
-                    if not objects:
-                        continue
-                    keys = [{"Key": obj["Key"]} for obj in objects]
-                    s3.delete_objects(
-                        Bucket=bucket,
-                        Delete={"Objects": keys, "Quiet": True},
-                    )
-                    deleted_count += len(keys)
-            except Exception:
-                # S3 errors during purge are logged but do not block deletion
-                logger.warning(
-                    "S3 purge error for session=%s bucket=%s",
-                    str(sid),
-                    bucket,
-                    exc_info=True,
-                )
-
-    return deleted_count
+    return sum(
+        _purge_session_prefix(s3, bucket, str(sid))
+        for bucket in (AUDIO_BUCKET, FRAMES_BUCKET)
+        for sid in session_ids
+    )
 
 
 # ── Routes ───────────────────────────────────────────────────────────────
@@ -389,31 +399,27 @@ async def delete_my_account(
     await db.flush()
 
     # 8. Write account_deleted audit event — audit log is append-only,
-    #    we record what was deleted without removing any existing entries
-    for sid in session_ids:
-        await write_audit(
-            sid,
-            AuditEventType.ACCOUNT_DELETED,
-            clinician_id=str(user.user_id),
-            deleted_sessions=session_count,
-            deleted_note_versions=note_count,
-            deleted_pilot_metrics=metric_count,
-            deleted_s3_objects=s3_deleted,
-            retention_note="Audit logs pseudonymized, retained 7 years for compliance",
-        )
-
-    # If the user had no sessions, still log the deletion at account level
-    if not session_ids:
-        await write_audit(
-            f"account-{user.user_id}",
-            AuditEventType.ACCOUNT_DELETED,
-            clinician_id=str(user.user_id),
-            deleted_sessions=0,
-            deleted_note_versions=0,
-            deleted_pilot_metrics=0,
-            deleted_s3_objects=0,
-            retention_note="Audit logs pseudonymized, retained 7 years for compliance",
-        )
+    #    we record what was deleted without removing any existing
+    #    entries. One event per session so per-session compliance
+    #    queries still find it; if the user had no sessions we still
+    #    emit one row keyed by ``account-{user_id}`` so the deletion
+    #    isn't invisible. Counters are the *real* totals in both
+    #    paths — earlier code hardcoded zeros in the no-sessions
+    #    branch, which silently under-reported pilot_metrics
+    #    deletions for users with metrics-but-no-sessions.
+    audit_targets: list[str | uuid.UUID] = (
+        list(session_ids) if session_ids else [f"account-{user.user_id}"]
+    )
+    audit_kwargs: dict[str, Any] = dict(
+        clinician_id=str(user.user_id),
+        deleted_sessions=session_count,
+        deleted_note_versions=note_count,
+        deleted_pilot_metrics=metric_count,
+        deleted_s3_objects=s3_deleted,
+        retention_note="Audit logs pseudonymized, retained 7 years for compliance",
+    )
+    for target in audit_targets:
+        await write_audit(target, AuditEventType.ACCOUNT_DELETED, **audit_kwargs)
 
     logger.info(
         "Account deleted: user=%s sessions=%d notes=%d metrics=%d s3=%d",
