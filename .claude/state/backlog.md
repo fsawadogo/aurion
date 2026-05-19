@@ -21,6 +21,8 @@ Last seeded: 2026-05-14.
 - [ ] Q-01 AuditEventType StrEnum — replace 15+ event_type literals; type-safe write_audit kwargs via TypedDict — 2d — lane: backend — no blockers
 - [ ] Q-02 privacy.py:267 _purge_session_prefix extraction — flatten 5-level nesting in delete_my_account — 1d — lane: backend — no blockers
 - [ ] Q-03 write_audit kwarg whitelist — pair with Q-01; tighten **fields to known keys per event_type — 1d — lane: backend — depends on Q-01
+- [ ] Q-04 SessionUIState cleanup — drop isProcessing/showingReview/showingPostEncounter computed shims; migrate ContentView branches to switch on uiState — 1d — lane: ios — no blockers
+- [ ] AUR-DESIGN-NAVY — design decision on canonical navy (#0C1B37 vs #0D1B3E); collapse aurionNavyLegacy once chosen — 0.5d — lane: ios — no blockers
 
 ## In flight
 

@@ -25,7 +25,7 @@ struct PostEncounterView: View {
         VStack(spacing: 0) {
             AurionNavBar(title: "Generate Note") {
                 AurionTextButton(label: "Back") {
-                    sessionManager.showingPostEncounter = false
+                    sessionManager.dismissPostEncounter()
                 }
             }
 

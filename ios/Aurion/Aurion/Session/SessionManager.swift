@@ -74,12 +74,17 @@ struct FailedMaskingFrame: Identifiable {
 final class SessionManager: ObservableObject {
     @Published var session: CaptureSession?
     @Published var note: NoteResponse?
-    @Published var isProcessing = false
+    @Published private(set) var uiState: SessionUIState = .idle
     @Published var processingStatus = ""
-    @Published var showingReview = false
-    @Published var showingPostEncounter = false
     @Published var error: String?
     @Published var stage1Status: Stage1Status = .idle
+
+    // Bool read-only shims — kept temporarily so existing SwiftUI call sites
+    // (ContentView branches, `.animation(value:)` modifiers) don't all need
+    // to change in this same PR. Follow-up backlog: AUR-UI-STATE-CLEANUP.
+    var isProcessing: Bool { uiState == .processing }
+    var showingReview: Bool { uiState == .reviewing }
+    var showingPostEncounter: Bool { uiState == .postEncounter }
 
     /// Frames whose on-device masking failed during `submitFrames` /
     /// `submitScreenFrames`. Per CLAUDE.md the pipeline is fail-closed: these
@@ -279,7 +284,7 @@ final class SessionManager: ObservableObject {
         do {
             _ = try await api.stopRecording(sessionId: session.id)
             session.stopRecording()
-            showingPostEncounter = true
+            uiState = .postEncounter
             // Pipeline triggers from PostEncounterView after template confirmation.
         } catch {
             self.error = "Stop failed: \(error.localizedDescription)"
@@ -296,7 +301,7 @@ final class SessionManager: ObservableObject {
 
     /// Triggered by PostEncounterView after template confirmation.
     func submitProcessing() async {
-        showingPostEncounter = false
+        uiState = .processing
         await submitFrames()
         await submitAudio()
         // Screen frames merge into the note AFTER Stage 1 generated it,
@@ -520,7 +525,7 @@ final class SessionManager: ObservableObject {
             self.error = "Invalid API URL"
             return
         }
-        isProcessing = true
+        uiState = .processing
 
         let captured = audioSource.getRecordedAudioData()
         let audioPayload: Data
@@ -587,7 +592,7 @@ final class SessionManager: ObservableObject {
             let elapsed = Date().timeIntervalSince(stage1Start)
             stage1Status = .ready
             processingStatus = "Note ready for review (\(Int(elapsed))s)"
-            isProcessing = false
+            uiState = .noteReady
         } catch let urlError as URLError where urlError.code == .timedOut {
             recordStage1Timeout(sessionId: session.id, since: stage1Start)
         } catch APIError.timeout {
@@ -606,7 +611,7 @@ final class SessionManager: ObservableObject {
                     : "Transcription failed: \(error.localizedDescription)"
                 stage1Status = .ready
                 note = createDemoNote(sessionId: session.id, specialty: session.specialty)
-                isProcessing = false
+                uiState = .noteReady
                 return
             }
             #endif
@@ -677,6 +682,20 @@ final class SessionManager: ObservableObject {
         note = try await api.getStage1Note(sessionId: session.id)
     }
 
+    /// Dismiss the post-encounter sheet without submitting — the user
+    /// hit "Back" instead of continuing through template confirmation.
+    /// Drops the session back to idle; capture artifacts are retained
+    /// until ``endSession`` or the local-data purger runs.
+    func dismissPostEncounter() {
+        uiState = .idle
+    }
+
+    /// Open the note review screen from the noteReady state — the user
+    /// tapped "Review Now" on the NoteReadyView.
+    func beginReview() {
+        uiState = .reviewing
+    }
+
     func approveNote() async {
         guard let session else { return }
         do {
@@ -697,9 +716,7 @@ final class SessionManager: ObservableObject {
         session?.clearPersistence()
         session = nil
         note = nil
-        isProcessing = false
-        showingReview = false
-        showingPostEncounter = false
+        uiState = .idle
         processingStatus = ""
         error = nil
         maskingFailedFrames = []
@@ -749,9 +766,7 @@ final class SessionManager: ObservableObject {
         session?.clearPersistence()
         session = nil
         note = nil
-        isProcessing = false
-        showingReview = false
-        showingPostEncounter = false
+        uiState = .idle
         processingStatus = ""
         error = nil
         maskingFailedFrames = []

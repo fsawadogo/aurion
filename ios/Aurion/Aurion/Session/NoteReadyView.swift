@@ -45,7 +45,7 @@ struct NoteReadyView: View {
                 // Buttons
                 VStack(spacing: 10) {
                     AurionGoldButton(label: L("noteReady.reviewNow"), full: true) {
-                        sessionManager.showingReview = true
+                        sessionManager.beginReview()
                     }
                     AurionGhostButton(label: L("noteReady.saveLater"), full: true) {
                         sessionManager.saveForLater()
