@@ -4,6 +4,9 @@ testpaths = ["tests"]
 python_files = "test_*.py"
 python_classes = "Test*"
 python_functions = "test_*"
+markers = [
+    "e2e: end-to-end smoke tests against the live FastAPI router + Postgres",
+]
 
 [tool.ruff]
 target-version = "py311"
