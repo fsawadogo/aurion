@@ -16,6 +16,7 @@ from typing import Any, Optional
 import boto3
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.core.audit_events import enforce_audit_kwargs
 from app.core.clock import utcnow
 
 logger = logging.getLogger("aurion.audit")
@@ -48,13 +49,17 @@ class AuditLogService:
 
         Args:
             session_id: The session this event belongs to.
-            event_type: Event type string (e.g. 'consent_confirmed').
+            event_type: Event type string (e.g. 'consent_confirmed') or
+                        an ``AuditEventType`` member.
             **extra_fields: Additional fields to include in the record.
-                            Must not contain PHI.
+                            Must not contain PHI. Validated against
+                            ``ALLOWED_AUDIT_KWARGS`` (Q-03) — unknown
+                            keys raise in strict mode, warn in prod.
 
         Returns:
             The written audit record.
         """
+        enforce_audit_kwargs(event_type, extra_fields)
         timestamp = utcnow().isoformat(timespec="milliseconds")
         record = {
             "session_id": str(session_id),

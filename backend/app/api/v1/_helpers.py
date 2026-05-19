@@ -55,6 +55,10 @@ async def write_audit(
     as ``get_audit_event_for_state``'s fallback for unknown states).
     Both serialize identically because ``AuditEventType`` is a
     ``StrEnum``.
+
+    Validation against ``ALLOWED_AUDIT_KWARGS`` happens one layer
+    down in ``AuditLogService.write_event`` so module-level callers
+    that hit the service directly get the same guard (Q-03).
     """
     audit = get_audit_log_service()
     await audit.write_event(session_id=session_id, event_type=event_type, **fields)

@@ -12,7 +12,16 @@ need to write a data migration *and* update this test in the same PR.
 
 from __future__ import annotations
 
-from app.core.audit_events import AuditEventType
+import os
+
+import pytest
+
+from app.core.audit_events import (
+    ALLOWED_AUDIT_KWARGS,
+    AuditEventType,
+    enforce_audit_kwargs,
+    validate_audit_kwargs,
+)
 
 
 EXPECTED_VALUES: dict[str, str] = {
@@ -99,3 +108,107 @@ def test_state_audit_events_use_enum_members() -> None:
             f"STATE_AUDIT_EVENTS[{state!r}] should be an AuditEventType "
             f"member but was {type(event).__name__}: {event!r}"
         )
+
+
+# ── Q-03 — kwarg whitelist ────────────────────────────────────────────────
+
+
+def test_every_audit_event_has_whitelist_entry() -> None:
+    """OCP guard: every enum member must have an entry in
+    ``ALLOWED_AUDIT_KWARGS``. Adding a new event without a whitelist
+    entry trips this test until the gap is filled."""
+    missing = [m for m in AuditEventType if m not in ALLOWED_AUDIT_KWARGS]
+    assert not missing, (
+        f"AuditEventType members missing from ALLOWED_AUDIT_KWARGS: "
+        f"{[m.value for m in missing]}"
+    )
+
+
+def test_whitelist_only_lists_known_events() -> None:
+    """Inverse guard: whitelist must not reference removed enum members."""
+    known = set(AuditEventType)
+    extras = [e for e in ALLOWED_AUDIT_KWARGS if e not in known]
+    assert not extras, f"ALLOWED_AUDIT_KWARGS has stale entries: {extras}"
+
+
+def test_validate_returns_empty_for_known_kwargs() -> None:
+    unknown = validate_audit_kwargs(
+        AuditEventType.STAGE1_APPROVED,
+        ["version", "provider_used", "completeness_score"],
+    )
+    assert unknown == set()
+
+
+def test_validate_returns_unknown_kwargs() -> None:
+    unknown = validate_audit_kwargs(
+        AuditEventType.STAGE1_APPROVED,
+        ["version", "provideR_used", "completeness_score"],  # typo
+    )
+    assert unknown == {"provideR_used"}
+
+
+def test_validate_is_permissive_for_raw_string_event_types() -> None:
+    """Fallback path (unknown SessionState) emits a raw string event
+    type; the validator can't whitelist what it doesn't know about,
+    so it short-circuits with an empty set."""
+    unknown = validate_audit_kwargs("state_changed_unknown", ["anything"])
+    assert unknown == set()
+
+
+def test_strict_mode_raises_on_unknown_kwargs(monkeypatch) -> None:
+    """``AURION_AUDIT_STRICT=1`` (set by conftest) makes typos a
+    hard error."""
+    monkeypatch.setenv("AURION_AUDIT_STRICT", "1")
+    with pytest.raises(ValueError, match="Unknown kwargs"):
+        enforce_audit_kwargs(
+            AuditEventType.STAGE1_APPROVED,
+            {"version": 1, "typo_field": "x"},
+        )
+
+
+def test_strict_mode_passes_known_kwargs(monkeypatch) -> None:
+    monkeypatch.setenv("AURION_AUDIT_STRICT", "1")
+    # Should not raise.
+    enforce_audit_kwargs(
+        AuditEventType.STAGE1_APPROVED,
+        {"version": 1, "provider_used": "anthropic", "completeness_score": 0.8},
+    )
+
+
+def test_non_strict_mode_logs_warning_but_does_not_raise(monkeypatch) -> None:
+    """Production mode: log + continue. Losing an audit row to a typo
+    would be worse than letting it through with an extra field.
+
+    Patches the module-level logger directly instead of using caplog
+    because caplog interacts poorly with other tests in the suite that
+    install their own logging handlers (the test passes in isolation
+    but caplog goes empty when chained behind specific siblings).
+    """
+    from unittest.mock import MagicMock
+
+    from app.core import audit_events as ae
+
+    monkeypatch.setenv("AURION_AUDIT_STRICT", "0")
+    fake_logger = MagicMock()
+    monkeypatch.setattr(ae, "logger", fake_logger)
+
+    # Should not raise.
+    enforce_audit_kwargs(
+        AuditEventType.STAGE1_APPROVED,
+        {"version": 1, "typo_field": "x"},
+    )
+
+    fake_logger.warning.assert_called_once()
+    msg = fake_logger.warning.call_args[0][0]
+    assert "Unknown kwargs" in msg
+    assert "typo_field" in msg
+
+
+def test_pytest_runs_with_strict_mode() -> None:
+    """Top-level conftest must enable strict mode for the suite. This
+    test fails if someone deletes the conftest or its setdefault."""
+    assert os.getenv("AURION_AUDIT_STRICT") == "1", (
+        "Strict mode should be enabled for the test suite via "
+        "backend/tests/conftest.py — typos in audit kwargs must "
+        "break the build, not slip through to CloudWatch."
+    )
