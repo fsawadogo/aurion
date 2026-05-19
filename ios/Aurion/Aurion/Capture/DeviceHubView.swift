@@ -8,6 +8,10 @@ import ReplayKit
 struct DeviceHubView: View {
     @StateObject private var registry = CaptureSourceRegistry.shared
     @ObservedObject private var builtIn = CaptureSourceRegistry.shared.builtIn
+    /// Matches the readable-measure clamp used by Dashboard / Inbox /
+    /// Note so the four tabs feel like one app on iPad, not three
+    /// stretched-phone views and one centred one.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         NavigationStack {
@@ -39,6 +43,8 @@ struct DeviceHubView: View {
                 .aurionScreenEdge()
                 .padding(.top, 10)
                 .padding(.bottom, 20)
+                .frame(maxWidth: horizontalSizeClass == .regular ? 720 : .infinity)
+                .frame(maxWidth: .infinity, alignment: .center)
             }
             // Breathing room above the translucent (iOS 26 glass)
             // tab bar so the last permission tile / source row

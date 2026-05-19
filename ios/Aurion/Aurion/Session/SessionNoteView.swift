@@ -49,6 +49,10 @@ struct SessionNoteView: View {
     @State private var isLoading = true
     @State private var showCopiedToast = false
     @State private var error: String?
+    /// Clamps the note's reading column to a comfortable measure on
+    /// iPad. Without this the SOAP section paragraphs run edge-to-edge
+    /// at ~1000pt — too wide for sustained reading per HIG.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     var body: some View {
         ZStack {
@@ -77,12 +81,14 @@ struct SessionNoteView: View {
                         Text("Copied to clipboard")
                             .font(.system(size: 14, weight: .semibold))
                     }
-                    .foregroundColor(.white)
+                    .foregroundColor(.aurionNavy)
                     .padding(.horizontal, AurionSpacing.xl)
                     .padding(.vertical, AurionSpacing.sm)
-                    .background(Color.aurionNavy)
-                    .clipShape(Capsule())
-                    .shadow(color: .black.opacity(0.2), radius: 12, y: 6)
+                    // `.regularMaterial` is iOS's native confirmation-
+                    // chip backdrop (Control Center, Now Playing). Reads
+                    // as "from the system" rather than "from this app".
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
                     .padding(.bottom, AurionSpacing.xxl)
                     .transition(AurionTransition.fadeUp)
                 }
@@ -187,6 +193,10 @@ struct SessionNoteView: View {
                 .cornerRadius(AurionSpacing.sm)
             }
             .padding(AurionSpacing.xl)
+            // iPad reading-measure clamp — caps at ~720pt so paragraphs
+            // stay scannable. iPhone (compact) is a no-op.
+            .frame(maxWidth: horizontalSizeClass == .regular ? 720 : .infinity)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         .background(Color.aurionBackground)
     }
