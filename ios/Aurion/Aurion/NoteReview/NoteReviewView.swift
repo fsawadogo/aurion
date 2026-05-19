@@ -30,6 +30,13 @@ private extension NoteSectionResponse {
 
 private extension NoteResponse {
     var hasUnresolvedConflicts: Bool { sections.contains { $0.hasConflicts } }
+    /// Total unresolved Stage 2 conflicts across all sections.
+    var totalConflictCount: Int { sections.reduce(0) { $0 + $1.conflictCount } }
+    /// Section id of the first conflict in document order. Used by the
+    /// "Show" affordance on the conflicts banner to scroll to it.
+    var firstConflictSectionID: String? {
+        sections.first(where: { $0.hasConflicts })?.id
+    }
 }
 
 /// Maps a section id to its design-system accent color (left bar + icon).
@@ -88,6 +95,9 @@ struct NoteReviewView: View {
     /// Claim selected for inline edit. Driving the sheet off an Identifiable
     /// item value (vs. a bool) keeps the seed-text and target-claim atomic.
     @State private var conflictBeingEdited: ConflictEditTarget?
+    /// Captured from ``ScrollViewReader`` so the conflicts banner's
+    /// "Show" button can scroll to the first conflicting section.
+    @State private var conflictsBannerScrollProxy: ScrollViewProxy?
     /// Latest Stage 2 job snapshot. Polled in the background while the
     /// async job runs so the banner reflects pending → running → completed.
     @State private var stage2Status: Stage2StatusResponse?
@@ -131,12 +141,16 @@ struct NoteReviewView: View {
 
             if let n = note {
                 stage2Banner
-                ScrollView {
-                    if isEditing {
-                        editableProseBody(n)
-                    } else {
-                        fullProseBody(n)
+                conflictsBanner(n)
+                ScrollViewReader { proxy in
+                    ScrollView {
+                        if isEditing {
+                            editableProseBody(n)
+                        } else {
+                            fullProseBody(n)
+                        }
                     }
+                    .onAppear { conflictsBannerScrollProxy = proxy }
                 }
                 if let approveError {
                     Text(approveError)
@@ -261,10 +275,59 @@ struct NoteReviewView: View {
         .presentationDetents([.medium, .large])
     }
 
+    /// Sticky banner at the top of the review surface that surfaces
+    /// unresolved Stage 2 conflicts. Replaces the prior "scroll-and-find"
+    /// burden: physician sees the count immediately and can tap "Show"
+    /// to jump to the first conflict. The Approve button stays disabled
+    /// while conflicts > 0, but the layout no longer forces linear
+    /// resolution order — physicians often know what they want before
+    /// reading.
+    @ViewBuilder
+    private func conflictsBanner(_ note: NoteResponse) -> some View {
+        let count = note.totalConflictCount
+        if count > 0 {
+            HStack(spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.aurionAmber)
+                Text("\(count) conflict\(count == 1 ? "" : "s") to resolve")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(.aurionStatusConflict)
+                Spacer()
+                if let firstID = note.firstConflictSectionID {
+                    Button {
+                        AurionHaptics.selection()
+                        withAnimation(.aurionIOS) {
+                            conflictsBannerScrollProxy?.scrollTo(firstID, anchor: .top)
+                        }
+                    } label: {
+                        Text("Show")
+                            .font(.system(size: 13, weight: .semibold))
+                            .foregroundColor(.aurionStatusConflict)
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 6)
+                            .background(Color.aurionAmberBg.opacity(0.6))
+                            .clipShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Scroll to first conflict")
+                }
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color.aurionAmberBg)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(Color.aurionBorder).frame(height: 1)
+            }
+            .transition(.move(edge: .top).combined(with: .opacity))
+        }
+    }
+
     /// Strip across the top of the note when Stage 2 is still running.
-    /// Hidden when the job hasn't started yet, completed, or failed (errors
-    /// surface in approveError instead). Returns an EmptyView when there's
-    /// nothing to show — @ViewBuilder + the implicit `if` handles that.
+    /// Hidden when the job hasn't started yet, completed, or failed
+    /// (errors surface in `approveError` instead). Returns an EmptyView
+    /// when there's nothing to show — `@ViewBuilder` + the implicit
+    /// `if` handles that.
     @ViewBuilder
     private var stage2Banner: some View {
         if let status = stage2Status, status.isInProgress {
@@ -344,6 +407,9 @@ struct NoteReviewView: View {
         VStack(alignment: .leading, spacing: 18) {
             ForEach(Array(note.sections.enumerated()), id: \.element.id) { idx, section in
                 proseSection(section, index: idx)
+                    // Exposed to ScrollViewReader so the conflicts banner's
+                    // "Show" button can scroll to the first conflicting section.
+                    .id(section.id)
             }
             Spacer(minLength: 8)
         }
