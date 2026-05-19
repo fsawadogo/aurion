@@ -16,10 +16,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._helpers import get_session_or_404, write_audit
+from app.core.audit_events import AuditEventType
 from app.core.database import async_session_factory, get_db
 from app.core.models import TranscriptModel
 from app.core.types import SessionState, Transcript
-from app.api.v1._helpers import get_session_or_404, write_audit
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.note_gen.service import (
     approve_note,
@@ -269,7 +270,7 @@ async def approve_stage1_note(
 
     await write_audit(
         session_id,
-        "stage1_approved",
+        AuditEventType.STAGE1_APPROVED,
         version=approved_note.version,
         provider_used=approved_note.provider_used,
         completeness_score=approved_note.completeness_score,
@@ -287,7 +288,7 @@ async def approve_stage1_note(
     # needed. Stage 2 is best-effort; iOS can fall back to the Stage 1
     # note in the meantime.
     job = await create_job(session_id, db)
-    await write_audit(session_id, "stage2_started", job_id=str(job.id))
+    await write_audit(session_id, AuditEventType.STAGE2_STARTED, job_id=str(job.id))
     asyncio.create_task(_run_stage2_in_background(session_id, job.id))
 
     return NoteApprovalResponse(
@@ -331,7 +332,7 @@ async def _run_stage2_in_background(session_id: uuid.UUID, job_id: uuid.UUID) ->
                 logger.exception("Failed to mark Stage 2 job failed: %s", job_id)
             await write_audit(
                 session_id,
-                "stage2_failed",
+                AuditEventType.STAGE2_FAILED,
                 job_id=str(job_id),
                 reason=str(exc)[:200],
             )
@@ -423,7 +424,7 @@ async def approve_final_note(
 
     await write_audit(
         session_id,
-        "full_note_delivered",
+        AuditEventType.FULL_NOTE_DELIVERED,
         version=approved_note.version,
         provider_used=approved_note.provider_used,
         completeness_score=approved_note.completeness_score,
@@ -562,7 +563,7 @@ async def resolve_conflict_endpoint(
 
     await write_audit(
         session_id,
-        "conflict_resolved",
+        AuditEventType.CONFLICT_RESOLVED,
         claim_id=claim_id,
         action=body.action,
         new_version=updated.version,
@@ -611,7 +612,7 @@ async def edit_note_endpoint(
 
     await write_audit(
         session_id,
-        "note_version_created",
+        AuditEventType.NOTE_VERSION_CREATED,
         version=updated_note.version,
         sections_edited=list(body.edits.keys()),
     )

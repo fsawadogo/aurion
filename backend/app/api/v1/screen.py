@@ -33,6 +33,7 @@ from app.api.v1._helpers import (
     parse_masking_proof,
     write_audit,
 )
+from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.s3 import FRAMES_BUCKET, get_s3_client
 from app.core.types import (
@@ -143,7 +144,7 @@ async def upload_screen_frame(
 
     await write_audit(
         session_id,
-        "screen_frame_processed",
+        AuditEventType.SCREEN_FRAME_PROCESSED,
         frame_id=frame_id,
         timestamp_ms=timestamp_ms,
         screen_type=result.screen_type,

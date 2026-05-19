@@ -22,9 +22,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from app.core.database import get_db
+from app.api.v1._helpers import get_session_or_404, require_state, write_audit
+from app.core.audit_events import AuditEventType
 from app.core.models import PilotMetricsModel, TranscriptModel
 from app.core.types import SessionState
-from app.api.v1._helpers import get_session_or_404, require_state, write_audit
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.note_gen.service import generate_stage1_note
 from app.modules.phi_audit.service import scan_transcript_for_phi
@@ -119,7 +120,7 @@ async def submit_transcription(
 
     await write_audit(
         session_id,
-        "transcription_complete",
+        AuditEventType.TRANSCRIPTION_COMPLETE,
         provider_used=transcript.provider_used,
         segment_count=len(transcript.segments),
     )
@@ -149,7 +150,7 @@ async def submit_transcription(
     phi_result = await scan_transcript_for_phi(transcript)
     await write_audit(
         session_id,
-        "phi_audit_complete",
+        AuditEventType.PHI_AUDIT_COMPLETE,
         phi_detected=phi_result.phi_detected,
     )
 
@@ -163,7 +164,7 @@ async def submit_transcription(
             db=db,
         )
     except Exception as exc:
-        await write_audit(session_id, "stage1_failed", reason=str(exc)[:200])
+        await write_audit(session_id, AuditEventType.STAGE1_FAILED, reason=str(exc)[:200])
         raise HTTPException(
             status_code=500,
             detail=f"Stage 1 note generation failed: {exc}",
@@ -179,7 +180,7 @@ async def submit_transcription(
 
     await write_audit(
         session_id,
-        "stage1_delivered",
+        AuditEventType.STAGE1_DELIVERED,
         stage1_latency_ms=stage1_latency_ms,
     )
 
@@ -280,7 +281,7 @@ async def apply_speaker_tags(
 
     await write_audit(
         session_id,
-        "speaker_tags_applied",
+        AuditEventType.SPEAKER_TAGS_APPLIED,
         segments_updated=updated,
         segments_unknown=len(unknown),
     )

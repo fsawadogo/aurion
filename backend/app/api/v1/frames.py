@@ -26,6 +26,7 @@ from app.api.v1._helpers import (
     parse_masking_proof,
     write_audit,
 )
+from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.s3 import FRAMES_BUCKET, get_s3_client
 from app.modules.auth.service import CurrentUser, get_current_user
@@ -89,7 +90,7 @@ async def upload_frame(
 
     await write_audit(
         session_id,
-        "frame_uploaded",
+        AuditEventType.FRAME_UPLOADED,
         timestamp_ms=timestamp_ms,
         bytes=len(body),
         frame_type=proof.frame_type,

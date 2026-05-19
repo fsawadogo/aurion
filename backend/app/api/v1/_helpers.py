@@ -15,6 +15,7 @@ from fastapi import HTTPException
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.audit_events import AuditEventType
 from app.core.models import SessionModel
 from app.core.types import MaskingProof, SessionState
 from app.modules.audit_log.service import get_audit_log_service
@@ -40,7 +41,7 @@ async def get_session_or_404(
 
 async def write_audit(
     session_id: str | uuid.UUID,
-    event_type: str,
+    event_type: AuditEventType | str,
     **fields: Any,
 ) -> None:
     """Emit an audit event for ``session_id``.
@@ -48,6 +49,12 @@ async def write_audit(
     Wraps ``get_audit_log_service().write_event(...)``. Routes do not
     need the returned record; if a caller does, drop down to the
     service directly.
+
+    ``event_type`` accepts either an ``AuditEventType`` member (the
+    normalized path) or a raw string (legacy / data-driven sites such
+    as ``get_audit_event_for_state``'s fallback for unknown states).
+    Both serialize identically because ``AuditEventType`` is a
+    ``StrEnum``.
     """
     audit = get_audit_log_service()
     await audit.write_event(session_id=session_id, event_type=event_type, **fields)

@@ -21,9 +21,10 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._helpers import get_session_or_404, write_audit
+from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.types import SessionState
-from app.api.v1._helpers import get_session_or_404, write_audit
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.export.service import export_note_docx, export_note_plaintext
 from app.modules.note_gen.service import get_latest_note, is_note_approved
@@ -155,7 +156,7 @@ async def record_on_device_export(
 
     await write_audit(
         session_id,
-        "note_exported",
+        AuditEventType.NOTE_EXPORTED,
         format=body.format,
         bytes_produced=body.bytes_produced,
         origin="on_device",

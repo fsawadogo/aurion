@@ -20,10 +20,11 @@ from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import utcnow
+from app.api.v1._helpers import write_audit
+from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import NoteVersionModel, PilotMetricsModel, SessionModel
 from app.core.s3 import AUDIO_BUCKET, FRAMES_BUCKET, get_s3_client
-from app.api.v1._helpers import write_audit
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, get_current_user
 
@@ -392,7 +393,7 @@ async def delete_my_account(
     for sid in session_ids:
         await write_audit(
             sid,
-            "account_deleted",
+            AuditEventType.ACCOUNT_DELETED,
             clinician_id=str(user.user_id),
             deleted_sessions=session_count,
             deleted_note_versions=note_count,
@@ -405,7 +406,7 @@ async def delete_my_account(
     if not session_ids:
         await write_audit(
             f"account-{user.user_id}",
-            "account_deleted",
+            AuditEventType.ACCOUNT_DELETED,
             clinician_id=str(user.user_id),
             deleted_sessions=0,
             deleted_note_versions=0,
