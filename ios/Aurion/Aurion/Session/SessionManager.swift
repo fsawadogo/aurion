@@ -564,13 +564,9 @@ final class SessionManager: ObservableObject {
                 request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             }
 
-            var body = Data()
-            body.append(Data("--\(boundary)\r\n".utf8))
-            body.append(Data("Content-Disposition: form-data; name=\"audio_file\"; filename=\"recording.wav\"\r\n".utf8))
-            body.append(Data("Content-Type: audio/wav\r\n\r\n".utf8))
-            body.append(audioPayload)
-            body.append(Data("\r\n--\(boundary)--\r\n".utf8))
-            request.httpBody = body
+            var builder = MultipartBuilder(boundary: boundary)
+            builder.appendFile("audio_file", filename: "recording.wav", mime: "audio/wav", data: audioPayload)
+            request.httpBody = builder.finish()
 
             stage1Status = .generating
             processingStatus = "Generating note…"

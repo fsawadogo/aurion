@@ -25,6 +25,10 @@ extension Color {
     static let aurionNavy = Color(red: 12/255, green: 27/255, blue: 55/255)       // #0C1B37 (brand — matches Logo.png)
     static let aurionNavyLight = Color(red: 22/255, green: 40/255, blue: 78/255)  // #16284E (lighter shade, kept for accents)
     static let aurionNavyDark = Color(red: 8/255, green: 18/255, blue: 38/255)    // #081226 (deeper, for gradient base)
+    // Pre-brand-retune navy used by shadow tints, light-mode surface tokens,
+    // and the section-plan accent. Visually distinct from `aurionNavy` —
+    // canonical-color decision deferred to design review (AUR-DESIGN-NAVY).
+    static let aurionNavyLegacy = Color(red: 13/255, green: 27/255, blue: 62/255) // #0D1B3E
 
     // Gold ramp
     static let aurionGold = Color(red: 201/255, green: 168/255, blue: 76/255)      // #C9A84C (brand)
@@ -58,7 +62,7 @@ extension Color {
     static let aurionSectionInfo = Color(red: 45/255, green: 108/255, blue: 223/255)   // blue-500
     static let aurionSectionExam = Color(red: 46/255, green: 158/255, blue: 106/255)   // green-500
     static let aurionSectionAssessment = Color(red: 217/255, green: 148/255, blue: 31/255) // amber-500
-    static let aurionSectionPlan = Color(red: 13/255, green: 27/255, blue: 62/255)     // navy-500
+    static let aurionSectionPlan = Color.aurionNavyLegacy     // navy-500
 }
 
 // MARK: - Adaptive Colors (Light/Dark)
@@ -76,7 +80,7 @@ extension Color {
     )
     // Primary text — navy light, white dark
     static let aurionTextPrimary = Color(
-        light: Color(red: 13/255, green: 27/255, blue: 62/255),
+        light: Color.aurionNavyLegacy,
         dark: .white
     )
     // Secondary text — #6B7280 light, #B7C0D6 dark
@@ -91,7 +95,7 @@ extension Color {
     )
     // Hairline border
     static let aurionBorder = Color(
-        light: Color(red: 13/255, green: 27/255, blue: 62/255).opacity(0.06),
+        light: Color.aurionNavyLegacy.opacity(0.06),
         dark: Color.white.opacity(0.06)
     )
 }
@@ -152,11 +156,11 @@ struct AurionCardModifier: ViewModifier {
                     .stroke(Color.aurionBorder, lineWidth: 1)
             )
             .shadow(
-                color: colorScheme == .dark ? .clear : Color(red: 13/255, green: 27/255, blue: 62/255).opacity(0.04),
+                color: colorScheme == .dark ? .clear : Color.aurionNavyLegacy.opacity(0.04),
                 radius: 8, x: 0, y: 2
             )
             .shadow(
-                color: colorScheme == .dark ? .clear : Color(red: 13/255, green: 27/255, blue: 62/255).opacity(0.06),
+                color: colorScheme == .dark ? .clear : Color.aurionNavyLegacy.opacity(0.06),
                 radius: 16, x: 0, y: 4
             )
     }
@@ -175,7 +179,7 @@ struct AurionElevatedCardModifier: ViewModifier {
                     .stroke(Color.aurionGold.opacity(0.15), lineWidth: 1.5)
             )
             .shadow(
-                color: colorScheme == .dark ? .clear : Color(red: 13/255, green: 27/255, blue: 62/255).opacity(0.06),
+                color: colorScheme == .dark ? .clear : Color.aurionNavyLegacy.opacity(0.06),
                 radius: 16, x: 0, y: 6
             )
     }
@@ -195,11 +199,11 @@ extension View {
     func aurionCardShadow() -> some View {
         self
             .shadow(
-                color: Color(red: 13/255, green: 27/255, blue: 62/255).opacity(0.04),
+                color: Color.aurionNavyLegacy.opacity(0.04),
                 radius: 1, x: 0, y: 1
             )
             .shadow(
-                color: Color(red: 13/255, green: 27/255, blue: 62/255).opacity(0.06),
+                color: Color.aurionNavyLegacy.opacity(0.06),
                 radius: 8, x: 0, y: 4
             )
     }

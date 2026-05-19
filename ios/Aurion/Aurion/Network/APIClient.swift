@@ -176,39 +176,14 @@ final class APIClient: Sendable {
         facesDetected: Int,
         phiRegionsRedacted: Int
     ) async throws -> FrameUploadResponse {
-        let url = URL(string: "\(baseURL)/frames/\(sessionId)")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        addAuth(&request)
-
-        let boundary = "Boundary-\(UUID().uuidString)"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-
-        var body = Data()
-        let crlf = "\r\n".data(using: .utf8)!
-
-        func appendField(_ name: String, _ value: String) {
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
-            body.append(value.data(using: .utf8)!)
-            body.append(crlf)
-        }
-
-        appendField("timestamp_ms", "\(timestampMs)")
-        appendField("frame_type", frameType)
-        appendField("masking_status", "success")
-        appendField("faces_detected", "\(facesDetected)")
-        appendField("phi_regions_redacted", "\(phiRegionsRedacted)")
-
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"frame_file\"; filename=\"frame.jpg\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
-        body.append(jpegData)
-        body.append(crlf)
-
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        request.httpBody = body
+        var (request, builder) = makeMultipartUpload(url: URL(string: "\(baseURL)/frames/\(sessionId)")!)
+        builder.appendField("timestamp_ms", "\(timestampMs)")
+        builder.appendField("frame_type", frameType)
+        builder.appendField("masking_status", "success")
+        builder.appendField("faces_detected", "\(facesDetected)")
+        builder.appendField("phi_regions_redacted", "\(phiRegionsRedacted)")
+        builder.appendFile("frame_file", filename: "frame.jpg", mime: "image/jpeg", data: jpegData)
+        request.httpBody = builder.finish()
 
         let (data, response) = try await performRequest(request)
         try validateResponse(response, data: data)
@@ -229,43 +204,36 @@ final class APIClient: Sendable {
         timestampMs: Int,
         phiRegionsRedacted: Int
     ) async throws -> ScreenUploadResponse {
-        let url = URL(string: "\(baseURL)/screen/\(sessionId)")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.timeoutInterval = 30
-        addAuth(&request)
-
-        let boundary = "Boundary-\(UUID().uuidString)"
-        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-
-        var body = Data()
-        let crlf = "\r\n".data(using: .utf8)!
-
-        func appendField(_ name: String, _ value: String) {
-            body.append("--\(boundary)\r\n".data(using: .utf8)!)
-            body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
-            body.append(value.data(using: .utf8)!)
-            body.append(crlf)
-        }
-
-        appendField("timestamp_ms", "\(timestampMs)")
-        appendField("frame_type", "screen")
-        appendField("masking_status", "success")
-        appendField("faces_detected", "0")
-        appendField("phi_regions_redacted", "\(phiRegionsRedacted)")
-
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append("Content-Disposition: form-data; name=\"frame_file\"; filename=\"screen.jpg\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: image/jpeg\r\n\r\n".data(using: .utf8)!)
-        body.append(jpegData)
-        body.append(crlf)
-
-        body.append("--\(boundary)--\r\n".data(using: .utf8)!)
-        request.httpBody = body
+        var (request, builder) = makeMultipartUpload(url: URL(string: "\(baseURL)/screen/\(sessionId)")!)
+        builder.appendField("timestamp_ms", "\(timestampMs)")
+        builder.appendField("frame_type", "screen")
+        builder.appendField("masking_status", "success")
+        builder.appendField("faces_detected", "0")
+        builder.appendField("phi_regions_redacted", "\(phiRegionsRedacted)")
+        builder.appendFile("frame_file", filename: "screen.jpg", mime: "image/jpeg", data: jpegData)
+        request.httpBody = builder.finish()
 
         let (data, response) = try await performRequest(request)
         try validateResponse(response, data: data)
         return try JSONDecoder().decode(ScreenUploadResponse.self, from: data)
+    }
+
+    // MARK: - Multipart helper
+
+    /// Single source of truth for the boundary: produces a POST request
+    /// (method, auth, timeout, Content-Type with boundary) paired with a
+    /// ``MultipartBuilder`` that writes against the same boundary.
+    private func makeMultipartUpload(url: URL) -> (URLRequest, MultipartBuilder) {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 30
+        addAuth(&request)
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue(
+            "multipart/form-data; boundary=\(boundary)",
+            forHTTPHeaderField: "Content-Type"
+        )
+        return (request, MultipartBuilder(boundary: boundary))
     }
 
     // MARK: - Speaker Tags
@@ -402,6 +370,47 @@ final class APIClient: Sendable {
         if let token = KeychainHelper.shared.loadAuthToken() {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
+    }
+}
+
+// MARK: - Multipart Form Data Builder
+
+/// Builds an HTTP multipart/form-data body in PKWARE-style chunks.
+///
+/// Mirrors what the two upload endpoints (frame and screen) used to inline.
+/// Construct one per request with a fresh boundary, append fields and
+/// files in order, then call ``finish()`` to get the final ``Data``.
+struct MultipartBuilder {
+    let boundary: String
+    private var body = Data()
+    private static let crlf = "\r\n".data(using: .utf8)!
+
+    init(boundary: String) {
+        self.boundary = boundary
+    }
+
+    mutating func appendField(_ name: String, _ value: String) {
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append("Content-Disposition: form-data; name=\"\(name)\"\r\n\r\n".data(using: .utf8)!)
+        body.append(value.data(using: .utf8)!)
+        body.append(Self.crlf)
+    }
+
+    mutating func appendFile(_ name: String, filename: String, mime: String, data: Data) {
+        body.append("--\(boundary)\r\n".data(using: .utf8)!)
+        body.append(
+            "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n"
+                .data(using: .utf8)!
+        )
+        body.append("Content-Type: \(mime)\r\n\r\n".data(using: .utf8)!)
+        body.append(data)
+        body.append(Self.crlf)
+    }
+
+    func finish() -> Data {
+        var final = body
+        final.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        return final
     }
 }
 

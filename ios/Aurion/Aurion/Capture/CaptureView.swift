@@ -496,7 +496,7 @@ struct CaptureView: View {
 
     private var consentOverlay: some View {
         ZStack {
-            Color(red: 13/255, green: 27/255, blue: 62/255).opacity(0.78)
+            Color.aurionNavyLegacy.opacity(0.78)
                 .ignoresSafeArea()
 
             VStack(spacing: 14) {
