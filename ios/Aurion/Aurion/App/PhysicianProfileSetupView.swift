@@ -103,29 +103,19 @@ struct PhysicianProfileSetupView: View {
         .padding(.bottom, AurionSpacing.md)
     }
 
-    // MARK: - Footer (Back + Continue)
+    // MARK: - Footer (Continue)
 
     private var footer: some View {
         VStack(spacing: 0) {
             Rectangle().fill(Color.aurionBorder).frame(height: 1)
-            HStack(spacing: 12) {
-                if step > 0 {
-                    AurionGhostButton(label: "Back", full: true) {
-                        withAnimation(.aurionIOS) { step -= 1 }
-                    }
-                    .frame(maxWidth: .infinity)
-                }
-                AurionGoldButton(
-                    label: step == totalSteps - 1
-                        ? (isSaving ? "Saving…" : "Get Started")
-                        : "Continue",
-                    full: true,
-                    disabled: isSaving
-                ) {
-                    advance()
-                }
-                .frame(maxWidth: .infinity)
-                .layoutPriority(2)
+            AurionGoldButton(
+                label: step == totalSteps - 1
+                    ? (isSaving ? "Saving…" : "Get Started")
+                    : "Continue",
+                full: true,
+                disabled: isSaving
+            ) {
+                advance()
             }
             .aurionScreenEdge()
             .padding(.vertical, 12)
