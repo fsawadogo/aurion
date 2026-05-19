@@ -71,6 +71,9 @@ struct SessionNoteView: View {
                     HStack(spacing: AurionSpacing.sm) {
                         Image(systemName: "checkmark.circle.fill")
                             .foregroundColor(.clinicalNormal)
+                            // Bounce on appear so the toast reads as a
+                            // confirmation event, not just an overlay.
+                            .symbolEffect(.bounce, value: showCopiedToast)
                         Text("Copied to clipboard")
                             .font(.system(size: 14, weight: .semibold))
                     }
@@ -111,6 +114,8 @@ struct SessionNoteView: View {
                     Image(systemName: "doc.on.doc")
                 }
                 .disabled(note == nil)
+                .accessibilityLabel("Copy note")
+                .accessibilityHint("Copies the formatted note text to the clipboard.")
 
                 Button {
                     exportNote()
@@ -118,6 +123,8 @@ struct SessionNoteView: View {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .disabled(note == nil)
+                .accessibilityLabel("Export note")
+                .accessibilityHint("Exports the note as a Word document.")
             }
         }
         .task { await loadNote() }

@@ -136,8 +136,14 @@ struct SessionsInboxView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.aurionTextSecondary)
                     .padding(8)
+                    // Direction flip animates the same arrow rather than
+                    // swapping symbols — feels intentional, not flickery.
+                    .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(.plain)
+            .accessibilityLabel("Sort sessions")
+            .accessibilityValue(sortNewestFirst ? "Newest first" : "Oldest first")
+            .accessibilityHint("Double-tap to reverse the sort order.")
         }
         .aurionScreenEdge()
         .padding(.top, 10)

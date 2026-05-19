@@ -81,6 +81,12 @@ struct CaptureView: View {
                         // of hard-cutting — iOS 17+ system content-transition.
                         .contentTransition(.numericText())
                         .animation(AurionAnimation.smooth, value: elapsedTime)
+                        .accessibilityLabel("Elapsed recording time")
+                        // VoiceOver reads "minutes:seconds" rather than the
+                        // raw digits so e.g. "01:24" speaks as "1 minute 24
+                        // seconds" — clearer when the screen is in a coat
+                        // pocket and the clinician is checking on capture.
+                        .accessibilityValue(accessibleElapsedTime)
 
                     Text("Recording \u{00B7} \(session.captureMode.displayName)")
                         .font(.system(size: 13))
@@ -374,6 +380,10 @@ struct CaptureView: View {
             }
         }
         .frame(height: 40)
+        // Purely decorative — VoiceOver shouldn't announce each of the
+        // 21 bars. The presence of audio is already conveyed by the
+        // timer's running state.
+        .accessibilityHidden(true)
     }
 
     /// Per-bar height as a function of bar index + current audio level. The
@@ -577,6 +587,10 @@ struct CaptureView: View {
                     )
             }
             .opacity(session.state == .recording || session.state == .paused ? 1 : 0)
+            .accessibilityLabel(session.state == .paused ? "Resume recording" : "Pause recording")
+            .accessibilityHint(session.state == .paused
+                               ? "Continues capturing audio and video."
+                               : "Temporarily stops capture without ending the session.")
 
             Spacer()
 
@@ -628,6 +642,16 @@ struct CaptureView: View {
                 }
             }
             .disabled(!session.recordButtonEnabled && session.state != .recording && session.state != .paused)
+            .accessibilityLabel(
+                (session.state == .recording || session.state == .paused)
+                    ? "Stop recording"
+                    : "Start recording"
+            )
+            .accessibilityHint(
+                (session.state == .recording || session.state == .paused)
+                    ? "Ends capture and begins note generation."
+                    : "Begins audio and video capture for this session."
+            )
 
             Spacer()
 
@@ -647,6 +671,8 @@ struct CaptureView: View {
                     )
             }
             .opacity(session.state == .recording || session.state == .paused ? 1 : 0)
+            .accessibilityLabel("Stop recording")
+            .accessibilityHint("Ends capture and begins note generation.")
 
             Spacer()
         }
@@ -671,5 +697,17 @@ struct CaptureView: View {
         let mins = Int(seconds) / 60
         let secs = Int(seconds) % 60
         return String(format: "%02d:%02d", mins, secs)
+    }
+
+    /// VoiceOver-friendly form of the elapsed time. Uses
+    /// `DateComponentsFormatter` so users hear "1 minute 24 seconds"
+    /// instead of "zero one colon two four", which is unintelligible
+    /// from a coat pocket.
+    private var accessibleElapsedTime: String {
+        let formatter = DateComponentsFormatter()
+        formatter.allowedUnits = [.hour, .minute, .second]
+        formatter.unitsStyle = .spellOut
+        formatter.zeroFormattingBehavior = .dropLeading
+        return formatter.string(from: elapsedTime) ?? "\(Int(elapsedTime)) seconds"
     }
 }

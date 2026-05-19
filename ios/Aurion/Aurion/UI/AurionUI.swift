@@ -249,6 +249,11 @@ struct AurionAvatar: View {
                 .foregroundColor(.white)
         }
         .frame(width: size, height: size)
+        // Initials read as letters by default ("F. S."); the image trait
+        // + descriptive label gives VoiceOver "Profile avatar" instead.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel("Profile avatar")
+        .accessibilityAddTraits(.isImage)
     }
 }
 
@@ -452,6 +457,12 @@ struct AurionFilterChip: View {
             )
         }
         .buttonStyle(.plain)
+        // Without this, VoiceOver reads the count badge as a separate
+        // element ("12, button") with no relation to the filter label.
+        // Combining flattens it to "Pending, 12 sessions, button".
+        .accessibilityElement(children: .combine)
+        .accessibilityLabel("\(label), \(count) sessions")
+        .accessibilityAddTraits(active ? [.isSelected, .isButton] : .isButton)
     }
 }
 

@@ -290,6 +290,12 @@ struct NoteReviewView: View {
                 Image(systemName: "exclamationmark.triangle.fill")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.aurionAmber)
+                    // Soft heartbeat on the warning glyph — keeps the
+                    // unresolved-conflicts state visible at a glance
+                    // without the noisy strobe that earlier prototypes
+                    // had. Anchored on the count so a resolved conflict
+                    // re-fires the effect for the remaining ones.
+                    .symbolEffect(.pulse, options: .repeating, value: count)
                 Text("\(count) conflict\(count == 1 ? "" : "s") to resolve")
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.aurionStatusConflict)
