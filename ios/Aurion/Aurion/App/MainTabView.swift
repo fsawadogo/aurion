@@ -48,6 +48,9 @@ struct MainTabView: View {
     /// Persisted across launches via @SceneStorage so quitting on the
     /// Profile tab and reopening lands you back there.
     @SceneStorage("MainTabView.selection") private var selection: MainTab = .home
+    /// Cross-cutting nav bus — App Intents (``ShowPendingNotesIntent``)
+    /// and Spotlight handlers publish here so the tab bar can react.
+    @ObservedObject private var navigation = AppNavigation.shared
 
     var body: some View {
         TabView(selection: $selection) {
@@ -66,5 +69,13 @@ struct MainTabView: View {
         }
         .tabViewStyle(.sidebarAdaptable)
         .tint(.aurionGold)
+        .onChange(of: navigation.pendingTab) { _, newTab in
+            // App Intent / Spotlight asked us to switch tabs. We honor it
+            // once and clear the bus so a later in-app tap on the same
+            // tab doesn't replay the navigation as a "pending request".
+            guard let newTab else { return }
+            withAnimation(AurionAnimation.smooth) { selection = newTab }
+            navigation.clearPendingTab()
+        }
     }
 }

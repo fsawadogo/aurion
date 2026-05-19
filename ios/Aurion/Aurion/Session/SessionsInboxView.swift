@@ -12,6 +12,12 @@ struct SessionsInboxView: View {
     /// Searchable text — matches against specialty display name and
     /// state. Empty string → no text filter applied.
     @State private var searchText: String = ""
+    /// Programmatic nav stack — each entry is a session UUID. We push
+    /// onto it when a Spotlight tap arrives (via ``AppNavigation``) so
+    /// the user lands directly on the right note instead of having to
+    /// hunt for the row.
+    @State private var path: [String] = []
+    @ObservedObject private var navigation = AppNavigation.shared
 
     private enum Filter: String, CaseIterable, Hashable {
         case all = "All"
@@ -54,7 +60,7 @@ struct SessionsInboxView: View {
     }
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             VStack(alignment: .leading, spacing: 0) {
                 titleHeader
                 filterChips
@@ -79,6 +85,38 @@ struct SessionsInboxView: View {
             .navigationBarHidden(true)
             .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search by specialty or status")
             .task { await loadSessions() }
+            // Value-based destination so Spotlight deep-links can push by
+            // session UUID without us having to materialize the full
+            // ``SessionResponse`` up-front. If the row isn't in our local
+            // list (rare: donation outlived a server-side delete) we fall
+            // back to a tombstone view rather than crashing.
+            .navigationDestination(for: String.self) { sessionID in
+                if let s = sessions.first(where: { $0.id == sessionID }) {
+                    SessionNoteView(session: s)
+                } else {
+                    EmptyStateView(
+                        icon: "tray.slash",
+                        title: "Session not available",
+                        subtitle: "This note may have been purged or signed out from another device."
+                    )
+                    .padding()
+                }
+            }
+            .onChange(of: navigation.pendingNoteSessionID) { _, id in
+                guard let id else { return }
+                Task {
+                    // Ensure the session list is hot so the destination
+                    // can resolve `SessionResponse` from the id. If it's
+                    // already loaded this is a cache-hit no-op.
+                    if sessions.first(where: { $0.id == id }) == nil {
+                        await loadSessions()
+                    }
+                    // Replace the stack — we always want exactly one
+                    // detail view on top, never a chain of stacked notes.
+                    path = [id]
+                    navigation.clearPendingNote()
+                }
+            }
         }
     }
 
@@ -127,7 +165,7 @@ struct SessionsInboxView: View {
             AurionCard(padding: 0) {
                 VStack(spacing: 0) {
                     ForEach(Array(filtered.enumerated()), id: \.element.id) { index, session in
-                        NavigationLink(destination: SessionNoteView(session: session)) {
+                        NavigationLink(value: session.id) {
                             sessionRow(session)
                         }
                         .buttonStyle(.plain)
