@@ -8,7 +8,7 @@ topmost Active item matching its lane. Format per line:
 When a task moves through states, the loop edits this file in place:
 Active → In flight → Done (or → Blocked on triple failure).
 
-Last seeded: 2026-05-14. Last updated: 2026-05-19.
+Last seeded: 2026-05-14. Last updated: 2026-05-19 (post Q-05/Q-06).
 
 ## Active
 
@@ -16,8 +16,6 @@ Last seeded: 2026-05-14. Last updated: 2026-05-19.
 - [ ] AUR-DESIGN-DARK Dark mode rollout — collapse aurionNavy as text token, build full dark variant, drop preferredColorScheme(.light) lock in AurionApp — 5d — lane: ios — depends on AUR-DESIGN-NAVY
 - [ ] AUR-MP-CROSSCHECK Add MediaPipe as independent second face detector for Apple Vision (pilot follow-up; revisit only if clinical safety committee asks) — 5d — lane: ios — no blockers
 - [ ] AUR-DESIGN-NAVY — design decision on canonical navy (#0C1B37 vs #0D1B3E); collapse aurionNavyLegacy once chosen — 0.5d — lane: ios — no blockers
-- [ ] Q-05 Consolidate _to_uuid coercion — same idiom now duplicated in note_gen/repository.py, users_repository.py, _helpers.py, admin/_shared.py; promote to core/uuids.py — 0.5d — lane: backend — no blockers
-- [ ] Q-06 _DevUser dataclass — replace Pydantic BaseModel with frozen dataclass for the auth.py seed dict (no I/O, no validation needed) — 0.5d — lane: backend — no blockers
 
 ## In flight
 
@@ -29,6 +27,8 @@ Last seeded: 2026-05-14. Last updated: 2026-05-19.
 
 ## Done
 
+- [x] Q-06 _DevUser → frozen @dataclass — 0.5d — lane: backend — merged: 2026-05-19 (commit 5c5f1e9)
+- [x] Q-05 Consolidate _to_uuid to core/uuids.py — 0.5d — lane: backend — merged: 2026-05-19 (commit bdb22c3)
 - [x] UI-P6 Materials + iPad readable-measure pass (regularMaterial toast + 720pt clamp on Inbox/Note/Devices) — 0.5d — lane: ios — merged: 2026-05-19 (commit 9cefee6)
 - [x] UI-P5 A11y labels + symbol effects + motion polish (capture controls, sort, toolbar, conflicts pulse, copy bounce) — 0.5d — lane: ios — merged: 2026-05-19 (commit 4d00062)
 - [x] UI-P4a App Intents (StartSessionIntent, ShowPendingNotesIntent) + Spotlight donation + deep-link push — 1d — lane: ios — merged: 2026-05-19 (commit df32abb)
