@@ -58,6 +58,30 @@ extension Color {
     // Field surface (slightly warmer than canvas)
     static let aurionSurfaceAlt = Color(red: 238/255, green: 240/255, blue: 243/255)  // #EEF0F3
 
+    // ── On-navy text colors ──────────────────────────────────────────────
+    // For text/labels rendered on the dark navy gradient (login, register).
+    // These are not Dynamic-Type-secondary equivalents — they're tuned for
+    // the specific brightness of `aurionNavyDark → aurionNavy` background.
+
+    /// Labels and links on dark navy bg (login form fields, register).
+    static let aurionOnNavySecondary = Color(red: 183/255, green: 192/255, blue: 214/255) // #B7C0D6
+
+    /// Footer fine-print on dark navy bg.
+    static let aurionOnNavyFootnote = Color(red: 133/255, green: 144/255, blue: 174/255) // #8590AE
+
+    /// Soft error text on dark navy bg (validation messages on login/register).
+    static let aurionOnNavyError = Color(red: 255/255, green: 180/255, blue: 180/255) // #FFB4B4
+
+    // ── Light-bg neutrals ────────────────────────────────────────────────
+
+    /// Muted gray for caption/timestamps on light bg. Lighter than
+    /// ``aurionTextSecondary`` (107,114,128) — used when the secondary
+    /// text already carries enough weight and a tertiary is needed.
+    static let aurionMutedGray = Color(red: 154/255, green: 160/255, blue: 172/255) // #9AA0AC
+
+    /// Unselected option box / checkbox border on light bg.
+    static let aurionInputBorder = Color(red: 198/255, green: 202/255, blue: 210/255) // #C6CAD2
+
     // Note section accents (left-border tints in note review)
     static let aurionSectionInfo = Color(red: 45/255, green: 108/255, blue: 223/255)   // blue-500
     static let aurionSectionExam = Color(red: 46/255, green: 158/255, blue: 106/255)   // green-500
@@ -777,14 +801,14 @@ func sessionStateBadge(_ state: String) -> (text: String, color: Color) {
     switch state {
     case "EXPORTED": return (L("badge.exported"), Color.aurionBlue)
     case "REVIEW_COMPLETE": return (L("badge.ready"), Color.aurionGreen)
-    case "PURGED": return (L("badge.archived"), Color(red: 74/255, green: 81/255, blue: 96/255))
+    case "PURGED": return (L("badge.archived"), Color.aurionStatusArchived)
     case "PROCESSING_STAGE1": return (L("badge.processing"), Color.aurionAmber)
     case "PROCESSING_STAGE2": return (L("badge.enriching"), Color.aurionAmber)
     case "AWAITING_REVIEW": return (L("badge.review"), Color.aurionGold)
     case "RECORDING": return (L("badge.recording"), Color.aurionRed)
     case "PAUSED": return (L("badge.paused"), Color.aurionAmber)
-    case "CONSENT_PENDING": return (L("badge.consent"), Color(red: 74/255, green: 81/255, blue: 96/255))
-    default: return (state, Color(red: 74/255, green: 81/255, blue: 96/255))
+    case "CONSENT_PENDING": return (L("badge.consent"), Color.aurionStatusArchived)
+    default: return (state, Color.aurionStatusArchived)
     }
 }
 

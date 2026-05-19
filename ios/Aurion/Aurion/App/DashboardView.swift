@@ -515,7 +515,7 @@ struct DashboardView: View {
                                     .frame(width: 18, height: 18)
                                     .overlay(
                                         RoundedRectangle(cornerRadius: 5)
-                                            .stroke(isChecked ? Color.aurionGold : Color(red: 198/255, green: 202/255, blue: 210/255), lineWidth: 2)
+                                            .stroke(isChecked ? Color.aurionGold : Color.aurionInputBorder, lineWidth: 2)
                                     )
                                 if isChecked {
                                     Image(systemName: "checkmark")

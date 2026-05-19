@@ -396,7 +396,7 @@ struct PhysicianProfileSetupView: View {
             HStack(spacing: 12) {
                 ZStack {
                     Circle()
-                        .stroke(selected ? Color.aurionGold : Color(red: 198/255, green: 202/255, blue: 210/255), lineWidth: 2)
+                        .stroke(selected ? Color.aurionGold : Color.aurionInputBorder, lineWidth: 2)
                         .frame(width: 20, height: 20)
                     if selected {
                         Circle().fill(Color.aurionGold).frame(width: 10, height: 10)
@@ -431,7 +431,7 @@ struct PhysicianProfileSetupView: View {
                         .frame(width: 22, height: 22)
                         .overlay(
                             RoundedRectangle(cornerRadius: AurionRadius.xs)
-                                .stroke(on ? Color.aurionGold : Color(red: 198/255, green: 202/255, blue: 210/255), lineWidth: 2)
+                                .stroke(on ? Color.aurionGold : Color.aurionInputBorder, lineWidth: 2)
                         )
                     if on {
                         Image(systemName: "checkmark")
