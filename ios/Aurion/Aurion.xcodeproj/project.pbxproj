@@ -10,6 +10,7 @@
 		01AA1E3FEB61FA71031EF68F /* Foundation.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 0E9F46EEC9C4EB3FC14372E7 /* Foundation.framework */; };
 		10ACCED7207D123E1E9C1973 /* AurionCaptureActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D63FB6B5BBB0763268C0D86 /* AurionCaptureActivityWidget.swift */; };
 		1A4DA75A37227283741D7C99 /* AurionCaptureActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = D4CE963AFD574EFA97CB3466 /* AurionCaptureActivityAttributes.swift */; };
+		2E08A28484594DFE24A0A535 /* StartSessionWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = EDBD3E5A16266442A517C5FC /* StartSessionWidget.swift */; };
 		4C183FB4289BCA09922C1437 /* AurionWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = 43904B14883B880D0B18827A /* AurionWidgetsBundle.swift */; };
 		5F1BAE9AE2B82F774453681C /* AurionWidgets.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = EDFC027F24A3EF463400D8F3 /* AurionWidgets.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -58,6 +59,7 @@
 		43904B14883B880D0B18827A /* AurionWidgetsBundle.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = AurionWidgetsBundle.swift; sourceTree = "<group>"; };
 		A5745FEA7549A814BD6B3023 /* Info.plist */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		D4CE963AFD574EFA97CB3466 /* AurionCaptureActivityAttributes.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; name = AurionCaptureActivityAttributes.swift; path = Aurion/Session/AurionCaptureActivityAttributes.swift; sourceTree = "<group>"; };
+		EDBD3E5A16266442A517C5FC /* StartSessionWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StartSessionWidget.swift; sourceTree = "<group>"; };
 		EDFC027F24A3EF463400D8F3 /* AurionWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AurionWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7BD2FE82F8B528A000E70A0 /* Aurion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aurion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7BD2FF52F8B528B000E70A0 /* AurionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AurionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -67,16 +69,22 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		F7BD2FEA2F8B528A000E70A0 /* Aurion */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = Aurion;
 			sourceTree = "<group>";
 		};
 		F7BD2FF82F8B528B000E70A0 /* AurionTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = AurionTests;
 			sourceTree = "<group>";
 		};
 		F7BD30022F8B528B000E70A0 /* AurionUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = AurionUITests;
 			sourceTree = "<group>";
 		};
@@ -121,6 +129,7 @@
 				43904B14883B880D0B18827A /* AurionWidgetsBundle.swift */,
 				3D63FB6B5BBB0763268C0D86 /* AurionCaptureActivityWidget.swift */,
 				A5745FEA7549A814BD6B3023 /* Info.plist */,
+				EDBD3E5A16266442A517C5FC /* StartSessionWidget.swift */,
 			);
 			path = AurionWidgets;
 			sourceTree = "<group>";
@@ -334,6 +343,7 @@
 				4C183FB4289BCA09922C1437 /* AurionWidgetsBundle.swift in Sources */,
 				10ACCED7207D123E1E9C1973 /* AurionCaptureActivityWidget.swift in Sources */,
 				1A4DA75A37227283741D7C99 /* AurionCaptureActivityAttributes.swift in Sources */,
+				2E08A28484594DFE24A0A535 /* StartSessionWidget.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

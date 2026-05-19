@@ -16,6 +16,7 @@ SWIFT_VERSION = "5.0"
 WIDGET_LOCAL_FILES = %w[
   AurionWidgetsBundle.swift
   AurionCaptureActivityWidget.swift
+  StartSessionWidget.swift
 ]
 
 # Files outside AurionWidgets/ that the widget target also compiles

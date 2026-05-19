@@ -9,6 +9,10 @@ import WidgetKit
 @main
 struct AurionWidgetsBundle: WidgetBundle {
     var body: some Widget {
+        // Home-screen + Lock Screen "Start Session" quick-launch.
+        StartSessionWidget()
+        // Live Activity for in-flight capture (lock screen pill +
+        // Dynamic Island). Runtime-driven by SessionManager.
         AurionCaptureActivityWidget()
     }
 }
