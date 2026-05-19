@@ -723,10 +723,26 @@ struct NoteReviewView: View {
         }.count
         let totalSections = required.count
         let conflicts = n.sections.filter { $0.hasConflicts }.count
-        let blocked = conflicts > 0
-        let helpText: String = blocked
-            ? "\(conflicts) conflict\(conflicts == 1 ? "" : "s") must resolve before approval."
-            : "Ready to sign and export."
+        // Block approve while Stage 2 is still merging vision citations —
+        // the backend returns 409 "still processing" if we hit /approve
+        // before REVIEW_COMPLETE. The poller (`pollStage2Status`)
+        // populates `stage2Status` so this gate reacts in ~2s when
+        // Stage 2 finishes.
+        let stage2Running = stage2Status?.isInProgress == true
+        let blocked = conflicts > 0 || stage2Running
+        let helpText: String
+        if stage2Running {
+            let frames = stage2Status?.framesProcessed ?? 0
+            helpText = frames > 0
+                ? "Finishing visual enrichment · \(frames) frame\(frames == 1 ? "" : "s") processed…"
+                : "Finishing visual enrichment…"
+        } else if conflicts > 0 {
+            helpText = "\(conflicts) conflict\(conflicts == 1 ? "" : "s") must resolve before approval."
+        } else {
+            helpText = "Ready to sign and export."
+        }
+        let ringColor: Color = stage2Running ? .aurionGold
+            : (conflicts > 0 ? .aurionAmber : .aurionGreen)
 
         return HStack(spacing: 14) {
             ZStack {
@@ -735,7 +751,7 @@ struct NoteReviewView: View {
                 // rather than snapping.
                 CircularProgressRing(
                     progress: displayedCompleteness,
-                    color: blocked ? .aurionAmber : .aurionGreen,
+                    color: ringColor,
                     lineWidth: 4,
                     size: 48
                 )
@@ -755,10 +771,14 @@ struct NoteReviewView: View {
                     .font(.system(size: 12))
                     .foregroundColor(.aurionTextSecondary)
                     .lineSpacing(2)
+                    .contentTransition(.opacity)
+                    .animation(AurionAnimation.smooth, value: helpText)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             AurionGoldButton(
-                label: isApproving ? "Signing…" : "Approve & Sign",
+                label: stage2Running
+                    ? "Finishing…"
+                    : (isApproving ? "Signing…" : "Approve & Sign"),
                 size: .sm,
                 disabled: blocked || isApproving
             ) {
