@@ -51,7 +51,7 @@ struct ProfileView: View {
                             .padding(.top, 2)
                         Text(displayPracticeType)
                             .font(.system(size: 12))
-                            .foregroundColor(Color(red: 154/255, green: 160/255, blue: 172/255))
+                            .foregroundColor(Color.aurionMutedGray)
                             .padding(.top, 2)
                     }
                 }

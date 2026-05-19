@@ -85,7 +85,7 @@ struct CaptureView: View {
                     Text("Recording \u{00B7} \(session.captureMode.displayName)")
                         .font(.system(size: 13))
                         .tracking(0.4)
-                        .foregroundColor(Color(red: 183/255, green: 192/255, blue: 214/255))
+                        .foregroundColor(Color.aurionOnNavySecondary)
 
                     if let method = session.consentMethod, let timestamp = session.consentConfirmedAt {
                         consentChip(method: method, at: timestamp)

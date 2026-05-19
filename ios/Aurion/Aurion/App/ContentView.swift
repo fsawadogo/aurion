@@ -294,7 +294,7 @@ struct LoginView: View {
                         Text(L("login.email").uppercased())
                             .font(.system(size: 12, weight: .semibold))
                             .tracking(0.8)
-                            .foregroundColor(Color(red: 183/255, green: 192/255, blue: 214/255))
+                            .foregroundColor(Color.aurionOnNavySecondary)
                         TextField("dr.chen@aurion.health", text: $email)
                             .textFieldStyle(.plain)
                             .textContentType(.emailAddress)
@@ -315,7 +315,7 @@ struct LoginView: View {
                         Text(L("login.password").uppercased())
                             .font(.system(size: 12, weight: .semibold))
                             .tracking(0.8)
-                            .foregroundColor(Color(red: 183/255, green: 192/255, blue: 214/255))
+                            .foregroundColor(Color.aurionOnNavySecondary)
                         SecureField("", text: $password)
                             .textFieldStyle(.plain)
                             .foregroundColor(.white)
@@ -363,14 +363,14 @@ struct LoginView: View {
                     if let loginError {
                         Text(loginError)
                             .font(.system(size: 12))
-                            .foregroundColor(Color(red: 255/255, green: 180/255, blue: 180/255))
+                            .foregroundColor(Color.aurionOnNavyError)
                             .multilineTextAlignment(.center)
                     }
 
                     HStack {
                         Text("Forgot password?")
                             .font(.system(size: 13))
-                            .foregroundColor(Color(red: 183/255, green: 192/255, blue: 214/255))
+                            .foregroundColor(Color.aurionOnNavySecondary)
                         Spacer()
                         Button("Create account", action: onSwitchToRegister)
                             .font(.system(size: 13, weight: .semibold))
@@ -401,7 +401,7 @@ struct LoginView: View {
                 Text(L("login.footer"))
                     .font(.system(size: 12))
                     .tracking(0.4)
-                    .foregroundColor(Color(red: 133/255, green: 144/255, blue: 174/255))
+                    .foregroundColor(Color.aurionOnNavyFootnote)
                     .padding(.bottom, 40)
                     .opacity(loginAppeared ? 1 : 0)
                     .animation(.easeOut(duration: 0.5).delay(0.4), value: loginAppeared)
@@ -539,7 +539,7 @@ struct RegisterView: View {
                         if !confirmPassword.isEmpty && password != confirmPassword {
                             Text("Passwords don't match.")
                                 .font(.system(size: 12))
-                                .foregroundColor(Color(red: 255/255, green: 180/255, blue: 180/255))
+                                .foregroundColor(Color.aurionOnNavyError)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
 
@@ -562,14 +562,14 @@ struct RegisterView: View {
                         if let registerError {
                             Text(registerError)
                                 .font(.system(size: 12))
-                                .foregroundColor(Color(red: 255/255, green: 180/255, blue: 180/255))
+                                .foregroundColor(Color.aurionOnNavyError)
                                 .multilineTextAlignment(.center)
                         }
 
                         HStack(spacing: 6) {
                             Text("Already have an account?")
                                 .font(.system(size: 13))
-                                .foregroundColor(Color(red: 183/255, green: 192/255, blue: 214/255))
+                                .foregroundColor(Color.aurionOnNavySecondary)
                             Button("Sign in", action: onSwitchToLogin)
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundColor(.aurionGold)
@@ -588,7 +588,7 @@ struct RegisterView: View {
                     Text("By creating an account you agree to handle PHI in accordance with your facility's policies.")
                         .font(.system(size: 11))
                         .tracking(0.2)
-                        .foregroundColor(Color(red: 133/255, green: 144/255, blue: 174/255))
+                        .foregroundColor(Color.aurionOnNavyFootnote)
                         .multilineTextAlignment(.center)
                         .padding(.horizontal, 32)
                         .padding(.top, 24)
@@ -612,7 +612,7 @@ struct RegisterView: View {
             Text(label)
                 .font(.system(size: 12, weight: .semibold))
                 .tracking(0.8)
-                .foregroundColor(Color(red: 183/255, green: 192/255, blue: 214/255))
+                .foregroundColor(Color.aurionOnNavySecondary)
             Group {
                 if secure {
                     SecureField(placeholder, text: text)

@@ -194,7 +194,7 @@ enum AurionStatusKind {
         case .done: return .aurionGreen
         case .pending: return .aurionGold
         case .recording: return .white
-        case .archived: return Color(red: 154/255, green: 160/255, blue: 172/255)
+        case .archived: return Color.aurionMutedGray
         case .exported: return .aurionBlue
         case .conflict: return .aurionAmber
         }
@@ -310,7 +310,7 @@ struct AurionListItem: View {
                     if showChevron && action != nil {
                         Image(systemName: "chevron.right")
                             .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(Color(red: 154/255, green: 160/255, blue: 172/255))
+                            .foregroundColor(Color.aurionMutedGray)
                     }
                 }
                 .padding(.horizontal, 16)
