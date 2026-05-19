@@ -34,6 +34,11 @@ class UserModel(Base):
         nullable=False,
         default=UserRole.CLINICIAN,
     )
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    voice_enrolled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

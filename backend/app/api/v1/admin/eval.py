@@ -17,7 +17,8 @@ from app.api.v1._helpers import get_session_or_404, write_audit
 from app.api.v1.admin._shared import (
     EvalScoreRequest,
     EvalSessionResponse,
-    get_clinician_name,
+    resolve_clinician_names,
+    scan_audit_events,
 )
 from app.core.clock import utcnow
 from app.core.database import get_db
@@ -58,26 +59,30 @@ async def get_eval_sessions(
     result = await db.execute(stmt)
     sessions = result.scalars().all()
 
-    # Batch-load latest note versions for all sessions to avoid N+1 queries.
+    # Batch-load latest note versions + clinician names for all sessions
+    # in single queries each to avoid N+1.
     notes_by_session = await note_repo.get_latest_versions_by_session(
         db, (s.id for s in sessions)
     )
+    names_by_id = await resolve_clinician_names(
+        db, (s.clinician_id for s in sessions)
+    )
 
-    # Batch-load masking status from audit log for all sessions at once,
-    # instead of one DynamoDB query per session.
+    # One DynamoDB scan instead of N per-session queries — pilot scale
+    # makes the trade safe and the in-memory filter cheaper than the
+    # round-trips the prior loop incurred.
     audit = get_audit_log_service()
-    masking_by_session: dict[str, bool] = {}
-    for s in sessions:
-        sid = str(s.id)
-        session_events = await audit.get_session_events(sid)
-        masking_by_session[sid] = any(
-            e.get("event_type") == "masking_confirmed" for e in session_events
-        )
+    all_events = await scan_audit_events(audit)
+    sessions_with_masking_confirmed = {
+        e.get("session_id", "")
+        for e in all_events
+        if e.get("event_type") == "masking_confirmed"
+    }
 
     eval_sessions = []
     for s in sessions:
         sid = str(s.id)
-        clinician_name = get_clinician_name(str(s.clinician_id))
+        clinician_name = names_by_id[str(s.clinician_id)]
         scores = _EVAL_SCORES.get(sid)
         latest_note = notes_by_session.get(s.id)
         note_version = latest_note.version if latest_note else 0
@@ -88,7 +93,7 @@ async def get_eval_sessions(
             clinician_name=clinician_name,
             specialty=s.specialty,
             transcript_masked=True,  # All transcripts are masked by policy
-            frames_masked=masking_by_session.get(sid, False),
+            frames_masked=sid in sessions_with_masking_confirmed,
             note_version=note_version,
             scored=scores is not None,
             scores=scores,
@@ -139,7 +144,8 @@ async def submit_eval_score(
         scored_by=user.email,
     )
 
-    clinician_name = get_clinician_name(str(session.clinician_id))
+    names = await resolve_clinician_names(db, [session.clinician_id])
+    clinician_name = names[str(session.clinician_id)]
 
     return EvalSessionResponse(
         id=f"eval_{session_id[:8]}",

@@ -12,8 +12,6 @@ Last seeded: 2026-05-14.
 
 ## Active
 
-- [ ] P0-04 Alembic migrations — 8d — lane: backend — no blockers
-- [ ] P0-06 Persistent users + admin refactor — 8d — lane: backend — depends on P0-04
 - [ ] B-08 Eval persistence — 3d — lane: backend — depends on P0-04
 - [ ] P0-07 E2E smoke test — 3d — lane: backend — depends on P0-06, B-08
 - [ ] M-07-DASH Dashboard Stage 2 tile — 3d — lane: ios — no blockers
@@ -23,10 +21,12 @@ Last seeded: 2026-05-14.
 - [ ] Q-03 write_audit kwarg whitelist — pair with Q-01; tighten **fields to known keys per event_type — 1d — lane: backend — depends on Q-01
 - [ ] Q-04 SessionUIState cleanup — drop isProcessing/showingReview/showingPostEncounter computed shims; migrate ContentView branches to switch on uiState — 1d — lane: ios — no blockers
 - [ ] AUR-DESIGN-NAVY — design decision on canonical navy (#0C1B37 vs #0D1B3E); collapse aurionNavyLegacy once chosen — 0.5d — lane: ios — no blockers
+- [ ] Q-05 Consolidate _to_uuid coercion — same idiom now duplicated in note_gen/repository.py, users_repository.py, _helpers.py, admin/_shared.py; promote to core/uuids.py — 0.5d — lane: backend — no blockers
+- [ ] Q-06 _DevUser dataclass — replace Pydantic BaseModel with frozen dataclass for the auth.py seed dict (no I/O, no validation needed) — 0.5d — lane: backend — no blockers
 
 ## In flight
 
-(driver moves the top Active item here when starting; logs PR # when opened)
+- [~] P0-06 Persistent users + admin refactor — 8d — lane: backend — started: 2026-05-18
 
 ## Blocked
 
@@ -34,7 +34,11 @@ Last seeded: 2026-05-14.
 
 ## Done
 
-(driver moves here after auto-merge; keeps newest at top with merge date)
+- [x] P0-04 Alembic migrations — 8d — lane: backend — merged: 2026-05-17 (commit e330675)
+- [x] CQR-1 Backend route helpers DRY (Phase 1) — lane: backend — merged: 2026-05-17 (commit e330675)
+- [x] CQR-2 utcnow + NoteVersion repository (Phase 2) — lane: backend — merged: 2026-05-17 (commit e330675)
+- [x] CQR-3 iOS multipart dedup + Theme legacy navy (Phase 3) — lane: ios — merged: 2026-05-18 (commit f3c147d)
+- [x] CQR-4 admin.py package split + SessionUIState enum (Phase 4) — lane: both — merged: 2026-05-18 (commit 9edfef8)
 
 ---
 

@@ -18,7 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1.admin._shared import (
     PaginatedSessionsResponse,
     SessionAdminResponse,
-    get_clinician_name,
+    resolve_clinician_names,
 )
 from app.core.database import get_db
 from app.core.models import SessionModel
@@ -83,15 +83,18 @@ async def get_admin_sessions(
     result = await db.execute(stmt)
     sessions = result.scalars().all()
 
-    # Batch-load latest note versions for all sessions in a single query
+    # Batch-load latest note versions + clinician names in single queries
     # to avoid N+1 (one query per session in the loop).
     notes_by_session = await note_repo.get_latest_versions_by_session(
         db, (s.id for s in sessions)
     )
+    names_by_id = await resolve_clinician_names(
+        db, (s.clinician_id for s in sessions)
+    )
 
     items = []
     for s in sessions:
-        clinician_name = get_clinician_name(str(s.clinician_id))
+        clinician_name = names_by_id[str(s.clinician_id)]
 
         completeness_score = 0.0
         sections_populated = 0

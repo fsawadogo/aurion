@@ -11,59 +11,14 @@ parse, in-memory lookup). Each is consumed by 1-3 endpoint modules.
 from __future__ import annotations
 
 import json
-from typing import Any, Optional
+from typing import Any, Iterable, Optional
 
 from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.models import UserModel
 from app.core.types import UserRole
-
-
-# ── Mock User Store ────────────────────────────────────────────────────────
-# In production, user data comes from Cognito. For now, a simple
-# in-memory store seeded with the dev users.
-
-MOCK_USERS: dict[str, dict[str, Any]] = {
-    "u1": {
-        "id": "u1",
-        "email": "perry@creoq.ca",
-        "full_name": "Dr. Perry Gdalevitch",
-        "role": "CLINICIAN",
-        "is_active": True,
-        "voice_enrolled": True,
-        "created_at": "2026-01-15T10:00:00Z",
-        "last_login_at": "2026-04-10T14:30:00Z",
-    },
-    "u2": {
-        "id": "u2",
-        "email": "marie@creoq.ca",
-        "full_name": "Dr. Marie Gdalevitch",
-        "role": "CLINICIAN",
-        "is_active": True,
-        "voice_enrolled": False,
-        "created_at": "2026-01-15T10:00:00Z",
-        "last_login_at": "2026-04-09T09:15:00Z",
-    },
-    "u3": {
-        "id": "u3",
-        "email": "compliance@aurionclinical.com",
-        "full_name": "Compliance Officer",
-        "role": "COMPLIANCE_OFFICER",
-        "is_active": True,
-        "voice_enrolled": False,
-        "created_at": "2026-02-01T09:00:00Z",
-        "last_login_at": None,
-    },
-    "u4": {
-        "id": "u4",
-        "email": "eval@aurionclinical.com",
-        "full_name": "Eval Reviewer",
-        "role": "EVAL_TEAM",
-        "is_active": True,
-        "voice_enrolled": False,
-        "created_at": "2026-02-01T09:00:00Z",
-        "last_login_at": None,
-    },
-}
+from app.modules.auth import users_repository as users_repo
 
 
 # ── User schemas ───────────────────────────────────────────────────────────
@@ -307,12 +262,48 @@ def event_to_response(evt: dict[str, Any]) -> AuditEventResponse:
     )
 
 
-def get_clinician_name(clinician_id: str) -> str:
-    """Look up clinician name from mock user store."""
-    for u in MOCK_USERS.values():
-        if u["id"] == clinician_id:
-            return u["full_name"]
-    return f"Clinician {clinician_id[:8]}"
+def user_to_response(user: UserModel) -> UserResponse:
+    """Map a UserModel row to the admin API response shape."""
+    return UserResponse(
+        id=str(user.id),
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role,
+        is_active=user.is_active,
+        voice_enrolled=user.voice_enrolled,
+        created_at=user.created_at.isoformat() if user.created_at else "",
+        last_login_at=user.last_login_at.isoformat() if user.last_login_at else None,
+    )
+
+
+async def resolve_clinician_names(
+    db: AsyncSession,
+    clinician_ids: Iterable[Any],
+) -> dict[str, str]:
+    """Batch-resolve clinician UUIDs to display names.
+
+    The returned dict is keyed by ``str(uuid)`` so callers can look up
+    using the same ``str(s.clinician_id)`` they already build for
+    response bodies. Unknown ids get a fallback label.
+    """
+    import uuid as _uuid
+
+    uuids: list[_uuid.UUID] = []
+    string_to_uuid: dict[str, _uuid.UUID] = {}
+    for cid in clinician_ids:
+        try:
+            u = cid if isinstance(cid, _uuid.UUID) else _uuid.UUID(str(cid))
+        except (ValueError, AttributeError):
+            continue
+        string_to_uuid[str(cid)] = u
+        uuids.append(u)
+
+    by_uuid = await users_repo.get_clinician_names(db, uuids)
+
+    result: dict[str, str] = {}
+    for raw_id, parsed in string_to_uuid.items():
+        result[raw_id] = by_uuid.get(parsed, f"Clinician {raw_id[:8]}")
+    return result
 
 
 def safe_json_parse(value: Any) -> dict[str, Any]:

@@ -18,6 +18,7 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.clock import utcnow
 from app.core.database import async_session_factory, get_db
 from app.core.models import UserModel
 from app.core.types import UserRole
@@ -30,16 +31,54 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 _APP_ENV = os.getenv("APP_ENV", "local")
 
 # Dev seed accounts — written to the users table on startup if absent.
-# (password, user_id, full_name, role)
-_DEV_USERS: dict[str, tuple[str, str, str, UserRole]] = {
-    "admin@aurionclinical.com": ("admin", "00000000-0000-0000-0000-000000000000", "Admin", UserRole.ADMIN),
-    "perry@creoq.ca": ("perry", "00000000-0000-0000-0000-000000000001", "Dr. Perry Gdalevitch", UserRole.CLINICIAN),
-    "marie@creoq.ca": ("marie", "00000000-0000-0000-0000-000000000002", "Dr. Marie Gdalevitch", UserRole.CLINICIAN),
-    "compliance@aurionclinical.com": ("compliance", "00000000-0000-0000-0000-000000000003", "Compliance Officer", UserRole.COMPLIANCE_OFFICER),
-    "eval@aurionclinical.com": ("eval", "00000000-0000-0000-0000-000000000004", "Eval Reviewer", UserRole.EVAL_TEAM),
+class _DevUser(BaseModel):
+    password: str
+    user_id: str
+    full_name: str
+    role: UserRole
+    voice_enrolled: bool = False
+
+
+_DEV_USERS: dict[str, _DevUser] = {
+    "admin@aurionclinical.com": _DevUser(
+        password="admin",
+        user_id="00000000-0000-0000-0000-000000000000",
+        full_name="Admin",
+        role=UserRole.ADMIN,
+    ),
+    "perry@creoq.ca": _DevUser(
+        password="perry",
+        user_id="00000000-0000-0000-0000-000000000001",
+        full_name="Dr. Perry Gdalevitch",
+        role=UserRole.CLINICIAN,
+        voice_enrolled=True,
+    ),
+    "marie@creoq.ca": _DevUser(
+        password="marie",
+        user_id="00000000-0000-0000-0000-000000000002",
+        full_name="Dr. Marie Gdalevitch",
+        role=UserRole.CLINICIAN,
+    ),
+    "compliance@aurionclinical.com": _DevUser(
+        password="compliance",
+        user_id="00000000-0000-0000-0000-000000000003",
+        full_name="Compliance Officer",
+        role=UserRole.COMPLIANCE_OFFICER,
+    ),
+    "eval@aurionclinical.com": _DevUser(
+        password="eval",
+        user_id="00000000-0000-0000-0000-000000000004",
+        full_name="Eval Reviewer",
+        role=UserRole.EVAL_TEAM,
+    ),
     # Dedicated account for capturing the marketing demo video. Profile +
     # backlog of approved orthopedic sessions seeded via seed_demo.py.
-    "demo@aurion.health": ("demo1234", "00000000-0000-0000-0000-000000000005", "Dr. Antoine Tremblay", UserRole.CLINICIAN),
+    "demo@aurion.health": _DevUser(
+        password="demo1234",
+        user_id="00000000-0000-0000-0000-000000000005",
+        full_name="Dr. Antoine Tremblay",
+        role=UserRole.CLINICIAN,
+    ),
 }
 
 
@@ -83,6 +122,9 @@ async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)) -> Login
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid email or password.",
         )
+
+    user.last_login_at = utcnow()
+    await db.flush()
 
     return _build_login_response(user)
 
@@ -149,17 +191,18 @@ async def seed_dev_users() -> None:
         return
 
     async with async_session_factory() as db:
-        for email, (password, user_id, full_name, role) in _DEV_USERS.items():
+        for email, dev_user in _DEV_USERS.items():
             existing = await _find_user_by_email(db, email)
             if existing is not None:
                 continue
             db.add(
                 UserModel(
-                    id=uuid.UUID(user_id),
+                    id=uuid.UUID(dev_user.user_id),
                     email=email,
-                    password_hash=hash_password(password),
-                    full_name=full_name,
-                    role=role,
+                    password_hash=hash_password(dev_user.password),
+                    full_name=dev_user.full_name,
+                    role=dev_user.role,
+                    voice_enrolled=dev_user.voice_enrolled,
                 )
             )
         await db.commit()
