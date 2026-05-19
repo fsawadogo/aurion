@@ -16,16 +16,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import utcnow
 from app.core.models import EvalScoreModel
-
-
-def _to_uuid(session_id: str | uuid.UUID) -> uuid.UUID:
-    return session_id if isinstance(session_id, uuid.UUID) else uuid.UUID(str(session_id))
+from app.core.uuids import to_uuid
 
 
 async def get_score(
     db: AsyncSession, session_id: str | uuid.UUID
 ) -> EvalScoreModel | None:
-    return await db.get(EvalScoreModel, _to_uuid(session_id))
+    return await db.get(EvalScoreModel, to_uuid(session_id))
 
 
 async def get_scores_by_sessions(
@@ -61,7 +58,7 @@ async def upsert_score(
     Uses Postgres's ``INSERT ... ON CONFLICT (session_id) DO UPDATE`` so
     re-scoring is a single round-trip and atomic vs. concurrent writes.
     """
-    sid = _to_uuid(session_id)
+    sid = to_uuid(session_id)
     now = utcnow()
     stmt = pg_insert(EvalScoreModel).values(
         session_id=sid,

@@ -16,10 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import NoteVersionModel
-
-
-def _to_uuid(session_id: str | uuid.UUID) -> uuid.UUID:
-    return session_id if isinstance(session_id, uuid.UUID) else uuid.UUID(str(session_id))
+from app.core.uuids import to_uuid
 
 
 async def get_latest_version(
@@ -34,7 +31,7 @@ async def get_latest_version(
     considered — used by callers that need "the latest Stage 1 note"
     distinct from "the latest of any stage".
     """
-    stmt = select(NoteVersionModel).where(NoteVersionModel.session_id == _to_uuid(session_id))
+    stmt = select(NoteVersionModel).where(NoteVersionModel.session_id == to_uuid(session_id))
     if stage is not None:
         stmt = stmt.where(NoteVersionModel.stage == stage)
     stmt = stmt.order_by(NoteVersionModel.version.desc()).limit(1)
@@ -48,7 +45,7 @@ async def get_all_versions(
     """Return every version row for ``session_id``, ascending by version."""
     stmt = (
         select(NoteVersionModel)
-        .where(NoteVersionModel.session_id == _to_uuid(session_id))
+        .where(NoteVersionModel.session_id == to_uuid(session_id))
         .order_by(NoteVersionModel.version.asc())
     )
     return list((await db.execute(stmt)).scalars().all())

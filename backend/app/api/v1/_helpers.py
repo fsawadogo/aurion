@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.audit_events import AuditEventType
 from app.core.models import SessionModel
 from app.core.types import MaskingProof, SessionState
+from app.core.uuids import to_uuid
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.session.service import get_session
 
@@ -32,8 +33,7 @@ async def get_session_or_404(
     ``app.modules.session.service.get_session`` — this helper only adds
     the 404 boundary.
     """
-    sid = session_id if isinstance(session_id, uuid.UUID) else uuid.UUID(str(session_id))
-    session = await get_session(db, sid)
+    session = await get_session(db, to_uuid(session_id))
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
     return session
