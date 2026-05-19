@@ -8,6 +8,11 @@ import SwiftUI
 struct DashboardView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var sessionManager: SessionManager
+    /// Drives the iPad readable-measure clamp. ``.regular`` means
+    /// we're on iPad in regular size class — content gets centred
+    /// and capped at ~720pt so the dashboard doesn't stretch absurdly
+    /// wide. ``.compact`` (iPhone, iPad slide-over) keeps full width.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     @State private var recentSessions: [SessionResponse] = []
     @State private var isLoadingSessions = false
     @State private var showEncounterTypeSheet = false
@@ -125,6 +130,13 @@ struct DashboardView: View {
                 .aurionScreenEdge()
                 .padding(.top, 8)
                 .padding(.bottom, 24)
+                // iPad readable-measure clamp. On iPhone (compact) this
+                // is a no-op — `maxWidth: .infinity` lets content fill
+                // the screen. On iPad regular the content centres
+                // around 720pt so it reads like a focused dashboard,
+                // not a stretched phone screen.
+                .frame(maxWidth: horizontalSizeClass == .regular ? 720 : .infinity)
+                .frame(maxWidth: .infinity)
             }
             .background(Color.aurionBackground)
             .navigationBarHidden(true)
