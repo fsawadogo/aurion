@@ -9,6 +9,10 @@ struct SessionsInboxView: View {
     @State private var isLoading = true
     @State private var sortNewestFirst = true
     @State private var filter: Filter = .all
+    /// iPad readable-measure clamp — mirrors ``DashboardView``. Inbox
+    /// rows are dense; stretching them edge-to-edge on a 11" iPad makes
+    /// the eye sweep too far between specialty name and status pill.
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
     /// Searchable text — matches against specialty display name and
     /// state. Empty string → no text filter applied.
     @State private var searchText: String = ""
@@ -184,6 +188,8 @@ struct SessionsInboxView: View {
             .aurionScreenEdge()
             .padding(.top, 12)
             .padding(.bottom, 20)
+            .frame(maxWidth: horizontalSizeClass == .regular ? 720 : .infinity)
+            .frame(maxWidth: .infinity, alignment: .center)
         }
         // Breathing room above the translucent (iOS 26 glass) tab bar
         // so the last session row doesn't read as clipped.
