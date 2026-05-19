@@ -8,10 +8,12 @@ topmost Active item matching its lane. Format per line:
 When a task moves through states, the loop edits this file in place:
 Active → In flight → Done (or → Blocked on triple failure).
 
-Last seeded: 2026-05-14.
+Last seeded: 2026-05-14. Last updated: 2026-05-19.
 
 ## Active
 
+- [ ] UI-P4b Live Activity + Widget — 1d — lane: ios — **blocked on manual Xcode step**: requires File → New → Target → Widget Extension (name AurionWidgets, include Live Activity). Per AURION-CODING-WORKFLOW.md §11, project-target surgery is not on the auto-approval allow-list. Resume by prompting "UI-P4b ready" once target exists.
+- [ ] AUR-DESIGN-DARK Dark mode rollout — collapse aurionNavy as text token, build full dark variant, drop preferredColorScheme(.light) lock in AurionApp — 5d — lane: ios — depends on AUR-DESIGN-NAVY
 - [ ] AUR-MP-CROSSCHECK Add MediaPipe as independent second face detector for Apple Vision (pilot follow-up; revisit only if clinical safety committee asks) — 5d — lane: ios — no blockers
 - [ ] AUR-DESIGN-NAVY — design decision on canonical navy (#0C1B37 vs #0D1B3E); collapse aurionNavyLegacy once chosen — 0.5d — lane: ios — no blockers
 - [ ] Q-05 Consolidate _to_uuid coercion — same idiom now duplicated in note_gen/repository.py, users_repository.py, _helpers.py, admin/_shared.py; promote to core/uuids.py — 0.5d — lane: backend — no blockers
@@ -27,6 +29,12 @@ Last seeded: 2026-05-14.
 
 ## Done
 
+- [x] UI-P6 Materials + iPad readable-measure pass (regularMaterial toast + 720pt clamp on Inbox/Note/Devices) — 0.5d — lane: ios — merged: 2026-05-19 (commit 9cefee6)
+- [x] UI-P5 A11y labels + symbol effects + motion polish (capture controls, sort, toolbar, conflicts pulse, copy bounce) — 0.5d — lane: ios — merged: 2026-05-19 (commit 4d00062)
+- [x] UI-P4a App Intents (StartSessionIntent, ShowPendingNotesIntent) + Spotlight donation + deep-link push — 1d — lane: ios — merged: 2026-05-19 (commit df32abb)
+- [x] UI-P3 List + screen UX redesigns (inbox search + iPad clamp + amber conflicts banner with scroll-to-first) — 2d — lane: ios — merged: 2026-05-19 (commit 40b3dcf)
+- [x] UI-P2 Native TabView + iPad sidebarAdaptable (NavigationStack-based routing) — 1d — lane: ios — merged: 2026-05-19 (commit 312d3fe)
+- [x] UI-P1 Color token sweep + semantic typography modifiers + on-navy text tokens — 1d — lane: ios — merged: 2026-05-19 (commit 3a0152a)
 - [x] Q-04 SessionUIState shim cleanup — 1d — lane: ios — merged: 2026-05-19 (commit 69b317e)
 - [x] Q-03 write_audit kwarg whitelist + strict-mode — 1d — lane: backend — merged: 2026-05-19 (commit d539a57)
 - [x] Q-02 privacy.py _purge_session_prefix extraction + latent bug fix — 1d — lane: backend — merged: 2026-05-19 (commit ec3a318)
