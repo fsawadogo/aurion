@@ -271,16 +271,8 @@ struct ExportView: View {
 
     private var completionView: some View {
         VStack(spacing: AurionSpacing.xxl) {
-            ZStack {
-                Circle()
-                    .fill(Color.clinicalNormal.opacity(0.1))
-                    .frame(width: 100, height: 100)
-
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.system(size: 52))
-                    .foregroundColor(Color.aurionGold)
-            }
-            .transition(AurionTransition.scaleIn)
+            AurionIconBubble(symbol: "checkmark.circle.fill", tint: .aurionGold, size: 100, symbolWeight: .regular)
+                .transition(AurionTransition.scaleIn)
 
             VStack(spacing: AurionSpacing.sm) {
                 Text("Note Exported")

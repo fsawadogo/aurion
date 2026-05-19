@@ -69,6 +69,13 @@ struct DashboardView: View {
         recentSessions.filter { $0.state == "AWAITING_REVIEW" }
     }
 
+    /// Sessions whose Stage 2 visual enrichment is in flight on the
+    /// backend (post-`/approve-stage1`, pre-`REVIEW_COMPLETE`). The tile
+    /// polls each session's job state and self-promotes when complete.
+    private var stage2InProgressSessions: [SessionResponse] {
+        recentSessions.filter { $0.state == "PROCESSING_STAGE2" }
+    }
+
     /// Sessions on the backend still in an active capture state. Surfaced at
     /// the top of the dashboard with a Resume CTA so the physician can hop
     /// straight back into `CaptureView` after backgrounding the app.
@@ -110,6 +117,7 @@ struct DashboardView: View {
                 VStack(spacing: 20) {
                     greetingHeader
                     if !resumableSessions.isEmpty { resumableSection }
+                    if !stage2InProgressSessions.isEmpty { stage2InProgressSection }
                     if !pendingReviewSessions.isEmpty { pendingReviewSection }
                     quickStartSection
                     recentSessionsSection
@@ -184,14 +192,7 @@ struct DashboardView: View {
                 } label: {
                     AurionCard(padding: 16, accent: true) {
                         HStack(spacing: 12) {
-                            ZStack {
-                                Circle()
-                                    .fill(Color.aurionGold.opacity(0.18))
-                                    .frame(width: 36, height: 36)
-                                Image(systemName: "record.circle")
-                                    .font(.system(size: 18, weight: .semibold))
-                                    .foregroundColor(.aurionGold)
-                            }
+                            AurionIconBubble(symbol: "record.circle", tint: .aurionGold, size: 36)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(session.specialty.displayFormatted)
                                     .font(.system(size: 16, weight: .semibold))
@@ -247,6 +248,26 @@ struct DashboardView: View {
                     }
                 }
                 .buttonStyle(.plain)
+            }
+        }
+    }
+
+    // MARK: - Stage 2 in progress (polled tile)
+    //
+    // Surfaces sessions whose visual enrichment is still running on the
+    // backend. Each tile owns its own poll loop (5 s cadence); when a
+    // tile reports completion we refresh `recentSessions` so the row
+    // moves into Pending Review and the tile drops out.
+
+    private var stage2InProgressSection: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            SectionHeader(title: "Stage 2 in progress")
+            ForEach(stage2InProgressSessions, id: \.id) { session in
+                Stage2DashboardTile(
+                    session: session,
+                    onCompleted: { Task { await loadRecentSessions() } },
+                    onFailed: { Task { await loadRecentSessions() } }
+                )
             }
         }
     }

@@ -35,6 +35,30 @@ struct AurionCard<Content: View>: View {
     }
 }
 
+// MARK: - Icon bubble
+//
+// Tinted circular halo behind an SF Symbol. Used everywhere we want a
+// 36-64pt "status atom" — dashboard tiles, profile rows, export
+// completion, the approved-note toast. The opacity (0.16) matches the
+// tokens table; callers pass any aurion* color and a glyph name.
+
+struct AurionIconBubble: View {
+    let symbol: String
+    let tint: Color
+    var size: CGFloat = 44
+    var symbolWeight: Font.Weight = .semibold
+
+    var body: some View {
+        ZStack {
+            Circle().fill(tint.opacity(0.16))
+            Image(systemName: symbol)
+                .font(.system(size: size * 0.4, weight: symbolWeight))
+                .foregroundColor(tint)
+        }
+        .frame(width: size, height: size)
+    }
+}
+
 // MARK: - Buttons
 //
 // Three sizes per components.jsx GoldBtn (sm 8/16, md 14/22, lg 16/24).

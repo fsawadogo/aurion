@@ -322,14 +322,7 @@ struct NoteReviewView: View {
 
     private var approvedToast: some View {
         VStack(spacing: 12) {
-            ZStack {
-                Circle()
-                    .fill(Color.aurionGreen.opacity(0.15))
-                    .frame(width: 64, height: 64)
-                Image(systemName: "checkmark")
-                    .font(.system(size: 28, weight: .bold))
-                    .foregroundColor(.aurionGreen)
-            }
+            AurionIconBubble(symbol: "checkmark", tint: .aurionGreen, size: 64, symbolWeight: .bold)
             Text("Note Approved")
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(.aurionNavy)

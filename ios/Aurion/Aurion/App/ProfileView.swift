@@ -65,14 +65,7 @@ struct ProfileView: View {
             Section {
                 if appState.hasVoiceProfile {
                     HStack(spacing: 14) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.aurionGreen.opacity(0.15))
-                                .frame(width: 44, height: 44)
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(.aurionGreen)
-                        }
+                        AurionIconBubble(symbol: "checkmark", tint: .aurionGreen, size: 44, symbolWeight: .bold)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Voice ID set up")
                                 .font(.system(size: 15, weight: .semibold))
@@ -99,14 +92,7 @@ struct ProfileView: View {
                     }
                 } else {
                     HStack(spacing: 14) {
-                        ZStack {
-                            Circle()
-                                .fill(Color.aurionGold.opacity(0.18))
-                                .frame(width: 44, height: 44)
-                            Image(systemName: "mic.fill")
-                                .font(.system(size: 18, weight: .semibold))
-                                .foregroundColor(.aurionGold)
-                        }
+                        AurionIconBubble(symbol: "mic.fill", tint: .aurionGold, size: 44)
                         VStack(alignment: .leading, spacing: 2) {
                             Text("Set up your Voice ID")
                                 .font(.system(size: 15, weight: .semibold))

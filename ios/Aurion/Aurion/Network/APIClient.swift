@@ -628,9 +628,26 @@ struct Stage2StatusResponse: Codable, Sendable, Equatable {
     /// so the UI never silently drops a Stage 2 in flight.
     var isCompleted: Bool { status == "completed" }
     var isFailed: Bool { status == "failed" }
+    var isRunning: Bool { status == "running" }
     var isInProgress: Bool { status == "pending" || status == "running" }
     var hasStarted: Bool { status != "no_job" }
+
+    /// Collapses the five backend status strings onto the four visual
+    /// states any Stage 2 surface (dashboard tile, review banner) needs
+    /// to render. Lives next to the data so every UI site shares the
+    /// same mapping.
+    var displayKind: Stage2DisplayKind {
+        guard hasStarted else { return .pending }
+        if isCompleted { return .completed }
+        if isFailed { return .failed }
+        if isRunning { return .running }
+        return .pending
+    }
 }
+
+/// Four visual states a Stage 2 job collapses to. See
+/// ``Stage2StatusResponse/displayKind``.
+enum Stage2DisplayKind { case pending, running, completed, failed }
 
 
 struct NoteApprovalResponse: Codable, Sendable {
