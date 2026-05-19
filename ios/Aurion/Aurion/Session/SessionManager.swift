@@ -79,13 +79,6 @@ final class SessionManager: ObservableObject {
     @Published var error: String?
     @Published var stage1Status: Stage1Status = .idle
 
-    // Bool read-only shims — kept temporarily so existing SwiftUI call sites
-    // (ContentView branches, `.animation(value:)` modifiers) don't all need
-    // to change in this same PR. Follow-up backlog: AUR-UI-STATE-CLEANUP.
-    var isProcessing: Bool { uiState == .processing }
-    var showingReview: Bool { uiState == .reviewing }
-    var showingPostEncounter: Bool { uiState == .postEncounter }
-
     /// Frames whose on-device masking failed during `submitFrames` /
     /// `submitScreenFrames`. Per CLAUDE.md the pipeline is fail-closed: these
     /// frames were NOT uploaded. Surfaced to the clinician so they can choose
@@ -622,7 +615,7 @@ final class SessionManager: ObservableObject {
                 sessionId: session.id,
                 extra: ["reason": String(error.localizedDescription.prefix(200))]
             )
-            // Keep isProcessing true so the retry prompt remains reachable.
+            // Stay in uiState == .processing so the retry prompt remains reachable.
         }
     }
 
@@ -635,7 +628,7 @@ final class SessionManager: ObservableObject {
             sessionId: sessionId,
             extra: ["stage1_timeout_ms": "\(Int(elapsed * 1000))"]
         )
-        // Keep isProcessing true so ProcessingView (and the retry prompt) stay on screen.
+        // Stay in uiState == .processing so ProcessingView (and the retry prompt) stay on screen.
     }
 
     /// Re-fire the Stage 1 pipeline after a timeout/failure. Recorded

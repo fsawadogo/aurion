@@ -23,13 +23,14 @@ struct ContentView: View {
             } else if !appState.hasCompletedProfileSetup {
                 PhysicianProfileSetupView()
                     .transition(AurionTransition.fadeSlide)
-            } else if sessionManager.note != nil && !sessionManager.showingReview {
-                // Note ready — ask physician to review now or save for later
+            } else if sessionManager.uiState == .noteReady {
+                // Stage 1 note delivered — ask physician to review now
+                // or save for later.
                 NoteReadyView()
                     .transition(AurionTransition.fadeSlide)
                     .environmentObject(sessionManager)
-            } else if let note = sessionManager.note, sessionManager.showingReview {
-                // Physician chose to review now
+            } else if sessionManager.uiState == .reviewing, let note = sessionManager.note {
+                // Physician chose to review now.
                 NoteReviewView(
                     sessionId: sessionManager.session?.id ?? "",
                     initialNote: note,
@@ -39,13 +40,13 @@ struct ContentView: View {
                     }
                 )
                 .transition(AurionTransition.fadeSlide)
-            } else if sessionManager.showingPostEncounter, let session = sessionManager.session {
-                // Post-encounter — confirm template before pipeline
+            } else if sessionManager.uiState == .postEncounter, let session = sessionManager.session {
+                // Post-encounter — confirm template before pipeline.
                 PostEncounterView(currentSpecialty: session.specialty, profileLanguage: appState.physicianProfile?.outputLanguage ?? "en")
                     .transition(AurionTransition.fadeSlide)
                     .environmentObject(sessionManager)
-            } else if sessionManager.isProcessing {
-                // Processing state — after stop, before note arrives
+            } else if sessionManager.uiState == .processing {
+                // Processing — after stop, before note arrives.
                 ProcessingView(status: sessionManager.processingStatus)
                     .environmentObject(sessionManager)
                     .transition(.opacity)
@@ -65,9 +66,7 @@ struct ContentView: View {
         .animation(AurionAnimation.smooth, value: appState.isOnboardingComplete)
         .animation(AurionAnimation.smooth, value: sessionManager.session?.id)
         .animation(AurionAnimation.smooth, value: sessionManager.note?.sessionId)
-        .animation(AurionAnimation.smooth, value: sessionManager.showingReview)
-        .animation(AurionAnimation.smooth, value: sessionManager.showingPostEncounter)
-        .animation(AurionAnimation.smooth, value: sessionManager.isProcessing)
+        .animation(AurionAnimation.smooth, value: sessionManager.uiState)
         .onAppear {
             appState.checkVoiceEnrollment()
             checkForCrashRecovery()
