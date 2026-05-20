@@ -372,10 +372,38 @@ resource "aws_lb_target_group" "api" {
   }
 }
 
-resource "aws_lb_listener" "api" {
+# Port 80 → port 443 redirect. Pre-Phase 2 this listener forwarded
+# traffic directly; PHI in plaintext is unacceptable, so the only thing
+# port 80 does now is redirect (HTTP 301) to HTTPS.
+resource "aws_lb_listener" "api_http_redirect" {
   load_balancer_arn = aws_lb.api.arn
   port              = 80
   protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+
+    redirect {
+      port        = "443"
+      protocol    = "HTTPS"
+      status_code = "HTTP_301"
+    }
+  }
+
+  tags = {
+    Name = "aurion-api-listener-http-${var.environment}"
+  }
+}
+
+# Port 443 HTTPS — the real listener. TLS 1.2 minimum, 1.3 preferred.
+# Uses the ACM cert from acm.tf; depends on `aws_acm_certificate_validation`
+# so the cert is fully issued before the listener tries to attach it.
+resource "aws_lb_listener" "api_https" {
+  load_balancer_arn = aws_lb.api.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+  certificate_arn   = aws_acm_certificate_validation.api.certificate_arn
 
   default_action {
     type             = "forward"
@@ -383,7 +411,7 @@ resource "aws_lb_listener" "api" {
   }
 
   tags = {
-    Name = "aurion-api-listener-${var.environment}"
+    Name = "aurion-api-listener-https-${var.environment}"
   }
 }
 
@@ -403,7 +431,7 @@ resource "aws_ecs_task_definition" "api" {
   container_definitions = jsonencode([
     {
       name      = "aurion-api"
-      image     = "${aws_ecr_repository.backend.repository_url}:latest"
+      image     = "${aws_ecr_repository.backend.repository_url}:${var.api_image_tag}"
       essential = true
 
       portMappings = [
@@ -500,7 +528,7 @@ resource "aws_ecs_service" "api" {
     container_port   = 8000
   }
 
-  depends_on = [aws_lb_listener.api]
+  depends_on = [aws_lb_listener.api_https]
 
   tags = {
     Name = "aurion-api-service-${var.environment}"
@@ -768,7 +796,7 @@ resource "aws_ecs_task_definition" "whisper" {
   container_definitions = jsonencode([
     {
       name      = "aurion-whisper"
-      image     = "onerahmet/openai-whisper-asr-webservice:latest"
+      image     = "onerahmet/openai-whisper-asr-webservice:${var.whisper_image_tag}"
       essential = true
       memory    = 14336 # ~14GB — leave headroom on g4dn.xlarge (16GB)
 
