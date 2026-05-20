@@ -1,0 +1,84 @@
+name: Deploy — Prod
+
+# Manual deploy to the prod environment.
+#
+# Triggers only via the "Run workflow" button in the GitHub Actions
+# UI. The OIDC trust on AurionGitHubDeployerProd requires the workflow
+# to declare `environment: prod`, which in turn requires GitHub's
+# environment protection rule (configured in repo Settings → Environments)
+# to grant the run — that's where the per-deploy human approval lives.
+
+on:
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "ECR image tag to deploy (default: short SHA of main). Must be an immutable SHA-style tag, never `latest`."
+        required: true
+        default: ""
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: prod   # ← couples to GitHub Environment protection rule
+    env:
+      AWS_REGION: ca-central-1
+      # All workflow_dispatch inputs are promoted to env vars here so
+      # subsequent `run:` blocks reference them via $VAR shell expansion
+      # rather than ${{ }} interpolation — eliminates the injection
+      # surface even though the inputs come from an approval-gated path.
+      INPUT_IMAGE_TAG: ${{ inputs.image_tag }}
+      TF_VAR_api_image_tag: ${{ inputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      # Refuse to deploy `latest`. Prod must pin to an immutable tag.
+      - name: Validate image tag
+        run: |
+          if [ -z "$INPUT_IMAGE_TAG" ] || [ "$INPUT_IMAGE_TAG" = "latest" ]; then
+            echo "::error::image_tag must be a SHA-style immutable tag, not 'latest' or empty."
+            exit 1
+          fi
+
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_PROD }}
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: "1.9.0"
+          terraform_wrapper: false
+
+      - name: Render backend config
+        env:
+          BOOTSTRAP_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+        run: |
+          mkdir -p infrastructure/backends
+          cat > infrastructure/backends/prod.s3.tfbackend <<EOF
+          bucket         = "aurion-terraform-state-${BOOTSTRAP_ACCOUNT_ID}"
+          dynamodb_table = "aurion-terraform-locks"
+          key            = "aurion/prod/terraform.tfstate"
+          region         = "ca-central-1"
+          encrypt        = true
+          kms_key_id     = "alias/aurion-terraform-state"
+          EOF
+
+      - name: Terraform init
+        working-directory: infrastructure
+        run: terraform init -reconfigure -backend-config=backends/prod.s3.tfbackend
+
+      # Print the plan in the run log before applying. With GitHub's
+      # environment approval gate, you get the plan in the run log
+      # AND a separate manual approval step before this job actually
+      # starts — two opportunities to catch a bad apply.
+      - name: Terraform plan
+        working-directory: infrastructure
+        run: terraform plan -var-file=environments/prod.tfvars -out=plan.tfplan
+
+      - name: Terraform apply
+        working-directory: infrastructure
+        run: terraform apply -auto-approve plan.tfplan

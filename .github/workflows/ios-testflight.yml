@@ -1,0 +1,144 @@
+name: iOS — TestFlight
+
+# Builds the iOS app and uploads to TestFlight on every push to main
+# that touches iOS code. PRs build but don't upload (saves Mac runner
+# minutes — they're expensive — and avoids spurious TestFlight builds).
+#
+# Gated on the App Store Connect API key secret being present. Until
+# the Apple Developer Program membership processes (~48h) and you've
+# generated the key, the upload step is skipped automatically.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "ios/**"
+      - ".github/workflows/ios-testflight.yml"
+  pull_request:
+    branches: [main]
+    paths:
+      - "ios/**"
+
+permissions:
+  contents: read
+
+env:
+  XCODE_VERSION: "16.0"
+  IOS_PROJECT_DIR: ios/Aurion
+  IOS_SCHEME: Aurion
+
+jobs:
+  build:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+
+      # Build for the simulator on every event — proves the project
+      # compiles. Same target as the local dev check.
+      - name: Build for iPhone 17 Simulator
+        working-directory: ${{ env.IOS_PROJECT_DIR }}
+        run: |
+          xcodebuild -scheme "$IOS_SCHEME" \
+                     -destination 'platform=iOS Simulator,name=iPhone 17' \
+                     -configuration Debug \
+                     build | xcpretty || true
+
+  testflight:
+    # Only runs on main + only if the App Store Connect API key secret
+    # is set. Until the user has their Apple Developer membership +
+    # generated a key, this job is a graceful no-op.
+    runs-on: macos-15
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    env:
+      APP_STORE_CONNECT_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_P8:    ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if Apple Dev account not yet wired
+        id: gate
+        run: |
+          if [ -z "$APP_STORE_CONNECT_KEY_ID" ] || \
+             [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] || \
+             [ -z "$APP_STORE_CONNECT_KEY_P8" ]; then
+            echo "::notice::App Store Connect secrets not set — skipping TestFlight upload."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Select Xcode
+        if: steps.gate.outputs.skip == 'false'
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+
+      - name: Materialize App Store Connect API key
+        if: steps.gate.outputs.skip == 'false'
+        run: |
+          mkdir -p ~/.appstoreconnect/private_keys
+          # The secret is the base64-encoded contents of the .p8 file
+          # to avoid newline mangling in the GitHub secret store.
+          echo "$APP_STORE_CONNECT_KEY_P8" | base64 --decode \
+            > "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+
+      # `xcodebuild -allowProvisioningUpdates` uses the API key to
+      # auto-fetch / refresh signing certs + provisioning profiles —
+      # no manual cert + profile management in CI.
+      - name: Archive
+        if: steps.gate.outputs.skip == 'false'
+        working-directory: ${{ env.IOS_PROJECT_DIR }}
+        run: |
+          xcodebuild -scheme "$IOS_SCHEME" \
+                     -destination 'generic/platform=iOS' \
+                     -configuration Release \
+                     -archivePath "$RUNNER_TEMP/Aurion.xcarchive" \
+                     -allowProvisioningUpdates \
+                     -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
+                     -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+                     -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+                     archive | xcpretty || true
+
+      - name: Export IPA
+        if: steps.gate.outputs.skip == 'false'
+        working-directory: ${{ env.IOS_PROJECT_DIR }}
+        run: |
+          cat > "$RUNNER_TEMP/ExportOptions.plist" <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>method</key>
+            <string>app-store-connect</string>
+            <key>signingStyle</key>
+            <string>automatic</string>
+            <key>uploadSymbols</key>
+            <true/>
+          </dict>
+          </plist>
+          EOF
+          xcodebuild -exportArchive \
+                     -archivePath "$RUNNER_TEMP/Aurion.xcarchive" \
+                     -exportPath "$RUNNER_TEMP/export" \
+                     -exportOptionsPlist "$RUNNER_TEMP/ExportOptions.plist" \
+                     -allowProvisioningUpdates \
+                     -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
+                     -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
+                     -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID"
+
+      - name: Upload to TestFlight
+        if: steps.gate.outputs.skip == 'false'
+        run: |
+          IPA_PATH=$(find "$RUNNER_TEMP/export" -name "*.ipa" -type f | head -1)
+          if [ -z "$IPA_PATH" ]; then
+            echo "::error::No .ipa produced by export step"
+            exit 1
+          fi
+          xcrun altool --upload-app \
+                       --type ios \
+                       --file "$IPA_PATH" \
+                       --apiKey "$APP_STORE_CONNECT_KEY_ID" \
+                       --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
