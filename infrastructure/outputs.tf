@@ -151,3 +151,22 @@ output "waf_web_acl_arn" {
   description = "WAFv2 web ACL ARN — associated with the ALB."
   value       = aws_wafv2_web_acl.api.arn
 }
+
+# -----------------------------------------------------------------------------
+# GitHub Actions OIDC (Phase 3)
+# -----------------------------------------------------------------------------
+
+output "github_deployer_dev_role_arn" {
+  description = "ARN of the IAM role GitHub Actions assumes on pushes to main. Set this as the `AWS_DEPLOY_ROLE_DEV` repo secret."
+  value       = aws_iam_role.github_deployer_dev.arn
+}
+
+output "github_deployer_prod_role_arn" {
+  description = "ARN of the IAM role GitHub Actions assumes for manual prod deploys (workflow_dispatch in the `prod` environment). Set this as the `AWS_DEPLOY_ROLE_PROD` repo secret."
+  value       = aws_iam_role.github_deployer_prod.arn
+}
+
+output "ecr_registry" {
+  description = "ECR registry hostname (account-id.dkr.ecr.region.amazonaws.com). Set as the `ECR_REGISTRY` repo secret."
+  value       = split("/", aws_ecr_repository.backend.repository_url)[0]
+}
