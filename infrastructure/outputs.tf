@@ -20,9 +20,14 @@ output "ecs_cluster_arn" {
   value       = aws_ecs_cluster.main.arn
 }
 
-output "alb_url" {
-  description = "FastAPI ALB URL"
-  value       = "http://${aws_lb.api.dns_name}"
+output "alb_dns_name" {
+  description = "Raw ALB DNS name (use `api_url` for the canonical, TLS-terminated URL)."
+  value       = aws_lb.api.dns_name
+}
+
+output "api_url" {
+  description = "Canonical HTTPS URL for the API (uses var.api_domain). Configure the iOS app's Config.swift BACKEND_URL with this."
+  value       = "https://${var.api_domain}"
 }
 
 output "ecr_repository_url" {
@@ -121,4 +126,28 @@ output "kms_key_arn" {
 output "dashboard_url" {
   description = "CloudWatch Dashboard URL"
   value       = "https://${var.region}.console.aws.amazon.com/cloudwatch/home?region=${var.region}#dashboards:name=Aurion-${var.environment}"
+}
+
+# -----------------------------------------------------------------------------
+# DNS + TLS + WAF (Phase 2)
+# -----------------------------------------------------------------------------
+
+output "route53_zone_id" {
+  description = "Hosted zone ID for the apex domain. Same value whether this env owns the zone or reads it via data source."
+  value       = local.route53_zone_id
+}
+
+output "route53_nameservers" {
+  description = "NS records to set at the domain registrar after the first `terraform apply` in the owning env. Until these are delegated, ACM cert validation will hang. Example: copy these 4 values into the NS section for `aurionclinical.com` at your registrar."
+  value       = local.route53_nameservers
+}
+
+output "acm_certificate_arn" {
+  description = "ARN of the ACM cert for var.api_domain. Wired into the ALB HTTPS listener."
+  value       = aws_acm_certificate_validation.api.certificate_arn
+}
+
+output "waf_web_acl_arn" {
+  description = "WAFv2 web ACL ARN — associated with the ALB."
+  value       = aws_wafv2_web_acl.api.arn
 }

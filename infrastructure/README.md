@@ -69,6 +69,32 @@ Per `AURION-CODING-WORKFLOW.md` §11 deny-list:
 
 ## Production readiness
 
-Phase 1 of the production rollout (this PR) lands the remote backend.
-Phases 2–5 are tracked in the production-rollout plan; the canonical
-todo list lives in `.claude/state/backlog.md`.
+| Phase | Status | What it lands |
+|---|---|---|
+| 1 | done | Remote state bootstrap (`bootstrap/` module) |
+| 2 | code-ready, awaits apply | TLS (ACM) + DNS (Route 53) + WAF + SHA-pinning + 80→443 redirect on ALB |
+| 3 | pending | GitHub Actions CI/CD with OIDC |
+| 4 | pending | Cognito MFA, SNS alarms, CloudTrail, VPC Flow Logs |
+| 5 | pending | Runbooks + IAM Identity Center migration |
+
+## After the first Phase 2 dev apply — domain delegation
+
+`terraform apply` will create the Route 53 hosted zone for
+`aurionclinical.com` (only in the env where `manage_root_zone = true`,
+which is dev). Until the apex zone's nameservers are delegated from
+the registrar, the ACM cert validation in the same apply will hang
+for ~15 min and then fail.
+
+To unblock:
+
+```bash
+terraform output route53_nameservers
+```
+
+Will print 4 ns-* values. Set those at your domain registrar
+(GoDaddy, Namecheap, Cloudflare, etc.) as the NS records for
+`aurionclinical.com`. Propagation is usually under 10 minutes;
+Terraform's `aws_acm_certificate_validation` polls for up to 30 min.
+
+If you registered the domain through Route 53 directly, this step
+is skipped — Route 53 auto-delegates to its own zone.
