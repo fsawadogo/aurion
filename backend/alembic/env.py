@@ -17,7 +17,6 @@ Usage:
 
 from __future__ import annotations
 
-import os
 from logging.config import fileConfig
 
 from sqlalchemy import engine_from_config, pool
@@ -29,8 +28,14 @@ from alembic import context
 # Import the project's Base so Alembic can see every model's table metadata.
 # The import of ``models`` is intentional — it ensures all ORM classes are
 # registered on ``Base.metadata`` before autogenerate runs.
+#
+# Reading DATABASE_URL via app.core.database (rather than os.getenv directly)
+# means we share its normalisation logic for the JSON-envelope shape AWS RDS
+# managed-secrets emit — a plain os.getenv("DATABASE_URL") here would crash
+# in prod because the env var contains '{"username":"...","password":"..."}'
+# not a SQLAlchemy URL.
 # ---------------------------------------------------------------------------
-from app.core.database import Base  # noqa: F401
+from app.core.database import DATABASE_URL, Base  # noqa: F401
 
 # Alembic Config object — provides access to alembic.ini values.
 config = context.config
@@ -44,11 +49,7 @@ target_metadata = Base.metadata
 
 # Alembic uses a synchronous driver; the app uses asyncpg. Swap one for the
 # other so DATABASE_URL works for both.
-_database_url = os.getenv(
-    "DATABASE_URL",
-    "postgresql+asyncpg://aurion:aurion@localhost:5432/aurion",
-)
-config.set_main_option("sqlalchemy.url", _database_url.replace("asyncpg", "psycopg2"))
+config.set_main_option("sqlalchemy.url", DATABASE_URL.replace("asyncpg", "psycopg2"))
 
 
 def run_migrations_offline() -> None:
