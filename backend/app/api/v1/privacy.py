@@ -13,15 +13,15 @@ import logging
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.clock import utcnow
 from app.api.v1._helpers import write_audit
 from app.core.audit_events import AuditEventType
+from app.core.clock import utcnow
 from app.core.database import get_db
 from app.core.models import NoteVersionModel, PilotMetricsModel, SessionModel
 from app.core.s3 import AUDIO_BUCKET, FRAMES_BUCKET, get_s3_client

@@ -217,7 +217,6 @@ async def test_stage1_approve_then_export(
     """
     from app.api.v1 import notes as notes_routes
     from app.modules.eval import repository as eval_repo  # noqa: F401  - imported to ensure module is loaded
-    from app.modules.note_gen import service as note_gen_service
 
     # ── Mock background Stage 2 dispatch ──────────────────────────────
     # /approve-stage1 fires `asyncio.create_task(_run_stage2_in_background(...))`.

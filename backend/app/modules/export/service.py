@@ -8,7 +8,6 @@ from __future__ import annotations
 
 import io
 import logging
-from typing import Optional
 
 from docx import Document
 from docx.shared import Pt, RGBColor

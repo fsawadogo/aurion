@@ -2,14 +2,12 @@
 
 from __future__ import annotations
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from botocore.exceptions import ClientError
 
 from app.core.retry import with_retry
-
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -167,11 +165,9 @@ async def test_vision_fallback_used_when_primary_fails():
 
     assert len(result) == 1
     assert result[0].provider_used == "anthropic"
-    # Verify provider_fallback audit event was logged
-    audit_events = [
-        call.kwargs.get("event_type") or call.args[0]
-        for call in mock_audit.write_event.call_args_list
-    ]
+    # Verify provider_fallback audit event was logged. The assert
+    # below reads directly from call_args_list — the prior
+    # `audit_events = [...]` was a debug-time leftover.
     assert "provider_fallback" in [
         call[1]["event_type"]
         for call in mock_audit.write_event.call_args_list

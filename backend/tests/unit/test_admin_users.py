@@ -77,7 +77,9 @@ async def test_create_user_writes_hashed_password() -> None:
     db.add = MagicMock()
     db.flush = AsyncMock()
 
-    user = await users_repo.create_user(
+    # Discard the return — assertions below inspect the model that was
+    # passed to db.add(), which is the contract this test is verifying.
+    await users_repo.create_user(
         db,
         email="New@Aurion.com",
         full_name="New User",

@@ -20,8 +20,10 @@ from __future__ import annotations
 import os
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import engine_from_config, pool
+
+import app.core.models  # noqa: F401  — registers all models on Base.metadata
+from alembic import context
 
 # ---------------------------------------------------------------------------
 # Import the project's Base so Alembic can see every model's table metadata.
@@ -29,7 +31,6 @@ from sqlalchemy import engine_from_config, pool
 # registered on ``Base.metadata`` before autogenerate runs.
 # ---------------------------------------------------------------------------
 from app.core.database import Base  # noqa: F401
-import app.core.models  # noqa: F401  — registers all models on Base.metadata
 
 # Alembic Config object — provides access to alembic.ini values.
 config = context.config

@@ -44,7 +44,6 @@ import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine  # noqa: E402
 
-
 _PG_HOST = os.getenv("AURION_TEST_PG_HOST", "localhost")
 # docker-compose maps the aurion Postgres to host port 5434 (5432 is the
 # in-container port). 5434 is the contract.

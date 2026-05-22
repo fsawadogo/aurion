@@ -17,6 +17,7 @@ from typing import Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 
+from app.core.audit_events import AuditEventType
 from app.core.retry import with_retry
 from app.core.s3 import FRAMES_BUCKET, get_s3_client
 from app.core.types import (
@@ -28,7 +29,6 @@ from app.core.types import (
     ProviderError,
     TranscriptSegment,
 )
-from app.core.audit_events import AuditEventType
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry

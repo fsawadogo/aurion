@@ -23,7 +23,6 @@ from app.core.audit_events import (
     validate_audit_kwargs,
 )
 
-
 EXPECTED_VALUES: dict[str, str] = {
     # Lifecycle
     "SESSION_CREATED": "session_created",

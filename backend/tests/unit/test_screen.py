@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.core.types import ScreenCaptureResult, ScreenExtractedData, ScreenLabValue
+from app.core.types import ScreenCaptureResult, ScreenLabValue
 from app.modules.screen.service import (
     classify_screen_type,
     extract_imaging_metadata,
@@ -12,7 +12,6 @@ from app.modules.screen.service import (
     process_screen_frame,
     redact_phi,
 )
-
 
 # ── Screen Type Classification ───────────────────────────────────────────────
 

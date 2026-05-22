@@ -36,8 +36,9 @@ async def test_delete_account_with_metrics_but_no_sessions_logs_real_count(
     Pre-Q-02 behaviour: the no-sessions branch hardcoded zero. Tests
     the fix collapses both branches to one loop with real counters.
     """
-    from app.api.v1 import privacy as privacy_routes
     import uuid as _uuid
+
+    from app.api.v1 import privacy as privacy_routes
 
     user_id, _ = clinician_user
 

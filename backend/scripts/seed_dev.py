@@ -20,9 +20,6 @@ from pathlib import Path
 _backend_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_backend_root))
 
-from app.core.database import engine, async_session_factory  # noqa: E402
-from app.core.models import SessionModel, NoteVersionModel, PilotMetricsModel  # noqa: E402
-
 
 # ---------------------------------------------------------------------------
 # Template directory — five specialty template JSON files

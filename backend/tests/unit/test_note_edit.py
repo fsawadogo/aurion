@@ -18,7 +18,6 @@ import pytest
 
 from app.core.types import Note, NoteClaim, NoteSection
 
-
 # ── Fixtures ─────────────────────────────────────────────────────────────
 
 

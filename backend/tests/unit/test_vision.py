@@ -1,22 +1,19 @@
 """Tests for vision pipeline — conflict classification, note merge, frame discard."""
 
-import pytest
 
 from app.core.types import (
     FrameCaption,
-    MaskedFrame,
     Note,
     NoteClaim,
     NoteSection,
-    TranscriptSegment,
 )
+from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT
 from app.modules.vision.service import (
     classify_conflicts,
     get_frame_window_ms,
     has_unresolved_conflicts,
     merge_visual_citations,
 )
-from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT
 
 
 def _make_caption(
@@ -156,10 +153,9 @@ class TestNoteMerge:
             anchor_id="seg_003",
             description="MRI showing clear view of knee joint.",
         )]
-        result = merge_visual_citations(note, captions)
-
-        # imaging_review may now be populated if a caption was routed there
-        # (depends on anchor matching — test with fallback routing)
+        # Smoke: merge runs without raising on a Stage 1 anchor mismatch.
+        # Assertions on populated content live in the test below.
+        merge_visual_citations(note, captions)
 
     def test_remaining_pending_video_set_to_not_captured(self):
         note = _make_stage1_note()

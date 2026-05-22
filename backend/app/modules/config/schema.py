@@ -11,7 +11,6 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, model_validator
 
-
 # ── Provider Key Enums ─────────────────────────────────────────────────────
 
 class TranscriptionProviderKey(str, Enum):

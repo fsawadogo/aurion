@@ -22,14 +22,6 @@ from app.modules.providers.base import (
     VisionProvider,
 )
 
-# ── Transcription providers ────────────────────────────────────────────────
-from app.modules.providers.transcription.assemblyai import (
-    AssemblyAITranscriptionProvider,
-)
-from app.modules.providers.transcription.whisper import (
-    WhisperTranscriptionProvider,
-)
-
 # ── Note generation providers ──────────────────────────────────────────────
 from app.modules.providers.note_gen.anthropic import (
     AnthropicNoteGenerationProvider,
@@ -39,6 +31,14 @@ from app.modules.providers.note_gen.gemini import (
 )
 from app.modules.providers.note_gen.openai import (
     OpenAINoteGenerationProvider,
+)
+
+# ── Transcription providers ────────────────────────────────────────────────
+from app.modules.providers.transcription.assemblyai import (
+    AssemblyAITranscriptionProvider,
+)
+from app.modules.providers.transcription.whisper import (
+    WhisperTranscriptionProvider,
 )
 
 # ── Vision providers ───────────────────────────────────────────────────────

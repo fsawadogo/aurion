@@ -20,9 +20,10 @@ import io
 from pathlib import Path
 
 import pytest
-from alembic import command
 from alembic.config import Config
 from alembic.script import ScriptDirectory
+
+from alembic import command
 
 BACKEND_ROOT = Path(__file__).resolve().parent.parent.parent
 

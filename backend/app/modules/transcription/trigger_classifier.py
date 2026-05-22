@@ -11,10 +11,9 @@ and a trigger_type.
 from __future__ import annotations
 
 import logging
-import re
 from typing import Optional
 
-from app.core.types import Template, Transcript, TranscriptSegment
+from app.core.types import Template, Transcript
 
 logger = logging.getLogger("aurion.trigger_classifier")
 

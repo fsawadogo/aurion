@@ -1,7 +1,5 @@
 """Tests for note generation service — template loading, completeness, versioning."""
 
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -11,12 +9,9 @@ from app.core.types import (
     NoteSection,
     Template,
     TemplateSection,
-    Transcript,
-    TranscriptSegment,
 )
 from app.modules.note_gen.service import calculate_completeness, get_template, load_templates
 from app.modules.providers.note_gen.shared import NOTE_GEN_SYSTEM_PROMPT
-
 
 ORTHO_TEMPLATE = Template(
     key="orthopedic_surgery",

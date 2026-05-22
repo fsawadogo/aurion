@@ -1,8 +1,6 @@
 """Tests for session state machine — validates all transitions and consent hard block."""
 
-import uuid
 
-import pytest
 
 from app.core.types import SessionState
 from app.modules.session.service import (

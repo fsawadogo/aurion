@@ -17,9 +17,6 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.modules.config.schema import (
     AppConfigSchema,
-    NoteGenerationProviderKey,
-    TranscriptionProviderKey,
-    VisionProviderKey,
 )
 
 logger = logging.getLogger("aurion.config")

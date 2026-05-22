@@ -157,8 +157,9 @@ async def transcribe_audio(
         )
         return _demo_transcript(str(session_id))
 
-    # Step 1 — upload to S3
-    s3_key = await upload_audio_to_s3(audio_bytes, session_id)
+    # Step 1 — upload to S3. The returned key isn't consumed downstream
+    # (audit-log uses session_id, not the S3 key), so we discard it.
+    await upload_audio_to_s3(audio_bytes, session_id)
 
     # Step 2 — call provider via registry
     registry = get_registry()

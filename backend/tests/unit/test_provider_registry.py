@@ -1,11 +1,7 @@
 """Tests for provider registry — verifies correct provider resolved from config."""
 
-import os
 from unittest.mock import patch
 
-import pytest
-
-from app.core.types import ProviderError
 from app.modules.config.provider_registry import ProviderRegistry
 from app.modules.config.schema import AppConfigSchema
 from app.modules.providers.note_gen.anthropic import AnthropicNoteGenerationProvider

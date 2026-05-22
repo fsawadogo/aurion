@@ -1,6 +1,5 @@
 """Tests for trigger classifier — keyword detection and suppression."""
 
-import pytest
 
 from app.core.types import Template, TemplateSection, Transcript, TranscriptSegment
 from app.modules.transcription.trigger_classifier import (

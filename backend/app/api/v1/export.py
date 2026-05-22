@@ -26,7 +26,7 @@ from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.types import SessionState
 from app.modules.auth.service import CurrentUser, get_current_user
-from app.modules.export.service import export_note_docx, export_note_plaintext
+from app.modules.export.service import export_note_docx
 from app.modules.note_gen.service import get_latest_note, is_note_approved
 from app.modules.session.service import (
     InvalidTransitionError,

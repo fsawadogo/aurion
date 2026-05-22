@@ -20,7 +20,6 @@ from app.core.models import UserModel
 from app.core.types import UserRole
 from app.modules.auth import users_repository as users_repo
 
-
 # ── User schemas ───────────────────────────────────────────────────────────
 
 

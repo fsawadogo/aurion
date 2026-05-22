@@ -15,15 +15,14 @@ import time
 import uuid
 from typing import Literal
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from sqlalchemy import select
-
-from app.core.database import get_db
 from app.api.v1._helpers import get_session_or_404, require_state, write_audit
 from app.core.audit_events import AuditEventType
+from app.core.database import get_db
 from app.core.models import PilotMetricsModel, TranscriptModel
 from app.core.types import SessionState
 from app.modules.auth.service import CurrentUser, get_current_user

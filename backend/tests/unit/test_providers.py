@@ -1,7 +1,7 @@
 """Tests for provider implementations — verify they return valid data."""
 
-from unittest.mock import AsyncMock, patch, MagicMock
-import io
+import json
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -20,7 +20,6 @@ from app.modules.providers.transcription.whisper import WhisperTranscriptionProv
 from app.modules.providers.vision.anthropic import AnthropicVisionProvider
 from app.modules.providers.vision.gemini import GeminiVisionProvider
 from app.modules.providers.vision.openai import OpenAIVisionProvider
-
 
 # ── Fixtures ───────────────────────────────────────────────────────────────
 
@@ -174,9 +173,6 @@ def _mock_note_api_response(provider_name: str):
                          "source_id": "seg_001", "source_quote": "Test segment."}]},
         ]
     })
-
-
-import json
 
 
 class TestNoteGenProviders:

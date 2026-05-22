@@ -16,7 +16,6 @@ import httpx
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
-from jose.utils import base64url_decode
 
 from app.core.types import UserRole
 

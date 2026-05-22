@@ -12,9 +12,7 @@ Run with: python scripts/test_pipeline.py
 Requires: docker-compose up (backend on localhost:8080)
 """
 
-import json
 import sys
-import time
 
 import httpx
 

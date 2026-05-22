@@ -5,7 +5,6 @@ from pydantic import ValidationError
 
 from app.modules.config.schema import (
     AppConfigSchema,
-    FeatureFlagsConfig,
     NoteGenerationProviderKey,
     PipelineConfig,
     ProvidersConfig,
