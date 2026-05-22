@@ -96,7 +96,12 @@ jobs:
     if: github.ref == 'refs/heads/main'
     env:
       AWS_REGION: ca-central-1
-      TF_VAR_api_image_tag: ${{ needs.build.outputs.image_tag }}
+      # Promoted to a shell variable for the apply step. `-var` on the
+      # CLI overrides `-var-file=dev.tfvars` (Terraform precedence:
+      # CLI flags > tfvars files > env), so we pass it explicitly
+      # rather than relying on TF_VAR_ which DOES get overridden by
+      # the tfvars file.
+      IMAGE_TAG: ${{ needs.build.outputs.image_tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -133,4 +138,9 @@ jobs:
 
       - name: Terraform apply
         working-directory: infrastructure
-        run: terraform apply -auto-approve -var-file=environments/dev.tfvars
+        # `-var "api_image_tag=$IMAGE_TAG"` AFTER `-var-file=` so the
+        # SHA-pinned tag wins over the "latest" default in dev.tfvars.
+        # Without this the task definition keeps the :latest image
+        # reference, Terraform sees no diff between deploys, and ECS
+        # never rolls — the old image stays in place silently.
+        run: terraform apply -auto-approve -var-file=environments/dev.tfvars -var "api_image_tag=$IMAGE_TAG"
