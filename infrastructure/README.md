@@ -77,24 +77,52 @@ Per `AURION-CODING-WORKFLOW.md` §11 deny-list:
 | 4 | pending | Cognito MFA, SNS alarms, CloudTrail, VPC Flow Logs |
 | 5 | pending | Runbooks + IAM Identity Center migration |
 
-## After the first Phase 2 dev apply — domain delegation
+## After the first Phase 2 dev apply — subdomain delegation at Cloudflare
 
-`terraform apply` will create the Route 53 hosted zone for
-`aurionclinical.com` (only in the env where `manage_root_zone = true`,
-which is dev). Until the apex zone's nameservers are delegated from
-the registrar, the ACM cert validation in the same apply will hang
-for ~15 min and then fail.
+The apex `aurionclinical.com` is registered at Cloudflare and stays
+there. Each env delegates **only its own API subdomain** to AWS:
 
-To unblock:
+| Env | Subdomain delegated to AWS |
+|---|---|
+| dev | `api-dev.aurionclinical.com` |
+| prod | `api.aurionclinical.com` |
+
+`terraform apply` creates a Route 53 hosted zone for that subdomain.
+Until Cloudflare's DNS for `api-dev.aurionclinical.com` (or
+`api.aurionclinical.com` for prod) points at the AWS nameservers,
+the ACM cert validation in the same apply will hang for ~30 min then
+time out.
+
+To unblock the dev apply:
 
 ```bash
-terraform output route53_nameservers
+terraform output -json route53_nameservers
 ```
 
-Will print 4 ns-* values. Set those at your domain registrar
-(GoDaddy, Namecheap, Cloudflare, etc.) as the NS records for
-`aurionclinical.com`. Propagation is usually under 10 minutes;
-Terraform's `aws_acm_certificate_validation` polls for up to 30 min.
+Returns 4 strings like `ns-1234.awsdns-xx.com`. In **Cloudflare → DNS
+→ aurionclinical.com → Add record**, create 4 NS records:
 
-If you registered the domain through Route 53 directly, this step
-is skipped — Route 53 auto-delegates to its own zone.
+| Type | Name | Target |
+|---|---|---|
+| NS | `api-dev` | `ns-XXXX.awsdns-XX.com` |
+| NS | `api-dev` | `ns-YYYY.awsdns-YY.org` |
+| NS | `api-dev` | `ns-ZZZZ.awsdns-ZZ.net` |
+| NS | `api-dev` | `ns-WWWW.awsdns-WW.co.uk` |
+
+(Cloudflare's UI: leave Proxy status **DNS only** — orange cloud OFF —
+otherwise Cloudflare tries to proxy the NS query and breaks delegation.)
+
+Propagation: usually under 5 minutes. Verify with:
+
+```bash
+dig +short NS api-dev.aurionclinical.com
+```
+
+When that returns the 4 ns-* values, run the full apply:
+
+```bash
+terraform apply -var-file=environments/dev.tfvars
+```
+
+Prod follows the same pattern with `api.aurionclinical.com` and its
+own (separate) set of 4 NS records.
