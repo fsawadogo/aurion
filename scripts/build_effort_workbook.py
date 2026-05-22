@@ -227,8 +227,8 @@ INFRA = [
 # ── PRODUCTION ROLLOUT — Phases 1-5 ─────────────────────────────────────────
 PROD = [
     ("P1", "Phase 1 — State bootstrap (S3 + DDB + KMS)", "Done", "S", 0.5, 0.25, "bootstrap/ module applied to dev (commit cd40d3d). Account 366034225426.", "—"),
-    ("P2", "Phase 2 — TLS + DNS + WAF + SHA-pin", "In Progress", "M", 1.5, 1, "Code shipped (commit 352cc56). Route53 zone created. BLOCKED on Cloudflare DNS choice (A/B/C).", "P1"),
-    ("P3", "Phase 3 — GitHub Actions CI/CD with OIDC", "Done", "M", 1, 0.5, "Workflows + IAM OIDC trust shipped (commit 2a0fd11). Awaits secrets after P2 apply.", "P1"),
+    ("P2", "Phase 2 — TLS + DNS + WAF + SHA-pin", "Done", "M", 1.5, 1, "Fully applied 2026-05-22 (115 resources). api-dev.aurionclinical.com live, ACM cert valid, WAF in front, ALB returning HTTPS. ECS service waiting on first image push.", "P1"),
+    ("P3", "Phase 3 — GitHub Actions CI/CD with OIDC", "Verify", "M", 1, 0.5, "Workflows + IAM OIDC trust shipped (commit 2a0fd11). Roles exist in AWS. 4 GitHub Secrets need wiring: AWS_ACCOUNT_ID, AWS_DEPLOY_ROLE_DEV, AWS_DEPLOY_ROLE_PROD, ECR_REGISTRY.", "P1, P2"),
     ("P4", "Phase 4 — Cognito MFA + SNS + alarms + CloudTrail + Flow Logs + KMS rotation", "Not Started", "M", 1.5, 1, "Includes 5 missing operational alarms, SNS topic, GuardDuty enable.", "P2"),
     ("P5", "Phase 5 — Runbooks + IAM Identity Center + backup-restore drill", "Not Started", "M", 1, 1.5, "Mostly markdown + 1 IAM rework. Pre-pilot human-gated.", "P4"),
 ]
@@ -236,8 +236,8 @@ PROD = [
 # ── EXTERNAL BLOCKERS — non-engineering, can't be compressed ────────────────
 EXTERNAL = [
     ("EXT-01", "Apple Developer Program activation", "Done", "—", 0, 0, "Active 2026-05-22. Unblocks TestFlight, App IDs, Live Activity push (if added).", "—"),
-    ("EXT-02", "Cloudflare DNS delegation decision", "Blocker", "—", 0, 0, "Three paths on the table (manual records / subdomain delegation / Cloudflare TF provider). Recommend subdomain delegation.", "—"),
-    ("EXT-03", "First Phase 2 full apply against dev", "Not Started", "—", 0, 0, "~15-20 min compute + ~5 min cert validation post-DNS delegation.", "EXT-02"),
+    ("EXT-02", "Cloudflare DNS delegation (subdomain to AWS)", "Done", "—", 0, 0, "Option B chosen + applied 2026-05-22. 4 NS records at Cloudflare for api-dev.aurionclinical.com delegate to AWS. Propagation verified via dig.", "—"),
+    ("EXT-03", "First Phase 2 full apply against dev", "Done", "—", 0, 0, "Applied 2026-05-22. 115 resources created. ALB returns 503 (no image yet — expected). TLS valid.", "EXT-02"),
     ("EXT-04", "TestFlight initial build review", "Not Started", "—", 0, 0, "Apple reviews first build before internal testers can install. 24-48h.", "fastlane bootstrap; first iOS push"),
     ("EXT-05", "Cognito MFA enrollment by pilot physicians", "Not Started", "—", 0, 0, "~5 min per physician via Cognito hosted UI.", "P4 (MFA enable)"),
     ("EXT-06", "DPIA + consent forms + clinical safety committee sign-off", "Blocker", "—", 0, 0, "NON-ENGINEERING. 2-4 weeks of calendar depending on pilot site's IRB/QI committee cadence.", "—"),
