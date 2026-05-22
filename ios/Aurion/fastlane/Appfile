@@ -1,0 +1,20 @@
+# Shared config — read by every lane in fastlane/Fastfile.
+#
+# Values come from environment variables so this file can be checked
+# into git without leaking the team id / personal email. Set them in
+# your shell rc (~/.zshrc) alongside AWS_PROFILE.
+
+app_identifier "com.aurionclinical.aurion"
+
+# Apple ID — only needed for legacy operations that don't use the
+# App Store Connect API key auth (rare). The API key auth flow takes
+# precedence; we set this for safety in case a sub-tool falls back.
+apple_id ENV["APPLE_DEV_EMAIL"]
+
+# Team ID — the 10-character string at developer.apple.com → Membership
+# (top-right). Used by code-signing + provisioning profile lookups.
+team_id ENV["APPLE_TEAM_ID"]
+
+# Apple Developer Portal team for cert + profile management. Usually
+# the same as team_id for individual accounts.
+itc_team_id ENV["APPLE_TEAM_ID"]
