@@ -1,0 +1,149 @@
+# Aurion — fastlane lanes
+#
+# Auth: all lanes use the App Store Connect API key (the same one CI
+# uses, materialized from APP_STORE_CONNECT_KEY_ID / _ISSUER_ID /
+# _KEY_P8 env vars). No 2FA prompts, no session cookies — works
+# headless from a fresh shell.
+#
+# Run from the repo root:
+#   cd ios/Aurion && fastlane bootstrap
+#
+# Lanes:
+#   bootstrap                — create App IDs + ASC app record (one-time)
+#   upload_testflight        — local build + TestFlight upload (mirror of CI)
+#   invite_pilot_physicians  — add pilot physician emails as TestFlight testers
+#   list_testers             — print current testers (sanity check)
+
+# ---------------------------------------------------------------------------
+# Auth helper — turns the 3 env vars into the hash fastlane expects.
+# Decodes APP_STORE_CONNECT_KEY_P8 from base64 to a tempfile so the
+# key never has to sit on disk in cleartext.
+# ---------------------------------------------------------------------------
+def asc_api_key
+  raise "APP_STORE_CONNECT_KEY_ID is not set"     unless ENV["APP_STORE_CONNECT_KEY_ID"]
+  raise "APP_STORE_CONNECT_ISSUER_ID is not set"  unless ENV["APP_STORE_CONNECT_ISSUER_ID"]
+  raise "APP_STORE_CONNECT_KEY_P8 is not set"     unless ENV["APP_STORE_CONNECT_KEY_P8"]
+
+  app_store_connect_api_key(
+    key_id:      ENV["APP_STORE_CONNECT_KEY_ID"],
+    issuer_id:   ENV["APP_STORE_CONNECT_ISSUER_ID"],
+    key_content: Base64.decode64(ENV["APP_STORE_CONNECT_KEY_P8"]),
+    duration:    1200,
+    in_house:    false
+  )
+end
+
+default_platform(:ios)
+
+platform :ios do
+  # -------------------------------------------------------------------------
+  # bootstrap — one-time setup that creates the App IDs in the developer
+  # portal + the App Store Connect app record. Idempotent: re-running
+  # with an existing app/bundle is a no-op (fastlane checks first).
+  # -------------------------------------------------------------------------
+  desc "Create App IDs + App Store Connect app record (one-time)"
+  lane :bootstrap do
+    api_key = asc_api_key
+
+    # 1. Main app — bundle id, App ID with Live Activities support,
+    #    and the App Store Connect app record.
+    produce(
+      api_key:           api_key,
+      app_identifier:    "com.aurionclinical.aurion",
+      app_name:          "Aurion",
+      language:          "English",
+      app_version:       "1.0",
+      sku:               "aurion-pilot-001",
+      skip_itc:          false,            # create ASC record
+      skip_devcenter:    false,            # create App ID
+      enable_services: {
+        # Live Activities is enabled via NSSupportsLiveActivities in
+        # Info.plist (already set) — no developer-portal capability
+        # toggle. Push Notifications would be needed for push-updated
+        # activities; we don't ship that path.
+      }
+    )
+
+    # 2. Widget extension — bundle id only (extensions don't get ASC records).
+    produce(
+      api_key:           api_key,
+      app_identifier:    "com.aurionclinical.aurion.AurionWidgets",
+      app_name:          "Aurion Widgets",
+      sku:               "aurion-pilot-widgets-001",
+      skip_itc:          true,             # extensions: no ASC record
+      skip_devcenter:    false
+    )
+
+    UI.success "Bootstrap complete. App Store Connect record for 'Aurion' is ready."
+    UI.message "Next: push an iOS-touching commit to main → ios-testflight.yml uploads the first build."
+  end
+
+  # -------------------------------------------------------------------------
+  # upload_testflight — mirror of the CI workflow. Useful for a one-off
+  # local upload when CI is wedged or for the very first build.
+  # -------------------------------------------------------------------------
+  desc "Build + upload to TestFlight (mirrors ios-testflight.yml)"
+  lane :upload_testflight do
+    api_key = asc_api_key
+
+    build_app(
+      project:       "Aurion.xcodeproj",
+      scheme:        "Aurion",
+      configuration: "Release",
+      export_method: "app-store",
+      clean:         true
+    )
+
+    upload_to_testflight(
+      api_key:                       api_key,
+      skip_waiting_for_build_processing: true,
+      skip_submission:               true,        # don't ship to App Store
+      distribute_external:           false
+    )
+  end
+
+  # -------------------------------------------------------------------------
+  # invite_pilot_physicians — add the pilot doctors as internal testers.
+  # Emails come from ENV["PILOT_TESTER_EMAILS"] as a comma-separated list,
+  # so the actual addresses aren't checked into git.
+  # -------------------------------------------------------------------------
+  desc "Invite pilot physicians as TestFlight internal testers"
+  lane :invite_pilot_physicians do
+    api_key = asc_api_key
+    emails  = (ENV["PILOT_TESTER_EMAILS"] || "").split(",").map(&:strip).reject(&:empty?)
+
+    if emails.empty?
+      UI.user_error! "Set PILOT_TESTER_EMAILS=perry@creoq.ca,marie@creoq.ca (comma-separated)"
+    end
+
+    emails.each do |email|
+      first, last = email.split("@").first.split(".")
+      pilot(
+        api_key:        api_key,
+        app_identifier: "com.aurionclinical.aurion",
+        email:          email,
+        first_name:     first.to_s.capitalize,
+        last_name:      (last || "Doctor").capitalize,
+        groups:         ["Internal Testers"]
+      )
+      UI.success "Invited #{email}"
+    end
+  end
+
+  # -------------------------------------------------------------------------
+  # list_testers — print current internal testers. Useful for sanity check.
+  # -------------------------------------------------------------------------
+  desc "List current TestFlight testers"
+  lane :list_testers do
+    api_key = asc_api_key
+    Spaceship::ConnectAPI.login(use_portal: false, use_tunes: true, api_token: api_key)
+    app = Spaceship::ConnectAPI::App.find("com.aurionclinical.aurion")
+    UI.user_error! "App not found — run `fastlane bootstrap` first" unless app
+
+    testers = Spaceship::ConnectAPI::BetaTester.all(app_id: app.id)
+    UI.success "#{testers.size} tester(s):"
+    testers.each do |t|
+      UI.message "  - #{t.email} (#{t.first_name} #{t.last_name})"
+    end
+  end
+end

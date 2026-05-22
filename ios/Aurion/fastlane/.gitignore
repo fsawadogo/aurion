@@ -1,0 +1,15 @@
+README.md.bak
+report.xml
+test_output/
+*.gpx
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/test_output
+# Auto-generated metadata directories
+metadata/
+screenshots/
+# Local secrets — never commit
+.env
+.env.local
+api_key.json
+AuthKey_*.p8
