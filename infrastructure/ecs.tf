@@ -100,7 +100,13 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 }
 
-# Allow execution role to read secrets for container env injection
+# Allow execution role to read secrets for container env injection.
+# Two distinct ARN sources:
+#   1. The aurion/* secrets we manage explicitly (AI provider keys).
+#   2. The RDS master-user secret, auto-generated under the `rds!*`
+#      naming convention when manage_master_user_password = true on
+#      aws_db_instance. Its full ARN is exposed via the instance's
+#      `master_user_secret[0].secret_arn` output.
 resource "aws_iam_role_policy" "ecs_exec_secrets" {
   name = "aurion-ecs-exec-secrets-${var.environment}"
   role = aws_iam_role.ecs_task_execution.id
@@ -114,7 +120,8 @@ resource "aws_iam_role_policy" "ecs_exec_secrets" {
           "secretsmanager:GetSecretValue"
         ]
         Resource = [
-          "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:aurion/*"
+          "arn:aws:secretsmanager:${var.region}:${data.aws_caller_identity.current.account_id}:secret:aurion/*",
+          aws_db_instance.main.master_user_secret[0].secret_arn,
         ]
       },
       {
@@ -122,7 +129,14 @@ resource "aws_iam_role_policy" "ecs_exec_secrets" {
         Action = [
           "kms:Decrypt"
         ]
-        Resource = [aws_kms_key.main.arn]
+        # Two keys: the main app KMS key (encrypts aurion/* secrets), and
+        # the AWS-managed `aws/secretsmanager` key that wraps the RDS-
+        # generated master-user secret. The latter is account-default and
+        # safe to reference by wildcard alias.
+        Resource = [
+          aws_kms_key.main.arn,
+          "arn:aws:kms:${var.region}:${data.aws_caller_identity.current.account_id}:key/*",
+        ]
       }
     ]
   })
@@ -454,10 +468,19 @@ resource "aws_ecs_task_definition" "api" {
         { name = "APPCONFIG_APP_ID", value = aws_appconfig_application.main.id },
         { name = "APPCONFIG_ENV_ID", value = aws_appconfig_environment.main.environment_id },
         { name = "APPCONFIG_PROFILE_ID", value = aws_appconfig_configuration_profile.main.configuration_profile_id },
+        # DB connection metadata — host / port / db-name are NOT secrets,
+        # only the password is. The app reads these alongside the JSON
+        # credential secret injected below and constructs the SQLAlchemy URL.
+        { name = "DB_HOST", value = aws_db_instance.main.address },
+        { name = "DB_PORT", value = tostring(aws_db_instance.main.port) },
+        { name = "DB_NAME", value = aws_db_instance.main.db_name },
       ]
 
       secrets = [
         {
+          # AWS injects this as a JSON envelope: {"username":"...","password":"..."}.
+          # database.py detects the JSON shape and rebuilds the connection
+          # URL with DB_HOST/DB_PORT/DB_NAME from the env block above.
           name      = "DATABASE_URL"
           valueFrom = aws_db_instance.main.master_user_secret[0].secret_arn
         },
