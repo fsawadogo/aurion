@@ -86,20 +86,9 @@ variable "whisper_image_tag" {
 # DNS + TLS (Phase 2)
 # -----------------------------------------------------------------------------
 
-variable "root_domain" {
-  description = "Apex domain for the Route 53 hosted zone (e.g. 'aurionclinical.com'). All env-specific api_domain values live under this. Once the zone is created, point the registrar's NS records at the `route53_nameservers` output."
-  type        = string
-}
-
 variable "api_domain" {
-  description = "Fully qualified domain name for the API endpoint in this environment (e.g. 'api.aurionclinical.com' for prod, 'api-dev.aurionclinical.com' for dev). TLS cert is issued for this exact name; the ALB A-alias targets it."
+  description = "Fully qualified domain name for this env's API endpoint (e.g. 'api.aurionclinical.com' for prod, 'api-dev.aurionclinical.com' for dev). Used as BOTH the Route 53 hosted-zone name AND the apex A-alias inside that zone. TLS cert is issued for this exact name. The apex (aurionclinical.com) is managed at Cloudflare; each env delegates ONLY its subdomain to Route 53 by setting 4 NS records at Cloudflare for var.api_domain."
   type        = string
-}
-
-variable "manage_root_zone" {
-  description = "Whether this env's Terraform state owns the Route 53 hosted zone for root_domain. Set to true in EXACTLY ONE env (typically dev — the first env to apply). Other envs read the zone via data source. Zone has prevent_destroy enabled so a dev teardown won't take prod DNS with it."
-  type        = bool
-  default     = false
 }
 
 # -----------------------------------------------------------------------------
