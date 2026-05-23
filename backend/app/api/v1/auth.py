@@ -24,6 +24,7 @@ from app.core.database import async_session_factory, get_db
 from app.core.models import UserModel
 from app.core.types import UserRole
 from app.modules.auth.passwords import hash_password, verify_password
+from app.modules.auth.service import CurrentUser, get_current_user
 
 logger = logging.getLogger("aurion.auth")
 
@@ -165,6 +166,63 @@ async def register(body: RegisterRequest, db: AsyncSession = Depends(get_db)) ->
 
     logger.info("New user registered: id=%s role=%s", user.id, user.role.value)
     return _build_login_response(user)
+
+
+class CurrentUserResponse(BaseModel):
+    user_id: str
+    email: str
+    full_name: str
+    role: str
+
+
+@router.get("/me", response_model=CurrentUserResponse)
+async def me(
+    current: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CurrentUserResponse:
+    """Canonical identity endpoint. Validates the Bearer JWT via JWKS
+    (Cognito path) or the dev token (local path), looks up the matching
+    UserModel row, and auto-provisions on first sign-in.
+
+    First-sign-in flow: a Cognito-authenticated user who isn't yet in the
+    `users` table is created with a placeholder full_name (will be populated
+    once the user fills out PhysicianProfileSetupView) and the role from
+    their Cognito group claim — so admin / compliance / eval users land
+    with the right role even if they never hit the iOS onboarding.
+    """
+    user = await db.get(UserModel, current.user_id)
+    if user is None:
+        # Auto-provision. The Cognito JWT was already validated; the
+        # only thing we don't have is a UserModel row, which the iOS
+        # client expects to exist for downstream session/profile calls.
+        user = UserModel(
+            id=current.user_id,
+            email=current.email or f"unknown-{current.user_id}@aurionclinical.com",
+            full_name="",                       # filled in by profile setup
+            role=current.role,
+            password_hash="",                   # Cognito owns auth
+        )
+        db.add(user)
+        try:
+            await db.flush()
+        except IntegrityError:
+            # Email collision on a different sub — admin must reconcile.
+            await db.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="User exists with a different identity. Contact admin.",
+            )
+        logger.info(
+            "Auto-provisioned user from Cognito JWT: id=%s email=%s role=%s",
+            user.id, user.email, user.role.value,
+        )
+
+    return CurrentUserResponse(
+        user_id=str(user.id),
+        email=user.email,
+        full_name=user.full_name,
+        role=user.role.value,
+    )
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────

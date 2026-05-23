@@ -91,6 +91,11 @@ output "cognito_user_pool_client_id" {
   value       = aws_cognito_user_pool_client.main.id
 }
 
+output "cognito_hosted_ui_domain" {
+  description = "Hosted UI base URL for Cognito (sign-in lives at /login, signout at /logout). iOS Config.swift COGNITO_HOSTED_UI_BASE."
+  value       = "https://${aws_cognito_user_pool_domain.main.domain}.auth.${var.region}.amazoncognito.com"
+}
+
 # -----------------------------------------------------------------------------
 # AppConfig
 # -----------------------------------------------------------------------------

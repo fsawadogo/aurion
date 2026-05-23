@@ -244,11 +244,8 @@ struct LoginView: View {
     let onSwitchToRegister: () -> Void
 
     @EnvironmentObject var appState: AppState
-    @State private var email = ""
-    @State private var password = ""
     @State private var isSigningIn = false
     @State private var loginError: String?
-    @FocusState private var focusedField: LoginField?
     /// Drives the entrance staircase — logo first, then the form card,
     /// then the footer. Flipped on first appear; the resulting feel is a
     /// deliberate composition rather than a slam-on render.
@@ -258,26 +255,18 @@ struct LoginView: View {
     /// dashboard — confirms "you're in" with a beat of visual feedback.
     @State private var signInSucceeded = false
 
-    enum LoginField { case email, password }
-
     var body: some View {
         ZStack {
-            // Navy gradient background (design: #1A2E5C → #0D1B3E)
-            // Reversed direction so the upper portion (where the logo
-            // lockup lands) is exactly `aurionNavy` (= Logo.png bg color).
-            // Bottom fades into a slightly darker navy for depth without
-            // letting the logo look like it's pasted on a separate panel.
+            // Navy gradient background. Brand-fixed surface — same in
+            // both color schemes (login is identity, not theme).
             LinearGradient(
                 colors: [Color.aurionNavy, Color.aurionNavyDark],
                 startPoint: .top, endPoint: .bottom
             ).ignoresSafeArea()
 
             VStack(spacing: 0) {
-                // Logo lockup — matches design/assets/logo-lockup-dark.svg
                 AurionLogoLockup(size: 1.2, dark: true)
                     .padding(.top, 80)
-                    // Spring entrance — slides + scales in for a deliberate
-                    // brand reveal instead of a hard cut.
                     .opacity(loginAppeared ? 1 : 0)
                     .scaleEffect(loginAppeared ? 1 : 0.92)
                     .offset(y: loginAppeared ? 0 : -20)
@@ -288,69 +277,40 @@ struct LoginView: View {
 
                 Spacer()
 
-                // Form card — frosted glass per design
-                VStack(spacing: 14) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L("login.email").uppercased())
-                            .font(.system(size: 12, weight: .semibold))
-                            .tracking(0.8)
-                            .foregroundColor(Color.aurionOnNavySecondary)
-                        TextField("dr.chen@aurion.health", text: $email)
-                            .textFieldStyle(.plain)
-                            .textContentType(.emailAddress)
-                            .autocapitalization(.none)
+                // Sign-in card. The email + password form is gone —
+                // authentication happens in the Cognito hosted UI
+                // (opened in ASWebAuthenticationSession) so the iOS app
+                // never touches credentials, and MFA enrollment +
+                // challenge flows live entirely on Cognito's surface.
+                VStack(spacing: 18) {
+                    VStack(spacing: 6) {
+                        Text("Sign in to continue")
+                            .font(.system(size: 16, weight: .semibold))
                             .foregroundColor(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .background(Color.white.opacity(0.08))
-                            .cornerRadius(10)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(focusedField == .email ? Color.aurionGold : Color.white.opacity(0.16), lineWidth: 1)
-                            )
-                            .focused($focusedField, equals: .email)
-                    }
-
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L("login.password").uppercased())
-                            .font(.system(size: 12, weight: .semibold))
-                            .tracking(0.8)
+                        Text("Aurion uses a secure sign-in window from AWS Cognito. Multi-factor authentication is required.")
+                            .font(.system(size: 13))
                             .foregroundColor(Color.aurionOnNavySecondary)
-                        SecureField("", text: $password)
-                            .textFieldStyle(.plain)
-                            .foregroundColor(.white)
-                            .padding(.horizontal, 14)
-                            .padding(.vertical, 12)
-                            .background(Color.white.opacity(0.08))
-                            .cornerRadius(10)
-                            .overlay(
-                                RoundedRectangle(cornerRadius: 10)
-                                    .stroke(focusedField == .password ? Color.aurionGold : Color.white.opacity(0.16), lineWidth: 1)
-                            )
-                            .focused($focusedField, equals: .password)
+                            .multilineTextAlignment(.center)
+                            .lineSpacing(3)
                     }
 
                     Button {
                         AurionHaptics.impact(.medium)
                         Task { await signIn() }
                     } label: {
-                        HStack(spacing: 8) {
+                        HStack(spacing: 10) {
                             if signInSucceeded {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.aurionTextPrimary)
-                                    .transition(.scale.combined(with: .opacity))
+                                    .foregroundColor(.aurionNavy)
                                 Text("Signed in")
-                                    .transition(.opacity)
                             } else if isSigningIn {
-                                ProgressView()
-                                    .tint(.aurionNavy)
-                                    .transition(.opacity)
-                                Text("Signing in…")
-                                    .transition(.opacity)
+                                ProgressView().tint(.aurionNavy)
+                                Text("Opening secure sign-in…")
                             } else {
-                                Text(L("login.signIn"))
-                                    .transition(.opacity)
+                                Image(systemName: "lock.shield.fill")
+                                    .font(.system(size: 16, weight: .semibold))
+                                Text("Sign in")
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -358,7 +318,7 @@ struct LoginView: View {
                         .animation(AurionAnimation.smooth, value: signInSucceeded)
                     }
                     .buttonStyle(AurionPrimaryButtonStyle())
-                    .disabled(isSigningIn || signInSucceeded || email.isEmpty || password.isEmpty)
+                    .disabled(isSigningIn || signInSucceeded)
 
                     if let loginError {
                         Text(loginError)
@@ -367,15 +327,12 @@ struct LoginView: View {
                             .multilineTextAlignment(.center)
                     }
 
-                    HStack {
-                        Text("Forgot password?")
-                            .font(.system(size: 13))
-                            .foregroundColor(Color.aurionOnNavySecondary)
-                        Spacer()
-                        Button("Create account", action: onSwitchToRegister)
-                            .font(.system(size: 13, weight: .semibold))
-                            .foregroundColor(.aurionGold)
-                    }
+                    Text("First-time access? Your administrator will provide a temporary password and walk you through enrolling your authenticator app.")
+                        .font(.system(size: 11))
+                        .foregroundColor(Color.aurionOnNavyFootnote)
+                        .multilineTextAlignment(.center)
+                        .lineSpacing(3)
+                        .padding(.top, 4)
                 }
                 .padding(24)
                 .background(Color.white.opacity(0.06))
@@ -385,8 +342,6 @@ struct LoginView: View {
                         .stroke(Color.white.opacity(0.10), lineWidth: 1)
                 )
                 .padding(.horizontal, 24)
-                // Form card slides up after the logo lands — 180ms delay
-                // gives the logo room to finish its spring.
                 .opacity(loginAppeared ? 1 : 0)
                 .offset(y: loginAppeared ? 0 : 24)
                 .animation(
@@ -397,7 +352,6 @@ struct LoginView: View {
 
                 Spacer()
 
-                // Footer
                 Text(L("login.footer"))
                     .font(.system(size: 12))
                     .tracking(0.4)
@@ -419,29 +373,25 @@ struct LoginView: View {
         isSigningIn = true
         loginError = nil
         do {
-            let resp = try await APIClient.shared.login(email: email, password: password)
-            KeychainHelper.shared.saveAuthToken(
-                resp.accessToken,
-                userId: resp.userId,
-                role: resp.role,
-                name: resp.fullName
-            )
+            // Hosted UI handles password + TOTP MFA on Cognito's surface,
+            // we get back a token bundle on the redirect.
+            _ = try await CognitoAuth.shared.signIn()
+
+            // Backend round trip: validates the JWT via JWKS, looks up
+            // (or auto-provisions on first sign-in) the UserModel row,
+            // returns the canonical user identity for the SwiftUI app.
+            let me = try await APIClient.shared.fetchCurrentUser()
             AurionHaptics.notification(.success)
-            // Brief "signed in" beat before ContentView swaps in the
-            // dashboard — gives the user a single frame of confirmation
-            // that the credentials worked, not just a jarring scene cut.
             isSigningIn = false
             signInSucceeded = true
             try? await Task.sleep(nanoseconds: 600_000_000)
-            let role = UserRole(rawValue: resp.role) ?? .clinician
-            appState.applyAuth(userId: resp.userId, role: role)
-        } catch APIError.unauthorized {
+            appState.applyAuth(userId: me.userId, role: me.role)
+        } catch AuthError.userCancelled {
             isSigningIn = false
-            loginError = "Invalid email or password."
-            AurionHaptics.notification(.error)
+            // Soft state — no error banner, user knows they cancelled.
         } catch {
             isSigningIn = false
-            loginError = "Sign-in failed: \(error.localizedDescription)"
+            loginError = error.localizedDescription
             AurionHaptics.notification(.error)
         }
     }

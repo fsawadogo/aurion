@@ -32,6 +32,15 @@ final class APIClient: Sendable {
         ])
     }
 
+    /// Calls `/auth/me` with the current Bearer token. Backend validates
+    /// the Cognito JWT, finds or auto-provisions the matching UserModel
+    /// row, and returns the canonical identity. Used as the post-sign-in
+    /// handshake by ``LoginView`` so the SwiftUI app knows who you are
+    /// without parsing the JWT itself.
+    func fetchCurrentUser() async throws -> CurrentUserResponse {
+        try await get(path: "/auth/me")
+    }
+
     private func postAuth(path: String, body: [String: Any]) async throws -> LoginResponse {
         guard let url = URL(string: "\(baseURL)\(path)") else {
             throw APIError.networkError("Invalid URL")
@@ -367,7 +376,12 @@ final class APIClient: Sendable {
     }
 
     private func addAuth(_ request: inout URLRequest) {
-        if let token = KeychainHelper.shared.loadAuthToken() {
+        // Prefer the Cognito id_token (issued by hosted UI / Authorization
+        // Code flow) — carries the `email` claim the backend reads on first
+        // sign-in. Fall back to the legacy dev token only for local-mode
+        // builds talking to `/auth/login`.
+        let token = KeychainHelper.shared.getIDToken() ?? KeychainHelper.shared.loadAuthToken()
+        if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
     }
@@ -840,6 +854,27 @@ struct LoginResponse: Codable, Sendable {
         case userId = "user_id"
         case fullName = "full_name"
     }
+}
+
+/// Backend `/auth/me` shape — the canonical user identity after a
+/// Cognito-issued JWT has been validated.
+struct CurrentUserResponse: Codable, Sendable {
+    let userId: String
+    let email: String
+    let fullName: String
+    let roleRaw: String
+
+    enum CodingKeys: String, CodingKey {
+        case email
+        case userId = "user_id"
+        case fullName = "full_name"
+        case roleRaw = "role"
+    }
+
+    /// Mapped role enum. Falls back to `.clinician` on any unrecognised
+    /// value — keeps the iOS dispatch routing safe rather than 401-ing
+    /// the user out of the app for a server-side rename.
+    var role: UserRole { UserRole(rawValue: roleRaw) ?? .clinician }
 }
 
 // MARK: - Client Config
