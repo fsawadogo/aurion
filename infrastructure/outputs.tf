@@ -175,3 +175,22 @@ output "ecr_registry" {
   description = "ECR registry hostname (account-id.dkr.ecr.region.amazonaws.com). Set as the `ECR_REGISTRY` repo secret."
   value       = split("/", aws_ecr_repository.backend.repository_url)[0]
 }
+
+# -----------------------------------------------------------------------------
+# Phase 4 — observability + audit
+# -----------------------------------------------------------------------------
+
+output "alerts_sns_topic_arn" {
+  description = "SNS topic every CloudWatch alarm publishes to. Subscribe additional endpoints (PagerDuty, Slack, etc.) via the AWS console."
+  value       = aws_sns_topic.alerts.arn
+}
+
+output "audit_logs_bucket" {
+  description = "Bucket holding CloudTrail + VPC Flow Logs + S3 access logs. 7-year retention, Glacier transition after 90d."
+  value       = aws_s3_bucket.audit_logs.id
+}
+
+output "cloudtrail_name" {
+  description = "Multi-region CloudTrail name."
+  value       = aws_cloudtrail.main.name
+}

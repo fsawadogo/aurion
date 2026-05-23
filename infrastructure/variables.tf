@@ -95,6 +95,12 @@ variable "api_domain" {
 # WAF (Phase 2)
 # -----------------------------------------------------------------------------
 
+variable "alerts_email" {
+  description = "Email address that receives CloudWatch alarm notifications via SNS. Subscription is created in pending-confirmation state — confirm via the email link before alarms can route. Pre-pilot a single ops mailbox is fine; pre-GA route to PagerDuty / Opsgenie instead."
+  type        = string
+  default     = "faical@aurionclinical.com"
+}
+
 variable "waf_rate_limit_per_5min" {
   description = "WAFv2 rate-based rule threshold: max requests per 5-minute window per source IP. AWS allows 100..20,000,000. Pilot default is 2000 (~6.6 req/s sustained) — bump if clinicians hit it during sustained capture sessions."
   type        = number

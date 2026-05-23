@@ -158,6 +158,9 @@ resource "aws_cloudwatch_metric_alarm" "stage1_latency" {
     Service = "note_gen"
   }
 
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
   tags = {
     Name = "aurion-${var.environment}-stage1-latency-alarm"
   }
@@ -184,6 +187,9 @@ resource "aws_cloudwatch_metric_alarm" "masking_failure" {
   dimensions = {
     Service = "masking"
   }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
 
   tags = {
     Name = "aurion-${var.environment}-masking-failure-alarm"
@@ -213,6 +219,9 @@ resource "aws_cloudwatch_metric_alarm" "consent_block_failure" {
     Service = "session"
   }
 
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
   tags = {
     Name = "aurion-${var.environment}-consent-block-failure-alarm"
   }
@@ -240,7 +249,160 @@ resource "aws_cloudwatch_metric_alarm" "provider_fallback" {
     Service = "providers"
   }
 
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
   tags = {
     Name = "aurion-${var.environment}-provider-fallback-alarm"
+  }
+}
+
+# =============================================================================
+# Operational Alarms (Phase 4) — AWS built-in metrics, no app changes needed
+# =============================================================================
+# The four alarms above are business-metric alarms (PutMetric from the
+# app). These five are operational — they watch AWS-emitted metrics that
+# tell us whether the platform is breathing, independent of app logic.
+
+# -----------------------------------------------------------------------------
+# Alarm 5: ALB 5xx rate
+# Fires when the ALB sees ≥10 5xx responses over a 5-minute window.
+# Indicates backend instability — usually means ECS tasks are crashing
+# or the task definition is wrong.
+# -----------------------------------------------------------------------------
+resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
+  alarm_name          = "aurion-${var.environment}-alb-5xx-high"
+  alarm_description   = "ALB returning 5xx responses — backend tasks unhealthy"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = 1
+  threshold           = 10
+  treat_missing_data  = "notBreaching"
+
+  namespace   = "AWS/ApplicationELB"
+  metric_name = "HTTPCode_Target_5XX_Count"
+  statistic   = "Sum"
+  period      = 300
+  dimensions = {
+    LoadBalancer = aws_lb.api.arn_suffix
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Name = "aurion-${var.environment}-alb-5xx-alarm"
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Alarm 6: RDS CPU > 80% sustained
+# -----------------------------------------------------------------------------
+resource "aws_cloudwatch_metric_alarm" "rds_cpu" {
+  alarm_name          = "aurion-${var.environment}-rds-cpu-high"
+  alarm_description   = "RDS CPU > 80% for 10 minutes — query or connection storm"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  threshold           = 80
+  treat_missing_data  = "notBreaching"
+
+  namespace   = "AWS/RDS"
+  metric_name = "CPUUtilization"
+  statistic   = "Average"
+  period      = 300
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.main.id
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Name = "aurion-${var.environment}-rds-cpu-alarm"
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Alarm 7: RDS free storage < 5 GB
+# -----------------------------------------------------------------------------
+resource "aws_cloudwatch_metric_alarm" "rds_storage_low" {
+  alarm_name          = "aurion-${var.environment}-rds-storage-low"
+  alarm_description   = "RDS free storage below 5 GB — running out of disk"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 5 * 1024 * 1024 * 1024 # 5 GB in bytes
+  treat_missing_data  = "notBreaching"
+
+  namespace   = "AWS/RDS"
+  metric_name = "FreeStorageSpace"
+  statistic   = "Average"
+  period      = 300
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.main.id
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Name = "aurion-${var.environment}-rds-storage-alarm"
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Alarm 8: RDS connections > 80
+# Pilot RDS is db.t3.medium with max_connections ~= 120 default. 80
+# leaves headroom; >80 is a leak or runaway.
+# -----------------------------------------------------------------------------
+resource "aws_cloudwatch_metric_alarm" "rds_connections" {
+  alarm_name          = "aurion-${var.environment}-rds-connections-high"
+  alarm_description   = "RDS database connections > 80 — possible connection leak"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  threshold           = 80
+  treat_missing_data  = "notBreaching"
+
+  namespace   = "AWS/RDS"
+  metric_name = "DatabaseConnections"
+  statistic   = "Average"
+  period      = 300
+  dimensions = {
+    DBInstanceIdentifier = aws_db_instance.main.id
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Name = "aurion-${var.environment}-rds-connections-alarm"
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Alarm 9: ECS service has no healthy tasks
+# Fires immediately if running task count drops to 0. This is the "site
+# is down" alarm.
+# -----------------------------------------------------------------------------
+resource "aws_cloudwatch_metric_alarm" "ecs_healthy_tasks" {
+  alarm_name          = "aurion-${var.environment}-ecs-tasks-zero"
+  alarm_description   = "ECS aurion-api service has zero running tasks"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 1
+  threshold           = 1
+  treat_missing_data  = "breaching"
+
+  namespace   = "AWS/ECS"
+  metric_name = "RunningTaskCount"
+  statistic   = "Average"
+  period      = 60
+  dimensions = {
+    ClusterName = aws_ecs_cluster.main.name
+    ServiceName = aws_ecs_service.api.name
+  }
+
+  alarm_actions = [aws_sns_topic.alerts.arn]
+  ok_actions    = [aws_sns_topic.alerts.arn]
+
+  tags = {
+    Name = "aurion-${var.environment}-ecs-tasks-alarm"
   }
 }
