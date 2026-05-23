@@ -29,6 +29,19 @@ resource "aws_cognito_user_pool" "main" {
     temporary_password_validity_days = 7
   }
 
+  # Multi-factor authentication.
+  #
+  # Required for every user in both envs. Clinical app handling PHI:
+  # the cost of a stolen password is too high to leave MFA optional.
+  # SMS deliberately omitted — SIM-swap risk is real, TOTP via an
+  # authenticator app (1Password / Authy / Google Authenticator /
+  # iOS-built-in) is the appropriate factor here.
+  mfa_configuration = "ON"
+
+  software_token_mfa_configuration {
+    enabled = true
+  }
+
   # Account recovery via email only
   account_recovery_setting {
     recovery_mechanism {
