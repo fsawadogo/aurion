@@ -38,8 +38,9 @@ export interface AuditEvent {
   session_id: string;
   event_timestamp: string;
   event_type: string;
-  actor_id: string;
-  actor_role: UserRole;
+  event_id?: string;
+  actor_id?: string;
+  actor_role?: UserRole;
   details: Record<string, unknown>;
 }
 
