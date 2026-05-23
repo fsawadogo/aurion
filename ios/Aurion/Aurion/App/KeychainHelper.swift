@@ -11,6 +11,13 @@ final class KeychainHelper {
     private let userIdKey = "aurion.auth.user_id"
     private let userRoleKey = "aurion.auth.user_role"
     private let userNameKey = "aurion.auth.user_name"
+    // Cognito hosted-UI OAuth tokens. `authTokenKey` above stays as the
+    // dev-only legacy slot; the Cognito-issued access token is the new
+    // canonical Authorization-Bearer value for any non-local APP_ENV.
+    private let cognitoAccessTokenKey  = "aurion.cognito.access_token"
+    private let cognitoIDTokenKey      = "aurion.cognito.id_token"
+    private let cognitoRefreshTokenKey = "aurion.cognito.refresh_token"
+    private let cognitoExpiresAtKey    = "aurion.cognito.expires_at"
 
     private init() {}
 
@@ -41,6 +48,58 @@ final class KeychainHelper {
         delete(key: userIdKey)
         delete(key: userRoleKey)
         delete(key: userNameKey)
+    }
+
+    // MARK: - Cognito hosted-UI tokens
+
+    /// Persist the full OAuth token set after a successful sign-in or
+    /// refresh. `accessToken` rides on every API call; `refreshToken`
+    /// is used by ``CognitoAuth.refreshIfNeeded()`` near expiry.
+    func saveTokens(accessToken: String, idToken: String, refreshToken: String, expiresAt: Date) {
+        saveString(key: cognitoAccessTokenKey, value: accessToken)
+        saveString(key: cognitoIDTokenKey, value: idToken)
+        if !refreshToken.isEmpty {
+            saveString(key: cognitoRefreshTokenKey, value: refreshToken)
+        }
+        saveString(key: cognitoExpiresAtKey, value: String(expiresAt.timeIntervalSince1970))
+    }
+
+    /// Cognito access token — what APIClient sends as `Bearer …`.
+    func getAccessToken() -> String? { loadString(key: cognitoAccessTokenKey) }
+
+    /// Cognito id_token — carries the user's email + sub. Useful when
+    /// a view needs to render the signed-in identity without a backend
+    /// round-trip; the backend still validates JWTs via JWKS for every
+    /// real authorisation decision.
+    func getIDToken() -> String? { loadString(key: cognitoIDTokenKey) }
+
+    func getRefreshToken() -> String? { loadString(key: cognitoRefreshTokenKey) }
+
+    /// True if the access token has either expired or is within 60s of
+    /// expiring. Callers (APIClient) should refresh before issuing the
+    /// request.
+    var tokenIsStale: Bool {
+        guard
+            let raw = loadString(key: cognitoExpiresAtKey),
+            let expiresAtSeconds = TimeInterval(raw)
+        else { return true }
+        let expiresAt = Date(timeIntervalSince1970: expiresAtSeconds)
+        return expiresAt.timeIntervalSinceNow < 60
+    }
+
+    func hasValidSession() -> Bool {
+        guard getAccessToken() != nil else { return false }
+        return !tokenIsStale || getRefreshToken() != nil
+    }
+
+    func clearTokens() {
+        delete(key: cognitoAccessTokenKey)
+        delete(key: cognitoIDTokenKey)
+        delete(key: cognitoRefreshTokenKey)
+        delete(key: cognitoExpiresAtKey)
+        // Belt-and-suspenders: nuke the dev-only auth slots too so a
+        // sign-out doesn't leave a stale dev session lying around.
+        clearAuth()
     }
 
     // MARK: - Internal

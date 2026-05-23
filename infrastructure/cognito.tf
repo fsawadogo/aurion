@@ -81,7 +81,9 @@ resource "aws_cognito_user_pool_client" "main" {
   # No client secret — required for public clients (iOS, web SPA)
   generate_secret = false
 
-  # Auth flows
+  # Auth flows. Refresh token is the only one needed for the hosted-UI
+  # OAuth Authorization Code path; SRP / PASSWORD remain for backwards
+  # compatibility with the local-dev backend flow until that's deleted.
   explicit_auth_flows = [
     "ALLOW_USER_PASSWORD_AUTH",
     "ALLOW_USER_SRP_AUTH",
@@ -90,6 +92,26 @@ resource "aws_cognito_user_pool_client" "main" {
 
   # Prevent user enumeration attacks
   prevent_user_existence_errors = "ENABLED"
+
+  # ---------------------------------------------------------------------------
+  # OAuth — Authorization Code flow with PKCE, for Cognito hosted UI.
+  # ---------------------------------------------------------------------------
+  # iOS launches the hosted login page in ASWebAuthenticationSession,
+  # Cognito handles the password + TOTP MFA flow, and redirects back to
+  # the app with an auth code which iOS exchanges for tokens at /oauth2/token.
+  allowed_oauth_flows                  = ["code"]
+  allowed_oauth_flows_user_pool_client = true
+  allowed_oauth_scopes                 = ["openid", "email", "profile", "aws.cognito.signin.user.admin"]
+
+  callback_urls = [
+    "aurion://oauth-callback",
+    "http://localhost:3000/api/auth/callback/cognito",
+  ]
+  logout_urls = [
+    "aurion://oauth-logout",
+    "http://localhost:3000/auth/signed-out",
+  ]
+  supported_identity_providers = ["COGNITO"]
 
   # Token validity
   access_token_validity  = 1  # 1 hour
@@ -101,6 +123,20 @@ resource "aws_cognito_user_pool_client" "main" {
     id_token      = "hours"
     refresh_token = "days"
   }
+}
+
+# -----------------------------------------------------------------------------
+# Hosted UI Domain
+# -----------------------------------------------------------------------------
+# Public sign-in page at `aurion-<env>.auth.ca-central-1.amazoncognito.com`.
+# Free with the user pool — no custom cert or Route 53 setup needed. A
+# custom domain (login.aurionclinical.com) is a follow-up; the AWS-managed
+# subdomain is acceptable for the pilot since the URL is only rendered
+# briefly inside ASWebAuthenticationSession.
+
+resource "aws_cognito_user_pool_domain" "main" {
+  domain       = "aurion-${var.environment}"
+  user_pool_id = aws_cognito_user_pool.main.id
 }
 
 # -----------------------------------------------------------------------------
