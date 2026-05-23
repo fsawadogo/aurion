@@ -1,17 +1,29 @@
 name: CI
 
+# Backend CI/CD. Triggered ONLY by changes that can actually affect the
+# backend deploy: backend/**, infrastructure/**, or this workflow file.
+# iOS-only / docs-only / spreadsheet pushes don't fire this.
+#
 # PRs run lint + test only.
 # Pushes to main run lint + test, then build + push the image to ECR,
-# then `terraform apply` against the dev environment with the new
-# image tag. The dev environment auto-rolls.
+# then `terraform plan` (printed to the run log for visibility) followed
+# by `terraform apply` against dev with the SHA-pinned image tag.
 #
 # Prod deploys live in deploy-prod.yml (manual workflow_dispatch).
 
 on:
   push:
     branches: [main]
+    paths:
+      - "backend/**"
+      - "infrastructure/**"
+      - ".github/workflows/ci.yml"
   pull_request:
     branches: [main]
+    paths:
+      - "backend/**"
+      - "infrastructure/**"
+      - ".github/workflows/ci.yml"
 
 # OIDC requires id-token: write at the workflow or job level.
 permissions:
@@ -49,9 +61,10 @@ jobs:
       - run: cd backend && pytest tests/unit/ -v --tb=short
 
   # ---------------------------------------------------------------------------
-  # Build + Push — only on push to main. Tags with both SHA (immutable
-  # reference for the deploy step) and `latest` (convenience pointer,
-  # not what prod ever consumes).
+  # Build + Push — only on push to main. Single SHA-tagged image; no
+  # :latest pointer (the task definition pins to the SHA, so the pointer
+  # would just drift). Layer cache via GHA backend halves typical build
+  # time from ~60s → ~25s.
   # ---------------------------------------------------------------------------
   build:
     runs-on: ubuntu-latest
@@ -76,19 +89,25 @@ jobs:
 
       - uses: aws-actions/amazon-ecr-login@v2
 
+      - uses: docker/setup-buildx-action@v3
+
       - name: Build + push image
-        env:
-          IMAGE_TAG: ${{ steps.tag.outputs.sha }}
-        run: |
-          docker build -t aurion-api backend/
-          docker tag aurion-api:latest "${ECR_REGISTRY}/aurion-backend-dev:${IMAGE_TAG}"
-          docker tag aurion-api:latest "${ECR_REGISTRY}/aurion-backend-dev:latest"
-          docker push "${ECR_REGISTRY}/aurion-backend-dev:${IMAGE_TAG}"
-          docker push "${ECR_REGISTRY}/aurion-backend-dev:latest"
+        uses: docker/build-push-action@v5
+        with:
+          context: backend
+          push: true
+          tags: ${{ env.ECR_REGISTRY }}/aurion-backend-dev:${{ steps.tag.outputs.sha }}
+          # GHA cache backend — layers persist across runs in the
+          # repo's Actions cache. mode=max stores every intermediate
+          # layer (vs the default mode=min which only caches the
+          # final stage).
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
 
   # ---------------------------------------------------------------------------
-  # Deploy to dev — terraform apply with the SHA from the build job.
-  # Dev auto-rolls. Prod has its own workflow with a human gate.
+  # Deploy to dev — terraform plan (logged) → terraform apply with the
+  # SHA from the build job. Dev auto-rolls. Prod has its own workflow
+  # with a human gate.
   # ---------------------------------------------------------------------------
   deploy-dev:
     runs-on: ubuntu-latest
@@ -136,11 +155,14 @@ jobs:
         working-directory: infrastructure
         run: terraform init -reconfigure -backend-config=backends/dev.s3.tfbackend
 
+      # Plan with -out saves the exact set of operations; apply
+      # consumes the file so it's guaranteed to do precisely what
+      # the run log shows. No-color keeps the log readable in the
+      # GitHub Actions UI.
+      - name: Terraform plan
+        working-directory: infrastructure
+        run: terraform plan -no-color -out=tfplan -var-file=environments/dev.tfvars -var "api_image_tag=$IMAGE_TAG"
+
       - name: Terraform apply
         working-directory: infrastructure
-        # `-var "api_image_tag=$IMAGE_TAG"` AFTER `-var-file=` so the
-        # SHA-pinned tag wins over the "latest" default in dev.tfvars.
-        # Without this the task definition keeps the :latest image
-        # reference, Terraform sees no diff between deploys, and ECS
-        # never rolls — the old image stays in place silently.
-        run: terraform apply -auto-approve -var-file=environments/dev.tfvars -var "api_image_tag=$IMAGE_TAG"
+        run: terraform apply -auto-approve -no-color tfplan
