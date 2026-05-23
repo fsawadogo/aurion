@@ -98,7 +98,7 @@ variable "api_domain" {
 variable "alerts_email" {
   description = "Email address that receives CloudWatch alarm notifications via SNS. Subscription is created in pending-confirmation state — confirm via the email link before alarms can route. Pre-pilot a single ops mailbox is fine; pre-GA route to PagerDuty / Opsgenie instead."
   type        = string
-  default     = "faical@aurionclinical.com"
+  default     = "faical.sawadogo@aurionclinical.com"
 }
 
 variable "waf_rate_limit_per_5min" {
