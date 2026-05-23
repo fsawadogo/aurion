@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Bars3Icon,
   XMarkIcon,
@@ -15,21 +15,57 @@ import {
   BeakerIcon,
   ArrowRightOnRectangleIcon,
 } from "@heroicons/react/24/outline";
-import { logout } from "@/lib/api";
+import { getMe, logout } from "@/lib/api";
+import type { CurrentUser, UserRole } from "@/types";
 
-const navigation = [
-  { name: "Dashboard", href: "/dashboard", icon: ChartBarIcon },
-  { name: "Sessions", href: "/sessions", icon: RectangleStackIcon },
-  { name: "Audit Log", href: "/audit", icon: ClipboardDocumentListIcon },
-  { name: "PHI Masking", href: "/masking", icon: ShieldCheckIcon },
-  { name: "Users", href: "/users", icon: UsersIcon },
-  { name: "Config", href: "/config", icon: CogIcon },
-  { name: "Eval", href: "/eval", icon: BeakerIcon },
+// Mirrors backend require_role() gates per admin router.
+// Keep in sync with backend/app/api/v1/admin/*.py.
+const navigation: {
+  name: string;
+  href: string;
+  icon: typeof ChartBarIcon;
+  roles: UserRole[];
+}[] = [
+  { name: "Dashboard", href: "/dashboard", icon: ChartBarIcon, roles: ["EVAL_TEAM", "ADMIN"] },
+  { name: "Sessions", href: "/sessions", icon: RectangleStackIcon, roles: ["EVAL_TEAM", "ADMIN"] },
+  { name: "Audit Log", href: "/audit", icon: ClipboardDocumentListIcon, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
+  { name: "PHI Masking", href: "/masking", icon: ShieldCheckIcon, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
+  { name: "Users", href: "/users", icon: UsersIcon, roles: ["ADMIN"] },
+  { name: "Config", href: "/config", icon: CogIcon, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
+  { name: "Eval", href: "/eval", icon: BeakerIcon, roles: ["EVAL_TEAM", "ADMIN"] },
 ];
+
+const ROLE_LABEL: Record<UserRole, string> = {
+  ADMIN: "Administrator",
+  COMPLIANCE_OFFICER: "Compliance Officer",
+  EVAL_TEAM: "Eval Team",
+  CLINICAL_ADMIN: "Clinical Admin",
+  CLINICIAN: "Clinician",
+};
 
 export default function Sidebar() {
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [user, setUser] = useState<CurrentUser | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((u) => {
+        if (!cancelled) setUser(u);
+      })
+      .catch(() => {
+        // 401 already routes to /login via fetchWithAuth; any other failure
+        // means the sidebar stays empty rather than showing items the user
+        // can't actually open (the backend will 403 those anyway).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const visibleNav = user ? navigation.filter((item) => item.roles.includes(user.role)) : [];
+  const initial = user?.full_name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "?";
 
   const navContent = (
     <div className="flex h-full flex-col">
@@ -52,7 +88,7 @@ export default function Sidebar() {
 
       {/* Nav links */}
       <nav className="sidebar-scroll flex-1 space-y-0.5 overflow-y-auto px-3 py-4">
-        {navigation.map((item) => {
+        {visibleNav.map((item) => {
           const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
           return (
             <Link
@@ -83,11 +119,15 @@ export default function Sidebar() {
       <div className="px-4 py-4">
         <div className="flex items-center gap-3">
           <div className="flex h-8 w-8 items-center justify-center rounded-full bg-gradient-to-br from-gold-400 to-gold-600 text-xs font-bold text-navy-900 shadow-sm">
-            A
+            {initial}
           </div>
           <div className="min-w-0 flex-1">
-            <p className="truncate text-sm font-medium text-white/90">Admin User</p>
-            <p className="truncate text-[11px] text-gray-500">Administrator</p>
+            <p className="truncate text-sm font-medium text-white/90">
+              {user?.full_name?.trim() || user?.email || "Loading…"}
+            </p>
+            <p className="truncate text-[11px] text-gray-500">
+              {user ? ROLE_LABEL[user.role] : ""}
+            </p>
           </div>
         </div>
         <button

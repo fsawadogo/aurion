@@ -253,3 +253,10 @@ export interface AuthResponse {
   user_id: string;
   full_name: string;
 }
+
+export interface CurrentUser {
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
+}
