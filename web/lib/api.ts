@@ -13,6 +13,7 @@ import type {
   PilotMetric,
   ProviderConfig,
   Session,
+  SessionDetail,
   SessionFilters,
   UpdateUserPayload,
   User,
@@ -200,9 +201,9 @@ export async function getSessions(
   return res.json();
 }
 
-export async function getSessionCompleteness(
+export async function getSessionDetail(
   sessionId: string,
-): Promise<Session> {
+): Promise<SessionDetail> {
   const res = await fetchWithAuth(`/api/v1/admin/sessions/${sessionId}`);
   return res.json();
 }

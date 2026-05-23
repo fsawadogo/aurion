@@ -154,6 +154,31 @@ class PaginatedSessionsResponse(BaseModel):
     page_size: int
 
 
+class SectionDetail(BaseModel):
+    """Per-section completeness row for the session-detail view.
+
+    No claim text — that crosses into PHI territory and belongs in the
+    eval interface where masked content is shown by design.
+    ``claim_sources`` is a count by source_type, so reviewers can see
+    e.g. "this section was built from 4 transcript anchors and 1 frame
+    citation" without rendering the underlying text.
+    """
+
+    id: str
+    title: str
+    required: bool
+    status: str
+    claims_count: int
+    claim_sources: dict[str, int] = Field(default_factory=dict)
+
+
+class SessionDetailResponse(SessionAdminResponse):
+    note_version: int = 0
+    note_stage: int = 0
+    is_approved: bool = False
+    sections: list[SectionDetail] = Field(default_factory=list)
+
+
 # ── Eval schemas ───────────────────────────────────────────────────────────
 
 

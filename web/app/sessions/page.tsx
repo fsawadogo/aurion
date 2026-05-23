@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -25,6 +26,7 @@ const stateBadgeVariant: Record<string, "success" | "warning" | "error" | "info"
 };
 
 export default function SessionsPage() {
+  const router = useRouter();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -148,7 +150,11 @@ export default function SessionsPage() {
                     const pct = Math.round(s.completeness_score * 100);
                     const belowTarget = pct < 90;
                     return (
-                      <tr key={s.id} className="transition-colors hover:bg-gray-50/80">
+                      <tr
+                        key={s.id}
+                        onClick={() => router.push(`/sessions/${s.id}`)}
+                        className="cursor-pointer transition-colors hover:bg-gray-50/80"
+                      >
                         <td className="whitespace-nowrap px-4 py-3">
                           <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
                             {s.id.length > 12 ? `${s.id.slice(0, 8)}...` : s.id}
