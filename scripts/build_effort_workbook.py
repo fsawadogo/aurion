@@ -232,7 +232,7 @@ PROD = [
     ("P2", "Phase 2 — TLS + DNS + WAF + SHA-pin", "Done", "M", 1.5, 1, "Fully applied 2026-05-22 (115 resources). api-dev.aurionclinical.com live, ACM cert valid, WAF in front, ALB returning HTTPS. ECS service waiting on first image push.", "P1"),
     ("P3", "Phase 3 — GitHub Actions CI/CD with OIDC", "Done", "M", 1, 0.5, "All 4 GitHub Secrets wired + end-to-end CI run green 2026-05-22. Hardened bundle (paths filter, layer cache, plan-before-apply, drop :latest) merged via commit c8eb144.", "P1, P2"),
     ("P4", "Phase 4 — MFA + SNS + alarms + CloudTrail + Flow Logs + audit bucket", "Done", "M", 1.5, 1, "Cognito MFA ON (TOTP) + Cognito hosted UI domain + OAuth code flow + 5 new operational alarms + SNS topic (confirmed) + CloudTrail multi-region + VPC Flow Logs + S3 access logs on PHI buckets (commits 857c8de + 2aa95c7).", "P2"),
-    ("P5", "Phase 5 — Runbooks + IAM Identity Center + backup-restore drill", "Not Started", "M", 1, 1.5, "Mostly markdown + 1 IAM rework. Pre-pilot human-gated.", "P4"),
+    ("P5", "Phase 5 — Operational runbooks", "Done", "M", 1, 1.5, "5 runbooks shipped: incident response, DSAR, backup-restore drill SOP, Cognito user mgmt, pilot launch checklist (commit 8d40c3e). IAM Identity Center migration is a separate post-pilot follow-up (tracked as AUR-OPS-IIC).", "P4"),
 ]
 
 # ── EXTERNAL BLOCKERS — non-engineering, can't be compressed ────────────────
