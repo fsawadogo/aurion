@@ -12,6 +12,7 @@ with MFA, and can read `.claude/state/backlog.md` for current context.
 | [dsar.md](dsar.md) | A patient / physician submits a Quebec Law 25 access or deletion request |
 | [backup-restore-drill.md](backup-restore-drill.md) | Quarterly drill to prove RDS PITR actually restores. Pre-pilot **once**, then quarterly |
 | [cognito-user-management.md](cognito-user-management.md) | Add / remove pilot users, reset MFA when a doctor loses their phone, force sign-out |
+| [web-portal-deployment.md](web-portal-deployment.md) | First-time Amplify provisioning + deploy / rollback for the admin portal |
 | [pilot-launch-checklist.md](pilot-launch-checklist.md) | Go / no-go review before first physician sign-in |
 
 ## Conventions

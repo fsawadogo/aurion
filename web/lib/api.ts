@@ -4,6 +4,7 @@ import type {
   AuthResponse,
   ConfigChangeEvent,
   CreateUserPayload,
+  CurrentUser,
   EvalScore,
   EvalSession,
   MaskingReport,
@@ -12,6 +13,7 @@ import type {
   PilotMetric,
   ProviderConfig,
   Session,
+  SessionDetail,
   SessionFilters,
   UpdateUserPayload,
   User,
@@ -27,7 +29,7 @@ function getToken(): string | null {
   return match ? decodeURIComponent(match[1]) : null;
 }
 
-function buildQuery(params: Record<string, unknown>): string {
+function buildQuery<T extends object>(params: T): string {
   const parts: string[] = [];
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined && value !== null && value !== "") {
@@ -88,6 +90,11 @@ export async function login(
 export function logout(): void {
   document.cookie = "aurion_token=; path=/; max-age=0";
   window.location.href = "/login";
+}
+
+export async function getMe(): Promise<CurrentUser> {
+  const res = await fetchWithAuth("/api/v1/auth/me");
+  return res.json();
 }
 
 /* ─── Users ──────────────────────────────────────────────────────────────── */
@@ -194,9 +201,9 @@ export async function getSessions(
   return res.json();
 }
 
-export async function getSessionCompleteness(
+export async function getSessionDetail(
   sessionId: string,
-): Promise<Session> {
+): Promise<SessionDetail> {
   const res = await fetchWithAuth(`/api/v1/admin/sessions/${sessionId}`);
   return res.json();
 }

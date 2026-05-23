@@ -82,6 +82,31 @@ export interface Session {
   updated_at: string;
 }
 
+export type NoteSectionStatus =
+  | "populated"
+  | "pending_video"
+  | "not_captured"
+  | "processing_failed";
+
+export interface SectionDetail {
+  id: string;
+  title: string;
+  required: boolean;
+  status: NoteSectionStatus;
+  claims_count: number;
+  // Keys are NoteClaim source_type values ("transcript", "visual",
+  // "screen", "physician_edit"). Backend may return additional keys
+  // for unknown source types, so keep this open.
+  claim_sources: Record<string, number>;
+}
+
+export interface SessionDetail extends Session {
+  note_version: number;
+  note_stage: number;
+  is_approved: boolean;
+  sections: SectionDetail[];
+}
+
 export interface SessionFilters {
   clinician_id?: string;
   specialty?: string;
@@ -252,4 +277,11 @@ export interface AuthResponse {
   role: UserRole;
   user_id: string;
   full_name: string;
+}
+
+export interface CurrentUser {
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
 }

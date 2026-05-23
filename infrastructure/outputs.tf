@@ -194,3 +194,27 @@ output "cloudtrail_name" {
   description = "Multi-region CloudTrail name."
   value       = aws_cloudtrail.main.name
 }
+
+# -----------------------------------------------------------------------------
+# W010 — Web Portal (Amplify)
+# -----------------------------------------------------------------------------
+
+output "portal_url" {
+  description = "Canonical HTTPS URL for the web admin portal. Add to Cognito callback URLs once the hosted-UI flow is wired on the web side."
+  value       = "https://${var.web_portal_subdomain}"
+}
+
+output "portal_nameservers" {
+  description = "NS records to set at Cloudflare for var.web_portal_subdomain after the first apply. Same delegation pattern as route53_nameservers — add 4 NS records at Cloudflare for the portal subdomain pointing at these AWS nameservers, then ACM + Amplify domain verification can complete."
+  value       = aws_route53_zone.portal.name_servers
+}
+
+output "amplify_app_id" {
+  description = "Amplify app ID for the web portal. Empty string when var.amplify_github_access_token is unset (resource is skipped)."
+  value       = length(aws_amplify_app.web_portal) > 0 ? aws_amplify_app.web_portal[0].id : ""
+}
+
+output "amplify_default_domain" {
+  description = "Amplify-managed default subdomain (main.<app-id>.amplifyapp.com). Use for smoke testing before custom-domain verification finishes."
+  value       = length(aws_amplify_branch.main) > 0 ? "https://${aws_amplify_branch.main[0].branch_name}.${aws_amplify_app.web_portal[0].default_domain}" : ""
+}

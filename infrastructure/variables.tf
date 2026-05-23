@@ -92,6 +92,23 @@ variable "api_domain" {
 }
 
 # -----------------------------------------------------------------------------
+# Web Portal — Amplify Hosting (W010)
+# -----------------------------------------------------------------------------
+
+variable "web_portal_subdomain" {
+  description = "Fully qualified domain name for the web admin portal (e.g. 'portal-dev.aurionclinical.com' for dev, 'portal.aurionclinical.com' for prod). Same delegation pattern as var.api_domain — apex stays at Cloudflare, this subdomain delegates 4 NS records to Route 53 (zone created by amplify.tf)."
+  type        = string
+  default     = "portal-dev.aurionclinical.com"
+}
+
+variable "amplify_github_access_token" {
+  description = "Classic GitHub PAT with 'repo' scope for the AWS Amplify GitHub source connector. Set via TF_VAR_amplify_github_access_token in the deploy environment — never check into VCS. Required only for the initial Amplify app creation; rotation is via Amplify console, not Terraform. Leave null to skip the app+branch resources (lets the rest of the module plan cleanly while this is being provisioned)."
+  type        = string
+  default     = null
+  sensitive   = true
+}
+
+# -----------------------------------------------------------------------------
 # WAF (Phase 2)
 # -----------------------------------------------------------------------------
 
