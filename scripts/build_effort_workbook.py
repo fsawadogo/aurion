@@ -100,6 +100,8 @@ MOBILE = [
     ("Q-04", "SessionUIState shim cleanup", "Done", "S", 1, 0.25, "Drop Bool shims (commit 69b317e).", "—"),
     ("BUNDLE-ID", "Rebrand bundle ID → com.aurionclinical.aurion", "Done", "S", 0.5, 0.1, "Pre-TestFlight (commit 39c9404).", "—"),
     ("FASTLANE", "fastlane CLI bootstrap + TestFlight lanes", "Done", "M", 3, 0.25, "Appfile + Fastfile (commit e4a9d7b). User runs `fastlane bootstrap` once.", "Apple Dev active"),
+    ("COGNITO-IOS", "Cognito hosted UI login + MFA challenge + Keychain token mgmt", "Done", "L", 8, 1, "CognitoAuth.swift wraps ASWebAuthenticationSession + PKCE + /oauth2/token exchange. LoginView reduced from email/password form to single 'Sign in' button. Cognito drives password + TOTP MFA on its surface. Tokens persist to Keychain; APIClient sends id_token as Bearer (commit 6cb033b).", "Cognito User Pool (Done)"),
+    ("CONFIG-URL", "Config.swift Release URL → https://api-dev.aurionclinical.com", "Done", "S", 0.25, 0.1, "iOS Release builds point at the dev backend for the pilot (commit 3cbcbfa).", "P2 apply"),
     # Deferred mobile work
     ("M018", "MediaPipe face detection (backup)", "Future", "L", 5, 0.5, "Pilot follow-up — revisit only if clinical safety committee asks.", "M015 Apple Vision"),
     ("M019", "Ray-Ban Meta SDK", "Future", "XL", 15, 5, "Deferred post-pilot — pilot ships iPhone/iPad fallback.", "Partner SDK access"),
@@ -146,7 +148,7 @@ WEB = [
 # ── BACKEND SERVICES — clinical mode complete, physician APIs pending ───────
 BACKEND = [
     # Admin endpoints — Done
-    ("B001", "Auth (api/v1/auth.py)", "Done", "M", 3, 0.5, "Cognito JWKS + JWT + dev seed (now @dataclass per Q-06).", "—"),
+    ("B001", "Auth (api/v1/auth.py + /auth/me)", "Done", "M", 3, 0.5, "Cognito JWKS + JWT + dev seed (Q-06 dataclass). /auth/me added (commit 6cb033b) — validates Bearer JWT, auto-provisions UserModel on first Cognito sign-in.", "—"),
     ("B002", "Profile (api/v1/profile.py)", "Done", "S", 1, 0.25, "Physician profile CRUD.", "—"),
     ("B003", "Config (api/v1/config.py)", "Done", "S", 1, 0.25, "Runtime AppConfig.", "M008 AppConfig"),
     ("B004", "Admin (api/v1/admin.py — package split)", "Done", "L", 8, 1.5, "CQR-4 split into users/sessions/eval/metrics. Cognito wiring now real.", "B025 Alembic"),
@@ -228,8 +230,8 @@ INFRA = [
 PROD = [
     ("P1", "Phase 1 — State bootstrap (S3 + DDB + KMS)", "Done", "S", 0.5, 0.25, "bootstrap/ module applied to dev (commit cd40d3d). Account 366034225426.", "—"),
     ("P2", "Phase 2 — TLS + DNS + WAF + SHA-pin", "Done", "M", 1.5, 1, "Fully applied 2026-05-22 (115 resources). api-dev.aurionclinical.com live, ACM cert valid, WAF in front, ALB returning HTTPS. ECS service waiting on first image push.", "P1"),
-    ("P3", "Phase 3 — GitHub Actions CI/CD with OIDC", "Verify", "M", 1, 0.5, "Workflows + IAM OIDC trust shipped (commit 2a0fd11). Roles exist in AWS. 4 GitHub Secrets need wiring: AWS_ACCOUNT_ID, AWS_DEPLOY_ROLE_DEV, AWS_DEPLOY_ROLE_PROD, ECR_REGISTRY.", "P1, P2"),
-    ("P4", "Phase 4 — Cognito MFA + SNS + alarms + CloudTrail + Flow Logs + KMS rotation", "Not Started", "M", 1.5, 1, "Includes 5 missing operational alarms, SNS topic, GuardDuty enable.", "P2"),
+    ("P3", "Phase 3 — GitHub Actions CI/CD with OIDC", "Done", "M", 1, 0.5, "All 4 GitHub Secrets wired + end-to-end CI run green 2026-05-22. Hardened bundle (paths filter, layer cache, plan-before-apply, drop :latest) merged via commit c8eb144.", "P1, P2"),
+    ("P4", "Phase 4 — MFA + SNS + alarms + CloudTrail + Flow Logs + audit bucket", "Done", "M", 1.5, 1, "Cognito MFA ON (TOTP) + Cognito hosted UI domain + OAuth code flow + 5 new operational alarms + SNS topic (confirmed) + CloudTrail multi-region + VPC Flow Logs + S3 access logs on PHI buckets (commits 857c8de + 2aa95c7).", "P2"),
     ("P5", "Phase 5 — Runbooks + IAM Identity Center + backup-restore drill", "Not Started", "M", 1, 1.5, "Mostly markdown + 1 IAM rework. Pre-pilot human-gated.", "P4"),
 ]
 
@@ -239,10 +241,13 @@ EXTERNAL = [
     ("EXT-02", "Cloudflare DNS delegation (subdomain to AWS)", "Done", "—", 0, 0, "Option B chosen + applied 2026-05-22. 4 NS records at Cloudflare for api-dev.aurionclinical.com delegate to AWS. Propagation verified via dig.", "—"),
     ("EXT-03", "First Phase 2 full apply against dev", "Done", "—", 0, 0, "Applied 2026-05-22. 115 resources created. ALB returns 503 (no image yet — expected). TLS valid.", "EXT-02"),
     ("EXT-04", "TestFlight initial build review", "Not Started", "—", 0, 0, "Apple reviews first build before internal testers can install. 24-48h.", "fastlane bootstrap; first iOS push"),
-    ("EXT-05", "Cognito MFA enrollment by pilot physicians", "Not Started", "—", 0, 0, "~5 min per physician via Cognito hosted UI.", "P4 (MFA enable)"),
+    ("EXT-05", "Cognito MFA enrollment by pilot physicians", "Not Started", "—", 0, 0, "~5 min per physician via Cognito hosted UI. User pool MFA is ON, 3 pilot accounts pre-provisioned (perry, marie, faical.sawadogo) — they enroll TOTP on first sign-in.", "P4 (MFA enable)"),
     ("EXT-06", "DPIA + consent forms + clinical safety committee sign-off", "Blocker", "—", 0, 0, "NON-ENGINEERING. 2-4 weeks of calendar depending on pilot site's IRB/QI committee cadence.", "—"),
     ("EXT-07", "Cyber insurance + Business Associate Agreements (if applicable)", "Blocker", "—", 0, 0, "NON-ENGINEERING. Weeks. Required before live PHI.", "—"),
     ("EXT-08", "Pilot consent + recruitment of 3-5 physicians", "Not Started", "—", 0, 0, "Dr. Perry + Dr. Marie confirmed. Other 1-3 pending.", "—"),
+    ("EXT-09", "Pilot Cognito user provisioning (admin-create + groups)", "Done", "—", 0, 0, "scripts/provision_pilot_users.sh run 2026-05-23. 3 users in FORCE_CHANGE_PASSWORD state across CLINICIAN + ADMIN groups.", "EXT-03"),
+    ("EXT-10", "SNS alarm subscription confirmed", "Done", "—", 0, 0, "faical.sawadogo@aurionclinical.com confirmed 2026-05-23. CloudWatch alarms now route to a real mailbox.", "P4"),
+    ("EXT-11", "AI provider keys populated in Secrets Manager", "Done", "—", 0, 0, "OpenAI / Anthropic / Google AI / AssemblyAI uploaded 2026-05-22, ECS service rolled.", "P2"),
 ]
 
 
