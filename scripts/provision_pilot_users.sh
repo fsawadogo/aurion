@@ -54,7 +54,7 @@ provision() {
 
 provision "perry@creoq.ca"            "Dr. Perry Gdalevitch"   "CLINICIAN"
 provision "marie@creoq.ca"            "Dr. Marie Gdalevitch"   "CLINICIAN"
-provision "faycal@aurionclinical.com" "Faical Sawadogo"        "ADMIN"
+provision "faical@aurionclinical.com" "Faical Sawadogo"        "ADMIN"
 
 echo
 echo "Done. Distribute the temporary passwords through a secure channel"
