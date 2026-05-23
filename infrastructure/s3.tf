@@ -10,9 +10,41 @@
 # -----------------------------------------------------------------------------
 
 resource "aws_kms_key" "main" {
-  description             = "Aurion ${var.environment} encryption key for S3, RDS, and DynamoDB"
+  description             = "Aurion ${var.environment} encryption key for S3, RDS, DynamoDB, and audit services"
   deletion_window_in_days = 30
   enable_key_rotation     = true
+
+  # Key policy — account root + service-principal grants for CloudTrail
+  # (encrypt log files) and CloudWatch Logs (when we add log streaming
+  # later). Without this, those services can't use the key even though
+  # the IAM identity has decrypt rights on it.
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EnableIAMUserPermissions"
+        Effect    = "Allow"
+        Principal = { AWS = "arn:aws:iam::${data.aws_caller_identity.current.account_id}:root" }
+        Action    = "kms:*"
+        Resource  = "*"
+      },
+      {
+        Sid       = "AllowCloudTrailEncrypt"
+        Effect    = "Allow"
+        Principal = { Service = "cloudtrail.amazonaws.com" }
+        Action = [
+          "kms:GenerateDataKey*",
+          "kms:DescribeKey",
+        ]
+        Resource = "*"
+        Condition = {
+          StringLike = {
+            "kms:EncryptionContext:aws:cloudtrail:arn" = "arn:aws:cloudtrail:*:${data.aws_caller_identity.current.account_id}:trail/*"
+          }
+        }
+      },
+    ]
+  })
 
   tags = {
     Name = "aurion-key-${var.environment}"
@@ -252,4 +284,31 @@ resource "aws_s3_bucket_policy" "eval_ssl" {
       }
     ]
   })
+}
+
+# =============================================================================
+# Access logging on the 3 PHI buckets (Phase 4)
+# =============================================================================
+# Every GET / PUT on audio/frames/eval lands a log line in the audit
+# bucket. Catches the "who downloaded what" question that DSAR + breach
+# investigations need to answer.
+#
+# Destination is the central audit bucket; prefix segregates per-source.
+
+resource "aws_s3_bucket_logging" "audio" {
+  bucket        = aws_s3_bucket.audio.id
+  target_bucket = aws_s3_bucket.audit_logs.id
+  target_prefix = "s3-access/audio/"
+}
+
+resource "aws_s3_bucket_logging" "frames" {
+  bucket        = aws_s3_bucket.frames.id
+  target_bucket = aws_s3_bucket.audit_logs.id
+  target_prefix = "s3-access/frames/"
+}
+
+resource "aws_s3_bucket_logging" "eval" {
+  bucket        = aws_s3_bucket.eval.id
+  target_bucket = aws_s3_bucket.audit_logs.id
+  target_prefix = "s3-access/eval/"
 }
