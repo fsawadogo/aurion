@@ -106,10 +106,15 @@ resource "aws_cognito_user_pool_client" "main" {
   callback_urls = [
     "aurion://oauth-callback",
     "http://localhost:3000/api/auth/callback/cognito",
+    # Web portal — wired now so the hosted-UI integration can land later
+    # without a Cognito redeploy. Until the web side actually launches
+    # the hosted UI flow, the existing /auth/login path keeps working.
+    "https://${var.web_portal_subdomain}/api/auth/callback/cognito",
   ]
   logout_urls = [
     "aurion://oauth-logout",
     "http://localhost:3000/auth/signed-out",
+    "https://${var.web_portal_subdomain}/auth/signed-out",
   ]
   supported_identity_providers = ["COGNITO"]
 
