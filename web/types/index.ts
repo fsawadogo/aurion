@@ -160,6 +160,9 @@ export interface MaskingSessionResult {
   date: string;
   total_frames: number;
   masked_frames: number;
+  failed_frames: number;
+  skipped_frames: number;
+  uploaded_frames: number;
   pass: boolean;
 }
 

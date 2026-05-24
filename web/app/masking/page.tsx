@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -52,6 +53,7 @@ function ProgressRing({ value, size = 100 }: { value: number; size?: number }) {
 }
 
 export default function MaskingPage() {
+  const router = useRouter();
   const [report, setReport] = useState<MaskingReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -188,21 +190,24 @@ export default function MaskingPage() {
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Session</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Clinician</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Date</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Total Frames</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Masked</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-400">Attempts</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-400">Masked</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-400">Failed</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-400">Skipped</th>
+                  <th className="px-4 py-3 text-right text-[11px] font-semibold uppercase tracking-wider text-gray-400">Uploaded</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Status</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-6">
+                    <td colSpan={9} className="px-4 py-6">
                       <LoadingSkeleton lines={4} />
                     </td>
                   </tr>
                 ) : displayReport.sessions.length === 0 ? (
                   <tr>
-                    <td colSpan={6} className="px-4 py-12 text-center">
+                    <td colSpan={9} className="px-4 py-12 text-center">
                       <p className="text-sm text-gray-400">
                         No masking data available yet. Events appear here once sessions process video frames.
                       </p>
@@ -210,7 +215,13 @@ export default function MaskingPage() {
                   </tr>
                 ) : (
                   displayReport.sessions.map((s) => (
-                    <tr key={s.session_id} className="transition-colors hover:bg-gray-50/80">
+                    <tr
+                      key={s.session_id}
+                      onClick={() =>
+                        router.push(`/audit/${encodeURIComponent(s.session_id)}`)
+                      }
+                      className="cursor-pointer transition-colors hover:bg-gray-50/80"
+                    >
                       <td className="whitespace-nowrap px-4 py-3">
                         <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
                           {s.session_id.length > 12
@@ -224,11 +235,20 @@ export default function MaskingPage() {
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
                         {s.date}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600 font-medium">
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-right text-gray-600 font-medium tabular-nums">
                         {s.total_frames}
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600 font-medium">
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-right text-emerald-600 font-medium tabular-nums">
                         {s.masked_frames}
+                      </td>
+                      <td className={`whitespace-nowrap px-4 py-3 text-sm text-right font-medium tabular-nums ${s.failed_frames > 0 ? "text-red-600" : "text-gray-300"}`}>
+                        {s.failed_frames}
+                      </td>
+                      <td className={`whitespace-nowrap px-4 py-3 text-sm text-right font-medium tabular-nums ${s.skipped_frames > 0 ? "text-amber-600" : "text-gray-300"}`}>
+                        {s.skipped_frames}
+                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-sm text-right text-gray-600 font-medium tabular-nums">
+                        {s.uploaded_frames}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
                         {s.pass ? (
