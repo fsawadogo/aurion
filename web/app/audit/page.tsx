@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -31,6 +32,7 @@ function eventBadgeVariant(
 }
 
 export default function AuditPage() {
+  const router = useRouter();
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -239,7 +241,13 @@ export default function AuditPage() {
                   </tr>
                 ) : (
                   events.map((evt, i) => (
-                    <tr key={`${evt.session_id}-${evt.event_timestamp}-${i}`} className="transition-colors hover:bg-gray-50/80">
+                    <tr
+                      key={`${evt.session_id}-${evt.event_timestamp}-${i}`}
+                      onClick={() =>
+                        router.push(`/audit/${encodeURIComponent(evt.session_id)}`)
+                      }
+                      className="cursor-pointer transition-colors hover:bg-gray-50/80"
+                    >
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
                         {new Date(evt.event_timestamp).toLocaleString()}
                       </td>
