@@ -123,10 +123,28 @@ export default function DashboardPage() {
   const specialties = Object.entries(specialtyMap).slice(0, 5);
   const maxSpecialty = Math.max(...specialties.map(([, v]) => v), 1);
 
-  // Weekly data (last 7 entries grouped)
-  const weeklyBuckets: number[] = [0, 0, 0, 0, 0, 0, 0];
-  sessionsData.forEach((_, i) => {
-    weeklyBuckets[i % 7] += 1;
+  // Last 7 days, indexed so [6] = today and [0] = 6 days ago.
+  // Buckets by session.created_at — sessions outside the window are ignored.
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const weeklyBuckets: number[] = Array(7).fill(0);
+  const weeklyLabels: string[] = [];
+  for (let i = 6; i >= 0; i--) {
+    const d = new Date(today);
+    d.setDate(today.getDate() - i);
+    weeklyLabels.push(d.toLocaleDateString(undefined, { weekday: "short" }));
+  }
+  sessionsData.forEach((s) => {
+    if (!s.created_at) return;
+    const created = new Date(s.created_at);
+    if (Number.isNaN(created.getTime())) return;
+    created.setHours(0, 0, 0, 0);
+    const daysAgo = Math.floor(
+      (today.getTime() - created.getTime()) / 86_400_000,
+    );
+    if (daysAgo >= 0 && daysAgo < 7) {
+      weeklyBuckets[6 - daysAgo] += 1;
+    }
   });
   const maxWeekly = Math.max(...weeklyBuckets, 1);
 
@@ -206,8 +224,8 @@ export default function DashboardPage() {
 
         {/* Charts area */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card title="This Week">
-            {loading || metricsData.length === 0 ? (
+          <Card title="Last 7 days">
+            {loading || sessionsData.length === 0 ? (
               <div className="flex h-48 items-center justify-center">
                 <p className="text-sm text-gray-400">
                   {loading ? "Loading..." : "No session data available yet."}
@@ -215,10 +233,11 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="flex h-48 items-end justify-around gap-2 pt-4">
-                {["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map((day, i) => {
+                {weeklyLabels.map((label, i) => {
                   const height = (weeklyBuckets[i] / maxWeekly) * 100;
+                  const isToday = i === 6;
                   return (
-                    <div key={day} className="group flex flex-1 flex-col items-center gap-1.5">
+                    <div key={`${label}-${i}`} className="group flex flex-1 flex-col items-center gap-1.5">
                       <span className="text-xs font-semibold text-navy-600 opacity-0 transition-opacity group-hover:opacity-100">
                         {weeklyBuckets[i]}
                       </span>
@@ -228,7 +247,9 @@ export default function DashboardPage() {
                       >
                         <div className="h-full w-full rounded-t-md bg-gradient-to-t from-gold-500 to-gold-300" />
                       </div>
-                      <span className="text-[10px] font-medium text-gray-400">{day}</span>
+                      <span className={`text-[10px] font-medium ${isToday ? "text-navy-600" : "text-gray-400"}`}>
+                        {label}
+                      </span>
                     </div>
                   );
                 })}
