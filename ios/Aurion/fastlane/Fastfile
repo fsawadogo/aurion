@@ -49,7 +49,7 @@ platform :ios do
     #    and the App Store Connect app record.
     produce(
       api_key:           api_key,
-      app_identifier:    "com.aurionclinical.aurion",
+      app_identifier:    "com.aurionclinical.physician",
       app_name:          "Aurion",
       language:          "English",
       app_version:       "1.0",
@@ -67,7 +67,7 @@ platform :ios do
     # 2. Widget extension — bundle id only (extensions don't get ASC records).
     produce(
       api_key:           api_key,
-      app_identifier:    "com.aurionclinical.aurion.AurionWidgets",
+      app_identifier:    "com.aurionclinical.physician.widgets",
       app_name:          "Aurion Widgets",
       sku:               "aurion-pilot-widgets-001",
       skip_itc:          true,             # extensions: no ASC record
@@ -120,7 +120,7 @@ platform :ios do
       first, last = email.split("@").first.split(".")
       pilot(
         api_key:        api_key,
-        app_identifier: "com.aurionclinical.aurion",
+        app_identifier: "com.aurionclinical.physician",
         email:          email,
         first_name:     first.to_s.capitalize,
         last_name:      (last || "Doctor").capitalize,
@@ -137,7 +137,7 @@ platform :ios do
   lane :list_testers do
     api_key = asc_api_key
     Spaceship::ConnectAPI.login(use_portal: false, use_tunes: true, api_token: api_key)
-    app = Spaceship::ConnectAPI::App.find("com.aurionclinical.aurion")
+    app = Spaceship::ConnectAPI::App.find("com.aurionclinical.physician")
     UI.user_error! "App not found — run `fastlane bootstrap` first" unless app
 
     testers = Spaceship::ConnectAPI::BetaTester.all(app_id: app.id)

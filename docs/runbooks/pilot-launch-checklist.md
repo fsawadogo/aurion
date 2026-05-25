@@ -56,7 +56,7 @@ have no graceful-degradation mode.
 
 ## iOS / TestFlight
 
-- [ ] App ID `com.aurionclinical.aurion` registered in Apple Developer
+- [ ] App ID `com.aurionclinical.physician` registered in Apple Developer
       portal
 - [ ] App Store Connect record exists for "Aurion"
 - [ ] At least one TestFlight build with the Cognito hosted UI login
