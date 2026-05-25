@@ -88,4 +88,7 @@ infrastructure/node_modules/
 # Secrets — never commit
 *.pem
 *.key
+*.p8
+AuthKey_*.p8
+ApiKey_*.p8
 credentials.json

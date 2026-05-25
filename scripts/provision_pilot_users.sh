@@ -52,9 +52,11 @@ provision() {
   echo "  added to group: ${group}"
 }
 
-provision "perry@creoq.ca"            "Dr. Perry Gdalevitch"   "CLINICIAN"
-provision "marie@creoq.ca"            "Dr. Marie Gdalevitch"   "CLINICIAN"
-provision "faical.sawadogo@aurionclinical.com" "Faical Sawadogo"        "ADMIN"
+provision "perry@aurionclinical.com"           "Dr. Perry Gdalevitch"  "CLINICIAN"
+provision "marie@aurionclinical.com"           "Dr. Marie Gdalevitch"  "CLINICIAN"
+provision "faical.sawadogo@aurionclinical.com" "Faical Sawadogo"       "ADMIN"
+provision "uzziel.tamon@aurionclinical.com"    "Uzziel Tamon"          "ADMIN"
+provision "freddy.beltran@aurionclinical.com"  "Freddy Beltran"        "ADMIN"
 
 echo
 echo "Done. Distribute the temporary passwords through a secure channel"

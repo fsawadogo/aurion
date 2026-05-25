@@ -7,7 +7,7 @@ require "xcodeproj"
 
 PROJECT_PATH = "Aurion.xcodeproj"
 WIDGET_NAME  = "AurionWidgets"
-WIDGET_BUNDLE_ID = "com.aurionclinical.aurion.AurionWidgets"
+WIDGET_BUNDLE_ID = "com.aurionclinical.physician.widgets"
 DEPLOYMENT_TARGET = "26.0"
 DEVELOPMENT_TEAM  = "S5N6XHH7AQ"
 SWIFT_VERSION = "5.0"

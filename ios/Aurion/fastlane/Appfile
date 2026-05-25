@@ -4,7 +4,7 @@
 # into git without leaking the team id / personal email. Set them in
 # your shell rc (~/.zshrc) alongside AWS_PROFILE.
 
-app_identifier "com.aurionclinical.aurion"
+app_identifier "com.aurionclinical.physician"
 
 # Apple ID — only needed for legacy operations that don't use the
 # App Store Connect API key auth (rare). The API key auth flow takes
