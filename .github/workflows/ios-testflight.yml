@@ -23,18 +23,21 @@ permissions:
   contents: read
 
 env:
-  XCODE_VERSION: "16.0"
   IOS_PROJECT_DIR: ios/Aurion
   IOS_SCHEME: Aurion
 
 jobs:
   build:
-    runs-on: macos-15
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode
-        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+      - name: Select Xcode (newest installed)
+        # Aurion's pbxproj uses IPHONEOS_DEPLOYMENT_TARGET = 26.0 + APIs
+        # like AVAudioSession.allowBluetoothHFP that require Xcode 26+.
+        # Pick the highest-numbered Xcode in /Applications rather than
+        # pin to an exact patch version — runner image bumps don't break us.
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)/Contents/Developer" && xcodebuild -version
 
       # Build for the simulator on every event — proves the project
       # compiles. Same target as the local dev check.
@@ -50,7 +53,7 @@ jobs:
     # Only runs on main + only if the App Store Connect API key secret
     # is set. Until the user has their Apple Developer membership +
     # generated a key, this job is a graceful no-op.
-    runs-on: macos-15
+    runs-on: macos-26
     needs: build
     if: github.ref == 'refs/heads/main'
     env:
@@ -72,9 +75,9 @@ jobs:
             echo "skip=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Select Xcode
+      - name: Select Xcode (newest installed)
         if: steps.gate.outputs.skip == 'false'
-        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app/Contents/Developer"
+        run: sudo xcode-select -s "$(ls -d /Applications/Xcode_*.app | sort -V | tail -1)/Contents/Developer" && xcodebuild -version
 
       - name: Materialize App Store Connect API key
         if: steps.gate.outputs.skip == 'false'
