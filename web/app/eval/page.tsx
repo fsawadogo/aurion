@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -178,16 +179,14 @@ export default function EvalPage() {
                             {s.scores ? `${s.scores.overall}%` : "--"}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-sm">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setSelectedId(s.id);
-                              }}
+                            <Link
+                              href={`/eval/${encodeURIComponent(s.id)}`}
+                              onClick={(e) => e.stopPropagation()}
                             >
-                              Review
-                            </Button>
+                              <Button variant="ghost" size="sm">
+                                Open triad
+                              </Button>
+                            </Link>
                           </td>
                         </tr>
                       ))

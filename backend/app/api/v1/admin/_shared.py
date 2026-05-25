@@ -202,6 +202,42 @@ class EvalScoreRequest(BaseModel):
     notes: str = ""
 
 
+class EvalTranscriptSegment(BaseModel):
+    """Masked transcript segment as surfaced to the eval team.
+
+    PHI is already redacted by the upstream PHI audit (Comprehend Medical
+    run during transcription). Eval team sees the masked text only —
+    raw audio + raw transcript are out of scope per the web portal spec.
+    """
+
+    id: str
+    start_ms: int
+    end_ms: int
+    text: str
+    is_visual_trigger: bool = False
+    trigger_type: Optional[str] = None
+
+
+class EvalSessionDetailResponse(EvalSessionResponse):
+    """Full triad view: transcript + note + (frame citations live as
+    visual-source claims inside note_sections, no separate array needed).
+
+    Frontend renders three panes:
+      - Transcript: transcript_segments
+      - Note: note_sections (each section has claims, each claim has
+              source_type ∈ {transcript, visual, screen, physician_edit}
+              and a source_id that anchors back to a segment / frame)
+      - Frame citations: filter note claims by source_type == "visual"
+    """
+
+    transcript_provider: str = ""
+    transcript_segments: list[EvalTranscriptSegment] = Field(default_factory=list)
+    note_specialty: str = ""
+    note_stage: int = 0
+    note_completeness_score: float = 0.0
+    note_sections: list[dict[str, Any]] = Field(default_factory=list)
+
+
 # ── Config schemas ─────────────────────────────────────────────────────────
 
 

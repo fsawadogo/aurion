@@ -123,9 +123,11 @@ export interface SessionFilters {
 export interface Claim {
   id: string;
   text: string;
-  source_type: "transcript" | "visual" | "screen";
+  source_type: "transcript" | "visual" | "screen" | "physician_edit";
   source_id: string;
   source_quote: string;
+  physician_edited?: boolean;
+  original_text?: string | null;
 }
 
 export type SectionStatus =
@@ -264,6 +266,27 @@ export interface EvalScore {
   notes: string;
   scored_by: string;
   scored_at: string;
+}
+
+export interface EvalTranscriptSegment {
+  id: string;
+  start_ms: number;
+  end_ms: number;
+  text: string;
+  is_visual_trigger: boolean;
+  trigger_type: string | null;
+}
+
+export interface EvalSessionDetail extends EvalSession {
+  transcript_provider: string;
+  transcript_segments: EvalTranscriptSegment[];
+  note_specialty: string;
+  note_stage: number;
+  note_completeness_score: number;
+  // Note sections come straight from the persisted note JSON — each
+  // section has id, title, status, claims[]. The Claim shape (see above)
+  // anchors back to transcript segments / frame ids via source_id.
+  note_sections: NoteSection[];
 }
 
 /* ─── API Responses ──────────────────────────────────────────────────────── */

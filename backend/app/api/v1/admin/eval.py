@@ -14,18 +14,22 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1._helpers import get_session_or_404, write_audit
 from app.api.v1.admin._shared import (
     EvalScoreRequest,
+    EvalSessionDetailResponse,
     EvalSessionResponse,
+    EvalTranscriptSegment,
     resolve_clinician_names,
     scan_audit_events,
 )
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
-from app.core.models import EvalScoreModel, SessionModel
+from app.core.models import EvalScoreModel, SessionModel, TranscriptModel
 from app.core.types import SessionState, UserRole
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, require_role
 from app.modules.eval import repository as eval_repo
 from app.modules.note_gen import repository as note_repo
+
+import json
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -115,6 +119,104 @@ async def get_eval_sessions(
         ))
 
     return eval_sessions
+
+
+@router.get("/eval/sessions/{session_id}", response_model=EvalSessionDetailResponse)
+async def get_eval_session_detail(
+    session_id: str,
+    user: CurrentUser = Depends(
+        require_role(UserRole.EVAL_TEAM, UserRole.ADMIN)
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Triad view for one session — masked transcript + note (with claims
+    that anchor to transcript segments + frame ids) + score state.
+
+    EVAL_TEAM or ADMIN. The shape is additive over EvalSessionResponse —
+    the frontend list page can keep using the smaller list response,
+    only the detail route needs this fatter payload.
+    """
+    try:
+        sid_uuid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Invalid session ID format")
+
+    s = await get_session_or_404(db, sid_uuid)
+    sid = str(s.id)
+
+    names = await resolve_clinician_names(db, [s.clinician_id])
+    clinician_name = names[str(s.clinician_id)]
+
+    # Masking-confirmed lookup mirrors the list endpoint — single audit
+    # scan, in-memory filter.
+    audit = get_audit_log_service()
+    all_events = await scan_audit_events(audit)
+    frames_masked = any(
+        e.get("event_type") == "masking_confirmed" and e.get("session_id") == sid
+        for e in all_events
+    )
+
+    score_row = await eval_repo.get_score(db, sid_uuid)
+    latest_note = await note_repo.get_latest_version(db, sid_uuid)
+
+    # Transcript — one row per session.
+    transcript_segments: list[EvalTranscriptSegment] = []
+    transcript_provider = ""
+    transcript_row = await db.get(TranscriptModel, sid_uuid)
+    if transcript_row is not None:
+        transcript_provider = transcript_row.provider_used
+        try:
+            parsed = json.loads(transcript_row.transcript_json)
+            for seg in parsed.get("segments", []) or []:
+                if not isinstance(seg, dict):
+                    continue
+                transcript_segments.append(EvalTranscriptSegment(
+                    id=str(seg.get("id", "")),
+                    start_ms=int(seg.get("start_ms", 0)),
+                    end_ms=int(seg.get("end_ms", 0)),
+                    text=str(seg.get("text", "")),
+                    is_visual_trigger=bool(seg.get("is_visual_trigger", False)),
+                    trigger_type=seg.get("trigger_type"),
+                ))
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+
+    # Note content — claims carry source_type so the frontend can split
+    # into transcript / visual / screen / physician_edit groups.
+    note_sections: list[dict] = []
+    note_specialty = ""
+    note_stage = 0
+    note_completeness = 0.0
+    note_version = 0
+    if latest_note is not None:
+        note_specialty = latest_note.specialty
+        note_stage = latest_note.stage
+        note_completeness = latest_note.completeness_score
+        note_version = latest_note.version
+        try:
+            parsed = json.loads(latest_note.content)
+            note_sections = parsed.get("sections", []) or []
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+    return EvalSessionDetailResponse(
+        id=f"eval_{sid[:8]}",
+        session_id=sid,
+        clinician_name=clinician_name,
+        specialty=s.specialty,
+        transcript_masked=True,
+        frames_masked=frames_masked,
+        note_version=note_version,
+        scored=score_row is not None,
+        scores=_score_payload(score_row) if score_row else None,
+        created_at=s.created_at.isoformat() if s.created_at else "",
+        transcript_provider=transcript_provider,
+        transcript_segments=transcript_segments,
+        note_specialty=note_specialty,
+        note_stage=note_stage,
+        note_completeness_score=note_completeness,
+        note_sections=note_sections,
+    )
 
 
 @router.post("/eval/sessions/{session_id}/score", response_model=EvalSessionResponse)

@@ -7,6 +7,7 @@ import type {
   CurrentUser,
   EvalScore,
   EvalSession,
+  EvalSessionDetail,
   MaskingReport,
   MetricFilters,
   PaginatedResponse,
@@ -215,7 +216,7 @@ export async function getEvalSessions(): Promise<EvalSession[]> {
   return res.json();
 }
 
-export async function getEvalSession(id: string): Promise<EvalSession> {
+export async function getEvalSession(id: string): Promise<EvalSessionDetail> {
   const res = await fetchWithAuth(`/api/v1/admin/eval/sessions/${id}`);
   return res.json();
 }
