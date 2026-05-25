@@ -86,19 +86,48 @@ platform :ios do
   lane :upload_testflight do
     api_key = asc_api_key
 
+    # 1. Ensure an Apple Distribution certificate exists in the team and
+    #    is installed in the local keychain. fastlane's `cert` action
+    #    creates one via the API key if none exists and downloads the
+    #    matching private key — this is what xcodebuild's
+    #    -allowProvisioningUpdates flow is missing (it only creates
+    #    Development certs, never Distribution).
+    cert(
+      api_key:     api_key,
+      development: false                          # i.e. Distribution
+    )
+
+    # 2. Ensure App Store provisioning profiles exist for both targets.
+    #    Distribution profiles don't need registered devices.
+    sigh(
+      api_key:        api_key,
+      app_identifier: "com.aurionclinical.physician",
+      development:    false,                      # implies App Store distribution
+      force:          true                        # refresh on each run
+    )
+    sigh(
+      api_key:        api_key,
+      app_identifier: "com.aurionclinical.physician.widgets",
+      development:    false,
+      force:          true
+    )
+
+    # 3. Archive + export with explicit -allowProvisioningUpdates so
+    #    gym picks up the profiles we just created.
     build_app(
       project:       "Aurion.xcodeproj",
       scheme:        "Aurion",
       configuration: "Release",
       export_method: "app-store",
-      clean:         true
+      clean:         true,
+      xcargs:        "-allowProvisioningUpdates"
     )
 
     upload_to_testflight(
-      api_key:                       api_key,
+      api_key:                           api_key,
       skip_waiting_for_build_processing: true,
-      skip_submission:               true,        # don't ship to App Store
-      distribute_external:           false
+      skip_submission:                   true,    # don't ship to App Store
+      distribute_external:               false
     )
   end
 
@@ -119,12 +148,14 @@ platform :ios do
     emails.each do |email|
       first, last = email.split("@").first.split(".")
       pilot(
-        api_key:        api_key,
-        app_identifier: "com.aurionclinical.physician",
-        email:          email,
-        first_name:     first.to_s.capitalize,
-        last_name:      (last || "Doctor").capitalize,
-        groups:         ["Internal Testers"]
+        api_key:                  api_key,
+        app_identifier:           "com.aurionclinical.physician",
+        app_platform:             "ios",
+        email:                    email,
+        first_name:               first.to_s.capitalize,
+        last_name:                (last || "Doctor").capitalize,
+        distribute_only:          true,    # add-tester mode (no upload)
+        notify_external_testers:  false    # we don't run external groups
       )
       UI.success "Invited #{email}"
     end

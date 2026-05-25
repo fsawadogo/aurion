@@ -89,6 +89,10 @@ infrastructure/node_modules/
 *.pem
 *.key
 *.p8
+*.p12
+*.cer
+*.certSigningRequest
+*.mobileprovision
 AuthKey_*.p8
 ApiKey_*.p8
 credentials.json
