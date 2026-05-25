@@ -60,6 +60,8 @@ jobs:
       APP_STORE_CONNECT_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       APP_STORE_CONNECT_KEY_P8:    ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+      APPLE_DIST_CERT_P12:         ${{ secrets.APPLE_DIST_CERT_P12 }}
+      APPLE_DIST_CERT_PASSWORD:    ${{ secrets.APPLE_DIST_CERT_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -87,6 +89,43 @@ jobs:
           # to avoid newline mangling in the GitHub secret store.
           echo "$APP_STORE_CONNECT_KEY_P8" | base64 --decode \
             > "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8"
+
+      # Without this step, xcodebuild's export step produces a Development-
+      # signed .ipa (because -allowProvisioningUpdates only creates Development
+      # certs). altool then rejects the upload with 90035 "Invalid Signature".
+      # Importing the Apple Distribution cert + private key into a dedicated
+      # build-only keychain lets codesign find the Distribution identity and
+      # actually re-sign the export to Distribution.
+      - name: Import Apple Distribution cert into a temp keychain
+        if: steps.gate.outputs.skip == 'false'
+        run: |
+          KEYCHAIN="$RUNNER_TEMP/aurion-build.keychain-db"
+          KEYCHAIN_PASSWORD="$(openssl rand -base64 24)"
+
+          # Create + unlock a clean keychain for this run.
+          security create-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+          security set-keychain-settings -lut 21600 "$KEYCHAIN"
+          security unlock-keychain -p "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          # Add the new keychain to the user search list ahead of login.keychain.
+          security list-keychains -d user -s "$KEYCHAIN" $(security list-keychains -d user | tr -d '"')
+          security default-keychain -s "$KEYCHAIN"
+
+          # Decode + import the Distribution cert + private key.
+          echo "$APPLE_DIST_CERT_P12" | base64 --decode > "$RUNNER_TEMP/dist.p12"
+          security import "$RUNNER_TEMP/dist.p12" \
+            -k "$KEYCHAIN" \
+            -P "$APPLE_DIST_CERT_PASSWORD" \
+            -T /usr/bin/codesign \
+            -T /usr/bin/security \
+            -T /usr/bin/productbuild
+          rm "$RUNNER_TEMP/dist.p12"
+
+          # Authorize codesign to use the imported key without prompting.
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASSWORD" "$KEYCHAIN"
+
+          # Sanity check: confirm the Distribution identity is visible.
+          security find-identity -v -p codesigning "$KEYCHAIN"
 
       # `xcodebuild -allowProvisioningUpdates` uses the API key to
       # auto-fetch / refresh signing certs + provisioning profiles —
