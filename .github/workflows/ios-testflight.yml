@@ -91,7 +91,10 @@ jobs:
       - name: Archive
         if: steps.gate.outputs.skip == 'false'
         working-directory: ${{ env.IOS_PROJECT_DIR }}
+        # Raw xcodebuild output (no `xcpretty || true`) — when archive fails
+        # we need the real signing / provisioning error, not a swallowed exit.
         run: |
+          set -o pipefail
           xcodebuild -scheme "$IOS_SCHEME" \
                      -destination 'generic/platform=iOS' \
                      -configuration Release \
@@ -100,7 +103,7 @@ jobs:
                      -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
                      -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
                      -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
-                     archive | xcpretty || true
+                     archive
 
       - name: Export IPA
         if: steps.gate.outputs.skip == 'false'
