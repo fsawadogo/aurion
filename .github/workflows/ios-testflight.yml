@@ -93,6 +93,11 @@ jobs:
         working-directory: ${{ env.IOS_PROJECT_DIR }}
         # Raw xcodebuild output (no `xcpretty || true`) — when archive fails
         # we need the real signing / provisioning error, not a swallowed exit.
+        #
+        # CODE_SIGN_IDENTITY="Apple Distribution" forces Xcode to look up
+        # an App Store distribution profile (no device list required)
+        # instead of its default Apple Development profile, which would
+        # demand registered test devices we don't have.
         run: |
           set -o pipefail
           xcodebuild -scheme "$IOS_SCHEME" \
@@ -103,6 +108,8 @@ jobs:
                      -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
                      -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
                      -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+                     CODE_SIGN_IDENTITY="Apple Distribution" \
+                     CODE_SIGN_STYLE=Automatic \
                      archive
 
       - name: Export IPA
