@@ -197,8 +197,8 @@ export default function EvalDetailPage({ params }: { params: { id: string } }) {
               <div className="lg:col-span-5">
                 <Card title={`Generated note (v${data.note_version})`}>
                   <p className="mb-3 text-[11px] text-gray-400">
-                    Click any claim's source chip to scroll-highlight the anchor in the
-                    transcript pane.
+                    Click any claim&apos;s source chip to scroll-highlight the anchor
+                    in the transcript pane.
                   </p>
                   {data.note_sections.length === 0 ? (
                     <p className="py-6 text-center text-sm text-gray-400">

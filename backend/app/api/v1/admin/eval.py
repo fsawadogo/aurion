@@ -5,6 +5,7 @@ EVAL_TEAM or ADMIN. Scores persist in the ``eval_scores`` table (B-08).
 
 from __future__ import annotations
 
+import json
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -28,8 +29,6 @@ from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, require_role
 from app.modules.eval import repository as eval_repo
 from app.modules.note_gen import repository as note_repo
-
-import json
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
