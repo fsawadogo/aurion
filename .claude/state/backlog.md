@@ -12,14 +12,13 @@ Last seeded: 2026-05-14. Last updated: 2026-05-26 (post PR #15 — eval scoring 
 
 ## Active
 
-- [ ] EVAL-3 eval session assignment (admin assigns specific sessions to specific EVAL_TEAM members; list filtered by assignment) — 1d — lane: backend — no blockers
-- [ ] WEB-METRICS-CHARTS pilot metrics time-series charts (per-metric daily aggregation endpoint + recharts integration) — 3d — lane: backend — depends on EVAL-3
-- [ ] WEB-COGNITO-UI web portal switches from /auth/login to Cognito hosted UI (parity with iOS) — 2d — lane: backend — depends on EVAL-3
+- [ ] WEB-METRICS-CHARTS pilot metrics time-series charts (per-metric daily aggregation endpoint + dashboard rewrite) — 3d — lane: backend — no blockers
+- [ ] WEB-COGNITO-UI web portal switches from /auth/login to Cognito hosted UI (parity with iOS) — 2d — lane: backend — no blockers
 - [ ] AUR-MP-CROSSCHECK Add MediaPipe as independent second face detector for Apple Vision (pilot follow-up; revisit only if clinical safety committee asks) — 5d — lane: ios — no blockers
 
 ## In flight
 
-(no active in-flight tasks)
+- [ ] WEB-METRICS-CHARTS started 2026-05-26, branch lane-backend/web-metrics-charts
 
 ## Blocked
 
@@ -27,6 +26,7 @@ Last seeded: 2026-05-14. Last updated: 2026-05-26 (post PR #15 — eval scoring 
 
 ## Done
 
+- [x] EVAL-3 eval session assignment (admin assigns; list filtered for EVAL_TEAM; score completes assignment) — 1d — lane: backend — merged: 2026-05-26 (PR #16, commit 38212df)
 - [x] EVAL-2 eval scoring per spec (descriptive_mode_pass + soap_section_scores + hallucination_count + discrepancies) — 1d — lane: backend — merged: 2026-05-26 (PR #15, commit ac45f7b)
 - [x] EVAL-1 eval triad view read-only side-by-side (GET /admin/eval/sessions/{id} + /eval/[id] page) — 1d — lane: backend — merged: 2026-05-26 (PR #14, commit 6f78af3)
 - [x] WEB-EXPORT-COMPLIANCE Info.plist ITSAppUsesNonExemptEncryption = false — 0.1d — lane: ios — merged: 2026-05-25 (PR #13)
