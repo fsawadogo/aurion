@@ -257,16 +257,26 @@ enum AuthError: LocalizedError {
 
 extension CognitoAuth: ASWebAuthenticationPresentationContextProviding {
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        // ASWebAuthenticationSession invokes this on the main thread per
+        // Apple's contract. A previous `DispatchQueue.main.sync` wrapper
+        // here deadlocked main → watchdog SIGKILL → app vanished the
+        // moment the user tapped Sign in. We branch on Thread.isMainThread
+        // so we stay safe even if Apple ever calls it off-main.
+        if Thread.isMainThread {
+            return Self.keyWindowAnchor()
+        }
+        return DispatchQueue.main.sync { Self.keyWindowAnchor() }
+    }
+
+    private static func keyWindowAnchor() -> ASPresentationAnchor {
         // Return the key window — the only sensible anchor for a sheet
         // that needs to overlay the foreground app. UIScene-based apps
         // can have multiple windows; first connected scene with a
         // .foregroundActive state is the one the user is looking at.
-        DispatchQueue.main.sync {
-            let scene = UIApplication.shared.connectedScenes
-                .compactMap { $0 as? UIWindowScene }
-                .first { $0.activationState == .foregroundActive }
-            return scene?.windows.first { $0.isKeyWindow } ?? ASPresentationAnchor()
-        }
+        let scene = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .first { $0.activationState == .foregroundActive }
+        return scene?.windows.first { $0.isKeyWindow } ?? ASPresentationAnchor()
     }
 }
 
