@@ -22,12 +22,32 @@ import type {
   UpdateUserPayload,
   User,
 } from "@/types";
+import {
+  getStoredIdToken,
+  refreshTokens,
+  signOut as cognitoSignOut,
+  tokenIsStale,
+} from "@/lib/cognito";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
+/** Resolve the bearer token for outgoing API requests.
+ *
+ * Preference order:
+ *   1. Cognito id_token in sessionStorage (the new hosted-UI flow).
+ *   2. Legacy `aurion_token` cookie (kept for one release so in-flight
+ *      dev sessions don't get bounced mid-task).
+ *
+ * Returns null only if neither is present — the caller's request will
+ * then fail with 401 and fetchWithAuth will route to /login.
+ */
 function getToken(): string | null {
+  if (typeof window !== "undefined") {
+    const cognito = getStoredIdToken();
+    if (cognito) return cognito;
+  }
   if (typeof document === "undefined") return null;
   const match = document.cookie.match(/(?:^|;\s*)aurion_token=([^;]*)/);
   return match ? decodeURIComponent(match[1]) : null;
@@ -47,23 +67,42 @@ export async function fetchWithAuth(
   path: string,
   options: RequestInit = {},
 ): Promise<Response> {
-  const token = getToken();
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-    ...(options.headers as Record<string, string> | undefined),
-  };
-  if (token) {
-    headers["Authorization"] = `Bearer ${token}`;
+  // If the Cognito id_token is past its expiry, refresh proactively
+  // so this request doesn't trigger the 401 retry path.
+  if (typeof window !== "undefined" && tokenIsStale()) {
+    await refreshTokens(); // null return = best-effort; downstream 401 handles it
   }
-  const response = await fetch(`${API_BASE}${path}`, {
+
+  const buildHeaders = (): Record<string, string> => {
+    const token = getToken();
+    const h: Record<string, string> = {
+      "Content-Type": "application/json",
+      ...(options.headers as Record<string, string> | undefined),
+    };
+    if (token) h["Authorization"] = `Bearer ${token}`;
+    return h;
+  };
+
+  let response = await fetch(`${API_BASE}${path}`, {
     ...options,
-    headers,
+    headers: buildHeaders(),
   });
-  if (response.status === 401) {
-    if (typeof window !== "undefined") {
+
+  // One silent refresh + retry on 401 — if the refresh works the
+  // user never sees the redirect.
+  if (response.status === 401 && typeof window !== "undefined") {
+    const refreshed = await refreshTokens();
+    if (refreshed) {
+      response = await fetch(`${API_BASE}${path}`, {
+        ...options,
+        headers: buildHeaders(),
+      });
+    }
+    if (response.status === 401) {
       window.location.href = "/login";
     }
   }
+
   if (!response.ok) {
     const body = await response.text();
     throw new Error(`API ${response.status}: ${body}`);
@@ -91,9 +130,12 @@ export async function login(
   return data;
 }
 
+/** Sign out via Cognito's /logout endpoint so the hosted-UI session
+ * terminates server-side too. Also clears the legacy `aurion_token`
+ * cookie for any in-flight dev sessions. */
 export function logout(): void {
   document.cookie = "aurion_token=; path=/; max-age=0";
-  window.location.href = "/login";
+  cognitoSignOut();
 }
 
 export async function getMe(): Promise<CurrentUser> {
