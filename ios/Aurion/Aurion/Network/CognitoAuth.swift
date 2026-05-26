@@ -268,7 +268,12 @@ extension CognitoAuth: ASWebAuthenticationPresentationContextProviding {
         return DispatchQueue.main.sync { Self.keyWindowAnchor() }
     }
 
-    private static func keyWindowAnchor() -> ASPresentationAnchor {
+    // `nonisolated` because the enclosing class is @MainActor but this
+    // helper is invoked from the nonisolated protocol callback above.
+    // ASWebAuthenticationSession's contract is to call us on main, so
+    // touching UIApplication here is safe at runtime even though Swift
+    // can't statically prove it.
+    private nonisolated static func keyWindowAnchor() -> ASPresentationAnchor {
         // Return the key window — the only sensible anchor for a sheet
         // that needs to overlay the foreground app. UIScene-based apps
         // can have multiple windows; first connected scene with a
