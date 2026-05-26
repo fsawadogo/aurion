@@ -130,6 +130,39 @@ class PaginatedMetricsResponse(BaseModel):
     page_size: int
 
 
+class MetricTimeseriesBucket(BaseModel):
+    """One day's aggregate over the pilot_metrics rows in the window.
+
+    Numeric metrics are arithmetic averages over the day's rows; null
+    when there were no rows that day. session_completeness is the % of
+    that day's rows that had session_completeness=true (0-100 float).
+    """
+
+    date: str  # ISO date, e.g. "2026-05-26"
+    session_count: int
+    template_section_completeness: Optional[float] = None
+    citation_traceability_rate: Optional[float] = None
+    physician_edit_rate: Optional[float] = None
+    conflict_rate: Optional[float] = None
+    low_confidence_frame_rate: Optional[float] = None
+    stage1_latency_ms: Optional[float] = None
+    stage2_latency_ms: Optional[float] = None
+    session_completeness: Optional[float] = None
+
+
+class MetricTimeseriesResponse(BaseModel):
+    """Daily aggregates over the requested window. Empty days are
+    included with session_count=0 and all metrics null so frontend
+    charts don't have to backfill gaps."""
+
+    from_date: str = Field(alias="from")
+    to_date: str = Field(alias="to")
+    bucket: str = "day"  # forward-compat: future "hour" / "week" values
+    buckets: list[MetricTimeseriesBucket] = Field(default_factory=list)
+
+    model_config = {"populate_by_name": True}
+
+
 # ── Admin sessions schemas ─────────────────────────────────────────────────
 
 

@@ -11,6 +11,8 @@ import type {
   EvalSessionDetail,
   MaskingReport,
   MetricFilters,
+  MetricTimeseriesFilters,
+  MetricTimeseriesResponse,
   PaginatedResponse,
   PilotMetric,
   ProviderConfig,
@@ -188,6 +190,15 @@ export async function getMetrics(
 ): Promise<PaginatedResponse<PilotMetric>> {
   const res = await fetchWithAuth(
     `/api/v1/admin/metrics${buildQuery(filters)}`,
+  );
+  return res.json();
+}
+
+export async function getMetricsTimeseries(
+  filters: MetricTimeseriesFilters = {},
+): Promise<MetricTimeseriesResponse> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/metrics/timeseries${buildQuery(filters)}`,
   );
   return res.json();
 }

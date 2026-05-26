@@ -11,20 +11,23 @@ from __future__ import annotations
 
 import json
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import func, select
+from sqlalchemy import Float, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.admin._shared import (
     ConfigChangeEvent,
+    MetricTimeseriesBucket,
+    MetricTimeseriesResponse,
     PaginatedMetricsResponse,
     PilotMetricResponse,
     safe_json_parse,
     scan_audit_events,
 )
+from app.core.clock import utcnow
 from app.core.database import get_db
 from app.core.models import PilotMetricsModel
 from app.core.types import UserRole
@@ -119,6 +122,162 @@ async def get_pilot_metrics(
         total=total,
         page=page,
         page_size=page_size,
+    )
+
+
+@router.get("/metrics/timeseries", response_model=MetricTimeseriesResponse)
+async def get_metrics_timeseries(
+    from_: Optional[str] = Query(None, alias="from"),
+    to: Optional[str] = Query(None),
+    specialty: Optional[str] = Query(None),
+    clinician_id: Optional[str] = Query(None),
+    user: CurrentUser = Depends(
+        require_role(UserRole.EVAL_TEAM, UserRole.ADMIN)
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Per-day aggregates over the pilot_metrics window. EVAL_TEAM or ADMIN.
+
+    Empty days are returned with session_count=0 + all metrics null so
+    the frontend doesn't have to backfill gaps when drawing the chart.
+
+    Default window is the last 14 days. `from`/`to` are ISO dates
+    (YYYY-MM-DD); `to` is inclusive.
+    """
+    today = utcnow().date()
+    try:
+        end_date = datetime.fromisoformat(to).date() if to else today
+    except ValueError:
+        end_date = today
+    try:
+        start_date = (
+            datetime.fromisoformat(from_).date()
+            if from_
+            else today - timedelta(days=13)
+        )
+    except ValueError:
+        start_date = today - timedelta(days=13)
+
+    if start_date > end_date:
+        start_date, end_date = end_date, start_date
+
+    day = func.date_trunc("day", PilotMetricsModel.created_at).label("day")
+
+    stmt = (
+        select(
+            day,
+            func.count().label("session_count"),
+            func.avg(PilotMetricsModel.template_section_completeness).label(
+                "template_section_completeness"
+            ),
+            func.avg(PilotMetricsModel.citation_traceability_rate).label(
+                "citation_traceability_rate"
+            ),
+            # physician_edit_rate lives as JSON; the timeseries surfaces
+            # only the numeric metrics directly. Edit-rate trends are a
+            # follow-up (per-section breakdown is richer than one number).
+            func.avg(PilotMetricsModel.conflict_rate).label("conflict_rate"),
+            func.avg(PilotMetricsModel.low_confidence_frame_rate).label(
+                "low_confidence_frame_rate"
+            ),
+            func.avg(PilotMetricsModel.stage1_latency_ms).label(
+                "stage1_latency_ms"
+            ),
+            func.avg(PilotMetricsModel.stage2_latency_ms).label(
+                "stage2_latency_ms"
+            ),
+            # session_completeness as a Boolean → 1/0 → average × 100
+            # gives % of that day's rows that were complete.
+            (
+                func.avg(
+                    func.cast(PilotMetricsModel.session_completeness, Float)
+                )
+                * 100
+            ).label("session_completeness"),
+        )
+        .where(
+            PilotMetricsModel.created_at
+            >= datetime.combine(start_date, datetime.min.time(), tzinfo=timezone.utc),
+            PilotMetricsModel.created_at
+            < datetime.combine(
+                end_date + timedelta(days=1), datetime.min.time(), tzinfo=timezone.utc
+            ),
+        )
+        .group_by(day)
+        .order_by(day)
+    )
+
+    if specialty:
+        stmt = stmt.where(PilotMetricsModel.specialty == specialty)
+    if clinician_id:
+        try:
+            cid = uuid.UUID(clinician_id)
+            stmt = stmt.where(PilotMetricsModel.clinician_id == cid)
+        except ValueError:
+            pass
+
+    result = await db.execute(stmt)
+    rows = result.all()
+
+    # Index rows by ISO date for O(1) backfill lookup.
+    by_date: dict[str, MetricTimeseriesBucket] = {}
+    for r in rows:
+        # r.day is a datetime at midnight UTC because DATE_TRUNC returns timestamptz.
+        iso = r.day.date().isoformat() if hasattr(r.day, "date") else str(r.day)[:10]
+        by_date[iso] = MetricTimeseriesBucket(
+            date=iso,
+            session_count=int(r.session_count or 0),
+            template_section_completeness=(
+                float(r.template_section_completeness)
+                if r.template_section_completeness is not None
+                else None
+            ),
+            citation_traceability_rate=(
+                float(r.citation_traceability_rate)
+                if r.citation_traceability_rate is not None
+                else None
+            ),
+            physician_edit_rate=None,  # JSON shape — surfaced via /metrics list
+            conflict_rate=(
+                float(r.conflict_rate) if r.conflict_rate is not None else None
+            ),
+            low_confidence_frame_rate=(
+                float(r.low_confidence_frame_rate)
+                if r.low_confidence_frame_rate is not None
+                else None
+            ),
+            stage1_latency_ms=(
+                float(r.stage1_latency_ms)
+                if r.stage1_latency_ms is not None
+                else None
+            ),
+            stage2_latency_ms=(
+                float(r.stage2_latency_ms)
+                if r.stage2_latency_ms is not None
+                else None
+            ),
+            session_completeness=(
+                float(r.session_completeness)
+                if r.session_completeness is not None
+                else None
+            ),
+        )
+
+    # Walk the date range so empty days come through as session_count=0.
+    buckets: list[MetricTimeseriesBucket] = []
+    cursor = start_date
+    while cursor <= end_date:
+        iso = cursor.isoformat()
+        buckets.append(
+            by_date.get(iso)
+            or MetricTimeseriesBucket(date=iso, session_count=0)
+        )
+        cursor += timedelta(days=1)
+
+    return MetricTimeseriesResponse(
+        **{"from": start_date.isoformat(), "to": end_date.isoformat()},
+        bucket="day",
+        buckets=buckets,
     )
 
 
