@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
+from typing import Optional
 
 from sqlalchemy import Boolean, DateTime, Enum, Float, Integer, String, Text
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.core.database import Base
@@ -346,3 +347,11 @@ class EvalScoreModel(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+    # Spec-aligned scoring (added v2, migration 0004). Nullable so
+    # legacy slider-only scores keep validating and the legacy
+    # frontend keeps submitting without these fields.
+    descriptive_mode_pass: Mapped[Optional[bool]] = mapped_column(Boolean, nullable=True)
+    soap_section_scores: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
+    hallucination_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    discrepancies: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)

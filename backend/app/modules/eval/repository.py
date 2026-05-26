@@ -52,15 +52,26 @@ async def upsert_score(
     overall: float,
     notes: str,
     scored_by: str,
+    # Spec-aligned fields — all optional, persisted only when provided.
+    descriptive_mode_pass: bool | None = None,
+    soap_section_scores: dict[str, int] | None = None,
+    hallucination_count: int | None = None,
+    discrepancies: list[str] | None = None,
 ) -> EvalScoreModel:
     """Insert or overwrite the canonical score for ``session_id``.
 
     Uses Postgres's ``INSERT ... ON CONFLICT (session_id) DO UPDATE`` so
     re-scoring is a single round-trip and atomic vs. concurrent writes.
+
+    Spec-aligned columns added in migration 0004 are nullable — re-scoring
+    a row that previously had values with a payload that omits them sets
+    the columns back to NULL (the form is the source of truth, not the
+    prior row). Callers that want to preserve prior values must read +
+    re-send them.
     """
     sid = to_uuid(session_id)
     now = utcnow()
-    stmt = pg_insert(EvalScoreModel).values(
+    values = dict(
         session_id=sid,
         transcript_accuracy=transcript_accuracy,
         citation_correctness=citation_correctness,
@@ -69,22 +80,17 @@ async def upsert_score(
         notes=notes,
         scored_by=scored_by,
         scored_at=now,
+        descriptive_mode_pass=descriptive_mode_pass,
+        soap_section_scores=soap_section_scores,
+        hallucination_count=hallucination_count,
+        discrepancies=discrepancies,
     )
-    stmt = stmt.on_conflict_do_update(
+    update_set = {k: v for k, v in values.items() if k != "session_id"}
+    stmt = pg_insert(EvalScoreModel).values(**values).on_conflict_do_update(
         index_elements=[EvalScoreModel.session_id],
-        set_=dict(
-            transcript_accuracy=transcript_accuracy,
-            citation_correctness=citation_correctness,
-            descriptive_mode_compliance=descriptive_mode_compliance,
-            overall=overall,
-            notes=notes,
-            scored_by=scored_by,
-            scored_at=now,
-        ),
+        set_=update_set,
     )
     await db.execute(stmt)
-    # Refetch so the caller gets the persisted row (including server-side
-    # values if any get added later).
     row = await db.get(EvalScoreModel, sid)
     assert row is not None  # we just upserted; impossible to be missing
     return row

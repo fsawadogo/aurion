@@ -196,10 +196,32 @@ class EvalSessionResponse(BaseModel):
 
 
 class EvalScoreRequest(BaseModel):
+    """Per-session quality score.
+
+    Required fields are the legacy three-slider shape — kept so the
+    list-page quick-score form keeps working without any frontend
+    changes. The optional fields are spec-aligned and richer:
+
+      - descriptive_mode_pass: pass / fail (per spec, replaces the
+        slider for Descriptive Mode adherence)
+      - soap_section_scores: {section_id: 0..5} per section
+      - hallucination_count: claims not traceable to any source
+      - discrepancies: free-form flags fed into engineering quality
+        tracking
+
+    Clients sending only the legacy fields stay valid; clients
+    sending the new fields get the richer detail persisted alongside.
+    """
+
     transcript_accuracy: float = Field(ge=0, le=100)
     citation_correctness: float = Field(ge=0, le=100)
     descriptive_mode_compliance: float = Field(ge=0, le=100)
     notes: str = ""
+
+    descriptive_mode_pass: Optional[bool] = None
+    soap_section_scores: Optional[dict[str, int]] = None
+    hallucination_count: Optional[int] = Field(default=None, ge=0)
+    discrepancies: Optional[list[str]] = None
 
 
 class EvalTranscriptSegment(BaseModel):

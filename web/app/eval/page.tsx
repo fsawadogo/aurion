@@ -52,18 +52,13 @@ export default function EvalPage() {
     setSubmitting(true);
     setError(null);
     try {
+      // Backend computes `overall` from the three component scores;
+      // don't send it (Pydantic ignores extras but skipping it keeps
+      // the payload aligned with EvalScoreSubmission).
       await submitEvalScore(selectedSession.session_id, {
         transcript_accuracy: transcriptAccuracy,
         citation_correctness: citationCorrectness,
         descriptive_mode_compliance: descriptiveCompliance,
-        overall:
-          Math.round(
-            ((transcriptAccuracy +
-              citationCorrectness +
-              descriptiveCompliance) /
-              3) *
-              10,
-          ) / 10,
         notes: evalNotes,
       });
       setTranscriptAccuracy(50);
