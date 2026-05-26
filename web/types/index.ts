@@ -256,6 +256,17 @@ export interface EvalSession {
   scored: boolean;
   scores: EvalScore | null;
   created_at: string;
+  // EVAL-3 assignment columns. assigned_to is the assignee's email
+  // (denormalized for cheap rendering); null when no open assignment.
+  assigned_to?: string | null;
+  assignment_completed_at?: string | null;
+}
+
+export interface EvalAssignee {
+  user_id: string;
+  email: string;
+  full_name: string;
+  role: UserRole;
 }
 
 export interface EvalScore {

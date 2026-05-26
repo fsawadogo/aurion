@@ -103,6 +103,7 @@ export default function EvalPage() {
                       <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Session</th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Clinician</th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Specialty</th>
+                      <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Assigned to</th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Masked</th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Status</th>
                       <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Score</th>
@@ -112,13 +113,13 @@ export default function EvalPage() {
                   <tbody className="divide-y divide-gray-50">
                     {loading ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-6">
+                        <td colSpan={8} className="px-4 py-6">
                           <LoadingSkeleton lines={4} />
                         </td>
                       </tr>
                     ) : evalSessions.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="px-4 py-12 text-center">
+                        <td colSpan={8} className="px-4 py-12 text-center">
                           <p className="text-sm text-gray-400">No sessions available for evaluation yet.</p>
                         </td>
                       </tr>
@@ -145,6 +146,20 @@ export default function EvalPage() {
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-sm capitalize text-gray-500">
                             {s.specialty.replace(/_/g, " ")}
+                          </td>
+                          <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-500">
+                            {s.assigned_to ? (
+                              <span title={s.assigned_to}>
+                                {s.assigned_to.split("@")[0]}
+                                {s.assignment_completed_at && (
+                                  <Badge variant="success" dot>
+                                    done
+                                  </Badge>
+                                )}
+                              </span>
+                            ) : (
+                              <span className="text-gray-300">—</span>
+                            )}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-sm">
                             {s.transcript_masked && s.frames_masked ? (

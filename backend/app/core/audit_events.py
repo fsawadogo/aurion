@@ -92,6 +92,9 @@ class AuditEventType(StrEnum):
     USER_CREATED = "user_created"
     USER_UPDATED = "user_updated"
     EVAL_SCORE_SUBMITTED = "eval_score_submitted"
+    EVAL_ASSIGNMENT_CREATED = "eval_assignment_created"
+    EVAL_ASSIGNMENT_REMOVED = "eval_assignment_removed"
+    EVAL_ASSIGNMENT_COMPLETED = "eval_assignment_completed"
 
     # ── System / config ──────────────────────────────────────────────────
     CONFIG_CHANGED = "config_changed"
@@ -227,6 +230,15 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
         {"target_user_id", "changes", "updated_by"}
     ),
     AuditEventType.EVAL_SCORE_SUBMITTED: frozenset({"overall_score", "scored_by"}),
+    AuditEventType.EVAL_ASSIGNMENT_CREATED: frozenset(
+        {"assignee_email", "assigned_by"}
+    ),
+    AuditEventType.EVAL_ASSIGNMENT_REMOVED: frozenset(
+        {"assignee_email", "removed_by"}
+    ),
+    AuditEventType.EVAL_ASSIGNMENT_COMPLETED: frozenset(
+        {"assignee_email", "completed_via_score"}
+    ),
     # System (admin write-through; kwargs vary, kept permissive)
     AuditEventType.CONFIG_CHANGED: frozenset({"changed_by", "diff"}),
     AuditEventType.PROVIDER_CHANGED: frozenset(

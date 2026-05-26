@@ -8,10 +8,13 @@ topmost Active item matching its lane. Format per line:
 When a task moves through states, the loop edits this file in place:
 Active → In flight → Done (or → Blocked on triple failure).
 
-Last seeded: 2026-05-14. Last updated: 2026-05-19 (post UI-P4b).
+Last seeded: 2026-05-14. Last updated: 2026-05-26 (post PR #15 — eval scoring spec).
 
 ## Active
 
+- [ ] EVAL-3 eval session assignment (admin assigns specific sessions to specific EVAL_TEAM members; list filtered by assignment) — 1d — lane: backend — no blockers
+- [ ] WEB-METRICS-CHARTS pilot metrics time-series charts (per-metric daily aggregation endpoint + recharts integration) — 3d — lane: backend — depends on EVAL-3
+- [ ] WEB-COGNITO-UI web portal switches from /auth/login to Cognito hosted UI (parity with iOS) — 2d — lane: backend — depends on EVAL-3
 - [ ] AUR-MP-CROSSCHECK Add MediaPipe as independent second face detector for Apple Vision (pilot follow-up; revisit only if clinical safety committee asks) — 5d — lane: ios — no blockers
 
 ## In flight
@@ -24,6 +27,11 @@ Last seeded: 2026-05-14. Last updated: 2026-05-19 (post UI-P4b).
 
 ## Done
 
+- [x] EVAL-2 eval scoring per spec (descriptive_mode_pass + soap_section_scores + hallucination_count + discrepancies) — 1d — lane: backend — merged: 2026-05-26 (PR #15, commit ac45f7b)
+- [x] EVAL-1 eval triad view read-only side-by-side (GET /admin/eval/sessions/{id} + /eval/[id] page) — 1d — lane: backend — merged: 2026-05-26 (PR #14, commit 6f78af3)
+- [x] WEB-EXPORT-COMPLIANCE Info.plist ITSAppUsesNonExemptEncryption = false — 0.1d — lane: ios — merged: 2026-05-25 (PR #13)
+- [x] WEB-CI-KEYCHAIN Distribution cert in CI temp keychain — 0.3d — lane: backend — merged: 2026-05-25 (PR #12)
+- [x] WEB-FASTLANE Fastlane lanes end-to-end (cert + sigh + invite) — 0.5d — lane: backend — merged: 2026-05-25 (PR #11)
 - [x] UI-P4b Live Activity (Lock Screen + Dynamic Island) — AurionWidgets target added via xcodeproj gem — 1d — lane: ios — merged: 2026-05-19 (commit ba4900c)
 - [x] AUR-DESIGN-DARK Muted-slate dark mode rollout (palette retune + adaptive tokens + bulk navy-text → adaptive swap) — 5d — lane: ios — merged: 2026-05-19 (commit 0cf99c8)
 - [x] AUR-DESIGN-NAVY Collapse aurionNavyLegacy → aurionNavy (brand-sampled #0C1B37 wins) — 0.5d — lane: ios — merged: 2026-05-19 (commit d6a88d3)

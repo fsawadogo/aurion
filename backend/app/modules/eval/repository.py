@@ -15,7 +15,7 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import utcnow
-from app.core.models import EvalScoreModel
+from app.core.models import EvalAssignmentModel, EvalScoreModel
 from app.core.uuids import to_uuid
 
 
@@ -93,4 +93,104 @@ async def upsert_score(
     await db.execute(stmt)
     row = await db.get(EvalScoreModel, sid)
     assert row is not None  # we just upserted; impossible to be missing
+    return row
+
+
+# ── Assignments ────────────────────────────────────────────────────────────
+
+
+async def get_assignment(
+    db: AsyncSession, session_id: str | uuid.UUID
+) -> EvalAssignmentModel | None:
+    return await db.get(EvalAssignmentModel, to_uuid(session_id))
+
+
+async def get_assignments_by_sessions(
+    db: AsyncSession,
+    session_ids: Iterable[uuid.UUID],
+) -> dict[uuid.UUID, EvalAssignmentModel]:
+    """Batch-load assignment rows for a set of session ids."""
+    ids = list(session_ids)
+    if not ids:
+        return {}
+    stmt = select(EvalAssignmentModel).where(
+        EvalAssignmentModel.session_id.in_(ids)
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return {row.session_id: row for row in rows}
+
+
+async def get_session_ids_assigned_to(
+    db: AsyncSession, assignee_user_id: uuid.UUID
+) -> set[uuid.UUID]:
+    """Return the set of session ids currently assigned to this user."""
+    stmt = select(EvalAssignmentModel.session_id).where(
+        EvalAssignmentModel.assignee_user_id == assignee_user_id
+    )
+    rows = (await db.execute(stmt)).scalars().all()
+    return set(rows)
+
+
+async def upsert_assignment(
+    db: AsyncSession,
+    *,
+    session_id: str | uuid.UUID,
+    assignee_user_id: uuid.UUID,
+    assignee_email: str,
+    assigned_by: uuid.UUID,
+    assigned_by_email: str,
+) -> EvalAssignmentModel:
+    """Insert or overwrite the canonical assignment for ``session_id``.
+
+    Re-assigning resets ``completed_at`` to NULL so the new assignee
+    sees the session in their queue.
+    """
+    sid = to_uuid(session_id)
+    now = utcnow()
+    values = dict(
+        session_id=sid,
+        assignee_user_id=assignee_user_id,
+        assignee_email=assignee_email,
+        assigned_by=assigned_by,
+        assigned_by_email=assigned_by_email,
+        assigned_at=now,
+        completed_at=None,
+    )
+    update_set = {k: v for k, v in values.items() if k != "session_id"}
+    stmt = pg_insert(EvalAssignmentModel).values(**values).on_conflict_do_update(
+        index_elements=[EvalAssignmentModel.session_id],
+        set_=update_set,
+    )
+    await db.execute(stmt)
+    row = await db.get(EvalAssignmentModel, sid)
+    assert row is not None
+    return row
+
+
+async def delete_assignment(
+    db: AsyncSession, session_id: str | uuid.UUID
+) -> bool:
+    """Remove the assignment for ``session_id``. Returns True if a row
+    was deleted, False if no assignment existed."""
+    from sqlalchemy import delete as sa_delete
+
+    sid = to_uuid(session_id)
+    stmt = sa_delete(EvalAssignmentModel).where(
+        EvalAssignmentModel.session_id == sid
+    )
+    result = await db.execute(stmt)
+    return result.rowcount > 0
+
+
+async def mark_assignment_complete(
+    db: AsyncSession, session_id: str | uuid.UUID
+) -> EvalAssignmentModel | None:
+    """Set ``completed_at = now`` on the assignment for ``session_id``
+    if one exists. Called when the assignee submits a score."""
+    sid = to_uuid(session_id)
+    row = await db.get(EvalAssignmentModel, sid)
+    if row is None:
+        return None
+    row.completed_at = utcnow()
+    await db.flush()
     return row

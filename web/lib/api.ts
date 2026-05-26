@@ -5,6 +5,7 @@ import type {
   ConfigChangeEvent,
   CreateUserPayload,
   CurrentUser,
+  EvalAssignee,
   EvalScoreSubmission,
   EvalSession,
   EvalSessionDetail,
@@ -229,5 +230,34 @@ export async function submitEvalScore(
     method: "POST",
     body: JSON.stringify(scores),
   });
+  return res.json();
+}
+
+export async function assignEvalSession(
+  sessionId: string,
+  assigneeEmail: string,
+): Promise<EvalSession> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/eval/sessions/${sessionId}/assign`,
+    {
+      method: "POST",
+      body: JSON.stringify({ assignee_email: assigneeEmail }),
+    },
+  );
+  return res.json();
+}
+
+export async function unassignEvalSession(
+  sessionId: string,
+): Promise<EvalSession> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/eval/sessions/${sessionId}/assign`,
+    { method: "DELETE" },
+  );
+  return res.json();
+}
+
+export async function getEvalAssignees(): Promise<EvalAssignee[]> {
+  const res = await fetchWithAuth("/api/v1/admin/eval/assignees");
   return res.json();
 }

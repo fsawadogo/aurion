@@ -193,6 +193,29 @@ class EvalSessionResponse(BaseModel):
     scored: bool
     scores: Optional[dict[str, Any]] = None
     created_at: str
+    # EVAL-3 assignment columns. assigned_to is the assignee's email
+    # (denormalized for cheap rendering); null when no open assignment.
+    assigned_to: Optional[str] = None
+    assignment_completed_at: Optional[str] = None
+
+
+class EvalAssignmentRequest(BaseModel):
+    """ADMIN-only payload for assigning a session to an eval-team member.
+
+    The assignee_email is resolved server-side to a user id. The user
+    must exist and have role EVAL_TEAM or ADMIN — anything else is a 400.
+    """
+
+    assignee_email: str
+
+
+class EvalAssigneeResponse(BaseModel):
+    """One eligible assignee — surfaced by GET /admin/eval/assignees."""
+
+    user_id: str
+    email: str
+    full_name: str
+    role: UserRole
 
 
 class EvalScoreRequest(BaseModel):
