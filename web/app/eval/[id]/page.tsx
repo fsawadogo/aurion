@@ -8,7 +8,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
-import { getEvalSession } from "@/lib/api";
+import { getEvalSession, submitEvalScore } from "@/lib/api";
 import type { Claim, EvalSessionDetail } from "@/types";
 
 const statusBadge: Record<string, "success" | "warning" | "error" | "info" | "neutral"> = {
@@ -47,13 +47,34 @@ export default function EvalDetailPage({ params }: { params: { id: string } }) {
   const [error, setError] = useState<string | null>(null);
   const [highlightSourceId, setHighlightSourceId] = useState<string | null>(null);
 
+  // Scoring panel state (spec-aligned: pass/fail + per-section SOAP +
+  // hallucination count + discrepancies + free-form notes).
+  const [descPass, setDescPass] = useState<boolean | null>(null);
+  const [soapScores, setSoapScores] = useState<Record<string, number>>({});
+  const [hallucinations, setHallucinations] = useState<number>(0);
+  const [discrepancies, setDiscrepancies] = useState<string>("");
+  const [scoreNotes, setScoreNotes] = useState<string>("");
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [scoreFeedback, setScoreFeedback] = useState<string | null>(null);
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
     getEvalSession(evalId)
       .then((d) => {
-        if (!cancelled) setData(d);
+        if (cancelled) return;
+        setData(d);
+        // Hydrate the scoring form from any prior score so re-scoring
+        // doesn't start from zero.
+        const s = d.scores;
+        if (s) {
+          setDescPass(s.descriptive_mode_pass ?? null);
+          setSoapScores(s.soap_section_scores ?? {});
+          setHallucinations(s.hallucination_count ?? 0);
+          setDiscrepancies((s.discrepancies ?? []).join("\n"));
+          setScoreNotes(s.notes ?? "");
+        }
       })
       .catch((err: unknown) => {
         if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load");
@@ -65,6 +86,48 @@ export default function EvalDetailPage({ params }: { params: { id: string } }) {
       cancelled = true;
     };
   }, [evalId]);
+
+  async function handleSubmitScore() {
+    if (!data) return;
+    setSubmitting(true);
+    setScoreFeedback(null);
+    try {
+      // Map the spec-aligned form into both representations so the
+      // backend keeps a consistent legacy aggregate on the row.
+      const descCompliance = descPass === null ? 50 : descPass ? 100 : 0;
+      const requiredSections = data.note_sections.filter(
+        (s) => s.status !== "not_captured",
+      );
+      const soapAvg5 = requiredSections.length === 0
+        ? 0
+        : requiredSections.reduce(
+            (acc, s) => acc + (soapScores[s.id] ?? 0),
+            0,
+          ) / requiredSections.length;
+      const transcriptAccuracy = Math.round(soapAvg5 * 20); // 0..5 → 0..100
+      const citationCorrectness = Math.max(0, 100 - hallucinations * 10); // each hall.= -10 pts
+      const cleanedDiscrepancies = discrepancies
+        .split("\n")
+        .map((line) => line.trim())
+        .filter((line) => line.length > 0);
+
+      await submitEvalScore(data.session_id, {
+        transcript_accuracy: transcriptAccuracy,
+        citation_correctness: citationCorrectness,
+        descriptive_mode_compliance: descCompliance,
+        notes: scoreNotes,
+        descriptive_mode_pass: descPass,
+        soap_section_scores: soapScores,
+        hallucination_count: hallucinations,
+        discrepancies: cleanedDiscrepancies.length > 0 ? cleanedDiscrepancies : null,
+      });
+      setScoreFeedback("Saved.");
+    } catch (err) {
+      setScoreFeedback(err instanceof Error ? err.message : "Submit failed");
+    } finally {
+      setSubmitting(false);
+    }
+  }
 
   // Frame citations = note claims with source_type === "visual" across all sections.
   const frameCitations = useMemo<Array<Claim & { section_id: string; section_title: string }>>(() => {
@@ -285,6 +348,167 @@ export default function EvalDetailPage({ params }: { params: { id: string } }) {
                 </Card>
               </div>
             </div>
+
+            {/* Spec-aligned scoring panel */}
+            <Card title="Quality scoring" className="mt-6">
+              <p className="mb-4 text-[11px] text-gray-400">
+                Per the eval spec: pass/fail on descriptive mode adherence,
+                0–5 per SOAP section, count of hallucinated claims (text
+                not traceable to any source), and free-form discrepancies
+                to feed engineering quality tracking.
+              </p>
+
+              <div className="grid gap-6 lg:grid-cols-2">
+                {/* Descriptive mode + hallucinations + notes column */}
+                <div className="space-y-5">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                      Descriptive mode compliance
+                    </label>
+                    <div className="flex gap-2">
+                      <Button
+                        variant={descPass === true ? "primary" : "secondary"}
+                        size="sm"
+                        onClick={() => setDescPass(true)}
+                      >
+                        Pass
+                      </Button>
+                      <Button
+                        variant={descPass === false ? "primary" : "secondary"}
+                        size="sm"
+                        onClick={() => setDescPass(false)}
+                      >
+                        Fail
+                      </Button>
+                      <Button
+                        variant={descPass === null ? "primary" : "ghost"}
+                        size="sm"
+                        onClick={() => setDescPass(null)}
+                      >
+                        Skip
+                      </Button>
+                    </div>
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      Fail = any claim crosses from describing into diagnosing /
+                      interpreting / suggesting a clinical conclusion.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="hallucination-count"
+                      className="mb-1.5 block text-sm font-medium text-gray-700"
+                    >
+                      Hallucination count
+                    </label>
+                    <input
+                      id="hallucination-count"
+                      type="number"
+                      min={0}
+                      value={hallucinations}
+                      onChange={(e) =>
+                        setHallucinations(Math.max(0, Number(e.target.value) || 0))
+                      }
+                      className="w-32 rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100"
+                    />
+                    <p className="mt-1 text-[11px] text-gray-400">
+                      Claims with no traceable source_id anchor.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="discrepancies"
+                      className="mb-1.5 block text-sm font-medium text-gray-700"
+                    >
+                      Discrepancies (one per line)
+                    </label>
+                    <textarea
+                      id="discrepancies"
+                      rows={3}
+                      value={discrepancies}
+                      onChange={(e) => setDiscrepancies(e.target.value)}
+                      placeholder={"e.g.\nClaim claim_004 wrongly anchored to seg_007\nCONFLICTS flag missing on frame_00214"}
+                      className="w-full rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100"
+                    />
+                  </div>
+
+                  <div>
+                    <label
+                      htmlFor="score-notes"
+                      className="mb-1.5 block text-sm font-medium text-gray-700"
+                    >
+                      Notes
+                    </label>
+                    <textarea
+                      id="score-notes"
+                      rows={2}
+                      value={scoreNotes}
+                      onChange={(e) => setScoreNotes(e.target.value)}
+                      placeholder="Anything else worth recording."
+                      className="w-full rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100"
+                    />
+                  </div>
+                </div>
+
+                {/* Per-section SOAP completeness column */}
+                <div>
+                  <label className="mb-2 block text-sm font-medium text-gray-700">
+                    SOAP completeness — per section (0 not present → 5 complete)
+                  </label>
+                  {data.note_sections.length === 0 ? (
+                    <p className="text-xs text-gray-400">
+                      No sections to score yet (note not generated).
+                    </p>
+                  ) : (
+                    <ul className="space-y-2">
+                      {data.note_sections.map((sec) => {
+                        const val = soapScores[sec.id] ?? 0;
+                        return (
+                          <li key={sec.id} className="rounded-lg bg-gray-50/60 p-2">
+                            <div className="mb-1 flex items-baseline justify-between">
+                              <span className="text-sm text-gray-700">
+                                {sec.title || sec.id}
+                              </span>
+                              <span className="text-xs font-mono text-navy-700 tabular-nums">
+                                {val} / 5
+                              </span>
+                            </div>
+                            <input
+                              type="range"
+                              min={0}
+                              max={5}
+                              step={1}
+                              value={val}
+                              onChange={(e) =>
+                                setSoapScores((prev) => ({
+                                  ...prev,
+                                  [sec.id]: Number(e.target.value),
+                                }))
+                              }
+                              className="w-full cursor-pointer accent-gold-500"
+                            />
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </div>
+              </div>
+
+              <div className="mt-6 flex items-center justify-end gap-3">
+                {scoreFeedback && (
+                  <span className="text-xs text-gray-500">{scoreFeedback}</span>
+                )}
+                <Button
+                  variant="primary"
+                  loading={submitting}
+                  onClick={handleSubmitScore}
+                >
+                  {data.scored ? "Save changes" : "Submit score"}
+                </Button>
+              </div>
+            </Card>
           </>
         )}
       </div>

@@ -34,10 +34,11 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 def _score_payload(row: EvalScoreModel) -> dict:
-    """Serialize an EvalScoreModel into the legacy response dict shape.
+    """Serialize an EvalScoreModel into the response dict shape.
 
-    The shape is preserved verbatim so the web portal (and any other
-    client reading ``scores``) keeps working without a frontend change.
+    Legacy three-slider fields plus the spec-aligned columns added in
+    migration 0004 (nullable — appear in the payload as None for rows
+    that predate slice 2 of the eval triad work).
     """
     return {
         "transcript_accuracy": row.transcript_accuracy,
@@ -47,6 +48,10 @@ def _score_payload(row: EvalScoreModel) -> dict:
         "notes": row.notes,
         "scored_by": row.scored_by,
         "scored_at": row.scored_at.isoformat() if row.scored_at else "",
+        "descriptive_mode_pass": row.descriptive_mode_pass,
+        "soap_section_scores": row.soap_section_scores,
+        "hallucination_count": row.hallucination_count,
+        "discrepancies": row.discrepancies,
     }
 
 
@@ -249,6 +254,10 @@ async def submit_eval_score(
         overall=overall,
         notes=body.notes,
         scored_by=user.email,
+        descriptive_mode_pass=body.descriptive_mode_pass,
+        soap_section_scores=body.soap_section_scores,
+        hallucination_count=body.hallucination_count,
+        discrepancies=body.discrepancies,
     )
 
     await write_audit(

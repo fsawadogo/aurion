@@ -266,6 +266,24 @@ export interface EvalScore {
   notes: string;
   scored_by: string;
   scored_at: string;
+  // Spec-aligned fields (slice 2). Nullable on the wire — older scores
+  // submitted before the migration land here with null values.
+  descriptive_mode_pass?: boolean | null;
+  soap_section_scores?: Record<string, number> | null;
+  hallucination_count?: number | null;
+  discrepancies?: string[] | null;
+}
+
+export interface EvalScoreSubmission {
+  transcript_accuracy: number;
+  citation_correctness: number;
+  descriptive_mode_compliance: number;
+  notes: string;
+  // Spec-aligned (slice 2) — all optional.
+  descriptive_mode_pass?: boolean | null;
+  soap_section_scores?: Record<string, number> | null;
+  hallucination_count?: number | null;
+  discrepancies?: string[] | null;
 }
 
 export interface EvalTranscriptSegment {

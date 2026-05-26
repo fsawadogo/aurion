@@ -5,7 +5,7 @@ import type {
   ConfigChangeEvent,
   CreateUserPayload,
   CurrentUser,
-  EvalScore,
+  EvalScoreSubmission,
   EvalSession,
   EvalSessionDetail,
   MaskingReport,
@@ -223,7 +223,7 @@ export async function getEvalSession(id: string): Promise<EvalSessionDetail> {
 
 export async function submitEvalScore(
   id: string,
-  scores: Omit<EvalScore, "scored_by" | "scored_at">,
+  scores: EvalScoreSubmission,
 ): Promise<EvalSession> {
   const res = await fetchWithAuth(`/api/v1/admin/eval/sessions/${id}/score`, {
     method: "POST",
