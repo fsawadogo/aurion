@@ -17,8 +17,6 @@
  *   touches MFA directly.
  */
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
-
 const HOSTED_UI_BASE =
   process.env.NEXT_PUBLIC_COGNITO_HOSTED_UI_BASE ??
   "https://aurion-dev.auth.ca-central-1.amazoncognito.com";
