@@ -474,6 +474,12 @@ resource "aws_ecs_task_definition" "api" {
         { name = "DB_HOST", value = aws_db_instance.main.address },
         { name = "DB_PORT", value = tostring(aws_db_instance.main.port) },
         { name = "DB_NAME", value = aws_db_instance.main.db_name },
+        # CORS — admin portal is the only browser client that calls /api/v1/*.
+        # Comma-separated list; backend/app/main.py:52 splits and feeds it
+        # into the FastAPI CORS middleware. iOS/iPad clients are unaffected
+        # (CORS is a browser policy only) but skipping this would silently
+        # block portal-dev.aurionclinical.com fetches.
+        { name = "CORS_ALLOWED_ORIGINS", value = "https://${var.web_portal_subdomain}" },
       ]
 
       secrets = [
