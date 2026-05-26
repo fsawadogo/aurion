@@ -51,8 +51,13 @@ function randomBytes(n: number): Uint8Array {
 
 function base64UrlEncode(bytes: ArrayBuffer | Uint8Array): string {
   const arr = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
+  // Avoid `for…of` on Uint8Array — tsconfig target is pre-es2015 by
+  // default, which trips "can only be iterated through with
+  // downlevelIteration." Index loop sidesteps the flag dance.
   let bin = "";
-  for (const byte of arr) bin += String.fromCharCode(byte);
+  for (let i = 0; i < arr.length; i++) {
+    bin += String.fromCharCode(arr[i]);
+  }
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
