@@ -30,6 +30,15 @@ async def get_user(
     return await db.get(UserModel, to_uuid(user_id))
 
 
+async def get_by_email(
+    db: AsyncSession, email: str
+) -> UserModel | None:
+    """Look up a user by their email. Case-sensitive — Cognito + the
+    admin user pool both treat email as the canonical identifier."""
+    stmt = select(UserModel).where(UserModel.email == email)
+    return (await db.execute(stmt)).scalar_one_or_none()
+
+
 async def create_user(
     db: AsyncSession,
     *,

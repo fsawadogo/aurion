@@ -71,6 +71,9 @@ EXPECTED_VALUES: dict[str, str] = {
     "USER_CREATED": "user_created",
     "USER_UPDATED": "user_updated",
     "EVAL_SCORE_SUBMITTED": "eval_score_submitted",
+    "EVAL_ASSIGNMENT_CREATED": "eval_assignment_created",
+    "EVAL_ASSIGNMENT_REMOVED": "eval_assignment_removed",
+    "EVAL_ASSIGNMENT_COMPLETED": "eval_assignment_completed",
     # System
     "CONFIG_CHANGED": "config_changed",
     "PROVIDER_CHANGED": "provider_changed",

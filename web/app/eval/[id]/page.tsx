@@ -8,8 +8,20 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { ArrowLeftIcon } from "@heroicons/react/24/outline";
-import { getEvalSession, submitEvalScore } from "@/lib/api";
-import type { Claim, EvalSessionDetail } from "@/types";
+import {
+  assignEvalSession,
+  getEvalAssignees,
+  getEvalSession,
+  getMe,
+  submitEvalScore,
+  unassignEvalSession,
+} from "@/lib/api";
+import type {
+  Claim,
+  CurrentUser,
+  EvalAssignee,
+  EvalSessionDetail,
+} from "@/types";
 
 const statusBadge: Record<string, "success" | "warning" | "error" | "info" | "neutral"> = {
   populated: "success",
@@ -56,6 +68,61 @@ export default function EvalDetailPage({ params }: { params: { id: string } }) {
   const [scoreNotes, setScoreNotes] = useState<string>("");
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [scoreFeedback, setScoreFeedback] = useState<string | null>(null);
+
+  // EVAL-3 assignment state. The picker only shows for ADMINs. We fetch
+  // /auth/me to know whether to show it, and /eval/assignees to populate
+  // the dropdown options.
+  const [me, setMe] = useState<CurrentUser | null>(null);
+  const [assignees, setAssignees] = useState<EvalAssignee[]>([]);
+  const [assigning, setAssigning] = useState(false);
+  const [assignmentFeedback, setAssignmentFeedback] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((u) => {
+        if (cancelled) return;
+        setMe(u);
+        if (u.role === "ADMIN") {
+          getEvalAssignees()
+            .then((list) => !cancelled && setAssignees(list))
+            .catch(() => {
+              /* keep assignees empty; UI just hides the picker */
+            });
+        }
+      })
+      .catch(() => {
+        /* /auth/me failure routes via fetchWithAuth's 401 handler */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  async function handleAssign(email: string) {
+    if (!data) return;
+    setAssigning(true);
+    setAssignmentFeedback(null);
+    try {
+      const updated = email
+        ? await assignEvalSession(data.session_id, email)
+        : await unassignEvalSession(data.session_id);
+      setData((prev) =>
+        prev
+          ? {
+              ...prev,
+              assigned_to: updated.assigned_to ?? null,
+              assignment_completed_at: updated.assignment_completed_at ?? null,
+            }
+          : prev,
+      );
+      setAssignmentFeedback(email ? "Assigned." : "Unassigned.");
+    } catch (err) {
+      setAssignmentFeedback(err instanceof Error ? err.message : "Failed");
+    } finally {
+      setAssigning(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -207,6 +274,51 @@ export default function EvalDetailPage({ params }: { params: { id: string } }) {
                     {data.scored ? "Yes" : "Pending"}
                   </Badge>
                 </Cell>
+
+                {/* Assigned-to cell — interactive only for ADMIN, read-only
+                    for others. Spans 2 grid cols so the dropdown fits. */}
+                <div className="md:col-span-2">
+                  <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+                    Assigned to
+                  </p>
+                  {me?.role === "ADMIN" ? (
+                    <div className="flex items-center gap-2">
+                      <select
+                        value={data.assigned_to ?? ""}
+                        onChange={(e) => handleAssign(e.target.value)}
+                        disabled={assigning}
+                        className="rounded-lg border border-gray-200 bg-gray-50/50 px-2 py-1 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100 disabled:opacity-50"
+                      >
+                        <option value="">— Unassigned —</option>
+                        {assignees.map((a) => (
+                          <option key={a.user_id} value={a.email}>
+                            {a.full_name || a.email} ({a.role})
+                          </option>
+                        ))}
+                      </select>
+                      {assignmentFeedback && (
+                        <span className="text-[11px] text-gray-500">
+                          {assignmentFeedback}
+                        </span>
+                      )}
+                    </div>
+                  ) : (
+                    <span className="text-sm">
+                      {data.assigned_to ? (
+                        <span title={data.assigned_to}>
+                          {data.assigned_to.split("@")[0]}
+                          {data.assignment_completed_at && (
+                            <Badge variant="success" dot>
+                              done
+                            </Badge>
+                          )}
+                        </span>
+                      ) : (
+                        <span className="text-gray-300">—</span>
+                      )}
+                    </span>
+                  )}
+                </div>
               </div>
             </Card>
 

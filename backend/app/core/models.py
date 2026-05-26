@@ -355,3 +355,32 @@ class EvalScoreModel(Base):
     soap_section_scores: Mapped[Optional[dict]] = mapped_column(JSONB, nullable=True)
     hallucination_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     discrepancies: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
+
+
+class EvalAssignmentModel(Base):
+    """Per-session eval-team assignment.
+
+    One row per (session_id) — re-assigning overwrites in place (the audit
+    log preserves history). Setting completed_at marks the assignment as
+    finished — this happens when the assignee submits a score.
+    """
+
+    __tablename__ = "eval_assignments"
+
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True
+    )
+    assignee_user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    assignee_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    assigned_by: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    assigned_by_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    assigned_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
