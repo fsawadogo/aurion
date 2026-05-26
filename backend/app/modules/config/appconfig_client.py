@@ -32,9 +32,17 @@ class AppConfigClient:
         self._poll_task: Optional[asyncio.Task] = None
         self._app_env = os.getenv("APP_ENV", "local")
 
-        # AWS AppConfig identifiers — set by LocalStack init or CDK
-        self._application_id = os.getenv("APPCONFIG_APPLICATION_ID", "")
-        self._environment_id = os.getenv("APPCONFIG_ENVIRONMENT_ID", "")
+        # AWS AppConfig identifiers. Terraform's ECS task definition
+        # (infrastructure/ecs.tf:468-469) ships these as the shorter
+        # APPCONFIG_APP_ID / APPCONFIG_ENV_ID — read those first and fall
+        # back to the long-form names so a local shell or LocalStack init
+        # that exported the legacy names still binds.
+        self._application_id = (
+            os.getenv("APPCONFIG_APP_ID") or os.getenv("APPCONFIG_APPLICATION_ID") or ""
+        )
+        self._environment_id = (
+            os.getenv("APPCONFIG_ENV_ID") or os.getenv("APPCONFIG_ENVIRONMENT_ID") or ""
+        )
         self._profile_id = os.getenv("APPCONFIG_PROFILE_ID", "")
 
         # Build boto3 client with optional endpoint override for LocalStack
