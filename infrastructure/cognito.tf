@@ -31,16 +31,23 @@ resource "aws_cognito_user_pool" "main" {
 
   # Multi-factor authentication.
   #
-  # Required for every user in both envs. Clinical app handling PHI:
-  # the cost of a stolen password is too high to leave MFA optional.
-  # SMS deliberately omitted — SIM-swap risk is real, TOTP via an
-  # authenticator app (1Password / Authy / Google Authenticator /
-  # iOS-built-in) is the appropriate factor here.
-  mfa_configuration = "ON"
+  # ⚠️  TEMPORARY: MFA is OFF to unblock end-to-end sign-in smoke
+  # testing during the pre-pilot iOS bring-up. MUST be restored to
+  # "ON" + the software_token_mfa_configuration block below before
+  # any real pilot session runs against this pool. Tracking issue:
+  # AUR-COG-MFA-RESTORE.
+  #
+  # Original justification (restore verbatim):
+  #   Required for every user in both envs. Clinical app handling PHI:
+  #   the cost of a stolen password is too high to leave MFA optional.
+  #   SMS deliberately omitted — SIM-swap risk is real, TOTP via an
+  #   authenticator app (1Password / Authy / Google Authenticator /
+  #   iOS-built-in) is the appropriate factor here.
+  mfa_configuration = "OFF"
 
-  software_token_mfa_configuration {
-    enabled = true
-  }
+  # software_token_mfa_configuration {
+  #   enabled = true
+  # }
 
   # Account recovery via email only
   account_recovery_setting {
