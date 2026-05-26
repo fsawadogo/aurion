@@ -3,14 +3,22 @@ import Foundation
 /// Environment-based configuration for API endpoints.
 enum AppConfig {
     #if DEBUG
-    // Local development. Simulator hits the loopback; physical device
-    // on the Mac's LAN reads through the host IP.
+    // Simulator runs against a local backend via loopback. Physical
+    // device DEBUG builds (USB-C install, no TestFlight needed) hit
+    // the dev cloud — the LAN-IP fallback path used to live here but
+    // assumed an unrealistic "phone on Mac WiFi + docker-compose up"
+    // setup. If you actually want local-backend dev on device, define
+    // `LOCAL_BACKEND` in Build Settings (Other Swift Flags: -DLOCAL_BACKEND)
+    // and set the IP below.
     #if targetEnvironment(simulator)
     static let apiBaseURL = "http://localhost:8080"
     static let wsBaseURL  = "ws://localhost:8080"
-    #else
+    #elseif LOCAL_BACKEND
     static let apiBaseURL = "http://10.0.0.225:8080"
     static let wsBaseURL  = "ws://10.0.0.225:8080"
+    #else
+    static let apiBaseURL = "https://api-dev.aurionclinical.com"
+    static let wsBaseURL  = "wss://api-dev.aurionclinical.com"
     #endif
     #else
     // Release builds (TestFlight + App Store). Pilot points at the
