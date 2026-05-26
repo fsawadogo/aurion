@@ -5,8 +5,13 @@ import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { getMetrics, getSessions } from "@/lib/api";
-import type { PilotMetric, Session } from "@/types";
+import { getMetrics, getMetricsTimeseries, getSessions } from "@/lib/api";
+import type {
+  MetricTimeseriesBucket,
+  MetricTimeseriesResponse,
+  PilotMetric,
+  Session,
+} from "@/types";
 
 function metricStatus(
   value: string,
@@ -41,6 +46,7 @@ const summaryIcons = [
 export default function DashboardPage() {
   const [metricsData, setMetricsData] = useState<PilotMetric[]>([]);
   const [sessionsData, setSessionsData] = useState<Session[]>([]);
+  const [timeseries, setTimeseries] = useState<MetricTimeseriesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -49,12 +55,14 @@ export default function DashboardPage() {
       setLoading(true);
       setError(null);
       try {
-        const [metricsRes, sessionsRes] = await Promise.all([
+        const [metricsRes, sessionsRes, timeseriesRes] = await Promise.all([
           getMetrics({ page: 1, page_size: 200 }),
           getSessions({ page: 1, page_size: 200 }),
+          getMetricsTimeseries(), // default window: last 14 days
         ]);
         setMetricsData(metricsRes.items);
         setSessionsData(sessionsRes.items);
+        setTimeseries(timeseriesRes);
       } catch (err) {
         setError(
           err instanceof Error ? err.message : "Failed to load dashboard data",
@@ -123,30 +131,8 @@ export default function DashboardPage() {
   const specialties = Object.entries(specialtyMap).slice(0, 5);
   const maxSpecialty = Math.max(...specialties.map(([, v]) => v), 1);
 
-  // Last 7 days, indexed so [6] = today and [0] = 6 days ago.
-  // Buckets by session.created_at — sessions outside the window are ignored.
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const weeklyBuckets: number[] = Array(7).fill(0);
-  const weeklyLabels: string[] = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(today.getDate() - i);
-    weeklyLabels.push(d.toLocaleDateString(undefined, { weekday: "short" }));
-  }
-  sessionsData.forEach((s) => {
-    if (!s.created_at) return;
-    const created = new Date(s.created_at);
-    if (Number.isNaN(created.getTime())) return;
-    created.setHours(0, 0, 0, 0);
-    const daysAgo = Math.floor(
-      (today.getTime() - created.getTime()) / 86_400_000,
-    );
-    if (daysAgo >= 0 && daysAgo < 7) {
-      weeklyBuckets[6 - daysAgo] += 1;
-    }
-  });
-  const maxWeekly = Math.max(...weeklyBuckets, 1);
+  // Volume bar chart now drives off `timeseries.buckets` directly,
+  // so the prior local weeklyBuckets / weeklyLabels block is gone.
 
   return (
     <>
@@ -222,33 +208,126 @@ export default function DashboardPage() {
           })}
         </div>
 
+        {/* Trend (last 14 days) — 8 sparkline panels, one per pilot metric. */}
+        <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-gray-400">
+          Trend ({timeseries ? `${timeseries.from} → ${timeseries.to}` : "last 14 days"})
+        </h2>
+        {loading ? (
+          <Card>
+            <LoadingSkeleton lines={4} />
+          </Card>
+        ) : timeseries === null || timeseries.buckets.length === 0 ? (
+          <Card>
+            <p className="py-6 text-center text-sm text-gray-400">
+              No time-series data available yet.
+            </p>
+          </Card>
+        ) : (
+          <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 stagger-children">
+            <Sparkline
+              title="Template completeness"
+              buckets={timeseries.buckets}
+              field="template_section_completeness"
+              fmt={(v) => `${Math.round(v * 100)}%`}
+              targetLabel="≥ 90%"
+            />
+            <Sparkline
+              title="Citation traceability"
+              buckets={timeseries.buckets}
+              field="citation_traceability_rate"
+              fmt={(v) => `${Math.round(v * 100)}%`}
+              targetLabel="≥ 95%"
+            />
+            <Sparkline
+              title="Conflict rate"
+              buckets={timeseries.buckets}
+              field="conflict_rate"
+              fmt={(v) => `${Math.round(v * 100)}%`}
+              targetLabel="Low"
+              lowerIsBetter
+            />
+            <Sparkline
+              title="Low confidence frames"
+              buckets={timeseries.buckets}
+              field="low_confidence_frame_rate"
+              fmt={(v) => `${Math.round(v * 100)}%`}
+              targetLabel="Low"
+              lowerIsBetter
+            />
+            <Sparkline
+              title="Stage 1 latency"
+              buckets={timeseries.buckets}
+              field="stage1_latency_ms"
+              fmt={(v) => (v < 1000 ? `${Math.round(v)}ms` : `${(v / 1000).toFixed(1)}s`)}
+              targetLabel="< 30s"
+              lowerIsBetter
+            />
+            <Sparkline
+              title="Stage 2 latency"
+              buckets={timeseries.buckets}
+              field="stage2_latency_ms"
+              fmt={(v) => (v < 1000 ? `${Math.round(v)}ms` : `${(v / 1000).toFixed(1)}s`)}
+              targetLabel="< 5 min"
+              lowerIsBetter
+            />
+            <Sparkline
+              title="Session completeness"
+              buckets={timeseries.buckets}
+              field="session_completeness"
+              fmt={(v) => `${Math.round(v)}%`}
+              targetLabel="100%"
+            />
+            <Sparkline
+              title="Sessions / day"
+              buckets={timeseries.buckets}
+              field="session_count"
+              fmt={(v) => `${Math.round(v)}`}
+              targetLabel=""
+            />
+          </div>
+        )}
+
         {/* Charts area */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card title="Last 7 days">
-            {loading || sessionsData.length === 0 ? (
+          <Card title={`Volume (${timeseries ? timeseries.buckets.length : 0} days)`}>
+            {loading || !timeseries || timeseries.buckets.length === 0 ? (
               <div className="flex h-48 items-center justify-center">
                 <p className="text-sm text-gray-400">
                   {loading ? "Loading..." : "No session data available yet."}
                 </p>
               </div>
             ) : (
-              <div className="flex h-48 items-end justify-around gap-2 pt-4">
-                {weeklyLabels.map((label, i) => {
-                  const height = (weeklyBuckets[i] / maxWeekly) * 100;
-                  const isToday = i === 6;
+              <div className="flex h-48 items-end justify-around gap-1 pt-4">
+                {timeseries.buckets.map((b, i) => {
+                  const maxV = Math.max(
+                    1,
+                    ...timeseries.buckets.map((x) => x.session_count),
+                  );
+                  const height = (b.session_count / maxV) * 100;
+                  const isToday = i === timeseries.buckets.length - 1;
+                  // Only label every other day if window is long.
+                  const showLabel =
+                    timeseries.buckets.length <= 14 ||
+                    i % Math.ceil(timeseries.buckets.length / 7) === 0;
                   return (
-                    <div key={`${label}-${i}`} className="group flex flex-1 flex-col items-center gap-1.5">
-                      <span className="text-xs font-semibold text-navy-600 opacity-0 transition-opacity group-hover:opacity-100">
-                        {weeklyBuckets[i]}
+                    <div
+                      key={b.date}
+                      className="group flex flex-1 flex-col items-center gap-1.5"
+                      title={`${b.date}: ${b.session_count} session${b.session_count === 1 ? "" : "s"}`}
+                    >
+                      <span className="text-[10px] font-semibold text-navy-600 opacity-0 transition-opacity group-hover:opacity-100">
+                        {b.session_count}
                       </span>
                       <div
                         className="w-full overflow-hidden rounded-t-md transition-all duration-500 ease-out"
-                        style={{ height: `${Math.max(height, 6)}%` }}
+                        style={{ height: `${Math.max(height, 4)}%` }}
                       >
                         <div className="h-full w-full rounded-t-md bg-gradient-to-t from-gold-500 to-gold-300" />
                       </div>
-                      <span className={`text-[10px] font-medium ${isToday ? "text-navy-600" : "text-gray-400"}`}>
-                        {label}
+                      <span
+                        className={`text-[9px] font-medium ${isToday ? "text-navy-600" : "text-gray-400"}`}
+                      >
+                        {showLabel ? b.date.slice(5) : ""}
                       </span>
                     </div>
                   );
@@ -289,5 +368,105 @@ export default function DashboardPage() {
         </div>
       </div>
     </>
+  );
+}
+
+// ── Sparkline — CSS-only mini bar chart per metric ─────────────────────────
+//
+// Renders one short bar per bucket. Bars share a single max so the
+// proportions are honest within one card. A separate chart library
+// (recharts / ECharts) is a follow-up — keeping CSS-only here keeps
+// the dependency surface stable for the pilot.
+
+type SparklineField = keyof Pick<
+  MetricTimeseriesBucket,
+  | "template_section_completeness"
+  | "citation_traceability_rate"
+  | "physician_edit_rate"
+  | "conflict_rate"
+  | "low_confidence_frame_rate"
+  | "stage1_latency_ms"
+  | "stage2_latency_ms"
+  | "session_completeness"
+  | "session_count"
+>;
+
+function Sparkline({
+  title,
+  buckets,
+  field,
+  fmt,
+  targetLabel,
+  lowerIsBetter,
+}: {
+  title: string;
+  buckets: MetricTimeseriesBucket[];
+  field: SparklineField;
+  fmt: (v: number) => string;
+  targetLabel: string;
+  lowerIsBetter?: boolean;
+}) {
+  const values: Array<number | null> = buckets.map((b) => {
+    const v = b[field];
+    return v === null || v === undefined ? null : Number(v);
+  });
+  const nonNull = values.filter((v): v is number => v !== null);
+  const max = nonNull.length === 0 ? 1 : Math.max(...nonNull);
+  const min = nonNull.length === 0 ? 0 : Math.min(...nonNull);
+  const span = Math.max(max - min, 1e-6);
+  const latest = nonNull.length === 0 ? null : nonNull[nonNull.length - 1];
+  const avg =
+    nonNull.length === 0
+      ? null
+      : nonNull.reduce((a, b) => a + b, 0) / nonNull.length;
+
+  return (
+    <Card>
+      <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
+        {title}
+      </p>
+      <div className="mt-1 flex items-baseline justify-between">
+        <p className="text-2xl font-bold text-navy-700 tabular-nums">
+          {latest === null ? "—" : fmt(latest)}
+        </p>
+        {targetLabel && (
+          <span className="text-[10px] font-medium text-gray-400">
+            target {targetLabel}
+          </span>
+        )}
+      </div>
+      <p className="mt-0.5 text-[11px] text-gray-400">
+        avg {avg === null ? "—" : fmt(avg)}
+      </p>
+      <div className="mt-3 flex h-12 items-end gap-0.5">
+        {values.map((v, i) => {
+          if (v === null) {
+            return (
+              <div
+                key={i}
+                className="flex-1 self-stretch rounded-sm bg-gray-100"
+                title={`${buckets[i].date}: no data`}
+              />
+            );
+          }
+          // Normalize to [0..1] of (v - min) / span so flat regions look
+          // flat, not all zero or all max.
+          const norm = (v - min) / span;
+          // Floor at 8% so a real-but-low value still shows a sliver.
+          const pct = Math.max(8, Math.round(norm * 100));
+          const colorClass = lowerIsBetter
+            ? "from-emerald-300 to-emerald-500"
+            : "from-gold-300 to-gold-500";
+          return (
+            <div
+              key={i}
+              className={`flex-1 rounded-sm bg-gradient-to-t ${colorClass}`}
+              style={{ height: `${pct}%` }}
+              title={`${buckets[i].date}: ${fmt(v)}`}
+            />
+          );
+        })}
+      </div>
+    </Card>
   );
 }

@@ -243,6 +243,33 @@ export interface MetricFilters {
   page_size?: number;
 }
 
+export interface MetricTimeseriesBucket {
+  date: string; // ISO date, e.g. "2026-05-26"
+  session_count: number;
+  template_section_completeness: number | null;
+  citation_traceability_rate: number | null;
+  physician_edit_rate: number | null;
+  conflict_rate: number | null;
+  low_confidence_frame_rate: number | null;
+  stage1_latency_ms: number | null;
+  stage2_latency_ms: number | null;
+  session_completeness: number | null;
+}
+
+export interface MetricTimeseriesResponse {
+  from: string;
+  to: string;
+  bucket: "day"; // forward-compat: backend may add "hour" / "week"
+  buckets: MetricTimeseriesBucket[];
+}
+
+export interface MetricTimeseriesFilters {
+  from?: string;
+  to?: string;
+  specialty?: string;
+  clinician_id?: string;
+}
+
 /* ─── Eval ───────────────────────────────────────────────────────────────── */
 
 export interface EvalSession {

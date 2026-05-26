@@ -93,11 +93,12 @@ trend panels.
   - `metrics.py` already lives under `app/api/v1/admin/` — extend it,
     don't fork
   - SQLAlchemy's `func.date_trunc('day', col)` for the bucket key
-- **New helper introduced?**: One — `pilot_metrics_repo.get_timeseries`
-  (currently no `pilot_metrics_repo` exists; sessions.py inlines its
-  one query). This is the **third** time we'd inline a pilot_metrics
-  query (admin/metrics.py + sessions completeness join + this); time
-  to extract per DRY.
+- **New helper introduced?**: No. PilotMetricsModel reads currently
+  live in 2 places: `admin/metrics.py` (paginated list — same
+  endpoint module) and `privacy.py` (DSAR purge — different
+  concern). Adding a second select in the same `admin/metrics.py`
+  module follows the existing pattern; a `pilot_metrics_repo`
+  extraction would be premature. Re-visit if a 4th read site appears.
 - **iOS UI tasks only**: N/A — backend + web only.
 
 ## Out of scope
