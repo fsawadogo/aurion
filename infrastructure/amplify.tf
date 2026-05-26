@@ -83,6 +83,14 @@ resource "aws_amplify_app" "web_portal" {
   environment_variables = {
     NEXT_PUBLIC_API_URL       = "https://${var.api_domain}"
     AMPLIFY_MONOREPO_APP_ROOT = "web"
+    # Cognito hosted-UI for the web portal (WEB-COGNITO-UI). Mirrors
+    # what iOS uses (Config.swift) so a single identity backs both
+    # platforms. Values come from cognito.tf so client_id / domain
+    # changes propagate without a separate edit here.
+    NEXT_PUBLIC_COGNITO_HOSTED_UI_BASE = "https://${aws_cognito_user_pool_domain.main.domain}.auth.${var.region}.amazoncognito.com"
+    NEXT_PUBLIC_COGNITO_CLIENT_ID      = aws_cognito_user_pool_client.main.id
+    NEXT_PUBLIC_COGNITO_REDIRECT_URI   = "https://${var.web_portal_subdomain}/api/auth/callback/cognito"
+    NEXT_PUBLIC_COGNITO_LOGOUT_URI     = "https://${var.web_portal_subdomain}/auth/signed-out"
   }
 
   # Disallow indexing the portal — it's an admin tool, not public.
