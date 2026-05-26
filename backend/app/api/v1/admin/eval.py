@@ -25,11 +25,11 @@ from app.api.v1.admin._shared import (
 )
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
-from app.core.models import EvalAssignmentModel, EvalScoreModel, SessionModel, TranscriptModel
+from app.core.models import EvalScoreModel, SessionModel, TranscriptModel
 from app.core.types import SessionState, UserRole
 from app.modules.audit_log.service import get_audit_log_service
-from app.modules.auth.service import CurrentUser, require_role
 from app.modules.auth import users_repository as users_repo
+from app.modules.auth.service import CurrentUser, require_role
 from app.modules.eval import repository as eval_repo
 from app.modules.note_gen import repository as note_repo
 
