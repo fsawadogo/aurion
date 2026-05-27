@@ -39,6 +39,22 @@ resource "aws_wafv2_web_acl" "api" {
       managed_rule_group_statement {
         vendor_name = "AWS"
         name        = "AWSManagedRulesCommonRuleSet"
+
+        # SizeRestrictions_BODY blocks any request body over 8 KB. Aurion's
+        # Stage 1 audio uploads (POST /transcription/{id}) and Stage 2 frame
+        # uploads (POST /frames/{id}) are multipart bodies far larger than
+        # that — even the 2 s minimum recording is ~64 KB of WAV — so this
+        # rule 403'd every upload at the WAF before the request ever reached
+        # the API. Count instead of block: oversized bodies are still logged
+        # to CloudWatch, but allowed through. The per-IP rate limit (rule
+        # 100) remains the DoS backstop, and every other Common Rule Set
+        # protection (XSS, LFI, RFI, bad-bot) stays in blocking mode.
+        rule_action_override {
+          name = "SizeRestrictions_BODY"
+          action_to_use {
+            count {}
+          }
+        }
       }
     }
 
