@@ -416,7 +416,7 @@ struct ProfileView: View {
             do {
                 let url = URL(string: "\(AppConfig.baseAPIPath)/privacy/my-data")!
                 var request = URLRequest(url: url)
-                if let token = KeychainHelper.shared.loadAuthToken() {
+                if let token = KeychainHelper.shared.bearerToken() {
                     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 }
                 let (data, _) = try await URLSession.shared.data(for: request)
@@ -435,7 +435,7 @@ struct ProfileView: View {
             do {
                 let url = URL(string: "\(AppConfig.baseAPIPath)/privacy/export?format=json")!
                 var request = URLRequest(url: url)
-                if let token = KeychainHelper.shared.loadAuthToken() {
+                if let token = KeychainHelper.shared.bearerToken() {
                     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 }
                 let (data, _) = try await URLSession.shared.data(for: request)
@@ -454,7 +454,7 @@ struct ProfileView: View {
                 let url = URL(string: "\(AppConfig.baseAPIPath)/privacy/my-account")!
                 var request = URLRequest(url: url)
                 request.httpMethod = "DELETE"
-                if let token = KeychainHelper.shared.loadAuthToken() {
+                if let token = KeychainHelper.shared.bearerToken() {
                     request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
                 }
                 let (_, response) = try await URLSession.shared.data(for: request)
