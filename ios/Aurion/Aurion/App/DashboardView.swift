@@ -247,9 +247,19 @@ struct DashboardView: View {
                                 .background(Color.aurionGold)
                                 .clipShape(Capsule())
                         }
+                        // Without this, the Spacer area between the label
+                        // stack and the Resume pill swallows taps — the
+                        // user sees the visual but the Button never fires.
+                        .contentShape(Rectangle())
                     }
                 }
                 .buttonStyle(.plain)
+            }
+            if let err = sessionManager.error {
+                Text(err)
+                    .font(.system(size: 12))
+                    .foregroundColor(.aurionRed)
+                    .padding(.horizontal, 4)
             }
         }
     }
@@ -369,9 +379,20 @@ struct DashboardView: View {
     private var recentSessionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: "Recent Sessions") {
-                Text("See all")
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundColor(.aurionGold)
+                Button {
+                    AurionHaptics.impact(.light)
+                    AppNavigation.shared.requestTab(.sessions)
+                } label: {
+                    Text("See all")
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundColor(.aurionGold)
+                }
+                .buttonStyle(.plain)
+                // Same Spacer-swallows-taps gotcha as the Resume button —
+                // the SectionHeader's trailing slot lives next to a layout
+                // Spacer; without contentShape the gold text reads but
+                // doesn't tap.
+                .contentShape(Rectangle())
             }
 
             if isLoadingSessions {
