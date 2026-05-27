@@ -28,7 +28,7 @@ struct ExportView: View {
         case pdf = "PDF"
         case text = "Text"
 
-        var isAvailable: Bool { self != .pdf }
+        var isAvailable: Bool { true }
 
         var icon: String {
             switch self {
@@ -367,11 +367,14 @@ struct ExportView: View {
                 case .text:
                     data = NoteDocumentBuilder.makePlainText(note, sessionId: sessionId)
                 case .pdf:
-                    throw NSError(
-                        domain: "Aurion.Export",
-                        code: 1,
-                        userInfo: [NSLocalizedDescriptionKey: "PDF export is not in the MVP."]
-                    )
+                    let (specialty, date) = noteDisplayStrings(for: sessionId, fallbackNote: note)
+                    data = try await MainActor.run {
+                        try NotePDFRenderer.render(
+                            note: note,
+                            specialtyTitle: specialty,
+                            dateString: date
+                        )
+                    }
                 }
 
                 let url = try writeToTempFile(data: data, format: selectedFormat)
@@ -415,6 +418,21 @@ struct ExportView: View {
             }
             isExporting = false
         }
+    }
+
+    /// Display strings for the PDF title block. Mirrors what
+    /// ``SessionNoteView`` computes from its ``SessionResponse``, but
+    /// ExportView only has the loaded ``NoteResponse`` to draw from —
+    /// note.specialty gives us the title; date defaults to the export
+    /// timestamp since the note payload doesn't carry the encounter date.
+    private func noteDisplayStrings(for sessionId: String, fallbackNote: NoteResponse) -> (String, String) {
+        let title = fallbackNote.specialty
+            .replacingOccurrences(of: "_", with: " ")
+            .capitalized
+        let f = DateFormatter()
+        f.dateStyle = .medium
+        f.timeStyle = .short
+        return (title, f.string(from: Date()))
     }
 
     /// Stage the bytes as a temporary file so the share sheet shows the
