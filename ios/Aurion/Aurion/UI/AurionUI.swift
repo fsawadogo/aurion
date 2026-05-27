@@ -449,7 +449,11 @@ struct AurionFilterChip: View {
                     .background(active ? Color.white.opacity(0.18) : Color.aurionSurfaceAlt)
                     .clipShape(Capsule())
             }
-            .foregroundColor(active ? .white : .aurionNavy)
+            // Inactive: aurionTextPrimary (adaptive — navy in light, off-white in
+            // dark) so the label reads against the dark card background. Hard-
+            // coding .aurionNavy here meant dark-blue text on a dark-gray
+            // card in dark mode — effectively invisible.
+            .foregroundColor(active ? .white : .aurionTextPrimary)
             .padding(.horizontal, 14)
             .padding(.vertical, 7)
             .background(active ? Color.aurionNavy : Color.aurionCardBackground)
@@ -484,7 +488,11 @@ struct AurionIconTile: View {
                 .frame(width: size, height: size)
             Image(systemName: systemName)
                 .font(.system(size: size * 0.5, weight: .regular))
-                .foregroundColor(active ? .aurionGoldDark : .aurionNavy)
+                // Inactive uses .aurionTextPrimary (adaptive). Hardcoding
+                // .aurionNavy made the icon invisible in dark mode against
+                // the .aurionSurfaceAlt tile — same pattern as the filter
+                // chip we just fixed.
+                .foregroundColor(active ? .aurionGoldDark : .aurionTextPrimary)
         }
     }
 }
