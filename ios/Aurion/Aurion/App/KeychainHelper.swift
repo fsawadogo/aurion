@@ -73,6 +73,16 @@ final class KeychainHelper {
     /// real authorisation decision.
     func getIDToken() -> String? { loadString(key: cognitoIDTokenKey) }
 
+    /// The token to send as the API `Bearer …` header. Prefers the Cognito
+    /// id_token (the backend validates it and reads the `email` claim on
+    /// first sign-in); falls back to the legacy dev token for local-mode
+    /// builds. SINGLE SOURCE OF TRUTH — every request path (APIClient and
+    /// any raw URLSession upload) must use this so they can't drift. The
+    /// transcription upload once read `loadAuthToken()` directly and 401'd
+    /// after the switch to native Cognito login, which writes only the
+    /// Cognito token slots; this helper prevents that class of bug.
+    func bearerToken() -> String? { getIDToken() ?? loadAuthToken() }
+
     func getRefreshToken() -> String? { loadString(key: cognitoRefreshTokenKey) }
 
     /// True if the access token has either expired or is within 60s of

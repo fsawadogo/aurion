@@ -615,7 +615,7 @@ final class SessionManager: ObservableObject {
 
             let boundary = UUID().uuidString
             request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-            if let token = KeychainHelper.shared.loadAuthToken() {
+            if let token = KeychainHelper.shared.bearerToken() {
                 request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
             }
 

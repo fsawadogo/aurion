@@ -376,11 +376,10 @@ final class APIClient: Sendable {
     }
 
     private func addAuth(_ request: inout URLRequest) {
-        // Prefer the Cognito id_token (issued by hosted UI / Authorization
-        // Code flow) — carries the `email` claim the backend reads on first
-        // sign-in. Fall back to the legacy dev token only for local-mode
-        // builds talking to `/auth/login`.
-        let token = KeychainHelper.shared.getIDToken() ?? KeychainHelper.shared.loadAuthToken()
+        // Canonical bearer-token selection lives in KeychainHelper so raw
+        // URLSession upload paths (e.g. the transcription multipart POST)
+        // use the exact same token and can't drift out of sync.
+        let token = KeychainHelper.shared.bearerToken()
         if let token {
             request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
         }
