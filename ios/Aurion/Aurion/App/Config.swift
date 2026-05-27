@@ -52,6 +52,10 @@ enum AppConfig {
     /// token exchange at `/oauth2/token`, signout at `/logout`.
     static let cognitoHostedUIBase = "https://aurion-dev.auth.ca-central-1.amazoncognito.com"
 
+    /// AWS region the user pool lives in. Used by the native (in-app)
+    /// sign-in path to build the Cognito JSON endpoint URL.
+    static let cognitoRegion = "ca-central-1"
+
     /// URL scheme the hosted UI redirects back to. Registered in
     /// `Info.plist`'s `CFBundleURLTypes` (synthesised via
     /// INFOPLIST_KEY_*; see ecs.tf for the matching backend env vars).
