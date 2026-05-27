@@ -55,11 +55,15 @@ struct AuditLogger {
     }
 
     private static func sendAuditEvent(_ payload: [String: String]) async {
-        guard let url = URL(string: "\(AppConfig.baseAPIPath)/audit/event") else { return }
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.httpBody = try? JSONEncoder().encode(payload)
-        _ = try? await URLSession.shared.data(for: request)
+        // Disabled: the backend has no /api/v1/audit/event endpoint
+        // (every relevant lifecycle event is already written server-side
+        // when the matching /sessions/* /notes/* call is processed —
+        // see DynamoDB aurion-audit-log-dev). The 404 retry pattern from
+        // this method was bursting WAF's RateLimitPerIP and causing
+        // collateral 403s on legitimate /notes/{id}/stage1 polls.
+        //
+        // Restore once the backend exposes a typed /audit/event endpoint
+        // (tracked: AUR-API-CLIENT-AUDIT).
+        _ = payload
     }
 }
