@@ -41,6 +41,145 @@ private extension String {
     }
 }
 
+// MARK: - NoteDocumentBody — Apple-Notes-style flowing document
+//
+// Renders the entire note as a single continuous document: large title,
+// muted meta row, then section headings + body paragraphs with inline
+// superscript footnote markers. The same View is mounted in the on-screen
+// scroll view and captured into PDF via ImageRenderer — `forPDF` swaps
+// screen-only chrome (status pills, the EMR-coming-soon footer) for the
+// print-clean variant so screen and document layout stay in sync.
+
+struct NoteDocumentBody: View {
+    let note: NoteResponse
+    let specialtyTitle: String
+    let dateString: String
+    let forPDF: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 28) {
+            // Title block — specialty (Notes-size title), then meta row.
+            VStack(alignment: .leading, spacing: 6) {
+                Text(specialtyTitle)
+                    .font(.system(size: 32, weight: .bold))
+                    .foregroundColor(forPDF ? .black : .aurionTextPrimary)
+                Text(dateString)
+                    .font(.system(size: 15))
+                    .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
+                HStack(spacing: 12) {
+                    Text("\(Int(note.completenessScore * 100))% complete")
+                    Text("·").foregroundColor((forPDF ? Color.black : .aurionTextSecondary).opacity(0.4))
+                    Text("v\(note.version)")
+                    Text("·").foregroundColor((forPDF ? Color.black : .aurionTextSecondary).opacity(0.4))
+                    Text(note.providerUsed)
+                }
+                .font(.system(size: 12))
+                .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
+                .padding(.top, 4)
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+
+            ForEach(note.sections, id: \.id) { section in
+                sectionView(section)
+            }
+
+            if !forPDF {
+                VStack(spacing: 6) {
+                    Image(systemName: "arrow.triangle.2.circlepath")
+                        .font(.system(size: 22, weight: .light))
+                        .foregroundColor(.aurionTextSecondary.opacity(0.5))
+                    Text("EMR Integration · Coming Soon")
+                        .font(.system(size: 12))
+                        .foregroundColor(.aurionTextSecondary)
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.top, 24)
+                .padding(.bottom, 8)
+            }
+        }
+        .padding(.horizontal, 24)
+        .padding(.vertical, 28)
+        // ImageRenderer captures whatever's behind the view — set an
+        // explicit white page background for PDF, transparent for screen
+        // so the scroll view's .aurionBackground shows through.
+        .background(forPDF ? Color.white : Color.clear)
+    }
+
+    @ViewBuilder
+    private func sectionView(_ section: NoteSectionResponse) -> some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Text(section.title)
+                    .font(.system(size: 20, weight: .semibold))
+                    .foregroundColor(forPDF ? .black : .aurionTextPrimary)
+                if !forPDF, section.status != "populated" {
+                    Text(statusLabel(section.status))
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.aurionTextSecondary)
+                        .padding(.horizontal, 6)
+                        .padding(.vertical, 2)
+                        .background(Color.aurionSurfaceAlt)
+                        .clipShape(Capsule())
+                }
+            }
+
+            if section.claims.isEmpty {
+                Text(section.status == "pending_video"
+                     ? "Awaiting visual enrichment."
+                     : "No content captured.")
+                    .font(.system(size: 16))
+                    .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
+                    .italic()
+            } else {
+                claimsParagraph(section.claims)
+            }
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    /// Single AttributedString of all claims as flowing prose with `¹ ² ³…`
+    /// superscript markers. Apple-Notes style — no bullets, no chevrons,
+    /// just typography.
+    private func claimsParagraph(_ claims: [NoteClaimResponse]) -> some View {
+        var attr = AttributedString()
+        for (i, claim) in claims.enumerated() {
+            var sentence = AttributedString(claim.text)
+            sentence.font = .system(size: 17)
+            sentence.foregroundColor = forPDF ? .black : .aurionTextPrimary
+            attr.append(sentence)
+
+            var marker = AttributedString(superscript(i + 1))
+            marker.font = .system(size: 11, weight: .semibold)
+            marker.foregroundColor = .aurionGold
+            attr.append(marker)
+
+            if i < claims.count - 1 {
+                attr.append(AttributedString(" "))
+            }
+        }
+        return Text(attr)
+            .lineSpacing(4)
+            .fixedSize(horizontal: false, vertical: true)
+    }
+
+    private func superscript(_ n: Int) -> String {
+        let map: [Character: Character] = [
+            "0": "⁰", "1": "¹", "2": "²", "3": "³", "4": "⁴",
+            "5": "⁵", "6": "⁶", "7": "⁷", "8": "⁸", "9": "⁹",
+        ]
+        return String(String(n).compactMap { map[$0] })
+    }
+
+    private func statusLabel(_ status: String) -> String {
+        switch status {
+        case "pending_video": return "Pending"
+        case "not_captured": return "Empty"
+        case "processing_failed": return "Failed"
+        default: return status.capitalized
+        }
+    }
+}
+
 /// Read-only note view for a completed session.
 /// Displays formatted SOAP note with copy-to-clipboard and export.
 struct SessionNoteView: View {
@@ -136,129 +275,21 @@ struct SessionNoteView: View {
         .task { await loadNote() }
     }
 
-    // MARK: - Note Content
+    // MARK: - Note Content (Apple-Notes-style flowing document)
 
     private func noteContent(_ note: NoteResponse) -> some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: AurionSpacing.lg) {
-                // Header card
-                VStack(alignment: .leading, spacing: AurionSpacing.sm) {
-                    HStack {
-                        Text(displaySpecialty)
-                            .aurionTitle()
-                        Spacer()
-                        HStack(spacing: AurionSpacing.xs) {
-                            CircularProgressRing(
-                                progress: note.completenessScore,
-                                color: note.completenessScore >= 0.9 ? .clinicalNormal : .clinicalWarning,
-                                lineWidth: 3,
-                                size: 28
-                            )
-                            Text("\(Int(note.completenessScore * 100))%")
-                                .font(.system(size: 13, weight: .bold, design: .rounded))
-                                .foregroundColor(note.completenessScore >= 0.9 ? .clinicalNormal : .clinicalWarning)
-                        }
-                    }
-
-                    HStack(spacing: AurionSpacing.lg) {
-                        Label(displayDate, systemImage: "calendar")
-                        Label("v\(note.version)", systemImage: "doc.badge.clock")
-                        Label(note.providerUsed, systemImage: "cpu")
-                    }
-                    .aurionCaption()
-                }
-                .padding(AurionSpacing.lg)
-                .background(Color.aurionCardBackground)
-                .cornerRadius(AurionSpacing.sm)
-
-                // Sections
-                ForEach(note.sections, id: \.id) { section in
-                    sectionCard(section)
-                }
-
-                // EMR Integration placeholder
-                VStack(spacing: AurionSpacing.sm) {
-                    Image(systemName: "arrow.triangle.2.circlepath")
-                        .font(.title2)
-                        .foregroundColor(.secondary.opacity(0.4))
-                    Text("EMR Integration")
-                        .font(.system(size: 14, weight: .semibold))
-                        .foregroundColor(.secondary)
-                    Text("Coming Soon")
-                        .aurionCaption()
-                }
-                .frame(maxWidth: .infinity)
-                .padding(AurionSpacing.xl)
-                .background(Color.aurionFieldBackground)
-                .cornerRadius(AurionSpacing.sm)
-            }
-            .padding(AurionSpacing.xl)
-            // iPad reading-measure clamp — caps at ~720pt so paragraphs
-            // stay scannable. iPhone (compact) is a no-op.
+            NoteDocumentBody(
+                note: note,
+                specialtyTitle: displaySpecialty,
+                dateString: displayDate,
+                forPDF: false
+            )
+            // iPad reading-measure clamp.
             .frame(maxWidth: horizontalSizeClass == .regular ? 720 : .infinity)
             .frame(maxWidth: .infinity, alignment: .center)
         }
         .background(Color.aurionBackground)
-    }
-
-    // MARK: - Section Card with Colored Border
-
-    private func sectionCard(_ section: NoteSectionResponse) -> some View {
-        let borderColor = section.id.sectionBorderColor
-        let icon = section.id.sectionIcon
-
-        return VStack(alignment: .leading, spacing: AurionSpacing.sm) {
-            // Section header with icon
-            HStack(spacing: AurionSpacing.sm) {
-                Image(systemName: icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundColor(borderColor)
-
-                Text(section.title)
-                    .font(.system(size: 17, weight: .semibold))
-                    .foregroundColor(.aurionTextPrimary)
-
-                Spacer()
-
-                sectionStatusBadge(section.status)
-            }
-
-            if section.claims.isEmpty {
-                Text("No content captured")
-                    .aurionBody()
-                    .foregroundColor(.secondary)
-                    .italic()
-                    .padding(.top, AurionSpacing.xxs)
-            } else {
-                ForEach(section.claims, id: \.id) { claim in
-                    VStack(alignment: .leading, spacing: AurionSpacing.xxs) {
-                        Text(claim.text)
-                            .aurionBody()
-
-                        HStack(spacing: AurionSpacing.xxs) {
-                            Image(systemName: claim.sourceType == "visual" ? "eye.circle" : "waveform")
-                                .font(.system(size: 10))
-                            Text("[\(claim.sourceId)]")
-                                .font(.system(size: 10))
-                        }
-                        .aurionCaption()
-                    }
-                    .padding(.vertical, AurionSpacing.xxs)
-                }
-            }
-        }
-        .padding(AurionSpacing.lg)
-        .background(Color.aurionCardBackground)
-        .cornerRadius(AurionSpacing.sm)
-        .overlay(
-            HStack {
-                RoundedRectangle(cornerRadius: 2)
-                    .fill(borderColor)
-                    .frame(width: 4)
-                Spacer()
-            }
-            .clipShape(RoundedRectangle(cornerRadius: AurionSpacing.sm))
-        )
     }
 
     // MARK: - Helpers
