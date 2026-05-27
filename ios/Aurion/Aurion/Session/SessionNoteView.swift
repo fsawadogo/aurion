@@ -67,7 +67,7 @@ struct NoteDocumentBody: View {
                     .font(.system(size: 15))
                     .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
                 HStack(spacing: 12) {
-                    Text("\(Int(note.completenessScore * 100))% complete")
+                    Text(L("noteDoc.percentComplete", Int(note.completenessScore * 100)))
                     Text("·").foregroundColor((forPDF ? Color.black : .aurionTextSecondary).opacity(0.4))
                     Text("v\(note.version)")
                     Text("·").foregroundColor((forPDF ? Color.black : .aurionTextSecondary).opacity(0.4))
@@ -88,7 +88,7 @@ struct NoteDocumentBody: View {
                     Image(systemName: "arrow.triangle.2.circlepath")
                         .font(.system(size: 22, weight: .light))
                         .foregroundColor(.aurionTextSecondary.opacity(0.5))
-                    Text("EMR Integration · Coming Soon")
+                    Text(L("noteDoc.emrComingSoon"))
                         .font(.system(size: 12))
                         .foregroundColor(.aurionTextSecondary)
                 }
@@ -125,8 +125,8 @@ struct NoteDocumentBody: View {
 
             if section.claims.isEmpty {
                 Text(section.status == "pending_video"
-                     ? "Awaiting visual enrichment."
-                     : "No content captured.")
+                     ? L("noteDoc.awaitingVisual")
+                     : L("noteDoc.noContent"))
                     .font(.system(size: 16))
                     .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
                     .italic()
@@ -172,9 +172,9 @@ struct NoteDocumentBody: View {
 
     private func statusLabel(_ status: String) -> String {
         switch status {
-        case "pending_video": return "Pending"
-        case "not_captured": return "Empty"
-        case "processing_failed": return "Failed"
+        case "pending_video": return L("noteDoc.status.pending")
+        case "not_captured": return L("noteDoc.status.empty")
+        case "processing_failed": return L("noteDoc.status.failed")
         default: return status.capitalized
         }
     }
@@ -196,14 +196,14 @@ struct SessionNoteView: View {
     var body: some View {
         ZStack {
             if isLoading {
-                ProgressView("Loading note...")
+                ProgressView(L("noteReview.loading"))
             } else if let note {
                 noteContent(note)
             } else {
                 EmptyStateView(
                     icon: "doc.questionmark",
-                    title: "No note available",
-                    subtitle: error ?? "The note could not be loaded."
+                    title: L("sessionNote.noNote"),
+                    subtitle: error ?? L("sessionNote.noNoteSub")
                 )
             }
 
@@ -217,7 +217,7 @@ struct SessionNoteView: View {
                             // Bounce on appear so the toast reads as a
                             // confirmation event, not just an overlay.
                             .symbolEffect(.bounce, value: showCopiedToast)
-                        Text("Copied to clipboard")
+                        Text(L("sessionNote.copied"))
                             .font(.system(size: 14, weight: .semibold))
                     }
                     .foregroundColor(.aurionTextPrimary)
@@ -259,8 +259,8 @@ struct SessionNoteView: View {
                     Image(systemName: "doc.on.doc")
                 }
                 .disabled(note == nil)
-                .accessibilityLabel("Copy note")
-                .accessibilityHint("Copies the formatted note text to the clipboard.")
+                .accessibilityLabel(L("sessionNote.a11yCopy"))
+                .accessibilityHint(L("sessionNote.a11yCopyHint"))
 
                 Button {
                     exportNote()
@@ -268,8 +268,8 @@ struct SessionNoteView: View {
                     Image(systemName: "square.and.arrow.up")
                 }
                 .disabled(note == nil)
-                .accessibilityLabel("Export note")
-                .accessibilityHint("Exports the note as a Word document.")
+                .accessibilityLabel(L("sessionNote.a11yExport"))
+                .accessibilityHint(L("sessionNote.a11yExportHint"))
             }
         }
         .task { await loadNote() }
@@ -295,7 +295,7 @@ struct SessionNoteView: View {
     // MARK: - Helpers
 
     private var displaySpecialty: String {
-        session.specialty.replacingOccurrences(of: "_", with: " ").capitalized
+        localizedSpecialty(session.specialty)
     }
 
     private var displayDate: String {
@@ -423,7 +423,7 @@ struct SessionNoteView: View {
                 _ = try await APIClient.shared.exportNote(sessionId: note.sessionId)
                 AurionHaptics.notification(.success)
             } catch {
-                self.error = "Export failed"
+                self.error = L("export.failedShort")
             }
         }
     }

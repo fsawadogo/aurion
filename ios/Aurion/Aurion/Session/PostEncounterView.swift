@@ -23,8 +23,8 @@ struct PostEncounterView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AurionNavBar(title: "Generate Note") {
-                AurionTextButton(label: "Back") {
+            AurionNavBar(title: L("postEncounter.generate")) {
+                AurionTextButton(label: L("setup.back")) {
                     sessionManager.dismissPostEncounter()
                 }
             }
@@ -32,7 +32,7 @@ struct PostEncounterView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     // Template section
-                    SectionHeader(title: "Template")
+                    SectionHeader(title: L("postEncounter.template"))
 
                     // Templates in a single card with dividers
                     VStack(spacing: 0) {
@@ -46,7 +46,7 @@ struct PostEncounterView: View {
                                     selectedTemplate = template.key
                                 } label: {
                                     HStack {
-                                        Text(template.displayName)
+                                        Text(localizedSpecialty(template.key))
                                             .font(.system(size: 15))
                                             .foregroundColor(.aurionTextPrimary)
                                         Spacer()
@@ -75,7 +75,7 @@ struct PostEncounterView: View {
                     )
 
                     // Language section
-                    SectionHeader(title: "Output Language")
+                    SectionHeader(title: L("postEncounter.outputLanguage"))
 
                     VStack(spacing: 0) {
                         ForEach(Array(languages.enumerated()), id: \.element.0) { index, lang in
@@ -120,7 +120,7 @@ struct PostEncounterView: View {
             // Bottom bar
             VStack(spacing: 0) {
                 Rectangle().fill(Color.aurionBorder).frame(height: 1)
-                AurionGoldButton(label: isConfirming ? "Generating…" : "Generate Note", full: true, disabled: isConfirming) {
+                AurionGoldButton(label: isConfirming ? L("postEncounter.generating") : L("postEncounter.generate"), full: true, disabled: isConfirming) {
                     Task { await confirmAndProcess() }
                 }
                 .aurionScreenEdge()

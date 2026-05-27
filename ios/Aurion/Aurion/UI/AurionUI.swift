@@ -254,7 +254,7 @@ struct AurionAvatar: View {
         // Initials read as letters by default ("F. S."); the image trait
         // + descriptive label gives VoiceOver "Profile avatar" instead.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Profile avatar")
+        .accessibilityLabel(L("a11y.profileAvatar"))
         .accessibilityAddTraits(.isImage)
     }
 }
@@ -906,14 +906,14 @@ func sessionStateKind(_ state: String) -> AurionStatusKind {
 /// kind label so we can show "Awaiting review" rather than "Pending" etc.
 func sessionStateLabel(_ state: String) -> String {
     switch state {
-    case "EXPORTED": return "Exported"
-    case "REVIEW_COMPLETE": return "Completed"
-    case "PURGED": return "Archived"
-    case "AWAITING_REVIEW": return "Pending review"
-    case "PROCESSING_STAGE1", "PROCESSING_STAGE2": return "Processing"
-    case "RECORDING": return "REC"
-    case "PAUSED": return "Paused"
-    case "CONSENT_PENDING": return "Consent"
+    case "EXPORTED": return L("state.exported")
+    case "REVIEW_COMPLETE": return L("state.completed")
+    case "PURGED": return L("state.archived")
+    case "AWAITING_REVIEW": return L("state.pendingReview")
+    case "PROCESSING_STAGE1", "PROCESSING_STAGE2": return L("state.processing")
+    case "RECORDING": return L("state.rec")
+    case "PAUSED": return L("state.paused")
+    case "CONSENT_PENDING": return L("state.consent")
     default: return state.replacingOccurrences(of: "_", with: " ").capitalized
     }
 }

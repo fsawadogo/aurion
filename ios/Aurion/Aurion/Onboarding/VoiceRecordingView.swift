@@ -22,15 +22,15 @@ struct VoiceRecordingView: View {
 
     private let minimumDuration: TimeInterval = 15
     private let sentences = [
-        "Range of motion is restricted to approximately 90 degrees of flexion.",
-        "There is tenderness on palpation at the medial joint line.",
-        "The wound edges appear well approximated with no signs of infection.",
-        "I am reviewing the imaging now — there is no visible fracture displacement.",
+        L("onboarding.voiceRec.sentence1"),
+        L("onboarding.voiceRec.sentence2"),
+        L("onboarding.voiceRec.sentence3"),
+        L("onboarding.voiceRec.sentence4"),
     ]
 
     var body: some View {
         VStack(spacing: 24) {
-            Text("Read aloud in your normal clinical voice")
+            Text(L("onboarding.voiceRec.instruction"))
                 .font(.title3)
                 .fontWeight(.semibold)
                 .foregroundColor(.aurionTextPrimary)
@@ -64,11 +64,11 @@ struct VoiceRecordingView: View {
                 .animation(.aurionIOS, value: statusText)
 
             if canProceed, let url = recorder.lastRecordingURL {
-                AurionGoldButton(label: "Continue", full: true) { onComplete(url) }
+                AurionGoldButton(label: L("setup.continue"), full: true) { onComplete(url) }
                     .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            Button("Re-record") { resetRecording() }
+            Button(L("onboarding.voiceRec.rerecord")) { resetRecording() }
                 .font(.caption)
                 .foregroundColor(.aurionTextPrimary)
                 .opacity(canProceed ? 1 : 0)
@@ -156,10 +156,10 @@ struct VoiceRecordingView: View {
     }
 
     private var statusText: String {
-        if permissionDenied { return "Microphone permission required" }
-        if recorder.isRecording { return "Tap to stop" }
-        if canProceed { return "Recording captured — tap Continue" }
-        return "Tap to start recording"
+        if permissionDenied { return L("onboarding.voiceRec.micDenied") }
+        if recorder.isRecording { return L("onboarding.voiceRec.tapStop") }
+        if canProceed { return L("onboarding.voiceRec.captured") }
+        return L("onboarding.voiceRec.tapStart")
     }
 
     // MARK: - Recording control

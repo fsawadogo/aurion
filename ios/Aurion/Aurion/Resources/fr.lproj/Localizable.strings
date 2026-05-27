@@ -43,6 +43,10 @@
 "sessions.filter.pending" = "En attente";
 "sessions.filter.completed" = "Termin\U00E9es";
 "sessions.filter.exported" = "Export\U00E9es";
+"sessions.sortNewest" = "Plus r\U00E9centes d\U2019abord";
+"sessions.sortOldest" = "Plus anciennes d\U2019abord";
+"sessions.sortHint" = "Touchez deux fois pour inverser l\U2019ordre de tri.";
+"sessions.searchPrompt" = "Rechercher par sp\U00E9cialit\U00E9 ou statut";
 
 /* ── Note pr\U00EAte ─────────────────────────────────── */
 "noteReady.title" = "Note pr\U00EAte";
@@ -57,6 +61,7 @@
 "postEncounter.sections" = "%d sections";
 "postEncounter.outputLanguage" = "Langue de sortie";
 "postEncounter.generate" = "G\U00E9n\U00E9rer la note";
+"postEncounter.generating" = "G\U00E9n\U00E9ration\U2026";
 
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "ENR";
@@ -65,10 +70,58 @@
 "capture.consentPending" = "Consentement requis";
 "capture.processing" = "Traitement...";
 "capture.consentTitle" = "Confirmer le consentement du patient";
-"capture.consentSub" = "L\U2019enregistrement ne peut commencer qu\U2019apr\U00E8s la confirmation du consentement du patient. C\U2019est une exigence r\U00E9glementaire.";
-"capture.consentButton" = "Confirmer le consentement";
+"capture.consentSub" = "Confirmez que le patient a \U00E9t\U00E9 inform\U00E9 et consent \U00E0 l\U2019enregistrement pour la g\U00E9n\U00E9ration de la note.";
+"capture.consentButton" = "Le patient a consenti";
 "capture.pause" = "Pause";
 "capture.resume" = "Reprendre";
+"capture.recordingMode" = "Enregistrement \U00B7 %@";
+"capture.consentChip" = "Consentement : %@ \U00B7 %@";
+"capture.consentMethodQ" = "Comment le consentement a-t-il \U00E9t\U00E9 donn\U00E9 ?";
+"capture.a11yElapsed" = "Temps d\U2019enregistrement \U00E9coul\U00E9";
+"capture.a11yViewFrames" = "Voir les images captur\U00E9es";
+"capture.a11yPause" = "Mettre l\U2019enregistrement en pause";
+"capture.a11yResume" = "Reprendre l\U2019enregistrement";
+"capture.a11yPauseHint" = "Suspend temporairement la capture sans terminer la session.";
+"capture.a11yResumeHint" = "Poursuit la capture audio et vid\U00E9o.";
+"capture.a11yStart" = "D\U00E9marrer l\U2019enregistrement";
+"capture.a11yStop" = "Arr\U00EAter l\U2019enregistrement";
+"capture.a11yStartHint" = "D\U00E9marre la capture audio et vid\U00E9o pour cette session.";
+"capture.a11yStopHint" = "Termine la capture et lance la g\U00E9n\U00E9ration de la note.";
+
+/* ── M\U00E9thodes de consentement ─────────────────────── */
+"consentMethod.verbal" = "Verbal";
+"consentMethod.paperForm" = "Formulaire papier";
+"consentMethod.digitalForm" = "Formulaire num\U00E9rique";
+
+/* ── Appareils ────────────────────────────────────────── */
+"devices.audioSource" = "Source audio";
+"devices.videoSource" = "Source vid\U00E9o";
+"devices.permissions" = "Autorisations";
+"devices.audio" = "Audio";
+"devices.video" = "Vid\U00E9o";
+"devices.permission.camera" = "Cam\U00E9ra";
+"devices.permission.microphone" = "Microphone";
+"devices.permission.bluetooth" = "Bluetooth";
+"devices.permission.screen" = "Enregistrement d\U2019\U00E9cran";
+"devices.granted" = "Accord\U00E9e";
+"devices.denied" = "Refus\U00E9e";
+"devices.none" = "Aucune";
+"devices.audioOnlySession" = "Session audio seulement";
+
+/* ── \U00C9tat des sources de capture ──────────────────── */
+"sourceStatus.disconnected" = "D\U00E9connect\U00E9";
+"sourceStatus.ready" = "Pr\U00EAt";
+"sourceStatus.starting" = "D\U00E9marrage\U2026";
+"sourceStatus.recording" = "Enregistrement";
+"sourceStatus.paused" = "En pause";
+
+/* ── Galerie d\U2019images ─────────────────────────────── */
+"frames.title" = "Images captur\U00E9es";
+"frames.count.one" = "%d image";
+"frames.count.many" = "%d images";
+"frames.empty" = "Aucune image";
+"frames.emptySub" = "Les images apparaissent ici au fur et \U00E0 mesure de la capture.\nFr\U00E9quence par d\U00E9faut : 1 par seconde.";
+"common.close" = "Fermer";
 
 /* ── Traitement ───────────────────────────────────────── */
 "processing.title" = "Traitement de la session";
@@ -101,6 +154,61 @@
 "setup.templateSub" = "Ceux-ci seront disponibles lors du d\U00E9marrage de sessions. Votre sp\U00E9cialit\U00E9 principale est pr\U00E9s\U00E9lectionn\U00E9e.";
 "setup.languageTitle" = "Langue de sortie ?";
 "setup.languageSub" = "Vos notes cliniques seront g\U00E9n\U00E9r\U00E9es dans cette langue.";
+"setup.recordingTitle" = "Pr\U00E9f\U00E9rences d\U2019enregistrement ?";
+"setup.getStarted" = "Commencer";
+"setup.skip" = "Passer";
+"setup.practice.clinic.sub" = "Pratique ambulatoire";
+"setup.practice.surgical.sub" = "\U00C9tablissement proc\U00E9dural";
+"setup.practice.hospital.sub" = "Milieu hospitalier";
+"setup.autoUpload.title" = "T\U00E9l\U00E9versement auto \U00E0 l\U2019arr\U00EAt";
+"setup.autoUpload.sub" = "Envoie la capture \U00E0 Aurion d\U00E8s la fin de l\U2019enregistrement.";
+"setup.localRetention.title" = "Conservation locale";
+"setup.localRetention.sub" = "Conserver les notes sur cet appareil pour r\U00E9vision.";
+"setup.consentReprompt.title" = "Redemander le consentement";
+"setup.consentReprompt.sub" = "Reconfirmer le consentement du patient avant l\U2019enregistrement.";
+"setup.days" = "jours";
+"setup.freq.everySession" = "Chaque session";
+"setup.freq.daily" = "Quotidien";
+"setup.freq.weekly" = "Hebdomadaire";
+
+/* ── Int\U00E9gration (onboarding) ─────────────────────── */
+"onboarding.getStarted" = "Commencer";
+"onboarding.wearable.title" = "Connectez vos lunettes";
+"onboarding.wearable.sub" = "Appairez vos lunettes intelligentes Ray-Ban Meta ou un autre wearable de capture via Bluetooth.";
+"onboarding.wearable.skip" = "Passer \U2014 utiliser la cam\U00E9ra du t\U00E9l\U00E9phone";
+"onboarding.wearable.scanning" = "Recherche d\U2019appareils \U00E0 proximit\U00E9\U2026";
+"onboarding.wearable.connected" = "Connect\U00E9";
+"onboarding.wearable.scanningShort" = "Recherche\U2026";
+"onboarding.wearable.scan" = "Rechercher des appareils";
+"onboarding.wearable.scanAgain" = "Rechercher \U00E0 nouveau";
+"onboarding.wearable.deviceFallback" = "Wearable";
+"onboarding.wearable.paired" = "Appair\U00E9";
+"onboarding.biometric.title" = "Consentement aux donn\U00E9es biom\U00E9triques";
+"onboarding.biometric.sub" = "Veuillez lire attentivement ce qui suit avant de continuer.";
+"onboarding.biometric.read" = "J\U2019ai lu et compris ce qui pr\U00E9c\U00E8de";
+"onboarding.biometric.agree" = "J\U2019accepte \U2014 cr\U00E9er l\U2019identit\U00E9 vocale";
+"onboarding.biometric.goBack" = "Retour";
+"onboarding.biometric.consentText" = "Aurion Clinical AI demande votre consentement pour collecter et traiter un court enregistrement vocal afin de cr\U00E9er un profil vocal de locuteur.\n\n**Ce que nous collectons :** Un enregistrement vocal de 30 \U00E0 60 secondes lu \U00E0 partir de phrases cliniques.\n\n**Comment il est utilis\U00E9 :** L\U2019enregistrement est trait\U00E9 enti\U00E8rement sur cet appareil pour cr\U00E9er une empreinte vocale (une repr\U00E9sentation math\U00E9matique de votre voix). Cette empreinte sert pendant les sessions cliniques \U00E0 distinguer votre voix de celle de votre patient.\n\n**Stockage :** L\U2019empreinte vocale est stock\U00E9e exclusivement dans le trousseau s\U00E9curis\U00E9 de cet appareil. Elle n\U2019est jamais transmise \U00E0 un serveur.\n\n**Suppression de l\U2019enregistrement :** L\U2019enregistrement vocal brut est supprim\U00E9 de la m\U00E9moire de l\U2019appareil imm\U00E9diatement apr\U00E8s la g\U00E9n\U00E9ration de l\U2019empreinte vocale. Il n\U2019est jamais stock\U00E9 sur disque ni t\U00E9l\U00E9vers\U00E9.\n\n**Vos droits :** Vous pouvez supprimer votre profil vocal \U00E0 tout moment dans les r\U00E9glages. Vous pouvez aussi le r\U00E9enregistrer. Le refus n\U2019affecte pas votre capacit\U00E9 \U00E0 utiliser Aurion \U2014 le syst\U00E8me fonctionnera sans s\U00E9paration des locuteurs.\n\nCe consentement est r\U00E9gi par les lois applicables sur la protection des donn\U00E9es biom\U00E9triques, dont la Loi 25 du Qu\U00E9bec et la LPRPDE.";
+"onboarding.voiceProc.creating" = "Cr\U00E9ation de votre identit\U00E9 vocale\U2026";
+"onboarding.voiceProc.saved" = "Identit\U00E9 vocale enregistr\U00E9e sur cet appareil";
+"onboarding.voiceProc.savedSub" = "Vous pouvez modifier ou supprimer votre identit\U00E9 vocale \U00E0 tout moment dans les r\U00E9glages.";
+"onboarding.voiceProc.continue" = "Continuer vers l\U2019accueil";
+"onboarding.voiceProc.step1" = "Analyse des sch\U00E9mas vocaux\U2026";
+"onboarding.voiceProc.step2" = "G\U00E9n\U00E9ration de l\U2019empreinte vocale\U2026";
+"onboarding.voiceProc.step3" = "S\U00E9curisation dans le trousseau\U2026";
+"onboarding.voiceExpl.title" = "Aidez Aurion \U00E0 reconna\U00EEtre votre voix";
+"onboarding.voiceExpl.body" = "Aurion utilise un court \U00E9chantillon vocal pour distinguer vos observations de celles de votre patient pendant les visites.\n\nVotre enregistrement est trait\U00E9 uniquement sur cet appareil et supprim\U00E9 imm\U00E9diatement. Rien n\U2019est envoy\U00E9 \U00E0 nos serveurs.";
+"onboarding.voiceExpl.skip" = "Passer pour l\U2019instant";
+"onboarding.voiceRec.instruction" = "Lisez \U00E0 voix haute avec votre voix clinique habituelle";
+"onboarding.voiceRec.rerecord" = "R\U00E9enregistrer";
+"onboarding.voiceRec.micDenied" = "Autorisation du microphone requise";
+"onboarding.voiceRec.tapStop" = "Touchez pour arr\U00EAter";
+"onboarding.voiceRec.captured" = "Enregistrement captur\U00E9 \U2014 touchez Continuer";
+"onboarding.voiceRec.tapStart" = "Touchez pour d\U00E9marrer l\U2019enregistrement";
+"onboarding.voiceRec.sentence1" = "L\U2019amplitude de mouvement est limit\U00E9e \U00E0 environ 90 degr\U00E9s de flexion.";
+"onboarding.voiceRec.sentence2" = "Il y a une sensibilit\U00E9 \U00E0 la palpation au niveau de l\U2019interligne articulaire m\U00E9dial.";
+"onboarding.voiceRec.sentence3" = "Les bords de la plaie semblent bien rapproch\U00E9s, sans signe d\U2019infection.";
+"onboarding.voiceRec.sentence4" = "J\U2019examine l\U2019imagerie maintenant \U2014 aucun d\U00E9placement de fracture visible.";
 
 /* ── Sp\U00E9cialit\U00E9s ────────────────────────────── */
 "specialty.orthopedic_surgery" = "Chirurgie orthop\U00E9dique";
@@ -122,12 +230,19 @@
 /* ── Profil ───────────────────────────────────────────── */
 "profile.title" = "Profil";
 "profile.defaultName" = "M\U00E9decin";
-"profile.voiceEnrolled" = "Profil vocal enregistr\U00E9";
-"profile.rerecordVoice" = "R\U00E9enregistrer le profil vocal";
-"profile.deleteVoice" = "Supprimer le profil vocal";
-"profile.noVoice" = "Aucun profil vocal";
-"profile.setupVoice" = "Configurer le profil vocal";
-"profile.sectionVoice" = "Profil vocal";
+"profile.voiceEnrolled" = "Identit\U00E9 vocale configur\U00E9e";
+"profile.voiceEnrolledSub" = "Aurion peut distinguer votre voix de celle de votre patient.";
+"profile.rerecordVoice" = "R\U00E9enregistrer l\U2019identit\U00E9 vocale";
+"profile.deleteVoice" = "Supprimer l\U2019identit\U00E9 vocale";
+"profile.noVoice" = "Aucune identit\U00E9 vocale";
+"profile.setupVoice" = "Configurer votre identit\U00E9 vocale";
+"profile.setupVoiceSub" = "Enregistrez 4 courtes phrases pour qu\U2019Aurion sache quelle voix est la v\U00F4tre.";
+"profile.startVoice" = "Configurer l\U2019identit\U00E9 vocale";
+"profile.sectionVoice" = "Identit\U00E9 vocale";
+"profile.sectionTeam" = "Membres de l\U2019\U00E9quipe";
+"profile.noTeam" = "Aucun membre d\U2019\U00E9quipe configur\U00E9";
+"profile.editTeam" = "Modifier les membres de l\U2019\U00E9quipe";
+"profile.signOut" = "Se d\U00E9connecter";
 "profile.practiceType" = "Type de pratique";
 "profile.primarySpecialty" = "Sp\U00E9cialit\U00E9 principale";
 "profile.preferredTemplates" = "Mod\U00E8les pr\U00E9f\U00E9r\U00E9s";
@@ -183,3 +298,217 @@
 /* ── Commun ───────────────────────────────────────────── */
 "common.done" = "Termin\U00E9";
 "common.cancel" = "Annuler";
+"common.retry" = "R\U00E9essayer";
+"common.skip" = "Passer";
+
+/* ── Connexion (suite) ────────────────────────────────── */
+"login.signedIn" = "Connect\U00E9";
+"login.signingIn" = "Connexion\U2026";
+"login.firstTimeHint" = "Premier acc\U00E8s\U202F? Utilisez le mot de passe temporaire envoy\U00E9 par votre administrateur \U2014 Aurion vous invitera \U00E0 en d\U00E9finir un nouveau.";
+"login.backendLookupFailed" = "Connect\U00E9, mais la r\U00E9cup\U00E9ration c\U00F4t\U00E9 serveur a \U00E9chou\U00E9 : %@";
+"login.mfaUnsupported" = "L\U2019authentification multifacteur est activ\U00E9e, mais cette version ne peut pas demander de code. Contactez l\U2019administrateur.";
+
+/* ── Nouveau mot de passe ─────────────────────────────── */
+"newpw.title" = "D\U00E9finir un nouveau mot de passe";
+"newpw.forUser" = "Pour %@";
+"newpw.newPassword" = "Nouveau mot de passe";
+"newpw.confirmPassword" = "Confirmer le mot de passe";
+"newpw.updating" = "Mise \U00E0 jour\U2026";
+"newpw.update" = "Mettre \U00E0 jour le mot de passe";
+"newpw.policy.length" = "Au moins 12 caract\U00E8res";
+"newpw.policy.upper" = "Une lettre majuscule";
+"newpw.policy.lower" = "Une lettre minuscule";
+"newpw.policy.digit" = "Un chiffre";
+"newpw.policy.symbol" = "Un symbole";
+"newpw.policy.match" = "Confirmation identique";
+
+/* ── Inscription ──────────────────────────────────────── */
+"register.title" = "Cr\U00E9er votre compte";
+"register.fullName" = "NOM COMPLET";
+"register.email" = "COURRIEL";
+"register.password" = "MOT DE PASSE";
+"register.confirmPassword" = "CONFIRMER LE MOT DE PASSE";
+"register.fullNamePlaceholder" = "Dr Jane Doe";
+"register.emailPlaceholder" = "vous@aurion.health";
+"register.passwordPlaceholder" = "Au moins 8 caract\U00E8res";
+"register.confirmPlaceholder" = "Resaisir le mot de passe";
+"register.passwordMismatch" = "Les mots de passe ne correspondent pas.";
+"register.createAccount" = "Cr\U00E9er le compte";
+"register.haveAccount" = "Vous avez d\U00E9j\U00E0 un compte ?";
+"register.phiNotice" = "En cr\U00E9ant un compte, vous acceptez de traiter les RPS conform\U00E9ment aux politiques de votre \U00E9tablissement.";
+"register.errorExists" = "Un compte avec ce courriel existe d\U00E9j\U00E0.";
+"register.errorGeneric" = "\U00C9chec de l\U2019inscription : %@";
+
+/* ── R\U00E9cup\U00E9ration de session (suite) ────────── */
+"recovery.message" = "Une session %@ a \U00E9t\U00E9 interrompue. Voulez-vous la r\U00E9cup\U00E9rer ?";
+
+/* ── Masquage sur l\U2019appareil ─────────────────────── */
+"masking.notUploaded.one" = "%d image n\U2019a pas pu \U00EAtre masqu\U00E9e sur l\U2019appareil et n\U2019a pas \U00E9t\U00E9 t\U00E9l\U00E9vers\U00E9e.";
+"masking.notUploaded.many" = "%d images n\U2019ont pas pu \U00EAtre masqu\U00E9es sur l\U2019appareil et n\U2019ont pas \U00E9t\U00E9 t\U00E9l\U00E9vers\U00E9es.";
+
+/* ── Tableau de bord (suite) ──────────────────────────── */
+"dashboard.sessionSummary" = "%d sessions aujourd\U2019hui \U00B7 %d en attente de r\U00E9vision";
+"dashboard.continueRecording" = "Continuer l\U2019enregistrement";
+"dashboard.recordingAgo" = "Enregistrement \U00B7 %@";
+"dashboard.pausedAgo" = "En pause \U00B7 %@";
+"dashboard.recordedAgo" = "Enregistr\U00E9e \U00B7 %@";
+"dashboard.stage2InProgress" = "\U00C9tape 2 en cours";
+"stage2.queued" = "\U00C9tape 2 en file \U00B7 Enregistr\U00E9e %@";
+"stage2.enrichingFrames.one" = "Enrichissement avec %d image\U2026";
+"stage2.enrichingFrames.many" = "Enrichissement avec %d images\U2026";
+"stage2.enriching" = "Enrichissement avec le contexte visuel\U2026";
+"stage2.complete" = "\U00C9tape 2 termin\U00E9e \U00B7 pr\U00EAte pour r\U00E9vision";
+"stage2.failed" = "\U00C9chec de l\U2019\U00E9tape 2 \U00B7 touchez pour r\U00E9viser la note de l\U2019\U00E9tape 1";
+"stage2.a11y" = "\U00C9tape 2 pour %@. %@";
+"stage2.a11yHint" = "Ouvrir la note en cours";
+"dashboard.quickStart" = "D\U00E9marrage rapide";
+"dashboard.recentSessions" = "Sessions r\U00E9centes";
+"dashboard.seeAll" = "Voir tout";
+
+/* ── Type de consultation ─────────────────────────────── */
+"encounter.title" = "Type de consultation";
+"encounter.whoInRoom" = "Qui est dans la pi\U00E8ce ?";
+"encounter.adjustSub" = "Aurion ajustera la capture et le consentement en cons\U00E9quence.";
+"encounter.doctorPatient.title" = "M\U00E9decin + patient";
+"encounter.doctorPatient.sub" = "Visite individuelle standard";
+"encounter.allied.title" = "Avec un membre de l\U2019\U00E9quipe";
+"encounter.allied.sub" = "Infirmi\U00E8re ou adjoint aussi pr\U00E9sent";
+"encounter.trainee.title" = "Avec un stagiaire";
+"encounter.trainee.sub" = "R\U00E9sident, fellow ou \U00E9tudiant";
+"encounter.noTeam" = "Aucun membre d\U2019\U00E9quipe configur\U00E9. Ajoutez-les dans les param\U00E8tres du profil.";
+"encounter.name" = "Nom";
+"encounter.namePlaceholder" = "J. Lee";
+"encounter.role" = "R\U00F4le";
+"encounter.role.resident" = "R\U00E9sident";
+"encounter.role.fellow" = "Fellow";
+"encounter.role.student" = "\U00C9tudiant";
+"common.add" = "Ajouter";
+
+/* ── Contexte pr\U00E9-consultation ───────────────────── */
+"context.title" = "Contexte";
+"context.question" = "Quelle est la raison de la visite ?";
+"context.required" = "Requis. Aurion s\U2019en sert pour orienter la note vers le bon mod\U00E8le de sp\U00E9cialit\U00E9.";
+"context.placeholder" = "p. ex. Douleur au genou droit, 3 semaines apr\U00E8s r\U00E9paration du m\U00E9nisque.";
+"context.tip" = "Aurion s\U2019en sert pour orienter la note structur\U00E9e. Reste sur l\U2019appareil.";
+"context.minHint" = "Saisissez au moins quelques mots de contexte pour d\U00E9marrer la session.";
+"context.captureMode" = "Mode de capture";
+"context.captureModeSub" = "Comment Aurion doit-il observer cette consultation ?";
+
+/* ── Modes de capture ─────────────────────────────────── */
+"captureMode.multimodal.title" = "Multimodal";
+"captureMode.multimodal.sub" = "Audio + vid\U00E9o \U2014 enrichissement visuel complet";
+"captureMode.audioOnly.title" = "Audio seulement";
+"captureMode.audioOnly.sub" = "Audio seulement \U2014 aucune capture vid\U00E9o";
+"captureMode.smartDictation.title" = "Dict\U00E9e intelligente";
+"captureMode.smartDictation.sub" = "Audio + sous-titres en direct \U2014 axe dict\U00E9e";
+
+/* ── \U00C9tats de session ─────────────────────────────── */
+"state.exported" = "Export\U00E9e";
+"state.completed" = "Termin\U00E9e";
+"state.archived" = "Archiv\U00E9e";
+"state.pendingReview" = "\U00C0 r\U00E9viser";
+"state.processing" = "Traitement";
+"state.rec" = "ENR";
+"state.paused" = "En pause";
+"state.consent" = "Consentement";
+
+/* ── Temps relatif ────────────────────────────────────── */
+"time.justNow" = "\U00C0 l\U2019instant";
+"time.minAgo" = "il y a %d min";
+"time.hrAgo" = "il y a %d h";
+"time.yesterday" = "Hier";
+
+/* ── Accessibilit\U00E9 ───────────────────────────────── */
+"a11y.openProfile" = "Ouvrir le profil";
+"a11y.profileAvatar" = "Avatar du profil";
+"a11y.progress" = "Progression";
+"a11y.logoTagline" = "Aurion \U2014 la r\U00E9f\U00E9rence en IA clinique";
+"a11y.sortSessions" = "Trier les sessions";
+
+/* ── Commun (suite) ───────────────────────────────────── */
+"common.edit" = "Modifier";
+"common.save" = "Enregistrer";
+
+/* ── R\U00E9vision de note ────────────────────────────── */
+"noteReview.title" = "R\U00E9viser la note";
+"noteReview.editConflict" = "Modifier le conflit";
+"noteReview.editConflictSub" = "Remplacez l\U2019\U00E9nonc\U00E9 en conflit. Le texte original est conserv\U00E9 dans le journal d\U2019audit.";
+"noteReview.conflictsToResolve.one" = "%d conflit \U00E0 r\U00E9soudre";
+"noteReview.conflictsToResolve.many" = "%d conflits \U00E0 r\U00E9soudre";
+"noteReview.show" = "Afficher";
+"noteReview.a11yScrollConflict" = "Aller au premier conflit";
+"noteReview.stage2InProgress" = "Enrichissement visuel en cours\U2026";
+"noteReview.stage2Failed" = "\U00C9chec de l\U2019\U00E9tape 2 : %@. Vous pouvez tout de m\U00EAme approuver la note de l\U2019\U00E9tape 1.";
+"noteReview.approved" = "Note approuv\U00E9e";
+"noteReview.conflictBadge" = "CONFLIT";
+"noteReview.optionalBadge" = "OPTIONNEL";
+"noteReview.optionalPlaceholder" = "Optionnel \U2014 se remplit seulement si de l\U2019imagerie a \U00E9t\U00E9 montr\U00E9e pendant la consultation.";
+"noteReview.noContent" = "Aucun contenu captur\U00E9 pour cette section.";
+"noteReview.sources" = "SOURCES";
+"noteReview.editedBadge" = "MODIFI\U00C9";
+"noteReview.conflictHint" = "Conflit visuel/audio \U2014 \U00E0 r\U00E9soudre avant l\U2019approbation.";
+"noteReview.acceptVisual" = "Accepter le visuel";
+"noteReview.rejectVisual" = "Rejeter le visuel";
+"noteReview.conflictResolveFailed" = "\U00C9chec de la r\U00E9solution du conflit : %@";
+"noteReview.loading" = "Chargement de la note\U2026";
+"noteReview.sectionsEdited.one" = "%d section modifi\U00E9e";
+"noteReview.sectionsEdited.many" = "%d sections modifi\U00E9es";
+"noteReview.saving" = "Enregistrement\U2026";
+"noteReview.finishing" = "Finalisation de l\U2019enrichissement visuel\U2026";
+"noteReview.finishingFrames.one" = "Finalisation de l\U2019enrichissement visuel \U00B7 %d image trait\U00E9e\U2026";
+"noteReview.finishingFrames.many" = "Finalisation de l\U2019enrichissement visuel \U00B7 %d images trait\U00E9es\U2026";
+"noteReview.conflictsMustResolve.one" = "%d conflit doit \U00EAtre r\U00E9solu avant l\U2019approbation.";
+"noteReview.conflictsMustResolve.many" = "%d conflits doivent \U00EAtre r\U00E9solus avant l\U2019approbation.";
+"noteReview.readyToSign" = "Pr\U00EAt \U00E0 signer et exporter.";
+"noteReview.sectionsCount" = "%d sections sur %d";
+"noteReview.finishingShort" = "Finalisation\U2026";
+"noteReview.signing" = "Signature\U2026";
+"noteReview.approveSign" = "Approuver et signer";
+"noteReview.stillProcessing" = "La note est encore en traitement. R\U00E9essayez dans un instant.";
+"noteReview.notFound" = "Note introuvable sur le serveur.";
+"noteReview.sessionExpired" = "Session expir\U00E9e \U2014 veuillez vous reconnecter.";
+"noteReview.serverError" = "Erreur serveur (%d). R\U00E9essayez.";
+
+/* ── Exportation ──────────────────────────────────────── */
+"export.comingSoon" = "Bient\U00F4t disponible";
+"export.title" = "Exporter la note clinique";
+"export.subtitle" = "G\U00E9n\U00E9rez un %@ pour vos dossiers.";
+"export.mime.docx" = "Document Microsoft Word";
+"export.mime.pdf" = "Format PDF";
+"export.mime.text" = "Fichier texte brut";
+"export.format" = "Format";
+"export.estSize" = "Taille estim\U00E9e";
+"export.phi" = "RPS";
+"export.scrubbed" = "Nettoy\U00E9es";
+"export.exportAs" = "Exporter en %@";
+"export.exporting" = "Exportation de la note\U2026";
+"export.prep" = "Pr\U00E9paration du document\U2026";
+"export.formatting" = "Mise en forme des sections\U2026";
+"export.generating" = "G\U00E9n\U00E9ration du fichier\U2026";
+"export.finalizing" = "Finalisation\U2026";
+"export.done" = "Note export\U00E9e";
+"export.doneSub" = "Le fichier %@ est pr\U00EAt. Le nettoyage des donn\U00E9es brutes a \U00E9t\U00E9 d\U00E9clench\U00E9.";
+"export.share" = "Partager %@";
+"export.purged.one" = "Donn\U00E9es brutes locales purg\U00E9es \U00B7 %d artefact";
+"export.purged.many" = "Donn\U00E9es brutes locales purg\U00E9es \U00B7 %d artefacts";
+"export.notLoaded" = "Note pas encore charg\U00E9e \U2014 veuillez r\U00E9essayer.";
+"export.failed" = "\U00C9chec de l\U2019exportation : %@";
+"export.failedShort" = "\U00C9chec de l\U2019exportation";
+
+/* ── Document de note (lecture seule / PDF) ───────────── */
+"noteDoc.percentComplete" = "%d %% termin\U00E9";
+"noteDoc.emrComingSoon" = "Int\U00E9gration DME \U00B7 Bient\U00F4t disponible";
+"noteDoc.awaitingVisual" = "En attente d\U2019enrichissement visuel.";
+"noteDoc.noContent" = "Aucun contenu captur\U00E9.";
+"noteDoc.status.pending" = "En attente";
+"noteDoc.status.empty" = "Vide";
+"noteDoc.status.failed" = "\U00C9chec";
+
+/* ── Note de session ──────────────────────────────────── */
+"sessionNote.noNote" = "Aucune note disponible";
+"sessionNote.noNoteSub" = "La note n\U2019a pas pu \U00EAtre charg\U00E9e.";
+"sessionNote.copied" = "Copi\U00E9 dans le presse-papiers";
+"sessionNote.a11yCopy" = "Copier la note";
+"sessionNote.a11yCopyHint" = "Copie le texte format\U00E9 de la note dans le presse-papiers.";
+"sessionNote.a11yExport" = "Exporter la note";
+"sessionNote.a11yExportHint" = "Exporte la note sous forme de document Word.";

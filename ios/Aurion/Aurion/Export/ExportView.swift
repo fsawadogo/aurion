@@ -40,9 +40,9 @@ struct ExportView: View {
 
         var mimeDescription: String {
             switch self {
-            case .docx: return "Microsoft Word Document"
-            case .pdf: return "Portable Document Format"
-            case .text: return "Plain Text File"
+            case .docx: return L("export.mime.docx")
+            case .pdf: return L("export.mime.pdf")
+            case .text: return L("export.mime.text")
             }
         }
 
@@ -120,7 +120,7 @@ struct ExportView: View {
                             .font(.system(size: 13, weight: .bold))
 
                         if !format.isAvailable {
-                            Text("Coming Soon")
+                            Text(L("export.comingSoon"))
                                 .font(.system(size: 9, weight: .medium))
                                 .foregroundColor(.secondary.opacity(0.6))
                         }
@@ -161,10 +161,10 @@ struct ExportView: View {
             }
 
             VStack(spacing: AurionSpacing.sm) {
-                Text("Export Clinical Note")
+                Text(L("export.title"))
                     .aurionTitle()
 
-                Text("Generate a \(selectedFormat.mimeDescription) for your records.")
+                Text(L("export.subtitle", selectedFormat.mimeDescription))
                     .font(.system(size: 15, weight: .regular))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -173,17 +173,17 @@ struct ExportView: View {
 
             // File info card
             HStack(spacing: AurionSpacing.lg) {
-                fileInfoItem(icon: "doc.text", label: "Format", value: selectedFormat.rawValue)
+                fileInfoItem(icon: "doc.text", label: L("export.format"), value: selectedFormat.rawValue)
                 Divider().frame(height: 32)
-                fileInfoItem(icon: "internaldrive", label: "Est. Size", value: "~25 KB")
+                fileInfoItem(icon: "internaldrive", label: L("export.estSize"), value: "~25 KB")
                 Divider().frame(height: 32)
-                fileInfoItem(icon: "lock.shield", label: "PHI", value: "Scrubbed")
+                fileInfoItem(icon: "lock.shield", label: L("export.phi"), value: L("export.scrubbed"))
             }
             .padding(AurionSpacing.lg)
             .background(Color.aurionCardBackground)
             .cornerRadius(AurionSpacing.sm)
 
-            Button("Export as \(selectedFormat.rawValue)") {
+            Button(L("export.exportAs", selectedFormat.rawValue)) {
                 exportNote()
             }
             .buttonStyle(AurionPrimaryButtonStyle())
@@ -222,7 +222,7 @@ struct ExportView: View {
             }
 
             VStack(spacing: AurionSpacing.sm) {
-                Text("Exporting note...")
+                Text(L("export.exporting"))
                     .font(.system(size: 17, weight: .semibold))
                     .foregroundColor(.aurionTextPrimary)
 
@@ -257,13 +257,13 @@ struct ExportView: View {
 
     private var progressLabel: String {
         if exportProgress < 0.3 {
-            return "Preparing document..."
+            return L("export.prep")
         } else if exportProgress < 0.6 {
-            return "Formatting sections..."
+            return L("export.formatting")
         } else if exportProgress < 0.9 {
-            return "Generating file..."
+            return L("export.generating")
         } else {
-            return "Finalizing..."
+            return L("export.finalizing")
         }
     }
 
@@ -275,10 +275,10 @@ struct ExportView: View {
                 .transition(AurionTransition.scaleIn)
 
             VStack(spacing: AurionSpacing.sm) {
-                Text("Note Exported")
+                Text(L("export.done"))
                     .aurionTitle()
 
-                Text("The \(selectedFormat.rawValue) file is ready. Raw data cleanup has been triggered.")
+                Text(L("export.doneSub", selectedFormat.rawValue))
                     .font(.system(size: 15, weight: .regular))
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -292,7 +292,7 @@ struct ExportView: View {
                     } label: {
                         HStack {
                             Image(systemName: "square.and.arrow.up")
-                            Text("Share \(selectedFormat.rawValue)")
+                            Text(L("export.share", selectedFormat.rawValue))
                         }
                     }
                     .buttonStyle(AurionPrimaryButtonStyle())
@@ -311,7 +311,7 @@ struct ExportView: View {
                 HStack(spacing: AurionSpacing.xs) {
                     Image(systemName: "checkmark.shield.fill")
                         .foregroundColor(.clinicalNormal)
-                    Text("Local raw data purged · \(report.totalArtifactsPurged) artifact\(report.totalArtifactsPurged == 1 ? "" : "s")")
+                    Text(Lplural("export.purged", report.totalArtifactsPurged))
                         .font(.system(size: 12, weight: .medium))
                         .foregroundColor(.aurionTextSecondary)
                 }
@@ -343,7 +343,7 @@ struct ExportView: View {
 
     private func exportNote() {
         guard let note else {
-            errorMessage = "Note not loaded yet — please retry."
+            errorMessage = L("export.notLoaded")
             return
         }
         isExporting = true
@@ -414,7 +414,7 @@ struct ExportView: View {
                 )
                 await MainActor.run { purgeReport = report }
             } catch {
-                errorMessage = "Export failed: \(error.localizedDescription)"
+                errorMessage = L("export.failed", error.localizedDescription)
             }
             isExporting = false
         }
@@ -426,9 +426,7 @@ struct ExportView: View {
     /// note.specialty gives us the title; date defaults to the export
     /// timestamp since the note payload doesn't carry the encounter date.
     private func noteDisplayStrings(for sessionId: String, fallbackNote: NoteResponse) -> (String, String) {
-        let title = fallbackNote.specialty
-            .replacingOccurrences(of: "_", with: " ")
-            .capitalized
+        let title = localizedSpecialty(fallbackNote.specialty)
         let f = DateFormatter()
         f.dateStyle = .medium
         f.timeStyle = .short

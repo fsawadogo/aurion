@@ -71,8 +71,8 @@ struct ContentView: View {
             appState.checkVoiceEnrollment()
             checkForCrashRecovery()
         }
-        .alert("Incomplete Session Detected", isPresented: $showRecoveryAlert) {
-            Button("Recover") {
+        .alert(L("recovery.title"), isPresented: $showRecoveryAlert) {
+            Button(L("recovery.recover")) {
                 guard let session = recoveredSession else { return }
                 Task {
                     // Validates against the backend, cold-starts sources,
@@ -85,13 +85,13 @@ struct ContentView: View {
                     }
                 }
             }
-            Button("Discard", role: .destructive) {
+            Button(L("recovery.discard"), role: .destructive) {
                 SessionPersistence.clear()
                 recoveredSession = nil
             }
         } message: {
             if let session = recoveredSession {
-                Text("A \(session.specialty.replacingOccurrences(of: "_", with: " ")) session was interrupted. Would you like to recover it?")
+                Text(L("recovery.message", session.specialty.replacingOccurrences(of: "_", with: " ")))
             }
         }
     }
@@ -119,7 +119,7 @@ struct ProcessingView: View {
 
                 CircularProgressRing(progress: 0.7, color: .aurionGold, lineWidth: 6, size: 80)
 
-                Text("Processing Session")
+                Text(L("processing.title"))
                     .aurionHeadline()
 
                 Text(status)
@@ -169,7 +169,7 @@ private struct Stage1RetryPrompt: View {
                 .font(.footnote)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
-            Button("Retry", action: onRetry)
+            Button(L("common.retry"), action: onRetry)
                 .buttonStyle(.borderedProminent)
         }
         .padding(16)
@@ -192,15 +192,15 @@ private struct MaskingRetryPrompt: View {
 
     var body: some View {
         VStack(spacing: 12) {
-            Text("\(failedCount) frame\(failedCount == 1 ? "" : "s") could not be masked on-device and were not uploaded.")
+            Text(Lplural("masking.notUploaded", failedCount))
                 .font(.subheadline)
                 .foregroundColor(.primary)
                 .multilineTextAlignment(.center)
 
             HStack(spacing: 12) {
-                Button("Retry", action: onRetry)
+                Button(L("common.retry"), action: onRetry)
                     .buttonStyle(.borderedProminent)
-                Button("Skip", role: .destructive, action: onSkip)
+                Button(L("common.skip"), role: .destructive, action: onSkip)
                     .buttonStyle(.bordered)
             }
         }
@@ -280,14 +280,14 @@ struct LoginView: View {
                 Spacer()
 
                 VStack(spacing: 16) {
-                    Text("Sign in")
+                    Text(L("login.signIn"))
                         .font(.system(size: 20, weight: .semibold))
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     VStack(spacing: 12) {
                         loginField(
-                            label: "Email",
+                            label: L("login.email"),
                             text: $email,
                             field: .email,
                             keyboard: .emailAddress,
@@ -298,7 +298,7 @@ struct LoginView: View {
                         }
 
                         loginField(
-                            label: "Password",
+                            label: L("login.password"),
                             text: $password,
                             field: .password,
                             secure: true,
@@ -318,14 +318,14 @@ struct LoginView: View {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 16, weight: .bold))
                                     .foregroundColor(.aurionNavy)
-                                Text("Signed in")
+                                Text(L("login.signedIn"))
                             } else if isSigningIn {
                                 ProgressView().tint(.aurionNavy)
-                                Text("Signing in…")
+                                Text(L("login.signingIn"))
                             } else {
                                 Image(systemName: "arrow.right.circle.fill")
                                     .font(.system(size: 16, weight: .semibold))
-                                Text("Sign in")
+                                Text(L("login.signIn"))
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -343,7 +343,7 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    Text("First-time access? Use the temporary password your administrator sent — Aurion will prompt you to set a new one.")
+                    Text(L("login.firstTimeHint"))
                         .font(.system(size: 11))
                         .foregroundColor(Color.aurionOnNavyFootnote)
                         .multilineTextAlignment(.leading)
@@ -473,7 +473,7 @@ struct LoginView: View {
                     appState.applyAuth(userId: me.userId, role: me.role)
                 } catch {
                     isSigningIn = false
-                    loginError = "Signed in but backend lookup failed: \(error.localizedDescription)"
+                    loginError = L("login.backendLookupFailed", error.localizedDescription)
                     AurionHaptics.notification(.error)
                 }
             }
@@ -482,7 +482,7 @@ struct LoginView: View {
             newPasswordChallenge = (session: session, username: username)
         case .mfaRequired:
             isSigningIn = false
-            loginError = "MFA is enabled on this pool, but this build can't prompt for a code. Contact admin."
+            loginError = L("login.mfaUnsupported")
             AurionHaptics.notification(.error)
         }
     }
@@ -540,7 +540,7 @@ private struct NewPasswordView: View {
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: "chevron.left")
-                            Text("Cancel")
+                            Text(L("common.cancel"))
                         }
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundColor(.white.opacity(0.8))
@@ -554,19 +554,19 @@ private struct NewPasswordView: View {
 
                 VStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
-                        Text("Set a new password")
+                        Text(L("newpw.title"))
                             .font(.system(size: 22, weight: .semibold))
                             .foregroundColor(.white)
-                        Text("For \(challenge.username)")
+                        Text(L("newpw.forUser", challenge.username))
                             .font(.system(size: 13))
                             .foregroundColor(Color.aurionOnNavySecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
 
-                    field("New password", text: $newPassword, field: .newPassword) {
+                    field(L("newpw.newPassword"), text: $newPassword, field: .newPassword) {
                         focused = .confirm
                     }
-                    field("Confirm password", text: $confirm, field: .confirm) {
+                    field(L("newpw.confirmPassword"), text: $confirm, field: .confirm) {
                         if canSubmit { Task { await submit() } }
                     }
 
@@ -580,11 +580,11 @@ private struct NewPasswordView: View {
                         HStack(spacing: 10) {
                             if isSubmitting {
                                 ProgressView().tint(.aurionNavy)
-                                Text("Updating…")
+                                Text(L("newpw.updating"))
                             } else {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 16, weight: .semibold))
-                                Text("Update password")
+                                Text(L("newpw.update"))
                             }
                         }
                         .frame(maxWidth: .infinity)
@@ -649,12 +649,12 @@ private struct NewPasswordView: View {
 
     private var policyChecklist: some View {
         VStack(alignment: .leading, spacing: 4) {
-            policyRow("At least 12 characters", ok: newPassword.count >= 12)
-            policyRow("One uppercase letter", ok: newPassword.range(of: #"[A-Z]"#, options: .regularExpression) != nil)
-            policyRow("One lowercase letter", ok: newPassword.range(of: #"[a-z]"#, options: .regularExpression) != nil)
-            policyRow("One digit", ok: newPassword.range(of: #"\d"#, options: .regularExpression) != nil)
-            policyRow("One symbol", ok: newPassword.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil)
-            policyRow("Confirm matches", ok: !confirm.isEmpty && newPassword == confirm)
+            policyRow(L("newpw.policy.length"), ok: newPassword.count >= 12)
+            policyRow(L("newpw.policy.upper"), ok: newPassword.range(of: #"[A-Z]"#, options: .regularExpression) != nil)
+            policyRow(L("newpw.policy.lower"), ok: newPassword.range(of: #"[a-z]"#, options: .regularExpression) != nil)
+            policyRow(L("newpw.policy.digit"), ok: newPassword.range(of: #"\d"#, options: .regularExpression) != nil)
+            policyRow(L("newpw.policy.symbol"), ok: newPassword.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil)
+            policyRow(L("newpw.policy.match"), ok: !confirm.isEmpty && newPassword == confirm)
         }
     }
 
@@ -731,15 +731,15 @@ struct RegisterView: View {
                         .padding(.bottom, 32)
 
                     VStack(spacing: 14) {
-                        Text("Create your account")
+                        Text(L("register.title"))
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.bottom, 4)
 
                         labelledField(
-                            label: "FULL NAME",
-                            placeholder: "Dr. Jane Doe",
+                            label: L("register.fullName"),
+                            placeholder: L("register.fullNamePlaceholder"),
                             text: $fullName,
                             secure: false,
                             field: .name,
@@ -748,8 +748,8 @@ struct RegisterView: View {
                         )
 
                         labelledField(
-                            label: "EMAIL",
-                            placeholder: "you@aurion.health",
+                            label: L("register.email"),
+                            placeholder: L("register.emailPlaceholder"),
                             text: $email,
                             secure: false,
                             field: .email,
@@ -758,8 +758,8 @@ struct RegisterView: View {
                         )
 
                         labelledField(
-                            label: "PASSWORD",
-                            placeholder: "At least 8 characters",
+                            label: L("register.password"),
+                            placeholder: L("register.passwordPlaceholder"),
                             text: $password,
                             secure: true,
                             field: .password,
@@ -768,8 +768,8 @@ struct RegisterView: View {
                         )
 
                         labelledField(
-                            label: "CONFIRM PASSWORD",
-                            placeholder: "Re-enter password",
+                            label: L("register.confirmPassword"),
+                            placeholder: L("register.confirmPlaceholder"),
                             text: $confirmPassword,
                             secure: true,
                             field: .confirm,
@@ -778,7 +778,7 @@ struct RegisterView: View {
                         )
 
                         if !confirmPassword.isEmpty && password != confirmPassword {
-                            Text("Passwords don't match.")
+                            Text(L("register.passwordMismatch"))
                                 .font(.system(size: 12))
                                 .foregroundColor(Color.aurionOnNavyError)
                                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -792,7 +792,7 @@ struct RegisterView: View {
                                 if isSubmitting {
                                     ProgressView().tint(.aurionNavy)
                                 }
-                                Text("Create Account")
+                                Text(L("register.createAccount"))
                             }
                             .frame(maxWidth: .infinity)
                         }
@@ -808,10 +808,10 @@ struct RegisterView: View {
                         }
 
                         HStack(spacing: 6) {
-                            Text("Already have an account?")
+                            Text(L("register.haveAccount"))
                                 .font(.system(size: 13))
                                 .foregroundColor(Color.aurionOnNavySecondary)
-                            Button("Sign in", action: onSwitchToLogin)
+                            Button(L("login.signIn"), action: onSwitchToLogin)
                                 .font(.system(size: 13, weight: .semibold))
                                 .foregroundColor(.aurionGold)
                         }
@@ -826,7 +826,7 @@ struct RegisterView: View {
                     )
                     .padding(.horizontal, 24)
 
-                    Text("By creating an account you agree to handle PHI in accordance with your facility's policies.")
+                    Text(L("register.phiNotice"))
                         .font(.system(size: 11))
                         .tracking(0.2)
                         .foregroundColor(Color.aurionOnNavyFootnote)
@@ -898,10 +898,10 @@ struct RegisterView: View {
             appState.applyAuth(userId: resp.userId, role: role)
             AurionHaptics.notification(.success)
         } catch APIError.conflict(let body) {
-            registerError = parseDetail(body) ?? "An account with that email already exists."
+            registerError = parseDetail(body) ?? L("register.errorExists")
             AurionHaptics.notification(.error)
         } catch {
-            registerError = "Sign-up failed: \(error.localizedDescription)"
+            registerError = L("register.errorGeneric", error.localizedDescription)
             AurionHaptics.notification(.error)
         }
     }

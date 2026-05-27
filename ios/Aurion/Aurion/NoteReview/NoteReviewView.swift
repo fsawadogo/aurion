@@ -121,10 +121,10 @@ struct NoteReviewView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            AurionNavBar(title: "Review Note") {
-                AurionTextButton(label: "Back") { onDismiss() }
+            AurionNavBar(title: L("noteReview.title")) {
+                AurionTextButton(label: L("setup.back")) { onDismiss() }
             } trailing: {
-                AurionTextButton(label: isEditing ? "Done" : "Edit") {
+                AurionTextButton(label: isEditing ? L("common.done") : L("common.edit")) {
                     if isEditing {
                         draftEdits.removeAll()
                     } else if let n = note {
@@ -170,7 +170,7 @@ struct NoteReviewView: View {
                 }
             } else {
                 Spacer()
-                ProgressView("Loading note…")
+                ProgressView(L("noteReview.loading"))
                 Spacer()
             }
         }
@@ -237,10 +237,10 @@ struct NoteReviewView: View {
             set: { conflictBeingEdited?.draft = $0 }
         )
         return VStack(alignment: .leading, spacing: 16) {
-            Text("Edit conflict")
+            Text(L("noteReview.editConflict"))
                 .font(.system(size: 20, weight: .bold))
                 .foregroundColor(.aurionTextPrimary)
-            Text("Replace the conflicting claim. The original text is preserved in the audit log.")
+            Text(L("noteReview.editConflictSub"))
                 .font(.system(size: 13))
                 .foregroundColor(.aurionTextSecondary)
             TextEditor(text: draftBinding)
@@ -255,10 +255,10 @@ struct NoteReviewView: View {
                         .stroke(Color.aurionBorder, lineWidth: 1)
                 )
             HStack(spacing: 12) {
-                Button("Cancel") { conflictBeingEdited = nil }
+                Button(L("common.cancel")) { conflictBeingEdited = nil }
                     .buttonStyle(.bordered)
                 Spacer()
-                Button("Save") {
+                Button(L("common.save")) {
                     let draft = conflictBeingEdited?.draft ?? target.draft
                     let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
                     guard !trimmed.isEmpty,
@@ -296,7 +296,7 @@ struct NoteReviewView: View {
                     // had. Anchored on the count so a resolved conflict
                     // re-fires the effect for the remaining ones.
                     .symbolEffect(.pulse, options: .repeating, value: count)
-                Text("\(count) conflict\(count == 1 ? "" : "s") to resolve")
+                Text(Lplural("noteReview.conflictsToResolve", count))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.aurionStatusConflict)
                 Spacer()
@@ -307,7 +307,7 @@ struct NoteReviewView: View {
                             conflictsBannerScrollProxy?.scrollTo(firstID, anchor: .top)
                         }
                     } label: {
-                        Text("Show")
+                        Text(L("noteReview.show"))
                             .font(.system(size: 13, weight: .semibold))
                             .foregroundColor(.aurionStatusConflict)
                             .padding(.horizontal, 12)
@@ -316,7 +316,7 @@ struct NoteReviewView: View {
                             .clipShape(Capsule())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Scroll to first conflict")
+                    .accessibilityLabel(L("noteReview.a11yScrollConflict"))
                 }
             }
             .padding(.horizontal, 16)
@@ -340,7 +340,7 @@ struct NoteReviewView: View {
             HStack(spacing: 10) {
                 ProgressView()
                     .controlSize(.small)
-                Text("Visual enrichment in progress…")
+                Text(L("noteReview.stage2InProgress"))
                     .font(.system(size: 13, weight: .medium))
                     .foregroundColor(.aurionTextPrimary)
                 Spacer()
@@ -380,7 +380,7 @@ struct NoteReviewView: View {
             }
             if status.isFailed {
                 await MainActor.run {
-                    approveError = "Stage 2 failed: \(status.errorMessage ?? "unknown error"). You can still approve the Stage 1 note."
+                    approveError = L("noteReview.stage2Failed", status.errorMessage ?? "unknown error")
                 }
                 return
             }
@@ -392,7 +392,7 @@ struct NoteReviewView: View {
     private var approvedToast: some View {
         VStack(spacing: 12) {
             AurionIconBubble(symbol: "checkmark", tint: .aurionGreen, size: 64, symbolWeight: .bold)
-            Text("Note Approved")
+            Text(L("noteReview.approved"))
                 .font(.system(size: 16, weight: .semibold))
                 .foregroundColor(.aurionTextPrimary)
         }
@@ -463,7 +463,7 @@ struct NoteReviewView: View {
                     .font(.system(size: 18, weight: .bold))
                     .foregroundColor(.aurionTextPrimary)
                 if s.hasConflicts {
-                    Text("CONFLICT")
+                    Text(L("noteReview.conflictBadge"))
                         .font(.system(size: 10, weight: .bold))
                         .tracking(0.6)
                         .foregroundColor(.aurionStatusConflict)
@@ -475,7 +475,7 @@ struct NoteReviewView: View {
                     // Soft "OPTIONAL" chip — pending_video sections never
                     // block approval; Stage 2 vision fills them only if
                     // imaging was actually reviewed during the encounter.
-                    Text("OPTIONAL")
+                    Text(L("noteReview.optionalBadge"))
                         .font(.system(size: 10, weight: .bold))
                         .tracking(0.6)
                         .foregroundColor(.aurionTextSecondary)
@@ -490,8 +490,8 @@ struct NoteReviewView: View {
             // reveal the citation list under this section.
             if body.isEmpty {
                 Text(s.status == "pending_video"
-                     ? "Optional — fills only if imaging was shown during the encounter."
-                     : "No content captured for this section.")
+                     ? L("noteReview.optionalPlaceholder")
+                     : L("noteReview.noContent"))
                     .font(.system(size: 14).italic())
                     .foregroundColor(.aurionTextSecondary)
             } else {
@@ -536,7 +536,7 @@ struct NoteReviewView: View {
         HStack(spacing: 0) {
             Rectangle().fill(Color.aurionGold).frame(width: 2)
             VStack(alignment: .leading, spacing: 10) {
-                Text("SOURCES")
+                Text(L("noteReview.sources"))
                     .font(.system(size: 10, weight: .semibold))
                     .tracking(0.6)
                     .foregroundColor(.aurionTextSecondary)
@@ -554,7 +554,7 @@ struct NoteReviewView: View {
                                 .tracking(0.4)
                                 .foregroundColor(.aurionTextSecondary)
                             if claim.physicianEdited {
-                                Text("EDITED")
+                                Text(L("noteReview.editedBadge"))
                                     .font(.system(size: 9, weight: .bold))
                                     .tracking(0.5)
                                     .foregroundColor(.aurionGold)
@@ -586,7 +586,7 @@ struct NoteReviewView: View {
                     .foregroundColor(.aurionAmber)
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("Visual vs audio conflict — resolve before approval.")
+                    Text(L("noteReview.conflictHint"))
                         .font(.system(size: 11, weight: .semibold))
                         .tracking(0.4)
                         .foregroundColor(.aurionStatusConflict)
@@ -597,13 +597,13 @@ struct NoteReviewView: View {
                 }
             }
             HStack(spacing: 8) {
-                conflictActionButton("Accept visual", inFlight: inFlight) {
+                conflictActionButton(L("noteReview.acceptVisual"), inFlight: inFlight) {
                     Task { await resolveConflict(claim, action: .acceptVisual) }
                 }
-                conflictActionButton("Reject visual", inFlight: inFlight) {
+                conflictActionButton(L("noteReview.rejectVisual"), inFlight: inFlight) {
                     Task { await resolveConflict(claim, action: .rejectVisual) }
                 }
-                conflictActionButton("Edit", inFlight: inFlight) {
+                conflictActionButton(L("common.edit"), inFlight: inFlight) {
                     conflictBeingEdited = ConflictEditTarget(claimId: claim.id, draft: claim.text)
                 }
             }
@@ -655,7 +655,7 @@ struct NoteReviewView: View {
                 extra: ["claim_id": claim.id, "action": action.rawValue]
             )
         } catch {
-            approveError = "Conflict resolution failed: \(error.localizedDescription)"
+            approveError = L("noteReview.conflictResolveFailed", error.localizedDescription)
         }
     }
 
@@ -694,12 +694,12 @@ struct NoteReviewView: View {
 
     private func editingBar(_ n: NoteResponse) -> some View {
         HStack(spacing: 14) {
-            Text("\(draftEdits.count) section\(draftEdits.count == 1 ? "" : "s") edited")
+            Text(Lplural("noteReview.sectionsEdited", draftEdits.count))
                 .font(.system(size: 13))
                 .foregroundColor(.aurionTextSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             AurionGoldButton(
-                label: isSavingEdits ? "Saving…" : "Save",
+                label: isSavingEdits ? L("noteReview.saving") : L("common.save"),
                 size: .sm,
                 disabled: isSavingEdits || draftEdits.isEmpty
             ) {
@@ -740,12 +740,12 @@ struct NoteReviewView: View {
         if stage2Running {
             let frames = stage2Status?.framesProcessed ?? 0
             helpText = frames > 0
-                ? "Finishing visual enrichment · \(frames) frame\(frames == 1 ? "" : "s") processed…"
-                : "Finishing visual enrichment…"
+                ? Lplural("noteReview.finishingFrames", frames)
+                : L("noteReview.finishing")
         } else if conflicts > 0 {
-            helpText = "\(conflicts) conflict\(conflicts == 1 ? "" : "s") must resolve before approval."
+            helpText = Lplural("noteReview.conflictsMustResolve", conflicts)
         } else {
-            helpText = "Ready to sign and export."
+            helpText = L("noteReview.readyToSign")
         }
         let ringColor: Color = stage2Running ? .aurionGold
             : (conflicts > 0 ? .aurionAmber : .aurionGreen)
@@ -770,7 +770,7 @@ struct NoteReviewView: View {
             VStack(alignment: .leading, spacing: 2) {
                 // Numerator/denominator — the missing "5 of 6 sections" hint
                 // so the percentage isn't the only signal.
-                Text("\(populated) of \(totalSections) sections")
+                Text(L("noteReview.sectionsCount", populated, totalSections))
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundColor(.aurionTextPrimary)
                 Text(helpText)
@@ -783,8 +783,8 @@ struct NoteReviewView: View {
             .frame(maxWidth: .infinity, alignment: .leading)
             AurionGoldButton(
                 label: stage2Running
-                    ? "Finishing…"
-                    : (isApproving ? "Signing…" : "Approve & Sign"),
+                    ? L("noteReview.finishingShort")
+                    : (isApproving ? L("noteReview.signing") : L("noteReview.approveSign")),
                 size: .sm,
                 disabled: blocked || isApproving
             ) {
@@ -888,7 +888,7 @@ struct NoteReviewView: View {
             let state = sessionStateFromConflict(body)
             switch state {
             case .stillProcessing:
-                return ApprovalStepResult(realFailure: "Note is still processing. Try again in a moment.")
+                return ApprovalStepResult(realFailure: L("noteReview.stillProcessing"))
             case .alreadyApproved:
                 return ApprovalStepResult(realFailure: nil)
             case .other(let message):
@@ -899,11 +899,11 @@ struct NoteReviewView: View {
             // approval flow falls through to success.
             return ApprovalStepResult(realFailure: nil)
         } catch APIError.notFound {
-            return ApprovalStepResult(realFailure: "Note not found on server.")
+            return ApprovalStepResult(realFailure: L("noteReview.notFound"))
         } catch APIError.unauthorized {
-            return ApprovalStepResult(realFailure: "Session expired — please sign in again.")
+            return ApprovalStepResult(realFailure: L("noteReview.sessionExpired"))
         } catch let APIError.serverError(code) {
-            return ApprovalStepResult(realFailure: "Server error (\(code)). Try again.")
+            return ApprovalStepResult(realFailure: L("noteReview.serverError", code))
         } catch {
             return ApprovalStepResult(realFailure: error.localizedDescription)
         }
