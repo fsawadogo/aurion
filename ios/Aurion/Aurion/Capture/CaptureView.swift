@@ -642,7 +642,18 @@ struct CaptureView: View {
                     }
                 }
             }
-            .disabled(!session.recordButtonEnabled && session.state != .recording && session.state != .paused)
+            // Two distinct disable rules combined:
+            //   1. Before recording starts: respect recordButtonEnabled
+            //      (consent required, etc.)
+            //   2. After recording starts: block Stop until the minimum
+            //      duration elapses so the audio delegate has time to
+            //      deliver its first buffer. Without this guard, tapping
+            //      Start → Stop in <2s leaves audioPCMData empty and the
+            //      next screen shows "Recording was too short".
+            .disabled(
+                ((session.state != .recording && session.state != .paused) && !session.recordButtonEnabled)
+                || ((session.state == .recording || session.state == .paused) && elapsedTime < SessionManager.minimumRecordingSeconds)
+            )
             .accessibilityLabel(
                 (session.state == .recording || session.state == .paused)
                     ? "Stop recording"
@@ -672,6 +683,11 @@ struct CaptureView: View {
                     )
             }
             .opacity(session.state == .recording || session.state == .paused ? 1 : 0)
+            // Same minimum-duration guard as the center record/stop button.
+            // Audio delegate buffers don't arrive until ~500ms–2s after
+            // capture starts; stopping inside that window produces an
+            // empty PCM buffer.
+            .disabled(elapsedTime < SessionManager.minimumRecordingSeconds)
             .accessibilityLabel("Stop recording")
             .accessibilityHint("Ends capture and begins note generation.")
 
