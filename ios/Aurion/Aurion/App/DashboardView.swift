@@ -205,7 +205,14 @@ struct DashboardView: View {
                     .animation(AurionAnimation.smooth, value: displayedTodayCount)
             }
             Spacer()
-            AurionAvatar(initials: avatarInitials, size: 44)
+            Button {
+                AurionHaptics.impact(.light)
+                AppNavigation.shared.requestTab(.profile)
+            } label: {
+                AurionAvatar(initials: avatarInitials, size: 44)
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Open profile")
         }
     }
 
