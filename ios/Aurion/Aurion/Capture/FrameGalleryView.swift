@@ -55,7 +55,7 @@ struct FrameGalleryView: View {
                     .animation(AurionAnimation.smooth, value: source.capturedFrames.count)
                 }
             }
-            .navigationTitle("Captured Frames")
+            .navigationTitle(L("frames.title"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
@@ -66,7 +66,7 @@ struct FrameGalleryView: View {
                         .animation(AurionAnimation.smooth, value: source.capturedFrames.count)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Done") {
+                    Button(L("common.done")) {
                         AurionHaptics.selection()
                         dismiss()
                     }
@@ -82,7 +82,7 @@ struct FrameGalleryView: View {
 
     private var frameCountLabel: String {
         let count = source.capturedFrames.count
-        return "\(count) frame\(count == 1 ? "" : "s")"
+        return Lplural("frames.count", count)
     }
 
     @ViewBuilder
@@ -125,10 +125,10 @@ struct FrameGalleryView: View {
                 .font(.system(size: 48, weight: .light))
                 .foregroundColor(.aurionTextSecondary.opacity(0.6))
                 .symbolEffect(.pulse, options: .repeating)
-            Text("No frames yet")
+            Text(L("frames.empty"))
                 .font(.system(size: 18, weight: .semibold))
                 .foregroundColor(.aurionTextPrimary)
-            Text("Frames appear here as they're captured.\nDefault rate is 1 per second.")
+            Text(L("frames.emptySub"))
                 .font(.system(size: 13))
                 .foregroundColor(.aurionTextSecondary)
                 .multilineTextAlignment(.center)
@@ -174,7 +174,7 @@ private struct FullFrameView: View {
                         .foregroundColor(.white)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button("Close") { dismiss() }
+                    Button(L("common.close")) { dismiss() }
                         .foregroundColor(.aurionGold)
                 }
             }

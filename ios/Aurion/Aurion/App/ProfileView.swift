@@ -28,11 +28,11 @@ struct ProfileView: View {
     }
 
     private var displaySpecialty: String {
-        (appState.physicianProfile?.primarySpecialty ?? "general").displayFormatted
+        localizedSpecialty(appState.physicianProfile?.primarySpecialty ?? "general")
     }
 
     private var displayPracticeType: String {
-        (appState.physicianProfile?.practiceType ?? "clinic").displayFormatted
+        localizedPracticeType(appState.physicianProfile?.practiceType ?? "clinic")
     }
 
     var body: some View {
@@ -56,7 +56,7 @@ struct ProfileView: View {
                 HStack(spacing: AurionSpacing.md) {
                     AurionAvatar(initials: physicianInitials, size: 64)
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(appState.physicianProfile?.displayName ?? "Physician")
+                        Text(appState.physicianProfile?.displayName ?? L("profile.defaultName"))
                             .font(.system(size: 18, weight: .semibold))
                             .foregroundColor(.aurionTextPrimary)
                         Text(displaySpecialty)
@@ -81,10 +81,10 @@ struct ProfileView: View {
                     HStack(spacing: 14) {
                         AurionIconBubble(symbol: "checkmark", tint: .aurionGreen, size: 44, symbolWeight: .bold)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Voice ID set up")
+                            Text(L("profile.voiceEnrolled"))
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(.aurionTextPrimary)
-                            Text("Aurion can tell your voice apart from your patient's.")
+                            Text(L("profile.voiceEnrolledSub"))
                                 .font(.system(size: 12))
                                 .foregroundColor(.aurionTextSecondary)
                                 .lineLimit(2)
@@ -93,12 +93,12 @@ struct ProfileView: View {
                     }
                     .padding(.vertical, 6)
 
-                    Button("Re-record Voice ID") {
+                    Button(L("profile.rerecordVoice")) {
                         appState.isOnboardingComplete = false
                     }
                     .foregroundColor(.aurionTextPrimary)
 
-                    Button("Delete Voice ID", role: .destructive) {
+                    Button(L("profile.deleteVoice"), role: .destructive) {
                         KeychainHelper.shared.deleteVoiceEmbedding()
                         AuditLogger.log(event: .voiceProfileDeleted)
                         appState.checkVoiceEnrollment()
@@ -108,10 +108,10 @@ struct ProfileView: View {
                     HStack(spacing: 14) {
                         AurionIconBubble(symbol: "mic.fill", tint: .aurionGold, size: 44)
                         VStack(alignment: .leading, spacing: 2) {
-                            Text("Set up your Voice ID")
+                            Text(L("profile.setupVoice"))
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(.aurionTextPrimary)
-                            Text("Record 4 short sentences so Aurion knows which voice is yours.")
+                            Text(L("profile.setupVoiceSub"))
                                 .font(.system(size: 12))
                                 .foregroundColor(.aurionTextSecondary)
                                 .lineLimit(2)
@@ -124,7 +124,7 @@ struct ProfileView: View {
                         appState.isOnboardingComplete = false
                     } label: {
                         HStack {
-                            Text("Start Voice ID")
+                            Text(L("profile.startVoice"))
                                 .font(.system(size: 15, weight: .semibold))
                                 .foregroundColor(.aurionTextPrimary)
                             Spacer()
@@ -142,27 +142,27 @@ struct ProfileView: View {
                     .listRowBackground(Color.clear)
                 }
             } header: {
-                SectionHeader(title: "Voice ID")
+                SectionHeader(title: L("profile.sectionVoice"))
             }
 
             // ── Practice Settings ────────────────────────────
             Section {
-                LabeledContent("Practice Type", value: displayPracticeType)
-                LabeledContent("Primary Specialty", value: displaySpecialty)
+                LabeledContent(L("profile.practiceType"), value: displayPracticeType)
+                LabeledContent(L("profile.primarySpecialty"), value: displaySpecialty)
 
                 if let templates = appState.physicianProfile?.preferredTemplates {
-                    LabeledContent("Preferred Templates", value: templates
-                        .map { $0.displayFormatted }
+                    LabeledContent(L("profile.preferredTemplates"), value: templates
+                        .map { localizedSpecialty($0) }
                         .joined(separator: ", "))
                 }
 
                 if let types = appState.physicianProfile?.consultationTypes {
-                    LabeledContent("Visit Types", value: types
-                        .map { $0.displayFormatted }
+                    LabeledContent(L("profile.visitTypes"), value: types
+                        .map { localizedConsultationType($0) }
                         .joined(separator: ", "))
                 }
 
-                Button("Edit Practice Settings") {
+                Button(L("profile.editPractice")) {
                     appState.hasCompletedProfileSetup = false
                 }
                 .foregroundColor(.aurionGold)
@@ -174,7 +174,7 @@ struct ProfileView: View {
             Section {
                 let team = appState.physicianProfile?.alliedHealthTeam ?? []
                 if team.isEmpty {
-                    Text("No team members configured")
+                    Text(L("profile.noTeam"))
                         .aurionCaption()
                 } else {
                     ForEach(team, id: \.name) { member in
@@ -182,12 +182,12 @@ struct ProfileView: View {
                     }
                 }
 
-                Button("Edit Team Members") {
+                Button(L("profile.editTeam")) {
                     showTeamMemberEditor = true
                 }
                 .foregroundColor(.aurionGold)
             } header: {
-                SectionHeader(title: "Team Members")
+                SectionHeader(title: L("profile.sectionTeam"))
             }
 
             // ── Language ─────────────────────────────────────
@@ -196,7 +196,7 @@ struct ProfileView: View {
                     Text("🇬🇧 English").tag("en")
                     Text("🇫🇷 Fran\u{00E7}ais").tag("fr")
                 } label: {
-                    Label("App Language", systemImage: "textformat")
+                    Label(L("profile.appLanguage"), systemImage: "textformat")
                         .foregroundColor(.aurionTextPrimary)
                 }
 
@@ -209,32 +209,32 @@ struct ProfileView: View {
                     Text("🇬🇧 English").tag("en")
                     Text("🇫🇷 Fran\u{00E7}ais").tag("fr")
                 } label: {
-                    Label("Note Output Language", systemImage: "doc.text")
+                    Label(L("profile.noteLanguage"), systemImage: "doc.text")
                         .foregroundColor(.aurionTextPrimary)
                 }
 
-                Text("App Language controls the interface. Note Output Language controls the language your clinical notes are generated in.")
+                Text(L("profile.languageHelp"))
                     .font(.caption)
                     .foregroundColor(.secondary)
             } header: {
-                SectionHeader(title: "Language")
+                SectionHeader(title: L("profile.sectionLanguage"))
             }
 
             // ── Notification Preferences ─────────────────────
             Section {
                 Toggle(isOn: $sessionAlertsEnabled) {
-                    Label("Session Alerts", systemImage: "bell.badge")
+                    Label(L("profile.sessionAlerts"), systemImage: "bell.badge")
                         .foregroundColor(.aurionTextPrimary)
                 }
                 .tint(.aurionGold)
 
                 Toggle(isOn: $noteReadyAlertsEnabled) {
-                    Label("Note Ready", systemImage: "doc.badge.clock")
+                    Label(L("profile.noteReady"), systemImage: "doc.badge.clock")
                         .foregroundColor(.aurionTextPrimary)
                 }
                 .tint(.aurionGold)
             } header: {
-                SectionHeader(title: "Notification Preferences")
+                SectionHeader(title: L("profile.sectionNotifications"))
             }
 
             // ── Privacy & Data (Law 25) ───────────────────────
@@ -242,37 +242,37 @@ struct ProfileView: View {
                 Button {
                     loadMyData()
                 } label: {
-                    Label("View My Data", systemImage: "doc.text.magnifyingglass")
+                    Label(L("profile.viewData"), systemImage: "doc.text.magnifyingglass")
                 }
 
                 Button {
                     exportMyData()
                 } label: {
-                    Label("Export My Data (JSON)", systemImage: "square.and.arrow.up")
+                    Label(L("profile.exportData"), systemImage: "square.and.arrow.up")
                 }
 
                 Button {
                     signOut()
                 } label: {
-                    Label("Sign Out", systemImage: "rectangle.portrait.and.arrow.right")
+                    Label(L("profile.signOut"), systemImage: "rectangle.portrait.and.arrow.right")
                 }
 
                 Button(role: .destructive) {
                     showDeleteConfirmation = true
                 } label: {
-                    Label("Delete My Account", systemImage: "trash")
+                    Label(L("profile.deleteAccount"), systemImage: "trash")
                 }
             } header: {
-                SectionHeader(title: "Privacy & Data")
+                SectionHeader(title: L("profile.sectionPrivacy"))
             } footer: {
-                Text("Under Quebec Law 25, you have the right to access, export, and delete your personal data. Account deletion is permanent and cannot be undone.")
+                Text(L("profile.privacyFooter"))
                     .font(.caption2)
             }
 
             // ── Consent History ───────────────────────────────
             Section {
                 if consentEvents.isEmpty {
-                    Text("No consent events recorded")
+                    Text(L("profile.noConsent"))
                         .aurionCaption()
                 } else {
                     ForEach(consentEvents) { event in
@@ -292,19 +292,19 @@ struct ProfileView: View {
                     }
                 }
             } header: {
-                SectionHeader(title: "Consent History", count: consentEvents.isEmpty ? nil : consentEvents.count)
+                SectionHeader(title: L("profile.sectionConsent"), count: consentEvents.isEmpty ? nil : consentEvents.count)
             }
 
             // ── Session History ───────────────────────────────
             Section {
                 if sessionHistory.isEmpty {
-                    Text("No sessions recorded")
+                    Text(L("profile.noSessionHistory"))
                         .aurionCaption()
                 } else {
                     ForEach(sessionHistory) { session in
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(session.specialty.replacingOccurrences(of: "_", with: " ").capitalized)
+                                Text(localizedSpecialty(session.specialty))
                                     .font(.subheadline)
                                     .foregroundColor(.aurionTextPrimary)
                                 Text(session.date)
@@ -319,58 +319,58 @@ struct ProfileView: View {
                     }
                 }
             } header: {
-                SectionHeader(title: "Session History", count: sessionHistory.isEmpty ? nil : sessionHistory.count)
+                SectionHeader(title: L("profile.sectionSessionHistory"), count: sessionHistory.isEmpty ? nil : sessionHistory.count)
             }
 
             // ── Legal ─────────────────────────────────────────
             Section {
                 Link(destination: URL(string: "https://aurionclinical.com/privacy")!) {
-                    Label("Privacy Policy", systemImage: "lock.doc")
+                    Label(L("profile.privacyPolicy"), systemImage: "lock.doc")
                 }
                 Link(destination: URL(string: "https://aurionclinical.com/terms")!) {
-                    Label("Terms of Service", systemImage: "doc.plaintext")
+                    Label(L("profile.termsOfService"), systemImage: "doc.plaintext")
                 }
                 Link(destination: URL(string: "https://aurionclinical.com/biometric-policy")!) {
-                    Label("Biometric Data Policy", systemImage: "faceid")
+                    Label(L("profile.biometricPolicy"), systemImage: "faceid")
                 }
 
                 // Version info
                 VStack(alignment: .leading, spacing: AurionSpacing.xs) {
                     HStack {
-                        Text("Version")
+                        Text(L("profile.version"))
                             .foregroundColor(.aurionTextPrimary)
                         Spacer()
                         Text("0.1.0")
                             .foregroundColor(.secondary)
                     }
                     HStack {
-                        Text("Build")
+                        Text(L("profile.build"))
                             .foregroundColor(.aurionTextPrimary)
                         Spacer()
                         Text("1")
                             .foregroundColor(.secondary)
                     }
                     HStack {
-                        Text("Environment")
+                        Text(L("profile.environment"))
                             .foregroundColor(.aurionTextPrimary)
                         Spacer()
-                        AurionStatusPill(kind: .conflict, labelOverride: "Development")
+                        AurionStatusPill(kind: .conflict, labelOverride: L("profile.development"))
                     }
                 }
             } header: {
-                SectionHeader(title: "Legal")
+                SectionHeader(title: L("profile.sectionLegal"))
             }
         }
-        .navigationTitle("Profile")
+        .navigationTitle(L("profile.title"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.automatic, for: .navigationBar)
         .onAppear { loadConsentHistory(); loadSessionHistory() }
         .task { await loadProfile() }
-        .alert("Delete Account", isPresented: $showDeleteConfirmation) {
-            Button("Delete Everything", role: .destructive) { deleteAccount() }
-            Button("Cancel", role: .cancel) {}
+        .alert(L("profile.deleteTitle"), isPresented: $showDeleteConfirmation) {
+            Button(L("profile.deleteConfirm"), role: .destructive) { deleteAccount() }
+            Button(L("profile.deleteCancel"), role: .cancel) {}
         } message: {
-            Text("This will permanently delete all your sessions, notes, and metrics. Audit logs will be retained for compliance. This cannot be undone.")
+            Text(L("profile.deleteMessage"))
         }
         .sheet(isPresented: $showDataExport) {
             if let data = try? JSONEncoder().encode(myData) {
@@ -383,7 +383,7 @@ struct ProfileView: View {
                     Color.black.opacity(0.3).ignoresSafeArea()
                     VStack(spacing: AurionSpacing.sm) {
                         ProgressView()
-                        Text("Loading your data...")
+                        Text(L("profile.loadingData"))
                             .font(.caption)
                             .foregroundColor(.white)
                     }

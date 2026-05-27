@@ -19,14 +19,14 @@ struct VoiceExplanationView: View {
                 .aurionBreathingGlow(radius: 36)
                 .aurionStagger(order: 0, baseDelay: 0.05)
 
-            Text("Help Aurion recognize your voice")
+            Text(L("onboarding.voiceExpl.title"))
                 .font(.title)
                 .fontWeight(.bold)
                 .foregroundColor(.aurionTextPrimary)
                 .multilineTextAlignment(.center)
                 .aurionStagger(order: 1)
 
-            Text("Aurion uses a short voice sample to separate your observations from your patient's during visits.\n\nYour recording is processed on this device only and deleted immediately. Nothing is sent to our servers.")
+            Text(L("onboarding.voiceExpl.body"))
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -36,10 +36,10 @@ struct VoiceExplanationView: View {
             Spacer()
 
             VStack(spacing: 12) {
-                AurionGoldButton(label: "Get Started", full: true) {
+                AurionGoldButton(label: L("onboarding.getStarted"), full: true) {
                     onGetStarted()
                 }
-                AurionGhostButton(label: "Skip for now", full: true) {
+                AurionGhostButton(label: L("onboarding.voiceExpl.skip"), full: true) {
                     AuditLogger.log(event: .voiceEnrollmentSkipped)
                     onSkip()
                 }

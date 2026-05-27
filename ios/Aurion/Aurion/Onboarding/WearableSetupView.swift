@@ -20,13 +20,13 @@ struct WearableSetupView: View {
             heroIcon
                 .aurionStagger(order: 0, baseDelay: 0.05)
 
-            Text("Connect Your Glasses")
+            Text(L("onboarding.wearable.title"))
                 .font(.title)
                 .fontWeight(.bold)
                 .foregroundColor(.aurionTextPrimary)
                 .aurionStagger(order: 1)
 
-            Text("Pair your Ray-Ban Meta Smart Glasses or other capture wearable via Bluetooth.")
+            Text(L("onboarding.wearable.sub"))
                 .font(.body)
                 .foregroundColor(.secondary)
                 .multilineTextAlignment(.center)
@@ -49,7 +49,7 @@ struct WearableSetupView: View {
                         ble.startScanning()
                     }
                 }
-                AurionGhostButton(label: "Skip — Use Phone Camera", full: true) {
+                AurionGhostButton(label: L("onboarding.wearable.skip"), full: true) {
                     onComplete()
                 }
             }
@@ -115,7 +115,7 @@ struct WearableSetupView: View {
             }
             .padding(.horizontal, 4)
         } else if ble.isScanning {
-            Text("Scanning for nearby devices…")
+            Text(L("onboarding.wearable.scanning"))
                 .font(.caption)
                 .foregroundColor(.aurionTextSecondary)
         }
@@ -183,15 +183,15 @@ struct WearableSetupView: View {
                     .font(.system(size: 24))
                     .foregroundColor(.aurionGold)
                 VStack(alignment: .leading, spacing: 2) {
-                    Text(ble.pairedDeviceName ?? "Wearable")
+                    Text(ble.pairedDeviceName ?? L("onboarding.wearable.deviceFallback"))
                         .font(.headline)
                         .foregroundColor(.aurionTextPrimary)
-                    Text("Connected")
+                    Text(L("onboarding.wearable.connected"))
                         .font(.caption)
                         .foregroundColor(.aurionGreen)
                 }
                 Spacer()
-                AurionStatusPill(kind: .done, labelOverride: "Paired")
+                AurionStatusPill(kind: .done, labelOverride: L("onboarding.wearable.paired"))
             }
         }
     }
@@ -199,9 +199,9 @@ struct WearableSetupView: View {
     // MARK: - Helpers
 
     private var scanButtonLabel: String {
-        if ble.isScanning { return "Scanning…" }
-        if ble.discoveredDevices.isEmpty { return "Scan for Devices" }
-        return "Scan Again"
+        if ble.isScanning { return L("onboarding.wearable.scanningShort") }
+        if ble.discoveredDevices.isEmpty { return L("onboarding.wearable.scan") }
+        return L("onboarding.wearable.scanAgain")
     }
 
     private func handlePairedAppearance() {

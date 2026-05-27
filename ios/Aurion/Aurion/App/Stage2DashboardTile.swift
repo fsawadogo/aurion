@@ -100,7 +100,7 @@ struct Stage2DashboardTile: View {
                     statusIcon
 
                     VStack(alignment: .leading, spacing: 2) {
-                        Text(session.specialty.displayFormatted)
+                        Text(localizedSpecialty(session.specialty))
                             .font(.headline)
                             .foregroundColor(.aurionTextPrimary)
                         Text(statusLine)
@@ -116,8 +116,8 @@ struct Stage2DashboardTile: View {
                         .foregroundColor(.aurionTextSecondary)
                 }
                 .accessibilityElement(children: .combine)
-                .accessibilityLabel("Stage 2 \(viewModel.status?.status ?? "in progress") for \(session.specialty.displayFormatted). \(statusLine)")
-                .accessibilityHint("Open in-flight note")
+                .accessibilityLabel(L("stage2.a11y", localizedSpecialty(session.specialty), statusLine))
+                .accessibilityHint(L("stage2.a11yHint"))
             }
         }
         .buttonStyle(.plain)
@@ -156,17 +156,17 @@ struct Stage2DashboardTile: View {
     private var statusLine: String {
         switch displayKind {
         case .pending:
-            return "Stage 2 queued · Recorded \(formatRelativeTime(session.createdAt))"
+            return L("stage2.queued", formatRelativeTime(session.createdAt))
         case .running:
             let frames = viewModel.status?.framesProcessed ?? 0
             return frames > 0
-                ? "Enriching with \(frames) frame\(frames == 1 ? "" : "s")…"
-                : "Enriching with visual context…"
+                ? Lplural("stage2.enrichingFrames", frames)
+                : L("stage2.enriching")
         case .completed:
-            return "Stage 2 complete · ready for review"
+            return L("stage2.complete")
         case .failed:
             return viewModel.status?.errorMessage.flatMap { $0.isEmpty ? nil : $0 }
-                ?? "Stage 2 failed · tap to review the Stage 1 note"
+                ?? L("stage2.failed")
         }
     }
 }

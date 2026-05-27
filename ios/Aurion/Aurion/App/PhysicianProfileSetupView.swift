@@ -26,25 +26,27 @@ struct PhysicianProfileSetupView: View {
 
     private let totalSteps = 6
 
-    private let practiceTypes_options: [(id: String, label: String, sub: String, icon: String)] = [
-        ("clinic", "Clinic", "Outpatient practice", "building.2"),
-        ("surgical_center", "Surgical Center", "Procedural facility", "cross.case"),
-        ("hospital", "Hospital", "Inpatient setting", "building.columns"),
+    // Practice-type rows: id + icon are static; the label and subtitle are
+    // resolved through localized helpers at render time (see practiceStep).
+    private let practiceTypes_options: [(id: String, subKey: String, icon: String)] = [
+        ("clinic", "setup.practice.clinic.sub", "building.2"),
+        ("surgical_center", "setup.practice.surgical.sub", "cross.case"),
+        ("hospital", "setup.practice.hospital.sub", "building.columns"),
     ]
 
-    private let specialties: [(id: String, label: String)] = [
-        ("orthopedic_surgery", "Orthopedic Surgery"),
-        ("plastic_surgery", "Plastic Surgery"),
-        ("musculoskeletal", "Musculoskeletal"),
-        ("emergency_medicine", "Emergency Medicine"),
-        ("general", "General"),
+    private let specialties: [String] = [
+        "orthopedic_surgery",
+        "plastic_surgery",
+        "musculoskeletal",
+        "emergency_medicine",
+        "general",
     ]
 
-    private let visitTypes: [(id: String, label: String)] = [
-        ("new_patient", "New Patient"),
-        ("follow_up", "Follow-up"),
-        ("pre_op", "Pre-Op"),
-        ("post_op", "Post-Op"),
+    private let visitTypes: [String] = [
+        "new_patient",
+        "follow_up",
+        "pre_op",
+        "post_op",
     ]
 
     private let languages: [(id: String, label: String, sub: String, flag: String)] = [
@@ -54,12 +56,12 @@ struct PhysicianProfileSetupView: View {
 
     private var stepTitle: String {
         switch step {
-        case 0: return "What type of practice?"
-        case 1: return "Primary specialty?"
-        case 2: return "Common visit types?"
-        case 3: return "Preferred templates?"
-        case 4: return "Output language?"
-        case 5: return "Recording preferences?"
+        case 0: return L("setup.practiceTitle")
+        case 1: return L("setup.specialtyTitle")
+        case 2: return L("setup.visitTitle")
+        case 3: return L("setup.templateTitle")
+        case 4: return L("setup.languageTitle")
+        case 5: return L("setup.recordingTitle")
         default: return ""
         }
     }
@@ -86,11 +88,11 @@ struct PhysicianProfileSetupView: View {
     private var header: some View {
         VStack(spacing: 8) {
             HStack {
-                Text("Step \(step + 1) of \(totalSteps)")
+                Text(L("setup.step", step + 1, totalSteps))
                     .font(.system(size: 12))
                     .foregroundColor(.aurionTextSecondary)
                 Spacer()
-                Button("Skip") {
+                Button(L("setup.skip")) {
                     appState.hasCompletedProfileSetup = true
                 }
                 .font(.system(size: 12))
@@ -110,8 +112,8 @@ struct PhysicianProfileSetupView: View {
             Rectangle().fill(Color.aurionBorder).frame(height: 1)
             AurionGoldButton(
                 label: step == totalSteps - 1
-                    ? (isSaving ? "Saving…" : "Get Started")
-                    : "Continue",
+                    ? (isSaving ? L("setup.saving") : L("setup.getStarted"))
+                    : L("setup.continue"),
                 full: true,
                 disabled: isSaving
             ) {
@@ -157,8 +159,8 @@ struct PhysicianProfileSetupView: View {
             ForEach(self.practiceTypes_options, id: \.id) { o in
                 AurionSelectableCard(
                     icon: o.icon,
-                    title: o.label,
-                    subtitle: o.sub,
+                    title: localizedPracticeType(o.id),
+                    subtitle: L(o.subKey),
                     selected: practiceTypes.contains(o.id)
                 ) {
                     if practiceTypes.contains(o.id) {
@@ -177,9 +179,9 @@ struct PhysicianProfileSetupView: View {
 
     private var specialtyStep: some View {
         VStack(spacing: 8) {
-            ForEach(specialties, id: \.id) { o in
-                radioRow(label: o.label, selected: primarySpecialty == o.id) {
-                    primarySpecialty = o.id
+            ForEach(specialties, id: \.self) { id in
+                radioRow(label: localizedSpecialty(id), selected: primarySpecialty == id) {
+                    primarySpecialty = id
                 }
             }
         }
@@ -187,12 +189,12 @@ struct PhysicianProfileSetupView: View {
 
     private var visitTypesStep: some View {
         VStack(spacing: 8) {
-            ForEach(visitTypes, id: \.id) { o in
-                checkboxRow(label: o.label, on: consultationTypes.contains(o.id)) {
-                    if consultationTypes.contains(o.id) {
-                        consultationTypes.remove(o.id)
+            ForEach(visitTypes, id: \.self) { id in
+                checkboxRow(label: localizedConsultationType(id), on: consultationTypes.contains(id)) {
+                    if consultationTypes.contains(id) {
+                        consultationTypes.remove(id)
                     } else {
-                        consultationTypes.insert(o.id)
+                        consultationTypes.insert(id)
                     }
                 }
             }
@@ -201,12 +203,12 @@ struct PhysicianProfileSetupView: View {
 
     private var templatesStep: some View {
         VStack(spacing: 8) {
-            ForEach(specialties, id: \.id) { o in
-                checkboxRow(label: o.label, on: preferredTemplates.contains(o.id), fontSize: 15) {
-                    if preferredTemplates.contains(o.id) {
-                        preferredTemplates.remove(o.id)
+            ForEach(specialties, id: \.self) { id in
+                checkboxRow(label: localizedSpecialty(id), on: preferredTemplates.contains(id), fontSize: 15) {
+                    if preferredTemplates.contains(id) {
+                        preferredTemplates.remove(id)
                     } else {
-                        preferredTemplates.insert(o.id)
+                        preferredTemplates.insert(id)
                     }
                 }
             }
@@ -220,8 +222,8 @@ struct PhysicianProfileSetupView: View {
             // physician to confirm in PostEncounterView.
             prefsToggleRow(
                 icon: "icloud.and.arrow.up",
-                title: "Auto-upload on stop",
-                subtitle: "Send capture to Aurion as soon as recording ends.",
+                title: L("setup.autoUpload.title"),
+                subtitle: L("setup.autoUpload.sub"),
                 on: $recordingPrefs.autoUpload
             )
 
@@ -230,19 +232,19 @@ struct PhysicianProfileSetupView: View {
             // expectation that purge is confirmed every session.
             prefsStepperRow(
                 icon: "clock.arrow.circlepath",
-                title: "Local retention",
-                subtitle: "Keep notes on this device for review.",
+                title: L("setup.localRetention.title"),
+                subtitle: L("setup.localRetention.sub"),
                 value: $recordingPrefs.retentionDays,
                 range: 1...30,
-                unit: "days"
+                unit: L("setup.days")
             )
 
             // Consent re-prompt cadence — how often the consent overlay
             // re-fires for returning patients.
             prefsPickerRow(
                 icon: "checkmark.shield",
-                title: "Consent re-prompt",
-                subtitle: "Re-confirm patient consent before recording.",
+                title: L("setup.consentReprompt.title"),
+                subtitle: L("setup.consentReprompt.sub"),
                 selection: $recordingPrefs.consentReprompt
             )
         }
@@ -503,9 +505,9 @@ enum ConsentRepromptCadence: String, CaseIterable, Identifiable, Codable {
 
     var label: String {
         switch self {
-        case .everySession: return "Every session"
-        case .daily: return "Daily"
-        case .weekly: return "Weekly"
+        case .everySession: return L("setup.freq.everySession")
+        case .daily: return L("setup.freq.daily")
+        case .weekly: return L("setup.freq.weekly")
         }
     }
 }

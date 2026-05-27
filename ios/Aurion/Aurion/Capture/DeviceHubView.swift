@@ -17,7 +17,7 @@ struct DeviceHubView: View {
         NavigationStack {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    Text("Devices")
+                    Text(L("tabs.devices"))
                         .font(.system(size: 28, weight: .bold))
                         .tracking(-0.56)
                         .foregroundColor(.aurionTextPrimary)
@@ -26,17 +26,17 @@ struct DeviceHubView: View {
                     activeSummary
 
                     VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: "Audio Source")
+                        SectionHeader(title: L("devices.audioSource"))
                         audioSourcesList
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: "Video Source")
+                        SectionHeader(title: L("devices.videoSource"))
                         videoSourcesList
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
-                        SectionHeader(title: "Permissions")
+                        SectionHeader(title: L("devices.permissions"))
                         permissionsGrid
                     }
                 }
@@ -64,14 +64,15 @@ struct DeviceHubView: View {
     private var activeSummary: some View {
         HStack(spacing: 12) {
             summaryCard(
-                title: "Audio",
+                title: L("devices.audio"),
                 source: registry.activeAudioSource,
                 placeholder: nil
             )
             summaryCard(
-                title: "Video",
+                title: L("devices.video"),
                 source: registry.activeVideoSource,
-                placeholder: "Audio-only session"
+                // placeholder shown when no video source (audio-only)
+                placeholder: L("devices.audioOnlySession")
             )
         }
     }
@@ -169,22 +170,22 @@ struct DeviceHubView: View {
         LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
             permissionCard(
                 icon: "camera.fill",
-                label: "Camera",
+                label: L("devices.permission.camera"),
                 granted: builtIn.cameraPermission == .authorized
             )
             permissionCard(
                 icon: "mic.fill",
-                label: "Microphone",
+                label: L("devices.permission.microphone"),
                 granted: builtIn.microphonePermission == .authorized
             )
             permissionCard(
                 icon: "antenna.radiowaves.left.and.right",
-                label: "Bluetooth",
+                label: L("devices.permission.bluetooth"),
                 granted: true
             )
             permissionCard(
                 icon: "rectangle.on.rectangle",
-                label: "Screen Recording",
+                label: L("devices.permission.screen"),
                 granted: RPScreenRecorder.shared().isAvailable
             )
         }
@@ -209,7 +210,7 @@ struct DeviceHubView: View {
                     }
                     AurionStatusPill(
                         kind: granted ? .done : .archived,
-                        labelOverride: granted ? "Granted" : "Denied"
+                        labelOverride: granted ? L("devices.granted") : L("devices.denied")
                     )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)
@@ -242,10 +243,10 @@ private struct VideoNoneRow: View {
                         .foregroundColor(isActive ? .aurionGoldDark : .aurionTextSecondary)
                 }
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("None")
+                    Text(L("devices.none"))
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.aurionTextPrimary)
-                    Text("Audio-only session")
+                    Text(L("devices.audioOnlySession"))
                         .font(.system(size: 12))
                         .foregroundColor(.aurionTextSecondary)
                 }

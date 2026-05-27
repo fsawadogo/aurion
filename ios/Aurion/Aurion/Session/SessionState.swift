@@ -24,17 +24,17 @@ enum CaptureMode: String, Codable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .multimodal: return "Multimodal"
-        case .audioOnly: return "Audio Only"
-        case .smartDictation: return "Smart Dictation"
+        case .multimodal: return L("captureMode.multimodal.title")
+        case .audioOnly: return L("captureMode.audioOnly.title")
+        case .smartDictation: return L("captureMode.smartDictation.title")
         }
     }
 
     var subtitle: String {
         switch self {
-        case .multimodal: return "Audio + video — full vision enrichment"
-        case .audioOnly: return "Audio only — no camera capture"
-        case .smartDictation: return "Audio + live captions — dictation focus"
+        case .multimodal: return L("captureMode.multimodal.sub")
+        case .audioOnly: return L("captureMode.audioOnly.sub")
+        case .smartDictation: return L("captureMode.smartDictation.sub")
         }
     }
 
@@ -72,9 +72,9 @@ enum ConsentMethod: String, Codable, CaseIterable, Identifiable {
 
     var displayName: String {
         switch self {
-        case .verbal: return "Verbal"
-        case .paperForm: return "Paper form"
-        case .digitalForm: return "Digital form"
+        case .verbal: return L("consentMethod.verbal")
+        case .paperForm: return L("consentMethod.paperForm")
+        case .digitalForm: return L("consentMethod.digitalForm")
         }
     }
 

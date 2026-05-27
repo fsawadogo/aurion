@@ -49,9 +49,27 @@ struct DashboardView: View {
 
     private var doctorLine: String {
         guard let name = appState.physicianProfile?.displayName, !name.isEmpty else { return "" }
-        let parts = name.split(separator: " ")
-        let last = parts.count > 1 ? String(parts.last!) : name
-        return "Dr. \(last)."
+        return "Dr. \(Self.lastName(from: name))."
+    }
+
+    /// Derive a presentable last name from a profile's `displayName`, which
+    /// is sometimes a real name ("Marie Gdalevitch") and sometimes the raw
+    /// sign-in email ("faical.sawadogo@aurionclinical.com") before the
+    /// physician sets a display name during onboarding.
+    private static func lastName(from raw: String) -> String {
+        // Real name with spaces → last word.
+        let words = raw.split(separator: " ")
+        if words.count > 1, let last = words.last {
+            return last.capitalized
+        }
+        // Email → strip the domain, split the local part on . _ - and take
+        // the last meaningful token (e.g. "faical.sawadogo" → "Sawadogo").
+        let local = raw.split(separator: "@").first.map(String.init) ?? raw
+        let tokens = local.split(whereSeparator: { ".-_".contains($0) })
+        if let last = tokens.last {
+            return last.capitalized
+        }
+        return raw.capitalized
     }
 
     private var avatarInitials: String {
@@ -112,7 +130,7 @@ struct DashboardView: View {
             case "follow_up": label = L("quickstart.followUp")
             case "pre_op": label = L("quickstart.preOp")
             case "post_op": label = L("quickstart.postOp")
-            default: label = type.displayFormatted
+            default: label = localizedConsultationType(type)
             }
             return (specialty, type, label, icon)
         }
@@ -198,7 +216,7 @@ struct DashboardView: View {
                             .foregroundColor(.aurionTextPrimary)
                     }
                 }
-                Text("\(displayedTodayCount) sessions \(L("dashboard.today")) \u{00B7} \(pendingReviewSessions.count) pending review")
+                Text(L("dashboard.sessionSummary", displayedTodayCount, pendingReviewSessions.count))
                     .font(.system(size: 14))
                     .foregroundColor(.aurionTextSecondary)
                     .contentTransition(.numericText())
@@ -212,7 +230,7 @@ struct DashboardView: View {
                 AurionAvatar(initials: avatarInitials, size: 44)
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Open profile")
+            .accessibilityLabel(L("a11y.openProfile"))
         }
     }
 
@@ -225,7 +243,7 @@ struct DashboardView: View {
     /// `ContentView` routes back to `CaptureView`.
     private var resumableSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Continue Recording")
+            SectionHeader(title: L("dashboard.continueRecording"))
             ForEach(resumableSessions, id: \.id) { session in
                 Button {
                     AurionHaptics.impact(.light)
@@ -235,17 +253,17 @@ struct DashboardView: View {
                         HStack(spacing: 12) {
                             AurionIconBubble(symbol: "record.circle", tint: .aurionGold, size: 36)
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(session.specialty.displayFormatted)
+                                Text(localizedSpecialty(session.specialty))
                                     .font(.system(size: 16, weight: .semibold))
                                     .foregroundColor(.aurionTextPrimary)
                                 Text(session.state == "PAUSED"
-                                     ? "Paused \(formatRelativeTime(session.updatedAt))"
-                                     : "Recording \(formatRelativeTime(session.updatedAt))")
+                                     ? L("dashboard.pausedAgo", formatRelativeTime(session.updatedAt))
+                                     : L("dashboard.recordingAgo", formatRelativeTime(session.updatedAt)))
                                     .font(.system(size: 13))
                                     .foregroundColor(.aurionTextSecondary)
                             }
                             Spacer()
-                            Text("Resume")
+                            Text(L("sessions.resume"))
                                 .font(.system(size: 13, weight: .semibold))
                                 // Brand-navy on gold pill — fixed in both modes.
                                 .foregroundColor(.aurionNavy)
@@ -281,10 +299,10 @@ struct DashboardView: View {
                     AurionCard(padding: 16, accent: true) {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
-                                Text(session.specialty.displayFormatted)
+                                Text(localizedSpecialty(session.specialty))
                                     .font(.system(size: 16, weight: .semibold))
                                     .foregroundColor(.aurionTextPrimary)
-                                Text("Recorded \(formatRelativeTime(session.createdAt))")
+                                Text(L("dashboard.recordedAgo", formatRelativeTime(session.createdAt)))
                                     .font(.system(size: 13))
                                     .foregroundColor(.aurionTextSecondary)
                             }
@@ -314,7 +332,7 @@ struct DashboardView: View {
 
     private var stage2InProgressSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Stage 2 in progress")
+            SectionHeader(title: L("dashboard.stage2InProgress"))
             ForEach(stage2InProgressSessions, id: \.id) { session in
                 Stage2DashboardTile(
                     session: session,
@@ -329,7 +347,7 @@ struct DashboardView: View {
 
     private var quickStartSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Quick Start")
+            SectionHeader(title: L("dashboard.quickStart"))
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 ForEach(Array(quickStartCards.enumerated()), id: \.element.type) { idx, card in
                     Button {
@@ -345,7 +363,7 @@ struct DashboardView: View {
                                 AurionIconTile(systemName: card.icon, size: 36, active: true)
                                 Spacer(minLength: 0)
                                 VStack(alignment: .leading, spacing: 3) {
-                                    Text(card.specialty.displayFormatted)
+                                    Text(localizedSpecialty(card.specialty))
                                         .font(.system(size: 11, weight: .semibold))
                                         .tracking(0.6)
                                         .textCase(.uppercase)
@@ -385,12 +403,12 @@ struct DashboardView: View {
 
     private var recentSessionsSection: some View {
         VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: "Recent Sessions") {
+            SectionHeader(title: L("dashboard.recentSessions")) {
                 Button {
                     AurionHaptics.impact(.light)
                     AppNavigation.shared.requestTab(.sessions)
                 } label: {
-                    Text("See all")
+                    Text(L("dashboard.seeAll"))
                         .font(.system(size: 13, weight: .semibold))
                         .foregroundColor(.aurionGold)
                 }
@@ -447,7 +465,7 @@ struct DashboardView: View {
                     .foregroundColor(.aurionTextSecondary)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(session.specialty.displayFormatted)
+                Text(localizedSpecialty(session.specialty))
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(.aurionTextPrimary)
                     .lineLimit(1)
@@ -471,7 +489,7 @@ struct DashboardView: View {
     private var encounterTypeSheet: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                AurionNavBar(title: "Encounter Type") {
+                AurionNavBar(title: L("encounter.title")) {
                     AurionTextButton(label: L("common.cancel")) {
                         showEncounterTypeSheet = false
                     }
@@ -480,11 +498,11 @@ struct DashboardView: View {
                 ScrollView {
                     VStack(alignment: .leading, spacing: 20) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("Who\u{2019}s in the room?")
+                            Text(L("encounter.whoInRoom"))
                                 .font(.system(size: 22, weight: .semibold))
                                 .tracking(-0.22)
                                 .foregroundColor(.aurionTextPrimary)
-                            Text("Aurion will adjust capture and consent accordingly.")
+                            Text(L("encounter.adjustSub"))
                                 .font(.system(size: 14))
                                 .foregroundColor(.aurionTextSecondary)
                         }
@@ -493,8 +511,8 @@ struct DashboardView: View {
                         VStack(spacing: 12) {
                             AurionSelectableCard(
                                 icon: "person.2",
-                                title: "Doctor + Patient",
-                                subtitle: "Standard one-on-one visit",
+                                title: L("encounter.doctorPatient.title"),
+                                subtitle: L("encounter.doctorPatient.sub"),
                                 selected: selectedEncounterType == "doctor_patient"
                             ) {
                                 selectedEncounterType = "doctor_patient"
@@ -503,8 +521,8 @@ struct DashboardView: View {
 
                             AurionSelectableCard(
                                 icon: "person.3",
-                                title: "With Team Member",
-                                subtitle: "Nurse or PA also present",
+                                title: L("encounter.allied.title"),
+                                subtitle: L("encounter.allied.sub"),
                                 selected: selectedEncounterType == "doctor_patient_allied"
                             ) {
                                 selectedEncounterType = "doctor_patient_allied"
@@ -516,8 +534,8 @@ struct DashboardView: View {
 
                             AurionSelectableCard(
                                 icon: "graduationcap",
-                                title: "With Trainee",
-                                subtitle: "Resident, fellow, or student",
+                                title: L("encounter.trainee.title"),
+                                subtitle: L("encounter.trainee.sub"),
                                 selected: selectedEncounterType == "doctor_patient_transitory"
                             ) {
                                 selectedEncounterType = "doctor_patient_transitory"
@@ -553,7 +571,7 @@ struct DashboardView: View {
         let team = appState.physicianProfile?.alliedHealthTeam ?? []
         return VStack(alignment: .leading, spacing: 10) {
             if team.isEmpty {
-                Text("No team members configured. Add them in Profile settings.")
+                Text(L("encounter.noTeam"))
                     .font(.system(size: 13))
                     .foregroundColor(.aurionTextSecondary)
                     .padding(.horizontal, 12)
@@ -587,7 +605,7 @@ struct DashboardView: View {
                                         .foregroundColor(.aurionTextPrimary)
                                 }
                             }
-                            Text("\(member.role.displayFormatted) — \(member.name)")
+                            Text("\(member.role.displayFormatted) \u{2014} \(member.name)")
                                 .font(.system(size: 14))
                                 .foregroundColor(.aurionTextPrimary)
                             Spacer()
@@ -606,15 +624,15 @@ struct DashboardView: View {
     private var traineeForm: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(spacing: 10) {
-                AurionField(label: "Name", placeholder: "J. Lee", text: $traineeName)
+                AurionField(label: L("encounter.name"), placeholder: L("encounter.namePlaceholder"), text: $traineeName)
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Role")
+                    Text(L("encounter.role"))
                         .font(.system(size: 13, weight: .medium))
                         .foregroundColor(.aurionTextSecondary)
-                    Picker("Role", selection: $traineeRole) {
-                        Text("Resident").tag("resident")
-                        Text("Fellow").tag("fellow")
-                        Text("Student").tag("medical_student")
+                    Picker(L("encounter.role"), selection: $traineeRole) {
+                        Text(L("encounter.role.resident")).tag("resident")
+                        Text(L("encounter.role.fellow")).tag("fellow")
+                        Text(L("encounter.role.student")).tag("medical_student")
                     }
                     .pickerStyle(.segmented)
                 }
@@ -630,7 +648,7 @@ struct DashboardView: View {
                     ])
                     traineeName = ""
                 } label: {
-                    Label("Add", systemImage: "plus.circle")
+                    Label(L("common.add"), systemImage: "plus.circle")
                         .font(.system(size: 14, weight: .medium))
                         .foregroundColor(.aurionGold)
                 }
@@ -645,8 +663,8 @@ struct DashboardView: View {
     private var encounterContextSheet: some View {
         NavigationStack {
             VStack(spacing: 0) {
-                AurionNavBar(title: "Context") {
-                    AurionTextButton(label: "Back") {
+                AurionNavBar(title: L("context.title")) {
+                    AurionTextButton(label: L("setup.back")) {
                         showContextPrompt = false
                         showEncounterTypeSheet = true
                     }
@@ -658,7 +676,7 @@ struct DashboardView: View {
 
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
-                                Text("What brings the patient in today?")
+                                Text(L("context.question"))
                                     .font(.system(size: 22, weight: .semibold))
                                     .tracking(-0.22)
                                     .foregroundColor(.aurionTextPrimary)
@@ -666,13 +684,13 @@ struct DashboardView: View {
                                     .font(.system(size: 22, weight: .semibold))
                                     .foregroundColor(.aurionGold)
                             }
-                            Text("Required. Aurion uses this to focus the note on the right specialty template.")
+                            Text(L("context.required"))
                                 .font(.system(size: 14))
                                 .foregroundColor(.aurionTextSecondary)
                         }
 
                         AurionField(
-                            placeholder: "e.g. Right knee pain, 3 weeks post-op meniscus repair.",
+                            placeholder: L("context.placeholder"),
                             text: $encounterContext,
                             multiline: true
                         )
@@ -682,7 +700,7 @@ struct DashboardView: View {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 18))
                                 .foregroundColor(.aurionGoldDark)
-                            Text("Aurion uses this to focus the structured note. Stays on-device.")
+                            Text(L("context.tip"))
                                 .font(.system(size: 13))
                                 .foregroundColor(.aurionStatusPending)
                                 .lineSpacing(3)
@@ -699,7 +717,7 @@ struct DashboardView: View {
                 VStack(spacing: 8) {
                     Rectangle().fill(Color.aurionBorder).frame(height: 1)
                     AurionGoldButton(
-                        label: "Start Session",
+                        label: L("dashboard.startButton"),
                         full: true,
                         disabled: !hasMinimumContext
                     ) {
@@ -708,7 +726,7 @@ struct DashboardView: View {
                     }
                     .padding(.top, 4)
                     if !hasMinimumContext {
-                        Text("Enter at least a few words of context to start the session.")
+                        Text(L("context.minHint"))
                             .font(.system(size: 12))
                             .foregroundColor(.aurionTextSecondary)
                             .multilineTextAlignment(.center)
@@ -733,11 +751,11 @@ struct DashboardView: View {
     private var captureModePicker: some View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
-                Text("Capture mode")
+                Text(L("context.captureMode"))
                     .font(.system(size: 22, weight: .semibold))
                     .tracking(-0.22)
                     .foregroundColor(.aurionTextPrimary)
-                Text("How should Aurion observe this encounter?")
+                Text(L("context.captureModeSub"))
                     .font(.system(size: 14))
                     .foregroundColor(.aurionTextSecondary)
             }

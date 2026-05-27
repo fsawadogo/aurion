@@ -15,13 +15,13 @@ struct BiometricConsentView: View {
         VStack(spacing: 24) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 16) {
-                    Text("Biometric Data Consent")
+                    Text(L("onboarding.biometric.title"))
                         .font(.title2)
                         .fontWeight(.bold)
                         .foregroundColor(.aurionTextPrimary)
                         .aurionStagger(order: 0, baseDelay: 0.05)
 
-                    Text("Please read the following carefully before proceeding.")
+                    Text(L("onboarding.biometric.sub"))
                         .font(.subheadline)
                         .foregroundColor(.secondary)
                         .aurionStagger(order: 1)
@@ -33,7 +33,7 @@ struct BiometricConsentView: View {
             }
 
             Toggle(isOn: $hasRead) {
-                Text("I have read and understand the above")
+                Text(L("onboarding.biometric.read"))
                     .font(.subheadline)
             }
             .tint(.aurionGold)
@@ -42,7 +42,7 @@ struct BiometricConsentView: View {
 
             VStack(spacing: 12) {
                 AurionGoldButton(
-                    label: "I Agree — Create Voice Profile",
+                    label: L("onboarding.biometric.agree"),
                     full: true,
                     disabled: !hasRead
                 ) {
@@ -51,7 +51,7 @@ struct BiometricConsentView: View {
                     onAccept()
                 }
 
-                AurionGhostButton(label: "Go Back", full: true) {
+                AurionGhostButton(label: L("onboarding.biometric.goBack"), full: true) {
                     onBack()
                 }
             }
@@ -62,22 +62,17 @@ struct BiometricConsentView: View {
     }
 
     private var consentText: some View {
-        Text("""
-        Aurion Clinical AI requests your consent to collect and process a short voice recording for the purpose of creating a speaker voice profile.
-
-        **What we collect:** A 30-60 second voice recording read from clinical sentences.
-
-        **How it is used:** The recording is processed entirely on this device to create a voice embedding (a mathematical representation of your voice). This embedding is used during clinical sessions to distinguish your speech from your patient's.
-
-        **Storage:** The voice embedding is stored exclusively in this device's secure Keychain. It is never transmitted to any server.
-
-        **Recording deletion:** The raw voice recording is deleted from device memory immediately after the voice embedding is generated. It is never stored on disk or uploaded.
-
-        **Your rights:** You may delete your voice profile at any time from Settings. You may also re-record your voice profile. Declining does not affect your ability to use Aurion — the system will function without speaker separation.
-
-        This consent is governed by applicable biometric data protection laws including Quebec's Law 25 and PIPEDA.
-        """)
-        .font(.footnote)
-        .foregroundColor(.aurionTextPrimary)
+        // Localized markdown — `**bold**` labels + blank-line paragraph
+        // breaks. `Text(String)` renders verbatim (no markdown), so parse
+        // through AttributedString to keep the bold section headers while
+        // preserving paragraph whitespace.
+        let raw = L("onboarding.biometric.consentText")
+        let attributed = (try? AttributedString(
+            markdown: raw,
+            options: .init(interpretedSyntax: .inlineOnlyPreservingWhitespace)
+        )) ?? AttributedString(raw)
+        return Text(attributed)
+            .font(.footnote)
+            .foregroundColor(.aurionTextPrimary)
     }
 }

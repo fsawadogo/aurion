@@ -20,11 +20,11 @@ enum CaptureSourceStatus: Equatable, Sendable {
     var label: String {
         switch self {
         case .unavailable(let reason): return reason
-        case .disconnected: return "Disconnected"
-        case .ready: return "Ready"
-        case .starting: return "Starting…"
-        case .recording: return "Recording"
-        case .paused: return "Paused"
+        case .disconnected: return L("sourceStatus.disconnected")
+        case .ready: return L("sourceStatus.ready")
+        case .starting: return L("sourceStatus.starting")
+        case .recording: return L("sourceStatus.recording")
+        case .paused: return L("sourceStatus.paused")
         case .error(let msg): return msg
         }
     }

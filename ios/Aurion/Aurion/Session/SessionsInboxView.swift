@@ -45,7 +45,7 @@ struct SessionsInboxView: View {
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
         guard !query.isEmpty else { return statusFiltered }
         return statusFiltered.filter { session in
-            session.specialty.displayFormatted.lowercased().contains(query)
+            localizedSpecialty(session.specialty).lowercased().contains(query)
                 || session.state.lowercased().contains(query)
         }
     }
@@ -87,7 +87,7 @@ struct SessionsInboxView: View {
             }
             .background(Color.aurionBackground)
             .navigationBarHidden(true)
-            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: "Search by specialty or status")
+            .searchable(text: $searchText, placement: .navigationBarDrawer(displayMode: .always), prompt: L("sessions.searchPrompt"))
             .task { await loadSessions() }
             // Value-based destination so Spotlight deep-links can push by
             // session UUID without us having to materialize the full
@@ -128,7 +128,7 @@ struct SessionsInboxView: View {
 
     private var titleHeader: some View {
         HStack {
-            Text("Sessions")
+            Text(L("sessions.title"))
                 .font(.system(size: 28, weight: .bold))
                 .tracking(-0.56)
                 .foregroundColor(.aurionTextPrimary)
@@ -145,9 +145,9 @@ struct SessionsInboxView: View {
                     .contentTransition(.symbolEffect(.replace))
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("Sort sessions")
-            .accessibilityValue(sortNewestFirst ? "Newest first" : "Oldest first")
-            .accessibilityHint("Double-tap to reverse the sort order.")
+            .accessibilityLabel(L("a11y.sortSessions"))
+            .accessibilityValue(sortNewestFirst ? L("sessions.sortNewest") : L("sessions.sortOldest"))
+            .accessibilityHint(L("sessions.sortHint"))
         }
         .aurionScreenEdge()
         .padding(.top, 10)
@@ -217,7 +217,7 @@ struct SessionsInboxView: View {
                     .foregroundColor(.aurionTextSecondary)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(s.specialty.displayFormatted)
+                Text(localizedSpecialty(s.specialty))
                     .font(.system(size: 15, weight: .semibold))
                     .foregroundColor(.aurionTextPrimary)
                     .lineLimit(1)

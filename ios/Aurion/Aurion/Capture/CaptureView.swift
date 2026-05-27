@@ -81,14 +81,14 @@ struct CaptureView: View {
                         // of hard-cutting — iOS 17+ system content-transition.
                         .contentTransition(.numericText())
                         .animation(AurionAnimation.smooth, value: elapsedTime)
-                        .accessibilityLabel("Elapsed recording time")
+                        .accessibilityLabel(L("capture.a11yElapsed"))
                         // VoiceOver reads "minutes:seconds" rather than the
                         // raw digits so e.g. "01:24" speaks as "1 minute 24
                         // seconds" — clearer when the screen is in a coat
                         // pocket and the clinician is checking on capture.
                         .accessibilityValue(accessibleElapsedTime)
 
-                    Text("Recording \u{00B7} \(session.captureMode.displayName)")
+                    Text(L("capture.recordingMode", session.captureMode.displayName))
                         .font(.system(size: 13))
                         .tracking(0.4)
                         .foregroundColor(Color.aurionOnNavySecondary)
@@ -284,7 +284,7 @@ struct CaptureView: View {
                 }
             }
             .buttonStyle(.plain)
-            .accessibilityLabel("View captured frames")
+            .accessibilityLabel(L("capture.a11yViewFrames"))
         }
     }
 
@@ -490,7 +490,7 @@ struct CaptureView: View {
         HStack(spacing: 6) {
             Image(systemName: method.icon)
                 .font(.system(size: 10, weight: .semibold))
-            Text("Consent: \(method.displayName) \u{00B7} \(Self.consentTimeFormatter.string(from: timestamp))")
+            Text(L("capture.consentChip", method.displayName, Self.consentTimeFormatter.string(from: timestamp)))
                 .font(.system(size: 12, weight: .medium))
         }
         .foregroundColor(.aurionGold)
@@ -520,12 +520,12 @@ struct CaptureView: View {
                         .foregroundColor(.aurionGoldDark)
                 }
 
-                Text("Confirm Patient Consent")
+                Text(L("capture.consentTitle"))
                     .font(.system(size: 20, weight: .semibold))
                     .foregroundColor(.aurionTextPrimary)
                     .multilineTextAlignment(.center)
 
-                Text("Confirm the patient has been informed and consents to recording for note generation.")
+                Text(L("capture.consentSub"))
                     .font(.system(size: 14))
                     .foregroundColor(.aurionTextSecondary)
                     .multilineTextAlignment(.center)
@@ -533,11 +533,11 @@ struct CaptureView: View {
 
                 consentMethodPicker
 
-                AurionGoldButton(label: "Patient Has Consented", full: true) {
+                AurionGoldButton(label: L("capture.consentButton"), full: true) {
                     Task { await sessionManager.confirmConsent(method: pendingConsentMethod) }
                 }
 
-                Button("Cancel") {}
+                Button(L("common.cancel")) {}
                     .font(.system(size: 14))
                     .foregroundColor(.aurionTextSecondary)
             }
@@ -552,10 +552,10 @@ struct CaptureView: View {
     /// The selection flows into the audit log via SessionManager.
     private var consentMethodPicker: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("How was consent given?")
+            Text(L("capture.consentMethodQ"))
                 .font(.system(size: 13, weight: .medium))
                 .foregroundColor(.aurionTextSecondary)
-            Picker("How was consent given?", selection: $pendingConsentMethod) {
+            Picker(L("capture.consentMethodQ"), selection: $pendingConsentMethod) {
                 ForEach(ConsentMethod.allCases) { method in
                     Text(method.displayName).tag(method)
                 }
@@ -588,10 +588,10 @@ struct CaptureView: View {
                     )
             }
             .opacity(session.state == .recording || session.state == .paused ? 1 : 0)
-            .accessibilityLabel(session.state == .paused ? "Resume recording" : "Pause recording")
+            .accessibilityLabel(session.state == .paused ? L("capture.a11yResume") : L("capture.a11yPause"))
             .accessibilityHint(session.state == .paused
-                               ? "Continues capturing audio and video."
-                               : "Temporarily stops capture without ending the session.")
+                               ? L("capture.a11yResumeHint")
+                               : L("capture.a11yPauseHint"))
 
             Spacer()
 
@@ -656,13 +656,13 @@ struct CaptureView: View {
             )
             .accessibilityLabel(
                 (session.state == .recording || session.state == .paused)
-                    ? "Stop recording"
-                    : "Start recording"
+                    ? L("capture.a11yStop")
+                    : L("capture.a11yStart")
             )
             .accessibilityHint(
                 (session.state == .recording || session.state == .paused)
-                    ? "Ends capture and begins note generation."
-                    : "Begins audio and video capture for this session."
+                    ? L("capture.a11yStopHint")
+                    : L("capture.a11yStartHint")
             )
 
             Spacer()
@@ -688,8 +688,8 @@ struct CaptureView: View {
             // capture starts; stopping inside that window produces an
             // empty PCM buffer.
             .disabled(elapsedTime < SessionManager.minimumRecordingSeconds)
-            .accessibilityLabel("Stop recording")
-            .accessibilityHint("Ends capture and begins note generation.")
+            .accessibilityLabel(L("capture.a11yStop"))
+            .accessibilityHint(L("capture.a11yStopHint"))
 
             Spacer()
         }

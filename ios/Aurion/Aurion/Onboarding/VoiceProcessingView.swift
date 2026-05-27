@@ -12,13 +12,13 @@ struct VoiceProcessingView: View {
     let onComplete: () -> Void
     @State private var isProcessing = true
     @State private var progress: Double = 0
-    @State private var currentStepLabel: String = "Analyzing voice patterns…"
+    @State private var currentStepLabel: String = L("onboarding.voiceProc.step1")
     @State private var failureMessage: String?
 
     private let stepLabels = [
-        "Analyzing voice patterns…",
-        "Generating voice embedding…",
-        "Securing in Keychain…",
+        L("onboarding.voiceProc.step1"),
+        L("onboarding.voiceProc.step2"),
+        L("onboarding.voiceProc.step3"),
     ]
 
     var body: some View {
@@ -36,7 +36,7 @@ struct VoiceProcessingView: View {
                         .foregroundColor(.aurionTextPrimary)
                 }
 
-                Text("Creating your voice profile…")
+                Text(L("onboarding.voiceProc.creating"))
                     .font(.title3)
                     .foregroundColor(.aurionTextPrimary)
 
@@ -49,13 +49,13 @@ struct VoiceProcessingView: View {
             } else {
                 AurionAnimatedCheck(size: 96, color: .aurionGold)
 
-                Text("Voice profile saved to this device")
+                Text(L("onboarding.voiceProc.saved"))
                     .font(.title3)
                     .fontWeight(.semibold)
                     .foregroundColor(.aurionTextPrimary)
                     .aurionStagger(order: 0, baseDelay: 0.5)
 
-                Text("You can update or delete your voice profile anytime in Settings.")
+                Text(L("onboarding.voiceProc.savedSub"))
                     .font(.body)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
@@ -66,7 +66,7 @@ struct VoiceProcessingView: View {
             Spacer()
 
             if !isProcessing {
-                AurionGoldButton(label: "Continue to Dashboard", full: true) { onComplete() }
+                AurionGoldButton(label: L("onboarding.voiceProc.continue"), full: true) { onComplete() }
                     .padding(.horizontal, 20)
                     .aurionStagger(order: 2, baseDelay: 0.5)
             }

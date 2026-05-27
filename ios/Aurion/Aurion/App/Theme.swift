@@ -416,7 +416,7 @@ struct CircularProgressRing: View {
         // "image" — surface the actual percentage so accessibility users
         // hear the same information sighted users see at the trim.
         .accessibilityElement(children: .ignore)
-        .accessibilityLabel("Progress")
+        .accessibilityLabel(L("a11y.progress"))
         .accessibilityValue("\(Int(max(0, min(1, progress)) * 100)) percent")
     }
 }
@@ -843,7 +843,7 @@ struct AurionLogoLockup: View {
             // at size=1.0 — login screens that passed size=1.2 now land at
             // 240pt, matching what they expected visually.
             .frame(height: 200 * size)
-            .accessibilityLabel("Aurion — the gold standard in clinical AI")
+            .accessibilityLabel(L("a11y.logoTagline"))
     }
 }
 
@@ -853,6 +853,31 @@ extension String {
     /// Converts snake_case keys like "orthopedic_surgery" to display form "Orthopedic Surgery".
     var displayFormatted: String {
         replacingOccurrences(of: "_", with: " ").capitalized
+    }
+}
+
+/// Localized specialty name for a backend key (e.g. "orthopedic_surgery").
+/// Falls back to `displayFormatted` when no translation exists so unknown
+/// or post-pilot specialties still render legibly rather than as a raw key.
+func localizedSpecialty(_ key: String) -> String {
+    let value = L("specialty.\(key)")
+    return value == "specialty.\(key)" ? key.displayFormatted : value
+}
+
+/// Localized consultation/visit type for a backend key (e.g. "follow_up").
+func localizedConsultationType(_ key: String) -> String {
+    let value = L("visitType.\(key)")
+    return value == "visitType.\(key)" ? key.displayFormatted : value
+}
+
+/// Localized practice-type label for a backend key. Maps onto the existing
+/// onboarding `setup.*` strings; unknown keys fall back to `displayFormatted`.
+func localizedPracticeType(_ key: String) -> String {
+    switch key {
+    case "clinic": return L("setup.clinic")
+    case "surgical_center": return L("setup.surgicalCenter")
+    case "hospital": return L("setup.hospital")
+    default: return key.displayFormatted
     }
 }
 
@@ -883,10 +908,10 @@ func formatISODate(_ iso: String) -> String {
 func formatRelativeTime(_ iso: String) -> String {
     guard let date = _isoFormatter.date(from: iso) else { return iso }
     let elapsed = Date().timeIntervalSince(date)
-    if elapsed < 60 { return "Just now" }
-    if elapsed < 3600 { return "\(Int(elapsed / 60)) min ago" }
-    if elapsed < 86_400 { return "\(Int(elapsed / 3600)) hr ago" }
-    if elapsed < 172_800 { return "Yesterday" }
+    if elapsed < 60 { return L("time.justNow") }
+    if elapsed < 3600 { return L("time.minAgo", Int(elapsed / 60)) }
+    if elapsed < 86_400 { return L("time.hrAgo", Int(elapsed / 3600)) }
+    if elapsed < 172_800 { return L("time.yesterday") }
     return _displayFormatter.string(from: date)
 }
 
