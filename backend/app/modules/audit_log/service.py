@@ -22,7 +22,16 @@ from app.core.clock import utcnow
 
 logger = logging.getLogger("aurion.audit")
 
-_TABLE_NAME = os.getenv("AUDIT_LOG_TABLE", "aurion-audit-log-local")
+# Terraform's ECS task definition ships the table name as
+# DYNAMODB_AUDIT_TABLE (see infrastructure/ecs.tf). Old AUDIT_LOG_TABLE
+# var name kept as fallback so a local shell with the legacy export
+# still works. The "aurion-audit-log-local" default is the LocalStack
+# table from backend/scripts/localstack-init/setup.sh — docker-compose only.
+_TABLE_NAME = (
+    os.getenv("DYNAMODB_AUDIT_TABLE")
+    or os.getenv("AUDIT_LOG_TABLE")
+    or "aurion-audit-log-local"
+)
 _REGION = os.getenv("AWS_DEFAULT_REGION", "ca-central-1")
 _ENDPOINT_URL = os.getenv("AWS_ENDPOINT_URL")
 
