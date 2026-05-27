@@ -488,7 +488,11 @@ struct AurionIconTile: View {
                 .frame(width: size, height: size)
             Image(systemName: systemName)
                 .font(.system(size: size * 0.5, weight: .regular))
-                .foregroundColor(active ? .aurionGoldDark : .aurionNavy)
+                // Inactive uses .aurionTextPrimary (adaptive). Hardcoding
+                // .aurionNavy made the icon invisible in dark mode against
+                // the .aurionSurfaceAlt tile — same pattern as the filter
+                // chip we just fixed.
+                .foregroundColor(active ? .aurionGoldDark : .aurionTextPrimary)
         }
     }
 }
