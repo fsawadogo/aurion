@@ -63,7 +63,10 @@ class PipelineConfig(BaseModel):
 
 
 class FeatureFlagsConfig(BaseModel):
-    screen_capture_enabled: bool = True
+    # Off for the pilot — see infrastructure/appconfig.tf. This is only the
+    # fallback used when AppConfig is unreachable; the live AppConfig value
+    # is the runtime source of truth.
+    screen_capture_enabled: bool = False
     note_versioning_enabled: bool = True
     session_pause_resume_enabled: bool = True
     per_session_provider_override: bool = True

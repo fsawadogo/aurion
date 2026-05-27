@@ -25,7 +25,10 @@ final class RemoteConfig: ObservableObject {
         videoCaptureFps: 1
     )
     @Published private(set) var featureFlags = ClientFeatureFlagsResponse(
-        screenCaptureEnabled: true,
+        // Off for the pilot — matches the backend AppConfig default. This is
+        // only the fallback used before/if the /config fetch fails; the live
+        // AppConfig value is the runtime source of truth.
+        screenCaptureEnabled: false,
         noteVersioningEnabled: true,
         sessionPauseResumeEnabled: true,
         perSessionProviderOverride: true,
