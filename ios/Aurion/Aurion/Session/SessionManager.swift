@@ -78,6 +78,12 @@ final class SessionManager: ObservableObject {
     @Published var processingStatus = ""
     @Published var error: String?
     @Published var stage1Status: Stage1Status = .idle
+    /// Wall-clock when the capture pipeline last began streaming. Used by
+    /// the CaptureView's stop button to enforce the minimum recording
+    /// duration so the audio delegate has time to deliver its first
+    /// buffer (warm-up is typically ~500ms but can exceed 1s on cold
+    /// AVAudioSession activation). Reset on stop.
+    @Published private(set) var recordingStartedAt: Date?
 
     /// Frames whose on-device masking failed during `submitFrames` /
     /// `submitScreenFrames`. Per CLAUDE.md the pipeline is fail-closed: these
@@ -180,11 +186,37 @@ final class SessionManager: ObservableObject {
             // the backend transition succeeded — no point starting an
             // activity for a session the server rejected.
             liveActivity.start(sessionID: session.id, specialty: session.specialty)
+            // Stamp the local clock so the stop button can require a
+            // minimum recording duration. AVAudioSession + AVCaptureSession
+            // need ~500ms–2s to deliver the first sample buffer; stopping
+            // before that gives us a zero-byte audioPCMData and "No audio
+            // captured" later in submitAudio.
+            recordingStartedAt = Date()
         } catch let sourceError as CaptureSourceError {
             self.error = sourceError.localizedDescription
         } catch {
             self.error = "Start failed: \(error.localizedDescription)"
         }
+    }
+
+    /// Earliest moment the user is allowed to tap Stop. The stop button is
+    /// disabled until ``recordingElapsed`` reaches this threshold so the
+    /// capture pipeline has a chance to deliver buffers — see startRecording.
+    nonisolated static let minimumRecordingSeconds: TimeInterval = 2
+
+    /// Wall-clock seconds since the capture pipeline started, or nil if
+    /// we haven't kicked off yet. Re-evaluated by SwiftUI on every TimelineView
+    /// tick so the stop button enables automatically once the floor is hit.
+    func recordingElapsed(at now: Date = Date()) -> TimeInterval? {
+        guard let recordingStartedAt else { return nil }
+        return now.timeIntervalSince(recordingStartedAt)
+    }
+
+    /// True once recording has run long enough that stopping should
+    /// produce a non-empty audio buffer. UI gates the Stop button on this.
+    func stopAllowed(at now: Date = Date()) -> Bool {
+        guard let elapsed = recordingElapsed(at: now) else { return false }
+        return elapsed >= Self.minimumRecordingSeconds
     }
 
     /// Capture sources to run for the active session, filtered by mode.
@@ -277,6 +309,9 @@ final class SessionManager: ObservableObject {
 
     func stopRecording() async {
         guard let session else { return }
+        // Clear the start timestamp so a future Resume → Stop pair re-arms
+        // the minimum-duration guard from scratch.
+        recordingStartedAt = nil
         // Stop local capture FIRST so getRecordedAudioData has a complete buffer
         // by the time submitProcessing fires.
         for source in activeSourcesForCurrentMode { source.stop() }
@@ -549,8 +584,14 @@ final class SessionManager: ObservableObject {
             audioPayload = WAVBuilder.silence()
             isDemoFallback = true
         } else {
-            self.error = "No audio captured. Please retry the recording."
-            stage1Status = .failed(reason: "No audio captured")
+            // Empty audioPCMData means the AVAudioSession delegate never
+            // delivered a buffer. In practice this is almost always a
+            // too-short recording — the stop-button guard below the start
+            // timestamp should catch most of these, but on first-launch
+            // mic warmup or a backgrounded session it's still possible.
+            // Phrasing avoids implying the mic / system is broken.
+            self.error = "Recording was too short. Speak for at least a few seconds before stopping."
+            stage1Status = .failed(reason: "Recording too short")
             // Stay on ProcessingView so the retry prompt is reachable.
             return
         }
