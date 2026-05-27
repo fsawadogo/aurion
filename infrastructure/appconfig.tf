@@ -173,7 +173,12 @@ resource "aws_appconfig_hosted_configuration_version" "main" {
       video_capture_fps          = 1
     }
     feature_flags = {
-      screen_capture_enabled        = true
+      # Disabled for the pilot. Aurion is a wearable scribe — clinical signal
+      # comes from glasses + audio, not the phone screen, and ReplayKit's
+      # screen-recording prompt + red status bar is alarming in a clinical
+      # room. The whole screen pipeline stays in the codebase, dormant behind
+      # this flag; flip back to true to re-enable without a code change.
+      screen_capture_enabled        = false
       note_versioning_enabled       = true
       session_pause_resume_enabled  = true
       per_session_provider_override = true
