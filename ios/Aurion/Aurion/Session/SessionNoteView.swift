@@ -302,40 +302,60 @@ struct SessionNoteView: View {
         do {
             note = try await APIClient.shared.getFullNote(sessionId: session.id)
         } catch {
-            // Demo note for Simulator
-            note = NoteResponse(
-                sessionId: session.id,
-                stage: 2,
-                version: 3,
-                providerUsed: "anthropic",
-                specialty: session.specialty,
-                completenessScore: 0.92,
-                sections: [
-                    NoteSectionResponse(id: "chief_complaint", title: "Chief Complaint", status: "populated", claims: [
-                        NoteClaimResponse(id: "c1", text: "Physician noted patient presents with right knee pain for the past three weeks, worsening with activity.", sourceType: "transcript", sourceId: "seg_001", sourceQuote: "right knee pain for the past three weeks")
-                    ]),
-                    NoteSectionResponse(id: "hpi", title: "History of Present Illness", status: "populated", claims: [
-                        NoteClaimResponse(id: "c2", text: "Physician noted pain began after a twisting injury during soccer. Aggravated by stairs and prolonged sitting, rated 6/10.", sourceType: "transcript", sourceId: "seg_002", sourceQuote: "twisting injury during a recreational soccer game")
-                    ]),
-                    NoteSectionResponse(id: "physical_exam", title: "Physical Examination", status: "populated", claims: [
-                        NoteClaimResponse(id: "c3", text: "Physician noted tenderness on palpation at the medial joint line of the right knee.", sourceType: "transcript", sourceId: "seg_003", sourceQuote: "tenderness on palpation at the medial joint line"),
-                        NoteClaimResponse(id: "c4", text: "Physician noted range of motion restricted -- flexion limited to approximately 110 degrees.", sourceType: "transcript", sourceId: "seg_004", sourceQuote: "flexion limited to approximately 110 degrees"),
-                        NoteClaimResponse(id: "c5", text: "McMurray test positive with palpable click on the medial side.", sourceType: "transcript", sourceId: "seg_005", sourceQuote: "McMurray test is positive")
-                    ]),
-                    NoteSectionResponse(id: "imaging_review", title: "Imaging Review", status: "populated", claims: [
-                        NoteClaimResponse(id: "c6", text: "Physician noted MRI shows horizontal tear of the medial meniscus posterior horn. No fracture or loose bodies.", sourceType: "transcript", sourceId: "seg_006", sourceQuote: "horizontal tear of the medial meniscus")
-                    ]),
-                    NoteSectionResponse(id: "assessment", title: "Assessment", status: "populated", claims: [
-                        NoteClaimResponse(id: "c7", text: "Physician stated assessment is medial meniscus tear, right knee.", sourceType: "transcript", sourceId: "seg_007", sourceQuote: "medial meniscus tear, right knee")
-                    ]),
-                    NoteSectionResponse(id: "plan", title: "Plan", status: "populated", claims: [
-                        NoteClaimResponse(id: "c8", text: "Physician noted plan is referral for arthroscopic partial meniscectomy and initiation of physiotherapy.", sourceType: "transcript", sourceId: "seg_008", sourceQuote: "refer for arthroscopic partial meniscectomy")
-                    ]),
-                ]
-            )
+            // The previous catch block here returned a hardcoded knee-pain
+            // SOAP note as a "Simulator fallback" — but it wasn't gated by
+            // #if DEBUG / targetEnvironment(simulator), so it shipped to
+            // TestFlight and made every failed note fetch look like a
+            // populated v3 anthropic note. The 92% completeness, "twisting
+            // injury during soccer", "medial meniscus tear" content you may
+            // have seen on real sessions all came from this fallback.
+            //
+            // Keeping the fallback for Simulator-only so the demo flow
+            // (no microphone) still produces a populated screen.
+            #if targetEnvironment(simulator)
+            note = sampleSimulatorNote(sessionId: session.id, specialty: session.specialty)
+            #else
+            note = nil
+            self.error = (error as? APIError)?.errorDescription ?? error.localizedDescription
+            #endif
         }
         isLoading = false
     }
+
+    #if targetEnvironment(simulator)
+    private func sampleSimulatorNote(sessionId: String, specialty: String) -> NoteResponse {
+        NoteResponse(
+            sessionId: sessionId,
+            stage: 2,
+            version: 3,
+            providerUsed: "anthropic",
+            specialty: specialty,
+            completenessScore: 0.92,
+            sections: [
+                NoteSectionResponse(id: "chief_complaint", title: "Chief Complaint", status: "populated", claims: [
+                    NoteClaimResponse(id: "c1", text: "Physician noted patient presents with right knee pain for the past three weeks, worsening with activity.", sourceType: "transcript", sourceId: "seg_001", sourceQuote: "right knee pain for the past three weeks")
+                ]),
+                NoteSectionResponse(id: "hpi", title: "History of Present Illness", status: "populated", claims: [
+                    NoteClaimResponse(id: "c2", text: "Physician noted pain began after a twisting injury during soccer. Aggravated by stairs and prolonged sitting, rated 6/10.", sourceType: "transcript", sourceId: "seg_002", sourceQuote: "twisting injury during a recreational soccer game")
+                ]),
+                NoteSectionResponse(id: "physical_exam", title: "Physical Examination", status: "populated", claims: [
+                    NoteClaimResponse(id: "c3", text: "Physician noted tenderness on palpation at the medial joint line of the right knee.", sourceType: "transcript", sourceId: "seg_003", sourceQuote: "tenderness on palpation at the medial joint line"),
+                    NoteClaimResponse(id: "c4", text: "Physician noted range of motion restricted -- flexion limited to approximately 110 degrees.", sourceType: "transcript", sourceId: "seg_004", sourceQuote: "flexion limited to approximately 110 degrees"),
+                    NoteClaimResponse(id: "c5", text: "McMurray test positive with palpable click on the medial side.", sourceType: "transcript", sourceId: "seg_005", sourceQuote: "McMurray test is positive")
+                ]),
+                NoteSectionResponse(id: "imaging_review", title: "Imaging Review", status: "populated", claims: [
+                    NoteClaimResponse(id: "c6", text: "Physician noted MRI shows horizontal tear of the medial meniscus posterior horn. No fracture or loose bodies.", sourceType: "transcript", sourceId: "seg_006", sourceQuote: "horizontal tear of the medial meniscus")
+                ]),
+                NoteSectionResponse(id: "assessment", title: "Assessment", status: "populated", claims: [
+                    NoteClaimResponse(id: "c7", text: "Physician stated assessment is medial meniscus tear, right knee.", sourceType: "transcript", sourceId: "seg_007", sourceQuote: "medial meniscus tear, right knee")
+                ]),
+                NoteSectionResponse(id: "plan", title: "Plan", status: "populated", claims: [
+                    NoteClaimResponse(id: "c8", text: "Physician noted plan is referral for arthroscopic partial meniscectomy and initiation of physiotherapy.", sourceType: "transcript", sourceId: "seg_008", sourceQuote: "refer for arthroscopic partial meniscectomy")
+                ]),
+            ]
+        )
+    }
+    #endif
 
     private func copyToClipboard(_ note: NoteResponse) {
         let dateStr = displayDate
