@@ -15,9 +15,21 @@ import boto3
 REGION: str = os.getenv("AWS_DEFAULT_REGION", "ca-central-1")
 ENDPOINT_URL: str | None = os.getenv("AWS_ENDPOINT_URL")
 
-AUDIO_BUCKET: str = os.getenv("AUDIO_S3_BUCKET", "aurion-audio-local")
-FRAMES_BUCKET: str = os.getenv("FRAMES_S3_BUCKET", "aurion-frames-local")
-EVAL_BUCKET: str = os.getenv("EVAL_S3_BUCKET", "aurion-eval-local")
+# Terraform's ECS task definition (infrastructure/ecs.tf:465-467) ships
+# the bucket names as S3_AUDIO_BUCKET / S3_FRAMES_BUCKET / S3_EVAL_BUCKET.
+# Read the ECS-shipped names first and fall back to the legacy *_S3_BUCKET
+# names for any local shell that exported them. Without this alignment,
+# dev fell back to "aurion-*-local" → NoSuchBucket on every PutObject →
+# 500 → iOS retries → WAF rate-limit → 403 on Stage 1.
+AUDIO_BUCKET: str = (
+    os.getenv("S3_AUDIO_BUCKET") or os.getenv("AUDIO_S3_BUCKET") or "aurion-audio-local"
+)
+FRAMES_BUCKET: str = (
+    os.getenv("S3_FRAMES_BUCKET") or os.getenv("FRAMES_S3_BUCKET") or "aurion-frames-local"
+)
+EVAL_BUCKET: str = (
+    os.getenv("S3_EVAL_BUCKET") or os.getenv("EVAL_S3_BUCKET") or "aurion-eval-local"
+)
 
 
 _s3_client: Any | None = None
