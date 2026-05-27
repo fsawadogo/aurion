@@ -138,6 +138,15 @@ jobs:
         # CODE_SIGN_IDENTITY[sdk=iphoneos*]="Apple Distribution" is baked
         # into the Release configs of the xcodeproj for both targets, so
         # the CLI doesn't need to override it.
+        #
+        # CURRENT_PROJECT_VERSION (CFBundleVersion) is overridden to the
+        # GitHub Actions run number — monotonically increasing per workflow
+        # invocation, so every push to main produces a unique TestFlight
+        # build number. Without this override, the pbxproj-baked value
+        # (`= 1`) made every upload after the first one a duplicate, and
+        # Apple's processing pipeline silently rejected them after
+        # altool's UPLOAD SUCCEEDED — fixing required physicians can't
+        # receive new bug-fix builds in TestFlight.
         run: |
           set -o pipefail
           xcodebuild -scheme "$IOS_SCHEME" \
@@ -148,6 +157,7 @@ jobs:
                      -authenticationKeyPath "$HOME/.appstoreconnect/private_keys/AuthKey_${APP_STORE_CONNECT_KEY_ID}.p8" \
                      -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
                      -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
+                     CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" \
                      archive
 
       - name: Export IPA
