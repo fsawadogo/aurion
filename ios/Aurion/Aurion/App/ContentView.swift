@@ -244,21 +244,23 @@ struct LoginView: View {
     let onSwitchToRegister: () -> Void
 
     @EnvironmentObject var appState: AppState
+    @State private var email = ""
+    @State private var password = ""
     @State private var isSigningIn = false
     @State private var loginError: String?
-    /// Drives the entrance staircase — logo first, then the form card,
-    /// then the footer. Flipped on first appear; the resulting feel is a
-    /// deliberate composition rather than a slam-on render.
     @State private var loginAppeared = false
-    /// True for ~700 ms after a successful sign-in. The sign-in button
-    /// morphs into a green checkmark before ContentView swaps in the
-    /// dashboard — confirms "you're in" with a beat of visual feedback.
     @State private var signInSucceeded = false
+    /// Set when Cognito asks the user to replace their temp password
+    /// (first sign-in for every admin-provisioned account). Drives a
+    /// full-screen cover sheet rather than swapping the form so the
+    /// transition reads as "you got past the first gate, now do this."
+    @State private var newPasswordChallenge: (session: String, username: String)?
+    @FocusState private var focusedField: Field?
+
+    enum Field { case email, password }
 
     var body: some View {
         ZStack {
-            // Navy gradient background. Brand-fixed surface — same in
-            // both color schemes (login is identity, not theme).
             LinearGradient(
                 colors: [Color.aurionNavy, Color.aurionNavyDark],
                 startPoint: .top, endPoint: .bottom
@@ -277,21 +279,34 @@ struct LoginView: View {
 
                 Spacer()
 
-                // Sign-in card. The email + password form is gone —
-                // authentication happens in the Cognito hosted UI
-                // (opened in ASWebAuthenticationSession) so the iOS app
-                // never touches credentials, and MFA enrollment +
-                // challenge flows live entirely on Cognito's surface.
-                VStack(spacing: 18) {
-                    VStack(spacing: 6) {
-                        Text("Sign in to continue")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundColor(.white)
-                        Text("Aurion uses a secure sign-in window from AWS Cognito. Multi-factor authentication is required.")
-                            .font(.system(size: 13))
-                            .foregroundColor(Color.aurionOnNavySecondary)
-                            .multilineTextAlignment(.center)
-                            .lineSpacing(3)
+                VStack(spacing: 16) {
+                    Text("Sign in")
+                        .font(.system(size: 20, weight: .semibold))
+                        .foregroundColor(.white)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+
+                    VStack(spacing: 12) {
+                        loginField(
+                            label: "Email",
+                            text: $email,
+                            field: .email,
+                            keyboard: .emailAddress,
+                            content: .username,
+                            submit: .next
+                        ) {
+                            focusedField = .password
+                        }
+
+                        loginField(
+                            label: "Password",
+                            text: $password,
+                            field: .password,
+                            secure: true,
+                            content: .password,
+                            submit: .done
+                        ) {
+                            Task { await signIn() }
+                        }
                     }
 
                     Button {
@@ -306,9 +321,9 @@ struct LoginView: View {
                                 Text("Signed in")
                             } else if isSigningIn {
                                 ProgressView().tint(.aurionNavy)
-                                Text("Opening secure sign-in…")
+                                Text("Signing in…")
                             } else {
-                                Image(systemName: "lock.shield.fill")
+                                Image(systemName: "arrow.right.circle.fill")
                                     .font(.system(size: 16, weight: .semibold))
                                 Text("Sign in")
                             }
@@ -318,20 +333,22 @@ struct LoginView: View {
                         .animation(AurionAnimation.smooth, value: signInSucceeded)
                     }
                     .buttonStyle(AurionPrimaryButtonStyle())
-                    .disabled(isSigningIn || signInSucceeded)
+                    .disabled(isSigningIn || signInSucceeded || email.isEmpty || password.isEmpty)
 
                     if let loginError {
                         Text(loginError)
                             .font(.system(size: 12))
                             .foregroundColor(Color.aurionOnNavyError)
                             .multilineTextAlignment(.center)
+                            .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
-                    Text("First-time access? Your administrator will provide a temporary password and walk you through enrolling your authenticator app.")
+                    Text("First-time access? Use the temporary password your administrator sent — Aurion will prompt you to set a new one.")
                         .font(.system(size: 11))
                         .foregroundColor(Color.aurionOnNavyFootnote)
-                        .multilineTextAlignment(.center)
+                        .multilineTextAlignment(.leading)
                         .lineSpacing(3)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
                 }
                 .padding(24)
@@ -366,32 +383,306 @@ struct LoginView: View {
                 loginAppeared = true
             }
         }
+        .fullScreenCover(item: Binding(
+            get: { newPasswordChallenge.map { NewPasswordChallenge(session: $0.session, username: $0.username) } },
+            set: { _ in newPasswordChallenge = nil }
+        )) { challenge in
+            NewPasswordView(challenge: challenge) { outcome in
+                handleOutcome(outcome)
+            } onCancel: {
+                newPasswordChallenge = nil
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func loginField(
+        label: String,
+        text: Binding<String>,
+        field: Field,
+        secure: Bool = false,
+        keyboard: UIKeyboardType = .default,
+        content: UITextContentType? = nil,
+        submit: SubmitLabel,
+        onSubmit: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.5)
+                .foregroundColor(Color.aurionOnNavyFootnote)
+            Group {
+                if secure {
+                    SecureField("", text: text)
+                } else {
+                    TextField("", text: text)
+                }
+            }
+            .focused($focusedField, equals: field)
+            .submitLabel(submit)
+            .onSubmit(onSubmit)
+            .textInputAutocapitalization(.never)
+            .autocorrectionDisabled()
+            .keyboardType(keyboard)
+            .textContentType(content)
+            .foregroundColor(.white)
+            .tint(.aurionGold)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 11)
+            .background(Color.white.opacity(0.08))
+            .cornerRadius(10)
+            .overlay(
+                RoundedRectangle(cornerRadius: 10)
+                    .stroke(Color.white.opacity(focusedField == field ? 0.35 : 0.10), lineWidth: 1)
+            )
+        }
     }
 
     @MainActor
     private func signIn() async {
+        guard !email.isEmpty, !password.isEmpty else { return }
         isSigningIn = true
         loginError = nil
         do {
-            // Hosted UI handles password + TOTP MFA on Cognito's surface,
-            // we get back a token bundle on the redirect.
-            _ = try await CognitoAuth.shared.signIn()
-
-            // Backend round trip: validates the JWT via JWKS, looks up
-            // (or auto-provisions on first sign-in) the UserModel row,
-            // returns the canonical user identity for the SwiftUI app.
-            let me = try await APIClient.shared.fetchCurrentUser()
-            AurionHaptics.notification(.success)
-            isSigningIn = false
-            signInSucceeded = true
-            try? await Task.sleep(nanoseconds: 600_000_000)
-            appState.applyAuth(userId: me.userId, role: me.role)
-        } catch AuthError.userCancelled {
-            isSigningIn = false
-            // Soft state — no error banner, user knows they cancelled.
+            let outcome = try await CognitoNativeAuth.shared.signIn(
+                email: email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
+                password: password
+            )
+            handleOutcome(outcome)
         } catch {
             isSigningIn = false
             loginError = error.localizedDescription
+            AurionHaptics.notification(.error)
+        }
+    }
+
+    @MainActor
+    private func handleOutcome(_ outcome: CognitoNativeAuth.SignInOutcome) {
+        switch outcome {
+        case .authenticated:
+            // Backend round trip — same shape as the hosted-UI path used
+            // to do, so AppState wiring downstream is unchanged.
+            Task {
+                do {
+                    let me = try await APIClient.shared.fetchCurrentUser()
+                    AurionHaptics.notification(.success)
+                    isSigningIn = false
+                    signInSucceeded = true
+                    newPasswordChallenge = nil
+                    try? await Task.sleep(nanoseconds: 600_000_000)
+                    appState.applyAuth(userId: me.userId, role: me.role)
+                } catch {
+                    isSigningIn = false
+                    loginError = "Signed in but backend lookup failed: \(error.localizedDescription)"
+                    AurionHaptics.notification(.error)
+                }
+            }
+        case .newPasswordRequired(let session, let username):
+            isSigningIn = false
+            newPasswordChallenge = (session: session, username: username)
+        case .mfaRequired:
+            isSigningIn = false
+            loginError = "MFA is enabled on this pool, but this build can't prompt for a code. Contact admin."
+            AurionHaptics.notification(.error)
+        }
+    }
+}
+
+// MARK: - New password challenge (first sign-in)
+
+/// Identifiable wrapper so the new-password screen can be presented via
+/// `.fullScreenCover(item:)` without ambiguity over the tuple.
+private struct NewPasswordChallenge: Identifiable {
+    let id = UUID()
+    let session: String
+    let username: String
+}
+
+private struct NewPasswordView: View {
+    let challenge: NewPasswordChallenge
+    let onSuccess: (CognitoNativeAuth.SignInOutcome) -> Void
+    let onCancel: () -> Void
+
+    @State private var newPassword = ""
+    @State private var confirm = ""
+    @State private var isSubmitting = false
+    @State private var error: String?
+    @FocusState private var focused: Field?
+
+    enum Field { case newPassword, confirm }
+
+    /// Cognito user pool policy mirrored from `infrastructure/cognito.tf`.
+    /// We surface the rules inline so the user sees what they're shooting
+    /// for before they hit submit, not after the failure roundtrip.
+    private var meetsPolicy: Bool {
+        newPassword.count >= 12 &&
+            newPassword.range(of: #"[a-z]"#, options: .regularExpression) != nil &&
+            newPassword.range(of: #"[A-Z]"#, options: .regularExpression) != nil &&
+            newPassword.range(of: #"\d"#, options: .regularExpression) != nil &&
+            newPassword.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil
+    }
+
+    private var canSubmit: Bool {
+        meetsPolicy && newPassword == confirm && !isSubmitting
+    }
+
+    var body: some View {
+        ZStack {
+            LinearGradient(
+                colors: [Color.aurionNavy, Color.aurionNavyDark],
+                startPoint: .top, endPoint: .bottom
+            ).ignoresSafeArea()
+
+            VStack(spacing: 0) {
+                HStack {
+                    Button {
+                        onCancel()
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "chevron.left")
+                            Text("Cancel")
+                        }
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.white.opacity(0.8))
+                    }
+                    Spacer()
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 20)
+
+                Spacer()
+
+                VStack(spacing: 16) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("Set a new password")
+                            .font(.system(size: 22, weight: .semibold))
+                            .foregroundColor(.white)
+                        Text("For \(challenge.username)")
+                            .font(.system(size: 13))
+                            .foregroundColor(Color.aurionOnNavySecondary)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
+                    field("New password", text: $newPassword, field: .newPassword) {
+                        focused = .confirm
+                    }
+                    field("Confirm password", text: $confirm, field: .confirm) {
+                        if canSubmit { Task { await submit() } }
+                    }
+
+                    policyChecklist
+                        .padding(.top, 4)
+
+                    Button {
+                        AurionHaptics.impact(.medium)
+                        Task { await submit() }
+                    } label: {
+                        HStack(spacing: 10) {
+                            if isSubmitting {
+                                ProgressView().tint(.aurionNavy)
+                                Text("Updating…")
+                            } else {
+                                Image(systemName: "checkmark.circle.fill")
+                                    .font(.system(size: 16, weight: .semibold))
+                                Text("Update password")
+                            }
+                        }
+                        .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(AurionPrimaryButtonStyle())
+                    .disabled(!canSubmit)
+
+                    if let error {
+                        Text(error)
+                            .font(.system(size: 12))
+                            .foregroundColor(Color.aurionOnNavyError)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+                }
+                .padding(24)
+                .background(Color.white.opacity(0.06))
+                .cornerRadius(18)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 18)
+                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                )
+                .padding(.horizontal, 24)
+
+                Spacer()
+            }
+        }
+        .onAppear { focused = .newPassword }
+    }
+
+    @ViewBuilder
+    private func field(
+        _ label: String,
+        text: Binding<String>,
+        field: Field,
+        onSubmit: @escaping () -> Void
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Text(label)
+                .font(.system(size: 11, weight: .semibold))
+                .tracking(0.5)
+                .foregroundColor(Color.aurionOnNavyFootnote)
+            SecureField("", text: text)
+                .focused($focused, equals: field)
+                .submitLabel(field == .newPassword ? .next : .done)
+                .onSubmit(onSubmit)
+                .textInputAutocapitalization(.never)
+                .autocorrectionDisabled()
+                .textContentType(.newPassword)
+                .foregroundColor(.white)
+                .tint(.aurionGold)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 11)
+                .background(Color.white.opacity(0.08))
+                .cornerRadius(10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.white.opacity(focused == field ? 0.35 : 0.10), lineWidth: 1)
+                )
+        }
+    }
+
+    private var policyChecklist: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            policyRow("At least 12 characters", ok: newPassword.count >= 12)
+            policyRow("One uppercase letter", ok: newPassword.range(of: #"[A-Z]"#, options: .regularExpression) != nil)
+            policyRow("One lowercase letter", ok: newPassword.range(of: #"[a-z]"#, options: .regularExpression) != nil)
+            policyRow("One digit", ok: newPassword.range(of: #"\d"#, options: .regularExpression) != nil)
+            policyRow("One symbol", ok: newPassword.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil)
+            policyRow("Confirm matches", ok: !confirm.isEmpty && newPassword == confirm)
+        }
+    }
+
+    private func policyRow(_ text: String, ok: Bool) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: ok ? "checkmark.circle.fill" : "circle")
+                .font(.system(size: 11))
+                .foregroundColor(ok ? Color.aurionGold : Color.aurionOnNavyFootnote)
+            Text(text)
+                .font(.system(size: 11))
+                .foregroundColor(ok ? Color.aurionOnNavySecondary : Color.aurionOnNavyFootnote)
+        }
+    }
+
+    @MainActor
+    private func submit() async {
+        isSubmitting = true
+        error = nil
+        do {
+            let outcome = try await CognitoNativeAuth.shared.completeNewPassword(
+                username: challenge.username,
+                newPassword: newPassword,
+                session: challenge.session
+            )
+            onSuccess(outcome)
+        } catch {
+            isSubmitting = false
+            self.error = error.localizedDescription
             AurionHaptics.notification(.error)
         }
     }
