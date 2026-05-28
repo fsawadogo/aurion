@@ -109,48 +109,63 @@ struct ContentView: View {
 struct ProcessingView: View {
     let status: String
     @EnvironmentObject var sessionManager: SessionManager
+    @EnvironmentObject var appState: AppState
 
     var body: some View {
         ZStack {
             Color.aurionBackground.ignoresSafeArea()
 
-            VStack(spacing: 24) {
-                Spacer()
-
-                CircularProgressRing(progress: 0.7, color: .aurionGold, lineWidth: 6, size: 80)
-
-                Text(L("processing.title"))
-                    .aurionHeadline()
-
-                Text(status)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-
-                // Recorded audio stays in memory while the prompt is
-                // visible, so the clinician can re-fire without losing
-                // the encounter.
-                if let prompt = sessionManager.stage1Status.retryPrompt {
-                    Stage1RetryPrompt(
-                        title: prompt.title,
-                        detail: prompt.detail,
-                        onRetry: { Task { await sessionManager.retryStage1() } }
-                    )
-                    .padding(.horizontal, 32)
+            // Recorded offline — the encounter is safely on disk and will
+            // sync on reconnect. Distinct terminal panel, not a progress ring.
+            if sessionManager.stage1Status == .queuedOffline {
+                OfflineQueuedPanel {
+                    sessionManager.endSession()
+                    appState.currentSession = nil
                 }
-
-                if !sessionManager.maskingFailedFrames.isEmpty {
-                    MaskingRetryPrompt(
-                        failedCount: sessionManager.maskingFailedFrames.count,
-                        onRetry: { Task { await sessionManager.retryFailedMaskingFrames() } },
-                        onSkip: { sessionManager.skipFailedMaskingFrames() }
-                    )
-                    .padding(.horizontal, 32)
-                }
-
-                Spacer()
+                .padding(.horizontal, 32)
+            } else {
+                processingBody
             }
+        }
+    }
+
+    private var processingBody: some View {
+        VStack(spacing: 24) {
+            Spacer()
+
+            CircularProgressRing(progress: 0.7, color: .aurionGold, lineWidth: 6, size: 80)
+
+            Text(L("processing.title"))
+                .aurionHeadline()
+
+            Text(status)
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 40)
+
+            // Recorded audio stays in memory while the prompt is
+            // visible, so the clinician can re-fire without losing
+            // the encounter.
+            if let prompt = sessionManager.stage1Status.retryPrompt {
+                Stage1RetryPrompt(
+                    title: prompt.title,
+                    detail: prompt.detail,
+                    onRetry: { Task { await sessionManager.retryStage1() } }
+                )
+                .padding(.horizontal, 32)
+            }
+
+            if !sessionManager.maskingFailedFrames.isEmpty {
+                MaskingRetryPrompt(
+                    failedCount: sessionManager.maskingFailedFrames.count,
+                    onRetry: { Task { await sessionManager.retryFailedMaskingFrames() } },
+                    onSkip: { sessionManager.skipFailedMaskingFrames() }
+                )
+                .padding(.horizontal, 32)
+            }
+
+            Spacer()
         }
     }
 }
@@ -211,6 +226,78 @@ private struct MaskingRetryPrompt: View {
                 .stroke(Color.aurionGold.opacity(0.4), lineWidth: 1)
         )
         .cornerRadius(12)
+    }
+}
+
+/// Terminal panel shown after a recording is captured with no connectivity.
+/// Reassures the physician the encounter is safe and will sync itself; the
+/// audio already sits in the on-device `OfflineUploadQueue`.
+private struct OfflineQueuedPanel: View {
+    let onDone: () -> Void
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Image(systemName: "checkmark.icloud")
+                .font(.system(size: 52, weight: .light))
+                .foregroundColor(.aurionGold)
+            Text(L("offline.queued.title"))
+                .aurionHeadline()
+            Text(L("offline.queued.detail"))
+                .font(.subheadline)
+                .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 16)
+            Button(L("common.done"), action: onDone)
+                .buttonStyle(.borderedProminent)
+                .padding(.top, 4)
+        }
+        .padding(28)
+    }
+}
+
+/// Slim banner surfacing connectivity + sync state, driven by the shared
+/// reachability monitor and upload queue. Hidden when online with nothing
+/// pending. Drop it at the top of any screen (currently the dashboard).
+struct OfflineStatusBanner: View {
+    @ObservedObject private var reachability = ReachabilityMonitor.shared
+    @ObservedObject private var queue = OfflineUploadQueue.shared
+
+    var body: some View {
+        if let message {
+            HStack(spacing: 10) {
+                if queue.isSyncing {
+                    ProgressView().controlSize(.small).tint(.white)
+                } else {
+                    Image(systemName: reachability.isOnline ? "arrow.triangle.2.circlepath" : "wifi.slash")
+                        .font(.footnote.weight(.semibold))
+                }
+                Text(message)
+                    .font(.footnote.weight(.medium))
+                    .lineLimit(2)
+                Spacer(minLength: 0)
+            }
+            .foregroundColor(.white)
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(reachability.isOnline ? Color.aurionGold.opacity(0.9) : Color.secondary)
+            .cornerRadius(12)
+        }
+    }
+
+    /// nil → banner hidden. Offline always shows; online shows only while
+    /// there's queued work to sync.
+    private var message: String? {
+        let count = queue.pending.count
+        if !reachability.isOnline {
+            return count > 0
+                ? Lplural("offline.queued.waiting", count)
+                : L("offline.savedLocally")
+        }
+        if count > 0 {
+            return Lplural("offline.syncing", count)
+        }
+        return nil
     }
 }
 

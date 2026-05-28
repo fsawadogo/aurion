@@ -113,6 +113,36 @@ final class APIClient: Sendable {
         return try await post(path: "/sessions/\(sessionId)/stop")
     }
 
+    /// Upload a recorded WAV for transcription + Stage 1 note generation,
+    /// used by `OfflineUploadQueue` to drain deferred encounters. Distinct
+    /// from the interactive `SessionManager.submitAudio` path, which carries
+    /// its own SLA timeout and drives the live processing UI; this is a
+    /// fire-and-wait background call. Throws `APIError` (offline/timeout →
+    /// keep queued; other → bounded retry) so the queue can classify failures.
+    /// The transcription runs server-side synchronously, hence the long timeout.
+    func uploadAudioForTranscription(sessionId: String, audio: Data) async throws {
+        let url = URL(string: "\(baseURL)/transcription/\(sessionId)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 180
+        let boundary = UUID().uuidString
+        request.setValue(
+            "multipart/form-data; boundary=\(boundary)",
+            forHTTPHeaderField: "Content-Type"
+        )
+        addAuth(&request)
+        var builder = MultipartBuilder(boundary: boundary)
+        builder.appendFile(
+            "audio_file",
+            filename: "recording.wav",
+            mime: "audio/wav",
+            data: audio
+        )
+        request.httpBody = builder.finish()
+        let (data, response) = try await performRequest(request)
+        try validateResponse(response, data: data)
+    }
+
     // MARK: - Notes
 
     func getStage1Note(sessionId: String) async throws -> NoteResponse {
@@ -352,7 +382,11 @@ final class APIClient: Sendable {
             return try await URLSession.shared.data(for: request)
         } catch let error as URLError {
             switch error.code {
-            case .notConnectedToInternet, .networkConnectionLost:
+            case .notConnectedToInternet, .networkConnectionLost,
+                 .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
+                // Treat "backend unreachable" the same as "no network" — both
+                // mean the request can't land, so the offline queue should
+                // keep the encounter and retry rather than dropping it.
                 throw APIError.offline
             case .timedOut:
                 throw APIError.timeout

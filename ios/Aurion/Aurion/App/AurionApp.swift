@@ -34,6 +34,10 @@ struct AurionApp: App {
                     // it before sign-in would just 401.
                     if appState.isAuthenticated {
                         await remoteConfig.refresh()
+                        // Drain any encounters captured offline in a prior
+                        // session and arm reconnect-driven sync. Gated on auth
+                        // because the upload needs a bearer token.
+                        OfflineUploadQueue.shared.start()
                     }
                 }
                 // Spotlight result tap. The donation lives in SessionNoteView;

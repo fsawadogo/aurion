@@ -532,3 +532,11 @@
 "sessions.date.today" = "Today";
 "sessions.date.week" = "Last 7 days";
 "sessions.date.month" = "Last 30 days";
+/* ── Offline capture resilience ───────────────────────── */
+"offline.savedLocally" = "Offline \U2014 recordings are saved on this device and will sync automatically.";
+"offline.queued.waiting.one" = "Offline \U2014 %d encounter waiting to sync.";
+"offline.queued.waiting.many" = "Offline \U2014 %d encounters waiting to sync.";
+"offline.syncing.one" = "Syncing %d encounter\U2026";
+"offline.syncing.many" = "Syncing %d encounters\U2026";
+"offline.queued.title" = "Saved on this device";
+"offline.queued.detail" = "You\U2019re offline. This encounter is safely stored and will upload automatically when you reconnect.";
