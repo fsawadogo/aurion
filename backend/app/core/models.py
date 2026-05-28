@@ -384,3 +384,33 @@ class EvalAssignmentModel(Base):
     completed_at: Mapped[Optional[datetime]] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class ProviderOverrideModel(Base):
+    """Global runtime AI-provider override.
+
+    Lets an ADMIN/COMPLIANCE_OFFICER pin the active provider for a given
+    provider type at runtime (no redeploy, no new IAM grant). One row per
+    provider type — the registry consults an in-memory cache that a
+    background poller refreshes from this table every ~10s, so the
+    override layer sits between the per-call override and AppConfig.
+
+    The audit log preserves the full history; this table holds only the
+    current effective override (upsert in place, delete to clear).
+    """
+
+    __tablename__ = "provider_overrides"
+
+    # "transcription" | "note_generation" | "vision"
+    provider_type: Mapped[str] = mapped_column(String(32), primary_key=True)
+    provider_value: Mapped[str] = mapped_column(String(32), nullable=False)
+    set_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

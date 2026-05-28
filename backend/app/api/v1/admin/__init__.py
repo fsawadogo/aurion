@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.v1.admin import audit, eval, metrics, sessions, users
+from app.api.v1.admin import audit, config, eval, metrics, sessions, users
 
 router = APIRouter()
 router.include_router(users.router)
@@ -18,3 +18,4 @@ router.include_router(audit.router)
 router.include_router(sessions.router)
 router.include_router(eval.router)
 router.include_router(metrics.router)
+router.include_router(config.router)

@@ -99,6 +99,8 @@ class AuditEventType(StrEnum):
     # ── System / config ──────────────────────────────────────────────────
     CONFIG_CHANGED = "config_changed"
     PROVIDER_CHANGED = "provider_changed"
+    PROVIDER_OVERRIDE_SET = "provider_override_set"
+    PROVIDER_OVERRIDE_CLEARED = "provider_override_cleared"
 
 
 # ── Q-03 — kwarg whitelist ────────────────────────────────────────────────
@@ -243,6 +245,12 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.CONFIG_CHANGED: frozenset({"changed_by", "diff"}),
     AuditEventType.PROVIDER_CHANGED: frozenset(
         {"changed_by", "provider_role", "old_provider", "new_provider"}
+    ),
+    AuditEventType.PROVIDER_OVERRIDE_SET: frozenset(
+        {"changed_by", "provider_type", "new_provider", "reason"}
+    ),
+    AuditEventType.PROVIDER_OVERRIDE_CLEARED: frozenset(
+        {"changed_by", "provider_type", "old_provider"}
     ),
 }
 
