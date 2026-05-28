@@ -108,11 +108,16 @@ class AssemblyAITranscriptionProvider(TranscriptionProvider):
     def _parse_response(self, data: dict, session_id: str) -> Transcript:
         """Parse AssemblyAI transcript response into standard schema."""
         segments = []
-        words = data.get("words", [])
+        # `or []` (not `.get(k, [])`): AssemblyAI returns an explicit null —
+        # not an absent key — for `words`/`utterances` when a transcript
+        # completes with no detected speech (silence, very short audio,
+        # speaker_labels off). `.get(k, [])` only defaults on a missing key,
+        # so a null value would slip through and crash on iteration.
+        words = data.get("words") or []
 
         if not words:
             # Fall back to utterances or sentences
-            utterances = data.get("utterances", [])
+            utterances = data.get("utterances") or []
             for i, utt in enumerate(utterances):
                 segments.append(
                     TranscriptSegment(

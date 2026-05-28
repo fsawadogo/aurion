@@ -142,6 +142,20 @@ class TestTranscriptionProviders:
         assert result.provider_used == "assemblyai"
         assert len(result.segments) > 0
 
+    def test_assemblyai_handles_null_words_and_utterances(self):
+        """Regression: a completed transcript with no detected speech comes
+        back with explicit `null` (not absent) words/utterances. The parser
+        must yield an empty transcript rather than crash on `enumerate(None)`
+        ('NoneType' object is not iterable -> 500)."""
+        provider = AssemblyAITranscriptionProvider()
+        transcript = provider._parse_response(
+            {"id": "x", "status": "completed", "words": None, "utterances": None},
+            "session-001",
+        )
+        assert transcript.session_id == "session-001"
+        assert transcript.provider_used == "assemblyai"
+        assert transcript.segments == []
+
     @pytest.mark.asyncio
     async def test_both_transcription_providers_return_same_schema(self):
         """Both providers must return the exact same Transcript schema."""
