@@ -4,6 +4,7 @@ import SwiftUI
 /// Provides: account info, voice profile, privacy controls, consent history, session history.
 struct ProfileView: View {
     @EnvironmentObject var appState: AppState
+    @EnvironmentObject var appLock: AppLockManager
     @State private var showDeleteConfirmation = false
     @State private var showDataExport = false
     @State private var isLoadingData = false
@@ -235,6 +236,31 @@ struct ProfileView: View {
                 .tint(.aurionGold)
             } header: {
                 SectionHeader(title: L("profile.sectionNotifications"))
+            }
+
+            // ── Security (app lock) ───────────────────────────
+            Section {
+                Toggle(isOn: $appLock.isEnabled) {
+                    Label(L("profile.appLock"), systemImage: "faceid")
+                        .foregroundColor(.aurionTextPrimary)
+                }
+                .tint(.aurionGold)
+
+                if appLock.isEnabled {
+                    Picker(selection: $appLock.idleTimeoutSeconds) {
+                        ForEach(AppLockManager.timeoutOptions, id: \.self) { secs in
+                            Text(L("applock.timeout.\(secs)")).tag(secs)
+                        }
+                    } label: {
+                        Label(L("profile.autoLock"), systemImage: "clock")
+                            .foregroundColor(.aurionTextPrimary)
+                    }
+                }
+            } header: {
+                SectionHeader(title: L("profile.sectionSecurity"))
+            } footer: {
+                Text(L("profile.appLockHelp"))
+                    .font(.caption2)
             }
 
             // ── Privacy & Data (Law 25) ───────────────────────

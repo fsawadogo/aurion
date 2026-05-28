@@ -572,6 +572,7 @@
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Aurion communicates with the local Aurion backend on your network during development.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Aurion records audio during clinical encounters to generate structured notes. Recording requires patient consent and stops when you end the session.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Aurion uses on-device speech recognition for voice enrollment and to display live captions during clinical encounters. Audio stays on this device — never sent to Apple servers.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Aurion uses Face ID to lock the app so patient data stays protected if your phone is unlocked and left unattended.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
@@ -611,6 +612,7 @@
 				INFOPLIST_KEY_NSLocalNetworkUsageDescription = "Aurion communicates with the local Aurion backend on your network during development.";
 				INFOPLIST_KEY_NSMicrophoneUsageDescription = "Aurion records audio during clinical encounters to generate structured notes. Recording requires patient consent and stops when you end the session.";
 				INFOPLIST_KEY_NSSpeechRecognitionUsageDescription = "Aurion uses on-device speech recognition for voice enrollment and to display live captions during clinical encounters. Audio stays on this device — never sent to Apple servers.";
+				INFOPLIST_KEY_NSFaceIDUsageDescription = "Aurion uses Face ID to lock the app so patient data stays protected if your phone is unlocked and left unattended.";
 				INFOPLIST_KEY_NSSupportsLiveActivities = YES;
 				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
 				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
