@@ -11,6 +11,7 @@ from typing import Optional
 
 from app.core.types import ProviderError
 from app.modules.config.appconfig_client import get_config
+from app.modules.config.provider_overrides import get_override
 from app.modules.config.schema import (
     NoteGenerationProviderKey,
     TranscriptionProviderKey,
@@ -95,7 +96,16 @@ class ProviderRegistry:
         self, override: Optional[str] = None
     ) -> TranscriptionProvider:
         config = get_config()
-        key = TranscriptionProviderKey(override) if override else config.providers.transcription
+        # Precedence: per-call override > DB override store > AppConfig.
+        if override:
+            key = TranscriptionProviderKey(override)
+        elif (store := get_override("transcription")) is not None:
+            key = TranscriptionProviderKey(store)
+            logger.info(
+                "transcription provider overridden via admin store: %s", key.value
+            )
+        else:
+            key = config.providers.transcription
         cls = _TRANSCRIPTION_PROVIDERS.get(key)
         if not cls:
             raise ProviderError(key.value, f"No transcription provider registered for key: {key}")
@@ -106,7 +116,16 @@ class ProviderRegistry:
         self, override: Optional[str] = None
     ) -> NoteGenerationProvider:
         config = get_config()
-        key = NoteGenerationProviderKey(override) if override else config.providers.note_generation
+        # Precedence: per-call override > DB override store > AppConfig.
+        if override:
+            key = NoteGenerationProviderKey(override)
+        elif (store := get_override("note_generation")) is not None:
+            key = NoteGenerationProviderKey(store)
+            logger.info(
+                "note_generation provider overridden via admin store: %s", key.value
+            )
+        else:
+            key = config.providers.note_generation
         cls = _NOTE_GEN_PROVIDERS.get(key)
         if not cls:
             raise ProviderError(key.value, f"No note generation provider registered for key: {key}")
@@ -117,7 +136,16 @@ class ProviderRegistry:
         self, override: Optional[str] = None
     ) -> VisionProvider:
         config = get_config()
-        key = VisionProviderKey(override) if override else config.providers.vision
+        # Precedence: per-call override > DB override store > AppConfig.
+        if override:
+            key = VisionProviderKey(override)
+        elif (store := get_override("vision")) is not None:
+            key = VisionProviderKey(store)
+            logger.info(
+                "vision provider overridden via admin store: %s", key.value
+            )
+        else:
+            key = config.providers.vision
         cls = _VISION_PROVIDERS.get(key)
         if not cls:
             raise ProviderError(key.value, f"No vision provider registered for key: {key}")
@@ -125,9 +153,21 @@ class ProviderRegistry:
         return cls()
 
     def get_note_provider_with_fallback(self) -> NoteGenerationProvider:
-        """Try the configured provider first, then fall back through the ordered list."""
+        """Try the configured provider first, then fall back through the ordered list.
+
+        The DB override store (if set) takes precedence over AppConfig as
+        the primary, matching :meth:`get_note_provider`'s precedence; the
+        ordered fallback list still applies if the primary is unavailable.
+        """
         config = get_config()
-        primary = config.providers.note_generation
+        if (store := get_override("note_generation")) is not None:
+            primary = NoteGenerationProviderKey(store)
+            logger.info(
+                "note_generation provider overridden via admin store: %s",
+                primary.value,
+            )
+        else:
+            primary = config.providers.note_generation
         order = [primary] + [k for k in _NOTE_GEN_FALLBACK_ORDER if k != primary]
 
         for key in order:

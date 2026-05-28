@@ -26,6 +26,10 @@ from app.api.v1.websocket import router as ws_router
 from app.core.database import close_db
 from app.core.logging import setup_logging
 from app.modules.config.appconfig_client import get_appconfig_client
+from app.modules.config.provider_overrides import (
+    start_override_polling,
+    stop_override_polling,
+)
 
 
 @asynccontextmanager
@@ -36,8 +40,10 @@ async def lifespan(app: FastAPI):
     await seed_dev_users()
     appconfig = get_appconfig_client()
     await appconfig.start_polling()
+    await start_override_polling()
     yield
     # Shutdown
+    await stop_override_polling()
     await appconfig.stop_polling()
     await close_db()
 

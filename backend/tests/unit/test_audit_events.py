@@ -77,6 +77,8 @@ EXPECTED_VALUES: dict[str, str] = {
     # System
     "CONFIG_CHANGED": "config_changed",
     "PROVIDER_CHANGED": "provider_changed",
+    "PROVIDER_OVERRIDE_SET": "provider_override_set",
+    "PROVIDER_OVERRIDE_CLEARED": "provider_override_cleared",
 }
 
 
