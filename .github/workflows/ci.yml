@@ -113,6 +113,16 @@ jobs:
     runs-on: ubuntu-latest
     needs: build
     if: github.ref == 'refs/heads/main'
+    # Serialize terraform apply against the shared dev state. Without this,
+    # two back-to-back main merges race the Terraform/DynamoDB state lock:
+    # one apply wins the lock and runs at the OLDER commit (potentially
+    # destroying resources a not-yet-applied PR added), the other fails to
+    # acquire the lock. cancel-in-progress: false makes the second run WAIT
+    # for the first to finish (never cancel an in-flight apply — that would
+    # orphan the lock + leave partial state), then apply the latest commit.
+    concurrency:
+      group: terraform-apply-dev
+      cancel-in-progress: false
     env:
       AWS_REGION: ca-central-1
       # Promoted to a shell variable for the apply step. `-var` on the
