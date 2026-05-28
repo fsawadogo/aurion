@@ -18,6 +18,11 @@ logger = logging.getLogger("aurion.providers.assemblyai")
 
 _ASSEMBLYAI_API_KEY = os.getenv("ASSEMBLYAI_API_KEY", "")
 _BASE_URL = "https://api.assemblyai.com/v2"
+# AssemblyAI's API requires an explicit model list on /v2/transcript — a bare
+# request 400s with: "speech_models must be a non-empty list containing one or
+# more of: universal-3-pro, universal-2". Default to universal-2 (strong
+# accuracy, lower cost); override to "universal-3-pro" for best quality.
+_SPEECH_MODEL = os.getenv("ASSEMBLYAI_SPEECH_MODEL", "universal-2")
 
 
 class AssemblyAITranscriptionProvider(TranscriptionProvider):
@@ -47,6 +52,7 @@ class AssemblyAITranscriptionProvider(TranscriptionProvider):
                     json={
                         "audio_url": upload_url,
                         "language_code": "en",
+                        "speech_models": [_SPEECH_MODEL],
                     },
                 )
                 transcript_resp.raise_for_status()
@@ -73,6 +79,21 @@ class AssemblyAITranscriptionProvider(TranscriptionProvider):
                     import asyncio
                     await asyncio.sleep(3)
 
+        except httpx.HTTPStatusError as e:
+            # Surface AssemblyAI's error body — it carries the actionable
+            # reason (e.g. the speech_models requirement). The body is the
+            # API's own error envelope, never transcript/PHI content.
+            body = (e.response.text or "")[:300] if e.response is not None else ""
+            status = e.response.status_code if e.response is not None else "?"
+            logger.error(
+                "AssemblyAI HTTP error: session=%s status=%s body=%s",
+                session_id, status, body,
+            )
+            raise ProviderError(
+                "assemblyai",
+                f"AssemblyAI transcription failed ({status}): {body}",
+                e,
+            )
         except httpx.HTTPError as e:
             logger.error(
                 "AssemblyAI call failed: session=%s error=%s", session_id, str(e)
