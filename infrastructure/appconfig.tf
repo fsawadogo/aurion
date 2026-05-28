@@ -150,7 +150,12 @@ resource "aws_appconfig_hosted_configuration_version" "main" {
 
   content = jsonencode({
     providers = {
-      transcription   = "whisper"
+      # AssemblyAI (cloud) for the dev env: the self-hosted Whisper EC2
+      # service is scaled to 0 and isn't wired for service discovery, so
+      # local transcription is unavailable. ASSEMBLYAI_API_KEY is injected
+      # to the API task. Switch back to "whisper" once the local service is
+      # restored + addressable (WHISPER_API_URL / service discovery).
+      transcription   = "assemblyai"
       note_generation = "anthropic"
       vision          = "openai"
     }
