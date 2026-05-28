@@ -532,3 +532,11 @@
 "sessions.date.today" = "Aujourd\U2019hui";
 "sessions.date.week" = "7 derniers jours";
 "sessions.date.month" = "30 derniers jours";
+/* ── R\U00E9silience de capture hors ligne ────────────────── */
+"offline.savedLocally" = "Hors ligne \U2014 les enregistrements sont conserv\U00E9s sur cet appareil et se synchroniseront automatiquement.";
+"offline.queued.waiting.one" = "Hors ligne \U2014 %d consultation en attente de synchronisation.";
+"offline.queued.waiting.many" = "Hors ligne \U2014 %d consultations en attente de synchronisation.";
+"offline.syncing.one" = "Synchronisation de %d consultation\U2026";
+"offline.syncing.many" = "Synchronisation de %d consultations\U2026";
+"offline.queued.title" = "Enregistr\U00E9 sur cet appareil";
+"offline.queued.detail" = "Vous \U00EAtes hors ligne. Cette consultation est conserv\U00E9e en toute s\U00E9curit\U00E9 et sera t\U00E9l\U00E9vers\U00E9e automatiquement \U00E0 la reconnexion.";

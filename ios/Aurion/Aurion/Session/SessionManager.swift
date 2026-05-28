@@ -13,6 +13,10 @@ enum Stage1Status: Equatable {
     case ready
     case timedOut(elapsed: TimeInterval)
     case failed(reason: String)
+    /// Recorded offline — the audio is persisted to the on-device upload
+    /// queue and will sync automatically on reconnect. Not an error; no retry
+    /// prompt (ProcessingView shows a dedicated "saved offline" panel).
+    case queuedOffline
 
     /// When non-nil, ProcessingView shows a retry prompt with this copy.
     var retryPrompt: (title: String, detail: String)? {
@@ -21,7 +25,7 @@ enum Stage1Status: Equatable {
             return ("Stage 1 timed out", "The note didn't generate within \(Int(elapsed))s.")
         case .failed(let reason):
             return ("Stage 1 failed", reason)
-        case .idle, .uploading, .generating, .ready:
+        case .idle, .uploading, .generating, .ready, .queuedOffline:
             return nil
         }
     }
@@ -204,6 +208,14 @@ final class SessionManager: ObservableObject {
     /// capture pipeline has a chance to deliver buffers — see startRecording.
     nonisolated static let minimumRecordingSeconds: TimeInterval = 2
 
+    /// URLError codes that mean "the request couldn't land" — no network, or
+    /// the backend host is unreachable. Mirrors APIClient's offline mapping so
+    /// the raw-URLSession audio upload classifies failures the same way.
+    private static let offlineURLErrorCodes: Set<URLError.Code> = [
+        .notConnectedToInternet, .networkConnectionLost,
+        .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed,
+    ]
+
     /// Wall-clock seconds since the capture pipeline started, or nil if
     /// we haven't kicked off yet. Re-evaluated by SwiftUI on every TimelineView
     /// tick so the stop button enables automatically once the floor is hit.
@@ -330,6 +342,13 @@ final class SessionManager: ObservableObject {
             session.stopRecording()
             uiState = .postEncounter
             // Pipeline triggers from PostEncounterView after template confirmation.
+        } catch APIError.offline {
+            // Backend unreachable — don't strand the physician on the capture
+            // screen. Advance locally so the encounter can be confirmed and
+            // persisted to the offline queue; the queue replays the stop
+            // transition + audio upload when connectivity returns.
+            session.stopRecording()
+            uiState = .postEncounter
         } catch {
             self.error = "Stop failed: \(error.localizedDescription)"
         }
@@ -346,12 +365,53 @@ final class SessionManager: ObservableObject {
     /// Triggered by PostEncounterView after template confirmation.
     func submitProcessing() async {
         uiState = .processing
+        // Offline: skip the per-frame Stage 2 uploads (each needs the network
+        // and would just fail) and persist the audio to the offline queue so
+        // the encounter — and its Stage 1 note — is never lost. The queue
+        // replays the stop transition + upload on reconnect.
+        if !ReachabilityMonitor.shared.isOnline {
+            await queueAudioOffline()
+            return
+        }
         await submitFrames()
         await submitAudio()
         // Screen frames merge into the note AFTER Stage 1 generated it,
         // so this runs last. The screen pipeline is fully on-device for
         // PHI; the upload carries the masking proof from P0-02.
         await submitScreenFrames()
+    }
+
+    /// Persist the recorded audio to the on-device upload queue for deferred
+    /// sync. Called when there's no connectivity at submit time, or when the
+    /// interactive upload fails offline mid-flight. Frees the in-memory PCM
+    /// once the WAV is safely on disk.
+    private func queueAudioOffline() async {
+        guard let session else { return }
+        guard let audio = audioSource.getRecordedAudioData(), !audio.isEmpty else {
+            // No captured audio (too-short recording). Nothing to queue —
+            // surface the same guidance as the online path.
+            self.error = "Recording was too short. Speak for at least a few seconds before stopping."
+            stage1Status = .failed(reason: "Recording too short")
+            return
+        }
+        do {
+            try OfflineUploadQueue.shared.enqueue(
+                sessionId: session.id,
+                specialty: session.specialty,
+                audio: audio
+            )
+            audioSource.discardRecordedAudio()
+            stage1Status = .queuedOffline
+            processingStatus = ""
+            AuditLogger.log(
+                event: .audioQueuedOffline,
+                sessionId: session.id,
+                extra: ["bytes": "\(audio.count)"]
+            )
+        } catch {
+            self.error = "Couldn't save the encounter for later: \(error.localizedDescription)"
+            stage1Status = .failed(reason: error.localizedDescription)
+        }
     }
 
     // MARK: - Frame Submission
@@ -643,6 +703,12 @@ final class SessionManager: ObservableObject {
             stage1Status = .ready
             processingStatus = "Note ready for review (\(Int(elapsed))s)"
             uiState = .noteReady
+        } catch let urlError as URLError where Self.offlineURLErrorCodes.contains(urlError.code) {
+            // Connectivity dropped mid-upload — persist for deferred sync
+            // instead of failing. (submitProcessing already routes a known-
+            // offline submit straight to the queue; this catches the race
+            // where the network died after the request started.)
+            await queueAudioOffline()
         } catch let urlError as URLError where urlError.code == .timedOut {
             recordStage1Timeout(sessionId: session.id, since: stage1Start)
         } catch APIError.timeout {

@@ -142,6 +142,7 @@ struct DashboardView: View {
         NavigationStack {
             ScrollView {
                 VStack(spacing: 20) {
+                    OfflineStatusBanner()
                     greetingHeader
                     if !resumableSessions.isEmpty { resumableSection }
                     if !stage2InProgressSessions.isEmpty { stage2InProgressSection }

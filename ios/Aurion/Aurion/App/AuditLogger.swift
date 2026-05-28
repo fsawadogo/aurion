@@ -28,6 +28,8 @@ enum AuditEvent: String {
     case noteExported = "note_exported"
     case localDataPurged = "local_data_purged"
     case appCrashDetected = "app_crash_detected"
+    case audioQueuedOffline = "audio_queued_offline"
+    case offlineUploadSynced = "offline_upload_synced"
 }
 
 struct AuditLogger {
