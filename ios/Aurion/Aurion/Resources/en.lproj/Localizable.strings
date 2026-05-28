@@ -526,3 +526,9 @@
 "applock.timeout.60" = "After 1 minute";
 "applock.timeout.300" = "After 5 minutes";
 "applock.timeout.900" = "After 15 minutes";
+/* ── Sessions date filter ─────────────────────────────── */
+"sessions.dateFilter" = "Filter by date";
+"sessions.date.all" = "All time";
+"sessions.date.today" = "Today";
+"sessions.date.week" = "Last 7 days";
+"sessions.date.month" = "Last 30 days";

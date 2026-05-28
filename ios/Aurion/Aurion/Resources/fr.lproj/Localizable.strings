@@ -526,3 +526,9 @@
 "applock.timeout.60" = "Apr\U00E8s 1 minute";
 "applock.timeout.300" = "Apr\U00E8s 5 minutes";
 "applock.timeout.900" = "Apr\U00E8s 15 minutes";
+/* ── Filtre de date des sessions ──────────────────────── */
+"sessions.dateFilter" = "Filtrer par date";
+"sessions.date.all" = "Toute la p\U00E9riode";
+"sessions.date.today" = "Aujourd\U2019hui";
+"sessions.date.week" = "7 derniers jours";
+"sessions.date.month" = "30 derniers jours";
