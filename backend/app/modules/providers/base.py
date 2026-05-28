@@ -32,9 +32,17 @@ class NoteGenerationProvider(ABC):
 
     @abstractmethod
     async def generate_note(
-        self, transcript: Transcript, template: Template, stage: int
+        self,
+        transcript: Transcript,
+        template: Template,
+        stage: int,
+        output_language: str = "en",
     ) -> Note:
-        """Generate a structured SOAP note from a transcript and template."""
+        """Generate a structured SOAP note from a transcript and template.
+
+        ``output_language`` (e.g. "en", "fr") selects the language of the
+        generated note content. Defaults to English.
+        """
         ...
 
 

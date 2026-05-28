@@ -26,8 +26,21 @@ STRICT RULES:
 Return only valid JSON matching the provided schema. No preamble, no explanation, no markdown."""
 
 
-def build_user_prompt(transcript: Transcript, template: Template, stage: int) -> str:
-    """Build the user prompt with transcript and template context."""
+_LANGUAGE_NAMES = {"en": "English", "fr": "French"}
+
+
+def build_user_prompt(
+    transcript: Transcript,
+    template: Template,
+    stage: int,
+    output_language: str = "en",
+) -> str:
+    """Build the user prompt with transcript and template context.
+
+    ``output_language`` controls the language of the generated note content.
+    The transcript may be in either language (FR or EN); the note is written
+    in the requested output language regardless of what was spoken.
+    """
     sections_spec = json.dumps(
         [{"id": s.id, "title": s.title, "required": s.required} for s in template.sections],
         indent=2,
@@ -36,8 +49,16 @@ def build_user_prompt(transcript: Transcript, template: Template, stage: int) ->
         f"[{s.id}] ({s.start_ms}ms-{s.end_ms}ms): {s.text}"
         for s in transcript.segments
     )
+    language_instruction = ""
+    if output_language != "en":
+        lang = _LANGUAGE_NAMES.get(output_language, output_language)
+        language_instruction = (
+            f"\nWrite ALL note content — claim text and section titles — in {lang}. "
+            "Keep the JSON structure, section \"id\" values, and status values "
+            "exactly as specified in English (do not translate keys or ids).\n"
+        )
     return f"""Generate a Stage {stage} clinical note for specialty: {template.key}
-
+{language_instruction}
 Template sections (generate each):
 {sections_spec}
 

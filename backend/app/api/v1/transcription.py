@@ -161,6 +161,7 @@ async def submit_transcription(
             specialty=session.specialty,
             session_id=str(session_id),
             db=db,
+            output_language=session.output_language,
         )
     except Exception as exc:
         await write_audit(session_id, AuditEventType.STAGE1_FAILED, reason=str(exc)[:200])
