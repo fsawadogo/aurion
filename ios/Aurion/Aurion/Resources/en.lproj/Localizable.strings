@@ -512,3 +512,17 @@
 "sessionNote.a11yCopyHint" = "Copies the formatted note text to the clipboard.";
 "sessionNote.a11yExport" = "Export note";
 "sessionNote.a11yExportHint" = "Exports the note as a Word document.";
+
+/* ── App Lock (security) ──────────────────────────────── */
+"profile.sectionSecurity" = "Security";
+"profile.appLock" = "App Lock";
+"profile.appLockHelp" = "Require Face ID / Touch ID (or your passcode) to open Aurion. Protects patient data if your phone is unlocked and left unattended.";
+"profile.autoLock" = "Auto-lock";
+"applock.title" = "Aurion is locked";
+"applock.subtitle" = "Authenticate to continue.";
+"applock.unlock" = "Unlock";
+"applock.reason" = "Unlock Aurion to access patient data.";
+"applock.timeout.0" = "Immediately";
+"applock.timeout.60" = "After 1 minute";
+"applock.timeout.300" = "After 5 minutes";
+"applock.timeout.900" = "After 15 minutes";

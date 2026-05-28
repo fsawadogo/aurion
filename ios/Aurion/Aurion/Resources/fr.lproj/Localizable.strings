@@ -512,3 +512,17 @@
 "sessionNote.a11yCopyHint" = "Copie le texte format\U00E9 de la note dans le presse-papiers.";
 "sessionNote.a11yExport" = "Exporter la note";
 "sessionNote.a11yExportHint" = "Exporte la note sous forme de document Word.";
+
+/* ── Verrouillage de l\U2019application ─────────────────── */
+"profile.sectionSecurity" = "S\U00E9curit\U00E9";
+"profile.appLock" = "Verrouillage de l\U2019application";
+"profile.appLockHelp" = "Exiger Face ID / Touch ID (ou votre code) pour ouvrir Aurion. Prot\U00E8ge les donn\U00E9es des patients si votre t\U00E9l\U00E9phone est d\U00E9verrouill\U00E9 et laiss\U00E9 sans surveillance.";
+"profile.autoLock" = "Verrouillage automatique";
+"applock.title" = "Aurion est verrouill\U00E9";
+"applock.subtitle" = "Authentifiez-vous pour continuer.";
+"applock.unlock" = "D\U00E9verrouiller";
+"applock.reason" = "D\U00E9verrouillez Aurion pour acc\U00E9der aux donn\U00E9es des patients.";
+"applock.timeout.0" = "Imm\U00E9diatement";
+"applock.timeout.60" = "Apr\U00E8s 1 minute";
+"applock.timeout.300" = "Apr\U00E8s 5 minutes";
+"applock.timeout.900" = "Apr\U00E8s 15 minutes";

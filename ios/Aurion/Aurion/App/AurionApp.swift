@@ -4,6 +4,7 @@ import SwiftUI
 struct AurionApp: App {
     @StateObject private var appState = AppState()
     @StateObject private var remoteConfig = RemoteConfig.shared
+    @StateObject private var appLock = AppLockManager()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -11,6 +12,17 @@ struct AurionApp: App {
             ContentView()
                 .environmentObject(appState)
                 .environmentObject(remoteConfig)
+                .environmentObject(appLock)
+                // Biometric app lock over the whole authenticated surface.
+                // Never shown pre-sign-in (nothing to protect on the login
+                // screen); the lock view self-prompts on appear.
+                .overlay {
+                    if appState.isAuthenticated && appLock.isLocked {
+                        AppLockView()
+                            .environmentObject(appLock)
+                    }
+                }
+                .animation(AurionAnimation.smooth, value: appLock.isLocked)
                 // Dark mode shipped under AUR-DESIGN-DARK (muted slate
                 // palette). Adaptive tokens in Theme.swift carry the
                 // light + dark pairs; brand-fixed surfaces (login
@@ -80,6 +92,8 @@ struct AurionApp: App {
                     LocalDataPurger.purgeStaleArtifacts()
                 }
             }
+            // Arm/clear the biometric lock based on background-idle time.
+            appLock.handleScenePhase(newPhase)
         }
     }
 }
