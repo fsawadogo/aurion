@@ -128,14 +128,23 @@ nonisolated final class AudioBufferConverter: @unchecked Sendable {
         return self.converter != nil
     }
 
-    /// Wrap the sample buffer's underlying audio buffer list in an
-    /// `AVAudioPCMBuffer`. Uses `bufferListNoCopy` so we don't allocate and
-    /// memcpy on every audio callback (these fire ~20–40 times per second
-    /// during recording — copy cost adds up).
+    /// Copy the sample buffer's audio into an `AVAudioPCMBuffer` that **owns**
+    /// its storage.
     ///
-    /// Exposed as a static helper so `LiveTranscriber` can reuse it without
-    /// duplicating the buffer-list dance — both consumers want the same
-    /// AVAudioPCMBuffer view of the same incoming CMSampleBuffer.
+    /// This used to wrap the sample buffer's block buffer with
+    /// `bufferListNoCopy` to avoid a per-callback memcpy. That was a
+    /// use-after-free for any *asynchronous* consumer: the backing
+    /// `CMBlockBuffer` is released as soon as the producing scope returns, but
+    /// `LiveTranscriber` hands the buffer to `SFSpeechRecognizer`, which
+    /// appends it on its own queue later — reading freed memory and crashing
+    /// with `EXC_BAD_ACCESS` inside `_appendAudioPCMBuffer`
+    /// (`CrashIfClientProvidedBogusAudioBufferList`). The no-copy view also
+    /// can't represent non-interleaved multi-channel audio (a single
+    /// `AudioBufferList` slot).
+    ///
+    /// Copying via `CMSampleBufferCopyPCMDataIntoAudioBufferList` into a buffer
+    /// allocated for `format` is self-contained and safe to hand across
+    /// threads. The copy is a few KB per ~20–40ms callback — negligible.
     static func pcmBuffer(
         from sampleBuffer: CMSampleBuffer,
         format: AVAudioFormat
@@ -143,27 +152,19 @@ nonisolated final class AudioBufferConverter: @unchecked Sendable {
         let numSamples = CMSampleBufferGetNumSamples(sampleBuffer)
         guard numSamples > 0 else { return nil }
 
-        var blockBuffer: CMBlockBuffer?
-        var audioBufferList = AudioBufferList()
-        let status = CMSampleBufferGetAudioBufferListWithRetainedBlockBuffer(
-            sampleBuffer,
-            bufferListSizeNeededOut: nil,
-            bufferListOut: &audioBufferList,
-            bufferListSize: MemoryLayout<AudioBufferList>.size,
-            blockBufferAllocator: nil,
-            blockBufferMemoryAllocator: nil,
-            flags: 0,
-            blockBufferOut: &blockBuffer
-        )
-        guard status == noErr else { return nil }
-
         guard let pcmBuffer = AVAudioPCMBuffer(
             pcmFormat: format,
-            bufferListNoCopy: &audioBufferList,
-            deallocator: nil
+            frameCapacity: AVAudioFrameCount(numSamples)
         ) else { return nil }
-
         pcmBuffer.frameLength = AVAudioFrameCount(numSamples)
+
+        let status = CMSampleBufferCopyPCMDataIntoAudioBufferList(
+            sampleBuffer,
+            at: 0,
+            frameCount: Int32(numSamples),
+            into: pcmBuffer.mutableAudioBufferList
+        )
+        guard status == noErr else { return nil }
         return pcmBuffer
     }
 }
