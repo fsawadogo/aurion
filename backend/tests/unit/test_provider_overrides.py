@@ -31,7 +31,6 @@ from app.modules.providers.transcription.assemblyai import (
 )
 from app.modules.providers.transcription.whisper import WhisperTranscriptionProvider
 from app.modules.providers.vision.anthropic import AnthropicVisionProvider
-from app.modules.providers.vision.openai import OpenAIVisionProvider
 
 
 def _mock_config(**overrides) -> AppConfigSchema:
