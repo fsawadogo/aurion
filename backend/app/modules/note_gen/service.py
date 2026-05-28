@@ -286,6 +286,7 @@ async def generate_stage1_note(
     session_id: str,
     db: AsyncSession,
     provider_override: Optional[str] = None,
+    output_language: str = "en",
 ) -> Note:
     """Generate a Stage 1 note from a transcript.
 
@@ -313,7 +314,9 @@ async def generate_stage1_note(
         type(provider).__name__,
     )
 
-    note = await provider.generate_note(transcript, template, stage=1)
+    note = await provider.generate_note(
+        transcript, template, stage=1, output_language=output_language
+    )
 
     note.session_id = session_id
     note.stage = 1

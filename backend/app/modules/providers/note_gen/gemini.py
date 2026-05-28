@@ -30,12 +30,16 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
     """Gemini note generation provider."""
 
     async def generate_note(
-        self, transcript: Transcript, template: Template, stage: int
+        self,
+        transcript: Transcript,
+        template: Template,
+        stage: int,
+        output_language: str = "en",
     ) -> Note:
         if not _GOOGLE_AI_API_KEY:
             raise ProviderError("gemini", "GOOGLE_AI_API_KEY not configured")
 
-        user_prompt = build_user_prompt(transcript, template, stage)
+        user_prompt = build_user_prompt(transcript, template, stage, output_language)
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:

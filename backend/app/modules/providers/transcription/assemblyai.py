@@ -51,7 +51,12 @@ class AssemblyAITranscriptionProvider(TranscriptionProvider):
                     headers=headers,
                     json={
                         "audio_url": upload_url,
-                        "language_code": "en",
+                        # Auto-detect the spoken language so French and English
+                        # encounters both transcribe correctly without the
+                        # clinician pre-declaring it (Whisper already
+                        # auto-detects). The note's output language is handled
+                        # separately at generation time.
+                        "language_detection": True,
                         "speech_models": [_SPEECH_MODEL],
                     },
                 )
