@@ -16,6 +16,9 @@ struct SessionsInboxView: View {
     /// Searchable text — matches against specialty display name and
     /// state. Empty string → no text filter applied.
     @State private var searchText: String = ""
+    /// Client-side date-range narrowing of the inbox. Like text search, it
+    /// narrows the displayed list without changing the status-chip counts.
+    @State private var dateRange: DateRange = .all
     /// Programmatic nav stack — each entry is a session UUID. We push
     /// onto it when a Spotlight tap arrives (via ``AppNavigation``) so
     /// the user lands directly on the right note instead of having to
@@ -30,6 +33,41 @@ struct SessionsInboxView: View {
         case exported = "Exported"
     }
 
+    /// Preset date windows for the inbox. `since == nil` means no lower
+    /// bound (all time).
+    private enum DateRange: String, CaseIterable, Hashable {
+        case all, today, week, month
+        var labelKey: String { "sessions.date.\(rawValue)" }
+        var since: Date? {
+            let cal = Calendar.current
+            let now = Date()
+            switch self {
+            case .all:   return nil
+            case .today: return cal.startOfDay(for: now)
+            case .week:  return cal.date(byAdding: .day, value: -7, to: now)
+            case .month: return cal.date(byAdding: .day, value: -30, to: now)
+            }
+        }
+    }
+
+    // ISO-8601 parsers — some `created_at` values carry fractional seconds
+    // (e.g. "...:02.75Z"), which the default formatter rejects, so try the
+    // fractional variant first and fall back to plain.
+    private static let isoFractional: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
+    private static let isoPlain = ISO8601DateFormatter()
+
+    private func inDateRange(_ s: SessionResponse) -> Bool {
+        guard let since = dateRange.since else { return true }
+        // Unparseable timestamp → don't hide the row.
+        guard let created = Self.isoFractional.date(from: s.createdAt)
+            ?? Self.isoPlain.date(from: s.createdAt) else { return true }
+        return created >= since
+    }
+
     /// Sessions after (1) sort, (2) status filter, (3) text search.
     /// Composing in that order keeps the chip counts accurate when
     /// the user has typed a search query.
@@ -42,9 +80,10 @@ struct SessionsInboxView: View {
         case .completed: statusFiltered = sorted.filter { $0.state == "REVIEW_COMPLETE" }
         case .exported: statusFiltered = sorted.filter { $0.state == "EXPORTED" || $0.state == "PURGED" }
         }
+        let dateFiltered = statusFiltered.filter(inDateRange)
         let query = searchText.trimmingCharacters(in: .whitespaces).lowercased()
-        guard !query.isEmpty else { return statusFiltered }
-        return statusFiltered.filter { session in
+        guard !query.isEmpty else { return dateFiltered }
+        return dateFiltered.filter { session in
             localizedSpecialty(session.specialty).lowercased().contains(query)
                 || session.state.lowercased().contains(query)
         }
@@ -133,6 +172,21 @@ struct SessionsInboxView: View {
                 .tracking(-0.56)
                 .foregroundColor(.aurionTextPrimary)
             Spacer()
+            Menu {
+                Picker(selection: $dateRange) {
+                    ForEach(DateRange.allCases, id: \.self) { range in
+                        Text(L(range.labelKey)).tag(range)
+                    }
+                } label: { EmptyView() }
+            } label: {
+                Image(systemName: dateRange == .all ? "calendar" : "calendar.badge.checkmark")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundColor(dateRange == .all ? .aurionTextSecondary : .aurionGold)
+                    .padding(8)
+            }
+            .accessibilityLabel(L("sessions.dateFilter"))
+            .accessibilityValue(L(dateRange.labelKey))
+
             Button {
                 withAnimation(.aurionIOS) { sortNewestFirst.toggle() }
             } label: {
