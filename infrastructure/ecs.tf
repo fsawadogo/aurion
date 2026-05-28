@@ -480,6 +480,12 @@ resource "aws_ecs_task_definition" "api" {
         # (CORS is a browser policy only) but skipping this would silently
         # block portal-dev.aurionclinical.com fetches.
         { name = "CORS_ALLOWED_ORIGINS", value = "https://${var.web_portal_subdomain}" },
+        # Self-hosted Whisper ASR endpoint via Cloud Map (service_discovery.tf).
+        # Read by providers/transcription/whisper.py when
+        # providers.transcription = "whisper" in AppConfig. Without this the
+        # provider defaults to localhost:8001 (wrong host + wrong port) and
+        # every Stage 1 fails with a connection error.
+        { name = "WHISPER_API_URL", value = local.whisper_api_url },
       ]
 
       secrets = [
@@ -891,6 +897,12 @@ resource "aws_ecs_service" "whisper" {
     subnets          = aws_subnet.private[*].id
     security_groups  = [aws_security_group.whisper.id]
     assign_public_ip = false
+  }
+
+  # Register tasks in Cloud Map so the API reaches Whisper at
+  # whisper.aurion-<env>.local:9000 regardless of task-IP churn.
+  service_registries {
+    registry_arn = aws_service_discovery_service.whisper.arn
   }
 
   depends_on = [aws_ecs_cluster_capacity_providers.main]
