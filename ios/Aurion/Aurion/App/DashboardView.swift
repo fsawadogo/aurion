@@ -242,18 +242,18 @@ struct DashboardView: View {
             VStack(alignment: .leading, spacing: 8) {
                 VStack(alignment: .leading, spacing: 0) {
                     Text(greetingLine1)
-                        .font(.system(size: 28, weight: .bold))
+                        .aurionFont(28, weight: .bold, relativeTo: .title)
                         .tracking(-0.56)
                         .foregroundColor(.aurionTextPrimary)
                     if !doctorLine.isEmpty {
                         Text(doctorLine)
-                            .font(.system(size: 28, weight: .bold))
+                            .aurionFont(28, weight: .bold, relativeTo: .title)
                             .tracking(-0.56)
                             .foregroundColor(.aurionTextPrimary)
                     }
                 }
                 Text(L("dashboard.sessionSummary", displayedTodayCount, pendingReviewSessions.count))
-                    .font(.system(size: 14))
+                    .aurionFont(14, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
                     .contentTransition(.numericText())
                     .animation(AurionAnimation.smooth, value: displayedTodayCount)
@@ -290,17 +290,17 @@ struct DashboardView: View {
                             AurionIconBubble(symbol: "record.circle", tint: .aurionGold, size: 36)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(localizedSpecialty(session.specialty))
-                                    .font(.system(size: 16, weight: .semibold))
+                                    .aurionFont(16, weight: .semibold, relativeTo: .body)
                                     .foregroundColor(.aurionTextPrimary)
                                 Text(session.state == "PAUSED"
                                      ? L("dashboard.pausedAgo", formatRelativeTime(session.updatedAt))
                                      : L("dashboard.recordingAgo", formatRelativeTime(session.updatedAt)))
-                                    .font(.system(size: 13))
+                                    .aurionFont(13, relativeTo: .footnote)
                                     .foregroundColor(.aurionTextSecondary)
                             }
                             Spacer()
                             Text(L("sessions.resume"))
-                                .font(.system(size: 13, weight: .semibold))
+                                .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                                 // Brand-navy on gold pill — fixed in both modes.
                                 .foregroundColor(.aurionNavy)
                                 .padding(.horizontal, 14)
@@ -333,15 +333,15 @@ struct DashboardView: View {
                         HStack {
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(localizedSpecialty(session.specialty))
-                                    .font(.system(size: 16, weight: .semibold))
+                                    .aurionFont(16, weight: .semibold, relativeTo: .body)
                                     .foregroundColor(.aurionTextPrimary)
                                 Text(L("dashboard.recordedAgo", formatRelativeTime(session.createdAt)))
-                                    .font(.system(size: 13))
+                                    .aurionFont(13, relativeTo: .footnote)
                                     .foregroundColor(.aurionTextSecondary)
                             }
                             Spacer()
                             Text(L("sessions.resume"))
-                                .font(.system(size: 13, weight: .semibold))
+                                .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                                 // Brand-navy on gold pill — fixed in both modes.
                                 .foregroundColor(.aurionNavy)
                                 .padding(.horizontal, 14)
@@ -397,12 +397,12 @@ struct DashboardView: View {
                                 Spacer(minLength: 0)
                                 VStack(alignment: .leading, spacing: 3) {
                                     Text(localizedSpecialty(card.specialty))
-                                        .font(.system(size: 11, weight: .semibold))
+                                        .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                                         .tracking(0.6)
                                         .textCase(.uppercase)
                                         .foregroundColor(.aurionTextSecondary)
                                     Text(card.label)
-                                        .font(.system(size: 16, weight: .semibold))
+                                        .aurionFont(16, weight: .semibold, relativeTo: .body)
                                         .foregroundColor(.aurionTextPrimary)
                                         .lineLimit(2)
                                 }
@@ -443,7 +443,7 @@ struct DashboardView: View {
                     AppNavigation.shared.requestTab(.sessions)
                 } label: {
                     Text(L("dashboard.seeAll"))
-                        .font(.system(size: 13, weight: .semibold))
+                        .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                         .foregroundColor(.aurionGold)
                 }
                 .buttonStyle(.plain)
@@ -495,16 +495,16 @@ struct DashboardView: View {
                     .fill(Color.aurionSurfaceAlt)
                     .frame(width: 32, height: 32)
                 Image(systemName: icon)
-                    .font(.system(size: 14))
+                    .aurionFont(14, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(localizedSpecialty(session.specialty))
-                    .font(.system(size: 14, weight: .semibold))
+                    .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextPrimary)
                     .lineLimit(1)
                 Text(formatRelativeTime(session.createdAt))
-                    .font(.system(size: 12))
+                    .aurionFont(12, relativeTo: .caption)
                     .foregroundColor(.aurionTextSecondary)
                     .lineLimit(1)
             }
@@ -533,11 +533,11 @@ struct DashboardView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         VStack(alignment: .leading, spacing: 4) {
                             Text(L("encounter.whoInRoom"))
-                                .font(.system(size: 22, weight: .semibold))
+                                .aurionFont(22, weight: .semibold, relativeTo: .title2)
                                 .tracking(-0.22)
                                 .foregroundColor(.aurionTextPrimary)
                             Text(L("encounter.adjustSub"))
-                                .font(.system(size: 14))
+                                .aurionFont(14, relativeTo: .subheadline)
                                 .foregroundColor(.aurionTextSecondary)
                         }
                         .padding(.top, 8)
@@ -606,7 +606,7 @@ struct DashboardView: View {
         return VStack(alignment: .leading, spacing: 10) {
             if team.isEmpty {
                 Text(L("encounter.noTeam"))
-                    .font(.system(size: 13))
+                    .aurionFont(13, relativeTo: .footnote)
                     .foregroundColor(.aurionTextSecondary)
                     .padding(.horizontal, 12)
             } else {
@@ -640,7 +640,7 @@ struct DashboardView: View {
                                 }
                             }
                             Text("\(member.role.displayFormatted) \u{2014} \(member.name)")
-                                .font(.system(size: 14))
+                                .aurionFont(14, relativeTo: .subheadline)
                                 .foregroundColor(.aurionTextPrimary)
                             Spacer()
                         }
@@ -661,7 +661,7 @@ struct DashboardView: View {
                 AurionField(label: L("encounter.name"), placeholder: L("encounter.namePlaceholder"), text: $traineeName)
                 VStack(alignment: .leading, spacing: 6) {
                     Text(L("encounter.role"))
-                        .font(.system(size: 13, weight: .medium))
+                        .aurionFont(13, weight: .medium, relativeTo: .footnote)
                         .foregroundColor(.aurionTextSecondary)
                     Picker(L("encounter.role"), selection: $traineeRole) {
                         Text(L("encounter.role.resident")).tag("resident")
@@ -683,7 +683,7 @@ struct DashboardView: View {
                     traineeName = ""
                 } label: {
                     Label(L("common.add"), systemImage: "plus.circle")
-                        .font(.system(size: 14, weight: .medium))
+                        .aurionFont(14, weight: .medium, relativeTo: .subheadline)
                         .foregroundColor(.aurionGold)
                 }
                 .disabled(traineeName.isEmpty || selectedParticipants.count >= 3)
@@ -711,15 +711,15 @@ struct DashboardView: View {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
                                 Text(L("context.question"))
-                                    .font(.system(size: 22, weight: .semibold))
+                                    .aurionFont(22, weight: .semibold, relativeTo: .title2)
                                     .tracking(-0.22)
                                     .foregroundColor(.aurionTextPrimary)
                                 Text("•")
-                                    .font(.system(size: 22, weight: .semibold))
+                                    .aurionFont(22, weight: .semibold, relativeTo: .title2)
                                     .foregroundColor(.aurionGold)
                             }
                             Text(L("context.required"))
-                                .font(.system(size: 14))
+                                .aurionFont(14, relativeTo: .subheadline)
                                 .foregroundColor(.aurionTextSecondary)
                         }
 
@@ -735,7 +735,7 @@ struct DashboardView: View {
                                 .font(.system(size: 18))
                                 .foregroundColor(.aurionGoldDark)
                             Text(L("context.tip"))
-                                .font(.system(size: 13))
+                                .aurionFont(13, relativeTo: .footnote)
                                 .foregroundColor(.aurionStatusPending)
                                 .lineSpacing(3)
                         }
@@ -761,7 +761,7 @@ struct DashboardView: View {
                     .padding(.top, 4)
                     if !hasMinimumContext {
                         Text(L("context.minHint"))
-                            .font(.system(size: 12))
+                            .aurionFont(12, relativeTo: .caption)
                             .foregroundColor(.aurionTextSecondary)
                             .multilineTextAlignment(.center)
                             .padding(.horizontal, 8)
@@ -786,11 +786,11 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 10) {
             VStack(alignment: .leading, spacing: 4) {
                 Text(L("context.captureMode"))
-                    .font(.system(size: 22, weight: .semibold))
+                    .aurionFont(22, weight: .semibold, relativeTo: .title2)
                     .tracking(-0.22)
                     .foregroundColor(.aurionTextPrimary)
                 Text(L("context.captureModeSub"))
-                    .font(.system(size: 14))
+                    .aurionFont(14, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
             }
             VStack(spacing: 10) {
