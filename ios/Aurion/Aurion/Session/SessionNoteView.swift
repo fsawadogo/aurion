@@ -196,7 +196,7 @@ struct SessionNoteView: View {
     var body: some View {
         ZStack {
             if isLoading {
-                ProgressView(L("noteReview.loading"))
+                skeletonDocument
             } else if let note {
                 noteContent(note)
             } else {
@@ -273,6 +273,32 @@ struct SessionNoteView: View {
             }
         }
         .task { await loadNote() }
+    }
+
+    // MARK: - Loading skeleton (document-shaped)
+
+    /// Shimmer placeholder shaped like the note — title, meta, then a few
+    /// sections of heading + body lines — so the document reads as forming.
+    private var skeletonDocument: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 22) {
+                AurionSkeleton().frame(width: 230, height: 30)   // title
+                AurionSkeleton().frame(width: 150, height: 14)   // meta
+                ForEach(0..<3, id: \.self) { _ in
+                    VStack(alignment: .leading, spacing: 10) {
+                        AurionSkeleton().frame(width: 140, height: 16)  // section heading
+                        AurionSkeleton().frame(maxWidth: .infinity).frame(height: 12)
+                        AurionSkeleton().frame(maxWidth: .infinity).frame(height: 12)
+                        AurionSkeleton().frame(width: 210, height: 12)
+                    }
+                    .padding(.top, 6)
+                }
+            }
+            .padding(AurionSpacing.xl)
+            .frame(maxWidth: horizontalSizeClass == .regular ? 700 : .infinity, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .disabled(true)
     }
 
     // MARK: - Note Content (Apple-Notes-style flowing document)

@@ -112,7 +112,7 @@ struct SessionsInboxView: View {
                 filterChips
                 Group {
                     if isLoading {
-                        Spacer(); ProgressView().frame(maxWidth: .infinity); Spacer()
+                        skeletonList
                     } else if filtered.isEmpty {
                         Spacer()
                         EmptyStateView(
@@ -226,6 +226,39 @@ struct SessionsInboxView: View {
     }
 
     // MARK: - List
+
+    /// Loading placeholder shaped like the real inbox — six shimmer rows in
+    /// the same card so the layout reads as "forming," not "stuck."
+    private var skeletonList: some View {
+        ScrollView {
+            AurionCard(padding: 0) {
+                VStack(spacing: 0) {
+                    ForEach(0..<6, id: \.self) { i in
+                        HStack(spacing: 12) {
+                            AurionSkeleton(cornerRadius: AurionRadius.sm)
+                                .frame(width: 36, height: 36)
+                            VStack(alignment: .leading, spacing: 6) {
+                                AurionSkeleton().frame(width: 150, height: 13)
+                                AurionSkeleton().frame(width: 90, height: 11)
+                            }
+                            Spacer()
+                            AurionSkeleton(cornerRadius: 11).frame(width: 64, height: 22)
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        if i < 5 {
+                            Rectangle().fill(Color.aurionBorder).frame(height: 1).padding(.leading, 64)
+                        }
+                    }
+                }
+            }
+            .aurionScreenEdge()
+            .padding(.top, 12)
+            .frame(maxWidth: horizontalSizeClass == .regular ? 720 : .infinity)
+            .frame(maxWidth: .infinity, alignment: .center)
+        }
+        .disabled(true)
+    }
 
     private var sessionsList: some View {
         ScrollView {
