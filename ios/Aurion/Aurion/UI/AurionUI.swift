@@ -438,7 +438,10 @@ struct AurionFilterChip: View {
     let action: () -> Void
 
     var body: some View {
-        Button(action: action) {
+        Button {
+            AurionHaptics.selection()
+            action()
+        } label: {
             HStack(spacing: 6) {
                 Text(label)
                     .font(.system(size: 13, weight: .semibold))

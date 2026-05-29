@@ -242,12 +242,14 @@ struct ProfileView: View {
                         .foregroundColor(.aurionTextPrimary)
                 }
                 .tint(.aurionGold)
+                .sensoryFeedback(.selection, trigger: sessionAlertsEnabled)
 
                 Toggle(isOn: $noteReadyAlertsEnabled) {
                     Label(L("profile.noteReady"), systemImage: "doc.badge.clock")
                         .foregroundColor(.aurionTextPrimary)
                 }
                 .tint(.aurionGold)
+                .sensoryFeedback(.selection, trigger: noteReadyAlertsEnabled)
             } header: {
                 SectionHeader(title: L("profile.sectionNotifications"))
             }
@@ -259,6 +261,7 @@ struct ProfileView: View {
                         .foregroundColor(.aurionTextPrimary)
                 }
                 .tint(.aurionGold)
+                .sensoryFeedback(.selection, trigger: appLock.isEnabled)
 
                 if appLock.isEnabled {
                     Picker(selection: $appLock.idleTimeoutSeconds) {

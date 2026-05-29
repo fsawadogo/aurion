@@ -121,6 +121,10 @@ struct Stage2DashboardTile: View {
             }
         }
         .buttonStyle(.plain)
+        // Smooth the icon/label/layout swap when the polled status flips
+        // (every ~5s) instead of snapping — the symbolEffects already animate
+        // the glyph; this carries the surrounding content with it.
+        .animation(AurionAnimation.smooth, value: viewModel.status?.status)
         .onAppear { viewModel.start() }
         .onDisappear { viewModel.stop() }
         .onChange(of: viewModel.status) { _, newValue in
