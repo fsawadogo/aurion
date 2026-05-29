@@ -56,6 +56,16 @@ struct ProfileView: View {
 
     private var listBody: some View {
         List {
+            // Surface data load / export / delete failures, which were
+            // previously set but never shown.
+            if let error {
+                Section {
+                    ErrorBanner(error, onDismiss: { self.error = nil })
+                        .listRowInsets(EdgeInsets())
+                        .listRowBackground(Color.clear)
+                }
+            }
+
             // ── Account Info ──────────────────────────────────
             Section {
                 HStack(spacing: AurionSpacing.md) {

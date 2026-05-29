@@ -299,6 +299,7 @@
 "common.done" = "Done";
 "common.cancel" = "Cancel";
 "common.retry" = "Retry";
+"common.dismiss" = "Dismiss";
 "common.skip" = "Skip";
 
 /* ── Login (extended) ─────────────────────────────────── */

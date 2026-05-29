@@ -153,15 +153,11 @@ struct NoteReviewView: View {
                     .onAppear { conflictsBannerScrollProxy = proxy }
                 }
                 if let approveError {
-                    Text(approveError)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.aurionRed)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: .infinity, alignment: .center)
-                        .padding(.horizontal, 16)
-                        .padding(.vertical, 10)
-                        .background(Color.aurionRed.opacity(0.08))
-                        .transition(.opacity)
+                    ErrorBanner(approveError, onDismiss: {
+                        withAnimation(AurionAnimation.smooth) { self.approveError = nil }
+                    })
+                    .padding(.horizontal, 16)
+                    .transition(.opacity)
                 }
                 if isEditing {
                     editingBar(n)
