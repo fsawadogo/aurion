@@ -557,3 +557,11 @@
 "tour.next" = "Suivant";
 "profile.replayTour" = "Revoir le guide";
 "profile.sectionHelp" = "Aide";
+/* ── Connexion biom\U00E9trique ────────────────────────────── */
+"login.rememberMeWith" = "Se souvenir de moi avec %@";
+"login.signInWith" = "Se connecter avec %@";
+"login.forgetSaved" = "Oublier la connexion enregistr\U00E9e";
+"login.biometricPrompt" = "Se connecter \U00E0 Aurion";
+"login.biometricExpired" = "Connexion enregistr\U00E9e expir\U00E9e. Veuillez vous connecter avec votre mot de passe.";
+"login.or" = "ou";
+"biometric.passcode" = "Code";

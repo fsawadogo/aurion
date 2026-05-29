@@ -6,6 +6,9 @@ struct ProfileView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var appLock: AppLockManager
     @EnvironmentObject var tour: TourCoordinator
+    /// Whether a biometric "remember me" login is saved — drives the Forget
+    /// row in Security. Seeded from the Keychain; cleared in place on tap.
+    @State private var hasSavedLogin = KeychainHelper.shared.hasBiometricCredential()
     @State private var showDeleteConfirmation = false
     @State private var showDataExport = false
     @State private var isLoadingData = false
@@ -255,6 +258,15 @@ struct ProfileView: View {
                     } label: {
                         Label(L("profile.autoLock"), systemImage: "clock")
                             .foregroundColor(.aurionTextPrimary)
+                    }
+                }
+
+                if hasSavedLogin {
+                    Button(role: .destructive) {
+                        KeychainHelper.shared.clearBiometricCredential()
+                        withAnimation { hasSavedLogin = false }
+                    } label: {
+                        Label(L("login.forgetSaved"), systemImage: "person.badge.key")
                     }
                 }
             } header: {

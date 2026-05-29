@@ -557,3 +557,11 @@
 "tour.next" = "Next";
 "profile.replayTour" = "Replay app tour";
 "profile.sectionHelp" = "Help";
+/* ── Biometric sign-in ────────────────────────────────── */
+"login.rememberMeWith" = "Remember me with %@";
+"login.signInWith" = "Sign in with %@";
+"login.forgetSaved" = "Forget saved login";
+"login.biometricPrompt" = "Sign in to Aurion";
+"login.biometricExpired" = "Saved login expired. Please sign in with your password.";
+"login.or" = "or";
+"biometric.passcode" = "Passcode";
