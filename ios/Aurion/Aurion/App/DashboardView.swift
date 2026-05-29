@@ -141,18 +141,22 @@ struct DashboardView: View {
 
     var body: some View {
         NavigationStack {
+            ScrollViewReader { proxy in
             ScrollView {
                 VStack(spacing: 20) {
                     OfflineStatusBanner()
                     greetingHeader
                         .tourAnchor(.greeting)
+                        .id(TourAnchor.greeting)
                     if !resumableSessions.isEmpty { resumableSection }
                     if !stage2InProgressSessions.isEmpty { stage2InProgressSection }
                     if !pendingReviewSessions.isEmpty { pendingReviewSection }
                     quickStartSection
                         .tourAnchor(.startSession)
+                        .id(TourAnchor.startSession)
                     recentSessionsSection
                         .tourAnchor(.recentSessions)
+                        .id(TourAnchor.recentSessions)
                 }
                 .aurionScreenEdge()
                 .padding(.top, 8)
@@ -209,6 +213,25 @@ struct DashboardView: View {
                 showEncounterTypeSheet = true
                 navigation.clearPendingQuickStart()
             }
+            // Smoothly scroll each highlighted section into view as the
+            // coach-mark tour advances, so the spotlight always lands on a
+            // visible target — notably recent sessions, which can sit below
+            // the fold on a tall dashboard.
+            .onChange(of: tour.stepIndex) { _, _ in scrollToTourTarget(proxy) }
+            .onChange(of: tour.isActive) { _, active in
+                if active { scrollToTourTarget(proxy) }
+            }
+            }
+        }
+    }
+
+    /// Center the current tour step's target section in the scroll view (the
+    /// greeting pins to the top instead, since it's already there). No-op for
+    /// the tab-bar step, which has no scroll anchor.
+    private func scrollToTourTarget(_ proxy: ScrollViewProxy) {
+        guard tour.isActive, let anchor = tour.currentStep.anchor else { return }
+        withAnimation(AurionAnimation.smooth) {
+            proxy.scrollTo(anchor, anchor: anchor == .greeting ? .top : .center)
         }
     }
 
