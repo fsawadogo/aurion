@@ -88,7 +88,7 @@ struct AurionGoldButton: View {
         } label: {
             HStack(spacing: 8) {
                 if let icon { Image(systemName: icon).font(.system(size: 18, weight: .semibold)) }
-                Text(label).font(.system(size: fontSize, weight: .semibold))
+                Text(label).aurionFont(fontSize, weight: .semibold, relativeTo: .body)
             }
             // Brand-navy on gold — must stay fixed in both modes.
             // `aurionTextPrimary` (off-white on dark) would lose contrast.
@@ -117,7 +117,7 @@ struct AurionGhostButton: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 16, weight: .semibold))
+                .aurionFont(16, weight: .semibold, relativeTo: .body)
                 .foregroundColor(.aurionTextPrimary)
                 .padding(.horizontal, 22)
                 .padding(.vertical, 14)
@@ -141,7 +141,7 @@ struct AurionTextButton: View {
     var body: some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 16, weight: .medium))
+                .aurionFont(16, weight: .medium, relativeTo: .body)
                 .foregroundColor(color)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
@@ -214,7 +214,7 @@ struct AurionStatusPill: View {
         HStack(spacing: 6) {
             Circle().fill(kind.dot).frame(width: 6, height: 6)
             Text(labelOverride ?? kind.label)
-                .font(.system(size: 11, weight: kind.weight))
+                .aurionFont(11, weight: kind.weight, relativeTo: .caption2)
                 .tracking(kind.tracking)
         }
         .foregroundColor(kind.foreground)
@@ -306,12 +306,12 @@ struct AurionListItem: View {
                             .frame(width: 24)
                     }
                     Text(title)
-                        .font(.system(size: 16))
+                        .aurionFont(16, relativeTo: .body)
                         .foregroundColor(.aurionTextPrimary)
                     Spacer()
                     if let value {
                         Text(value)
-                            .font(.system(size: 15))
+                            .aurionFont(15, relativeTo: .subheadline)
                             .foregroundColor(.aurionTextSecondary)
                     }
                     if showChevron && action != nil {
@@ -356,7 +356,7 @@ struct AurionField: View {
         VStack(alignment: .leading, spacing: 6) {
             if let label {
                 Text(label)
-                    .font(.system(size: 13, weight: .medium))
+                    .aurionFont(13, weight: .medium, relativeTo: .footnote)
                     .foregroundColor(.aurionTextSecondary)
             }
             Group {
@@ -372,7 +372,7 @@ struct AurionField: View {
                 }
             }
             .focused($focused)
-            .font(.system(size: 16))
+            .aurionFont(16, relativeTo: .body)
             .foregroundColor(.aurionTextPrimary)
             .padding(.horizontal, 14)
             .padding(.vertical, multiline ? 8 : 12)
@@ -409,7 +409,7 @@ struct AurionNavBar<Leading: View, Trailing: View>: View {
                 .frame(width: 80, alignment: .leading)
             Spacer(minLength: 0)
             Text(title)
-                .font(.system(size: 17, weight: .semibold))
+                .aurionFont(17, weight: .semibold, relativeTo: .headline)
                 .foregroundColor(.aurionTextPrimary)
             Spacer(minLength: 0)
             HStack { trailing() }
@@ -444,9 +444,9 @@ struct AurionFilterChip: View {
         } label: {
             HStack(spacing: 6) {
                 Text(label)
-                    .font(.system(size: 13, weight: .semibold))
+                    .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                 Text("\(count)")
-                    .font(.system(size: 11, weight: .semibold))
+                    .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                     .padding(.horizontal, 7)
                     .padding(.vertical, 1)
                     .background(active ? Color.white.opacity(0.18) : Color.aurionSurfaceAlt)
@@ -616,10 +616,10 @@ struct AurionSelectableCard<Trailing: View>: View {
                 AurionIconTile(systemName: icon, active: selected)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 17, weight: .semibold))
+                        .aurionFont(17, weight: .semibold, relativeTo: .headline)
                         .foregroundColor(.aurionTextPrimary)
                     Text(subtitle)
-                        .font(.system(size: 13))
+                        .aurionFont(13, relativeTo: .footnote)
                         .foregroundColor(.aurionTextSecondary)
                 }
                 Spacer(minLength: 0)

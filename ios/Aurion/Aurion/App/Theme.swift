@@ -130,7 +130,12 @@ extension Color {
     static let aurionSectionInfo = Color(red: 45/255, green: 108/255, blue: 223/255)   // blue-500
     static let aurionSectionExam = Color(red: 46/255, green: 158/255, blue: 106/255)   // green-500
     static let aurionSectionAssessment = Color(red: 217/255, green: 148/255, blue: 31/255) // amber-500
-    static let aurionSectionPlan = Color.aurionNavy     // navy-500
+    // navy-500 in light; a lifted slate-navy in dark so the "plan" accent
+    // stays visible on the dark canvas instead of collapsing to near-black.
+    static let aurionSectionPlan = Color(
+        light: .aurionNavy,
+        dark:  Color(red: 122/255, green: 146/255, blue: 200/255)  // #7A92C8
+    )
 }
 
 // MARK: - Adaptive Colors (Light/Dark)
@@ -319,7 +324,7 @@ extension View {
 struct AurionPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .semibold))
+            .aurionFont(16, weight: .semibold, relativeTo: .body)
             // Brand-navy on gold — fixed in both modes.
             .foregroundColor(.aurionNavy)
             .padding(.horizontal, 22)
@@ -338,7 +343,7 @@ struct AurionPrimaryButtonStyle: ButtonStyle {
 struct AurionSecondaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
-            .font(.system(size: 16, weight: .semibold))
+            .aurionFont(16, weight: .semibold, relativeTo: .body)
             .foregroundColor(.aurionTextPrimary)
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
@@ -513,7 +518,7 @@ extension View {
     // 34pt bold, tight tracking (--t-large-title)
     func aurionLargeTitle() -> some View {
         self
-            .font(.system(size: 34, weight: .bold))
+            .aurionFont(34, weight: .bold, relativeTo: .largeTitle)
             .tracking(-0.68)
             .foregroundColor(.aurionTextPrimary)
     }
@@ -521,7 +526,7 @@ extension View {
     // 28pt bold, tight tracking (--t-title-1)
     func aurionDisplay() -> some View {
         self
-            .font(.system(size: 28, weight: .bold))
+            .aurionFont(28, weight: .bold, relativeTo: .title)
             .tracking(-0.5)
             .foregroundColor(.aurionTextPrimary)
     }
@@ -529,7 +534,7 @@ extension View {
     // 20pt semibold (--t-title-3)
     func aurionTitle3() -> some View {
         self
-            .font(.system(size: 20, weight: .semibold))
+            .aurionFont(20, weight: .semibold, relativeTo: .title3)
             .tracking(-0.2)
             .foregroundColor(.aurionTextPrimary)
     }
@@ -537,7 +542,7 @@ extension View {
     // 22pt semibold (--t-title-2)
     func aurionTitle() -> some View {
         self
-            .font(.system(size: 22, weight: .semibold))
+            .aurionFont(22, weight: .semibold, relativeTo: .title2)
             .tracking(-0.3)
             .foregroundColor(.aurionTextPrimary)
     }
@@ -545,35 +550,35 @@ extension View {
     // 17pt semibold (--t-headline)
     func aurionHeadline() -> some View {
         self
-            .font(.system(size: 17, weight: .semibold))
+            .aurionFont(17, weight: .semibold, relativeTo: .headline)
             .foregroundColor(.aurionTextPrimary)
     }
 
     // 17pt regular (--t-body)
     func aurionBody() -> some View {
         self
-            .font(.system(size: 17, weight: .regular))
+            .aurionFont(17, weight: .regular, relativeTo: .body)
             .foregroundColor(.aurionTextPrimary)
     }
 
     // 15pt medium (--t-subheadline)
     func aurionCallout() -> some View {
         self
-            .font(.system(size: 15, weight: .medium))
+            .aurionFont(15, weight: .medium, relativeTo: .subheadline)
             .foregroundColor(.aurionTextSecondary)
     }
 
     // 13pt regular (--t-footnote)
     func aurionCaption() -> some View {
         self
-            .font(.system(size: 13, weight: .regular))
+            .aurionFont(13, weight: .regular, relativeTo: .footnote)
             .foregroundColor(.aurionTextSecondary)
     }
 
     // 11pt semibold uppercase (--t-caption-2)
     func aurionMicro() -> some View {
         self
-            .font(.system(size: 11, weight: .semibold))
+            .aurionFont(11, weight: .semibold, relativeTo: .caption2)
             .tracking(0.8)
             .textCase(.uppercase)
             .foregroundColor(.aurionTextSecondary)
@@ -616,7 +621,7 @@ struct AurionTabBar: View {
                                 .frame(height: 26)
 
                             Text(item.label)
-                                .font(.system(size: 10, weight: on ? .semibold : .medium))
+                                .aurionFont(10, weight: on ? .semibold : .medium, relativeTo: .caption2)
                                 .foregroundColor(on ? .aurionGold : .aurionTabInactive)
                         }
                         .frame(maxWidth: .infinity, minHeight: 44)
@@ -652,7 +657,7 @@ struct StatusBadge: View {
                 .fill(color)
                 .frame(width: 6, height: 6)
             Text(text)
-                .font(.system(size: 11, weight: .semibold))
+                .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                 .tracking(0.4)
         }
         .foregroundColor(color)
@@ -706,7 +711,7 @@ struct MetricCard: View {
                 Spacer()
                 if let trend = trend {
                     Text(trend)
-                        .font(.system(size: 11, weight: .bold))
+                        .aurionFont(11, weight: .bold, relativeTo: .caption2)
                         .foregroundColor(trend.hasPrefix("-") ? .clinicalAlert : .clinicalNormal)
                 }
             }
@@ -716,7 +721,7 @@ struct MetricCard: View {
                 .foregroundColor(.aurionTextPrimary)
 
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .aurionFont(12, weight: .medium, relativeTo: .caption)
                 .foregroundColor(.secondary)
         }
         .aurionCard()
@@ -741,13 +746,13 @@ struct SectionHeader<Trailing: View>: View {
     var body: some View {
         HStack(spacing: AurionSpacing.xs) {
             Text(title.uppercased())
-                .font(.system(size: 11, weight: .semibold))
+                .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                 .tracking(1.1)
                 .foregroundColor(.aurionTextSecondary)
 
             if let count = count {
                 Text("\(count)")
-                    .font(.system(size: 10, weight: .bold))
+                    .aurionFont(10, weight: .bold, relativeTo: .caption2)
                     .foregroundColor(.white)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
