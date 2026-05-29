@@ -73,8 +73,39 @@ final class CognitoNativeAuth {
         return try processAuthResult(raw, username: username)
     }
 
+    /// Mint a fresh token set from a stored refresh token (biometric
+    /// "remember me" sign-in). `REFRESH_TOKEN_AUTH` doesn't re-prompt MFA —
+    /// the refresh token already represents an MFA-completed session — so the
+    /// Face ID → signed-in path stays one tap even once MFA is restored.
+    ///
+    /// Cognito doesn't echo the refresh token back on this flow, so we
+    /// re-persist the one we used into the canonical slot — otherwise the
+    /// in-session refresh path (`CognitoAuth.refreshIfNeeded`) would have
+    /// nothing to work with.
+    func refreshSession(refreshToken: String) async throws -> SignInOutcome {
+        let body: [String: Any] = [
+            "AuthFlow": "REFRESH_TOKEN_AUTH",
+            "ClientId": AppConfig.cognitoClientID,
+            "AuthParameters": ["REFRESH_TOKEN": refreshToken],
+        ]
+        let raw = try await postJSON(target: "InitiateAuth", body: body)
+        let outcome = try processAuthResult(raw, username: "")
+        if case .authenticated(let session) = outcome {
+            KeychainHelper.shared.saveTokens(
+                accessToken: session.accessToken,
+                idToken: session.idToken,
+                refreshToken: refreshToken,
+                expiresAt: session.expiresAt
+            )
+        }
+        return outcome
+    }
+
     /// Local sign-out — drop the cached tokens. No Cognito round trip.
     /// Token revocation is handled by refresh-token expiry (30 days).
+    /// The biometric "remember me" credential is intentionally NOT cleared
+    /// here — it's a separate, user-managed convenience (Forget on the login
+    /// screen or in Profile › Security).
     func signOut() {
         KeychainHelper.shared.clearTokens()
     }

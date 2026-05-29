@@ -1,4 +1,5 @@
 import Foundation
+import LocalAuthentication
 import Security
 
 /// Keychain helper for sensitive credentials and on-device voice biometrics.
@@ -18,6 +19,13 @@ final class KeychainHelper {
     private let cognitoIDTokenKey      = "aurion.cognito.id_token"
     private let cognitoRefreshTokenKey = "aurion.cognito.refresh_token"
     private let cognitoExpiresAtKey    = "aurion.cognito.expires_at"
+    // Biometric "remember me": the refresh token is stored under a separate
+    // item gated by `.userPresence` (Face ID / Touch ID / passcode), so it
+    // survives sign-out and can only be read after the user authenticates.
+    // The email is a plain sibling item — a label for the button and a
+    // prompt-free existence check.
+    private let biometricRefreshTokenKey = "aurion.biometric.refresh_token"
+    private let biometricEmailKey        = "aurion.biometric.email"
 
     private init() {}
 
@@ -112,7 +120,65 @@ final class KeychainHelper {
         clearAuth()
     }
 
+    // MARK: - Biometric "remember me" credential
+
+    /// Persist the refresh token behind a biometric/passcode gate plus the
+    /// email as a plain label. Overwrites any prior saved login.
+    func saveBiometricCredential(refreshToken: String, email: String) {
+        guard !refreshToken.isEmpty else { return }
+        saveProtected(key: biometricRefreshTokenKey, value: refreshToken)
+        saveString(key: biometricEmailKey, value: email)
+    }
+
+    /// Read the saved refresh token using an already-authenticated
+    /// `LAContext` (from ``BiometricAuth.authenticate``). Because the context
+    /// has already evaluated, this read doesn't prompt again and returns
+    /// quickly — safe to call on the main thread. Returns nil if nothing is
+    /// saved or the context can't unlock the item.
+    func loadBiometricRefreshToken(context: LAContext) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: biometricRefreshTokenKey,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne,
+            kSecUseAuthenticationContext as String: context,
+        ]
+        var result: AnyObject?
+        let status = SecItemCopyMatching(query as CFDictionary, &result)
+        guard status == errSecSuccess, let data = result as? Data else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    /// Email tied to the saved login — used to label the button and to test
+    /// for existence without prompting for biometrics.
+    func savedBiometricEmail() -> String? { loadString(key: biometricEmailKey) }
+    func hasBiometricCredential() -> Bool { savedBiometricEmail() != nil }
+
+    func clearBiometricCredential() {
+        delete(key: biometricRefreshTokenKey)
+        delete(key: biometricEmailKey)
+    }
+
     // MARK: - Internal
+
+    /// Store a value gated by `.userPresence` (biometry or device passcode).
+    /// Reads of this item prompt the user; writes do not.
+    private func saveProtected(key: String, value: String) {
+        delete(key: key)
+        guard let access = SecAccessControlCreateWithFlags(
+            nil,
+            kSecAttrAccessibleWhenUnlockedThisDeviceOnly,
+            .userPresence,
+            nil
+        ) else { return }
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrAccount as String: key,
+            kSecValueData as String: Data(value.utf8),
+            kSecAttrAccessControl as String: access,
+        ]
+        SecItemAdd(query as CFDictionary, nil)
+    }
 
     private func saveString(key: String, value: String) {
         save(key: key, data: Data(value.utf8))

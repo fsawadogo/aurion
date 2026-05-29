@@ -362,6 +362,13 @@ struct LoginView: View {
     @State private var loginError: String?
     @State private var loginAppeared = false
     @State private var signInSucceeded = false
+    /// Biometric "remember me". `rememberMe` opts a password sign-in into
+    /// saving the credential; `hasSavedLogin` controls whether the Face ID
+    /// sign-in button is offered. Both seed from the Keychain so a returning
+    /// user keeps their choice.
+    @State private var rememberMe = KeychainHelper.shared.hasBiometricCredential()
+    @State private var hasSavedLogin = KeychainHelper.shared.hasBiometricCredential()
+    private let biometricsAvailable = BiometricAuth.isAvailable
     /// Set when Cognito asks the user to replace their temp password
     /// (first sign-in for every admin-provisioned account). Drives a
     /// full-screen cover sheet rather than swapping the form so the
@@ -421,6 +428,15 @@ struct LoginView: View {
                         }
                     }
 
+                    if biometricsAvailable {
+                        Toggle(isOn: $rememberMe) {
+                            Text(L("login.rememberMeWith", BiometricAuth.typeLabel))
+                                .font(.system(size: 13))
+                                .foregroundColor(.white.opacity(0.85))
+                        }
+                        .tint(.aurionGold)
+                    }
+
                     Button {
                         AurionHaptics.impact(.medium)
                         Task { await signIn() }
@@ -453,6 +469,10 @@ struct LoginView: View {
                             .foregroundColor(Color.aurionOnNavyError)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity, alignment: .leading)
+                    }
+
+                    if hasSavedLogin {
+                        biometricSignInSection
                     }
 
                     Text(L("login.firstTimeHint"))
@@ -550,6 +570,89 @@ struct LoginView: View {
         }
     }
 
+    /// "or — Sign in with Face ID" block, shown only when a saved login
+    /// exists. The Forget link removes the credential without signing in.
+    private var biometricSignInSection: some View {
+        VStack(spacing: 12) {
+            HStack(spacing: 10) {
+                Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+                Text(L("login.or"))
+                    .font(.system(size: 11))
+                    .foregroundColor(Color.aurionOnNavyFootnote)
+                Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+            }
+
+            Button {
+                AurionHaptics.impact(.medium)
+                Task { await signInWithBiometrics() }
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: BiometricAuth.iconName)
+                        .font(.system(size: 18, weight: .semibold))
+                    Text(L("login.signInWith", BiometricAuth.typeLabel))
+                        .font(.system(size: 15, weight: .semibold))
+                }
+                .foregroundColor(.white)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 13)
+                .background(Color.white.opacity(0.08))
+                .cornerRadius(10)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10)
+                        .stroke(Color.aurionGold.opacity(0.5), lineWidth: 1)
+                )
+            }
+            .disabled(isSigningIn || signInSucceeded)
+
+            Button(L("login.forgetSaved")) { forgetSavedLogin() }
+                .font(.system(size: 12))
+                .foregroundColor(Color.aurionOnNavyFootnote)
+        }
+    }
+
+    @MainActor
+    private func signInWithBiometrics() async {
+        // Authenticate first (non-blocking system prompt), then unlock the
+        // saved token with that same context — no second prompt. A nil
+        // context means the user cancelled or auth failed: stay silent and
+        // let them retry or use the password form.
+        guard let context = await BiometricAuth.authenticate(
+            reason: L("login.biometricPrompt")
+        ) else { return }
+        guard let refreshToken = KeychainHelper.shared.loadBiometricRefreshToken(
+            context: context
+        ) else { return }
+
+        isSigningIn = true
+        loginError = nil
+        do {
+            let outcome = try await CognitoNativeAuth.shared.refreshSession(
+                refreshToken: refreshToken
+            )
+            handleOutcome(outcome)
+        } catch {
+            // Refresh token expired or revoked — drop the stale credential and
+            // fall back to the password form.
+            isSigningIn = false
+            KeychainHelper.shared.clearBiometricCredential()
+            withAnimation(AurionAnimation.smooth) {
+                hasSavedLogin = false
+                rememberMe = false
+            }
+            loginError = L("login.biometricExpired")
+            AurionHaptics.notification(.error)
+        }
+    }
+
+    private func forgetSavedLogin() {
+        KeychainHelper.shared.clearBiometricCredential()
+        AurionHaptics.impact(.light)
+        withAnimation(AurionAnimation.smooth) {
+            hasSavedLogin = false
+            rememberMe = false
+        }
+    }
+
     @MainActor
     private func signIn() async {
         guard !email.isEmpty, !password.isEmpty else { return }
@@ -572,6 +675,16 @@ struct LoginView: View {
     private func handleOutcome(_ outcome: CognitoNativeAuth.SignInOutcome) {
         switch outcome {
         case .authenticated:
+            // Persist the biometric "remember me" credential when opted in.
+            // Skipped on the biometric sign-in path itself (the email field
+            // is empty there) — the credential already exists.
+            if rememberMe, !email.isEmpty,
+               let rt = KeychainHelper.shared.getRefreshToken(), !rt.isEmpty {
+                KeychainHelper.shared.saveBiometricCredential(
+                    refreshToken: rt,
+                    email: email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+                )
+            }
             // Backend round trip — same shape as the hosted-UI path used
             // to do, so AppState wiring downstream is unchanged.
             Task {
