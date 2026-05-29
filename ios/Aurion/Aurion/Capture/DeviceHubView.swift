@@ -18,7 +18,7 @@ struct DeviceHubView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
                     Text(L("tabs.devices"))
-                        .font(.system(size: 28, weight: .bold))
+                        .aurionFont(28, weight: .bold, relativeTo: .title)
                         .tracking(-0.56)
                         .foregroundColor(.aurionTextPrimary)
                         .padding(.bottom, -4)
@@ -81,7 +81,7 @@ struct DeviceHubView: View {
         let tint = source?.status.tint ?? .aurionTextSecondary
         return VStack(alignment: .leading, spacing: 8) {
             Text(title.uppercased())
-                .font(.system(size: 10, weight: .semibold))
+                .aurionFont(10, weight: .semibold, relativeTo: .caption2)
                 .tracking(1.0)
                 .foregroundColor(.aurionTextSecondary)
             HStack(spacing: 8) {
@@ -90,12 +90,12 @@ struct DeviceHubView: View {
                     .foregroundColor(tint)
                 VStack(alignment: .leading, spacing: 1) {
                     Text(source?.displayName ?? (placeholder ?? "—"))
-                        .font(.system(size: 14, weight: .semibold))
+                        .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
                         .foregroundColor(.aurionTextPrimary)
                         .lineLimit(1)
                     if let source {
                         Text(source.status.label)
-                            .font(.system(size: 11))
+                            .aurionFont(11, relativeTo: .caption2)
                             .foregroundColor(tint)
                             .lineLimit(1)
                     }
@@ -204,7 +204,7 @@ struct DeviceHubView: View {
                             .font(.system(size: 20))
                             .foregroundColor(.aurionTextPrimary)
                         Text(label)
-                            .font(.system(size: 14, weight: .medium))
+                            .aurionFont(14, weight: .medium, relativeTo: .subheadline)
                             .foregroundColor(.aurionTextPrimary)
                             .lineLimit(1)
                     }
@@ -244,10 +244,10 @@ private struct VideoNoneRow: View {
                 }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(L("devices.none"))
-                        .font(.system(size: 15, weight: .semibold))
+                        .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                         .foregroundColor(.aurionTextPrimary)
                     Text(L("devices.audioOnlySession"))
-                        .font(.system(size: 12))
+                        .aurionFont(12, relativeTo: .caption)
                         .foregroundColor(.aurionTextSecondary)
                 }
                 Spacer()
@@ -291,10 +291,10 @@ private struct SourceRow: View {
 
                 VStack(alignment: .leading, spacing: 2) {
                     Text(source.displayName)
-                        .font(.system(size: 15, weight: .semibold))
+                        .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                         .foregroundColor(.aurionTextPrimary)
                     Text(source.detail.isEmpty ? source.status.label : source.detail)
-                        .font(.system(size: 12))
+                        .aurionFont(12, relativeTo: .caption)
                         .foregroundColor(source.status.tint)
                         .lineLimit(2)
                 }

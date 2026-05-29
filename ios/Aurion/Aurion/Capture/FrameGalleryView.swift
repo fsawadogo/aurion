@@ -60,7 +60,7 @@ struct FrameGalleryView: View {
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     Text(frameCountLabel)
-                        .font(.system(size: 13, weight: .medium))
+                        .aurionFont(13, weight: .medium, relativeTo: .footnote)
                         .foregroundColor(.aurionTextSecondary)
                         .contentTransition(.numericText())
                         .animation(AurionAnimation.smooth, value: source.capturedFrames.count)
@@ -70,7 +70,7 @@ struct FrameGalleryView: View {
                         AurionHaptics.selection()
                         dismiss()
                     }
-                    .font(.system(size: 16, weight: .semibold))
+                    .aurionFont(16, weight: .semibold, relativeTo: .body)
                     .foregroundColor(.aurionGold)
                 }
             }
@@ -103,7 +103,7 @@ struct FrameGalleryView: View {
 
             // Timestamp pill — bottom-left over the image for context
             Text(formatTimestamp(frame.timestamp))
-                .font(.system(size: 10, weight: .semibold))
+                .aurionFont(10, weight: .semibold, relativeTo: .caption2)
                 .monospacedDigit()
                 .foregroundColor(.white)
                 .padding(.horizontal, 6)
@@ -126,10 +126,10 @@ struct FrameGalleryView: View {
                 .foregroundColor(.aurionTextSecondary.opacity(0.6))
                 .symbolEffect(.pulse, options: .repeating)
             Text(L("frames.empty"))
-                .font(.system(size: 18, weight: .semibold))
+                .aurionFont(18, weight: .semibold, relativeTo: .title3)
                 .foregroundColor(.aurionTextPrimary)
             Text(L("frames.emptySub"))
-                .font(.system(size: 13))
+                .aurionFont(13, relativeTo: .footnote)
                 .foregroundColor(.aurionTextSecondary)
                 .multilineTextAlignment(.center)
         }
@@ -169,7 +169,7 @@ private struct FullFrameView: View {
             .toolbar {
                 ToolbarItem(placement: .principal) {
                     Text(formatTimestamp(frame.timestamp))
-                        .font(.system(size: 14, weight: .semibold))
+                        .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
                         .monospacedDigit()
                         .foregroundColor(.white)
                 }
