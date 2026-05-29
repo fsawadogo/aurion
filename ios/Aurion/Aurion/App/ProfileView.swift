@@ -72,14 +72,14 @@ struct ProfileView: View {
                     AurionAvatar(initials: physicianInitials, size: 64)
                     VStack(alignment: .leading, spacing: 2) {
                         Text(appState.physicianProfile?.displayName ?? L("profile.defaultName"))
-                            .font(.system(size: 18, weight: .semibold))
+                            .aurionFont(18, weight: .semibold, relativeTo: .title3)
                             .foregroundColor(.aurionTextPrimary)
                         Text(displaySpecialty)
-                            .font(.system(size: 13))
+                            .aurionFont(13, relativeTo: .footnote)
                             .foregroundColor(.aurionTextSecondary)
                             .padding(.top, 2)
                         Text(displayPracticeType)
-                            .font(.system(size: 12))
+                            .aurionFont(12, relativeTo: .caption)
                             .foregroundColor(Color.aurionMutedGray)
                             .padding(.top, 2)
                     }
@@ -97,10 +97,10 @@ struct ProfileView: View {
                         AurionIconBubble(symbol: "checkmark", tint: .aurionGreen, size: 44, symbolWeight: .bold)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(L("profile.voiceEnrolled"))
-                                .font(.system(size: 15, weight: .semibold))
+                                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                                 .foregroundColor(.aurionTextPrimary)
                             Text(L("profile.voiceEnrolledSub"))
-                                .font(.system(size: 12))
+                                .aurionFont(12, relativeTo: .caption)
                                 .foregroundColor(.aurionTextSecondary)
                                 .lineLimit(2)
                         }
@@ -124,10 +124,10 @@ struct ProfileView: View {
                         AurionIconBubble(symbol: "mic.fill", tint: .aurionGold, size: 44)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(L("profile.setupVoice"))
-                                .font(.system(size: 15, weight: .semibold))
+                                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                                 .foregroundColor(.aurionTextPrimary)
                             Text(L("profile.setupVoiceSub"))
-                                .font(.system(size: 12))
+                                .aurionFont(12, relativeTo: .caption)
                                 .foregroundColor(.aurionTextSecondary)
                                 .lineLimit(2)
                         }
@@ -140,7 +140,7 @@ struct ProfileView: View {
                     } label: {
                         HStack {
                             Text(L("profile.startVoice"))
-                                .font(.system(size: 15, weight: .semibold))
+                                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                                 .foregroundColor(.aurionTextPrimary)
                             Spacer()
                             Image(systemName: "arrow.right")

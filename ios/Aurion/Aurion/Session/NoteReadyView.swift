@@ -27,13 +27,13 @@ struct NoteReadyView: View {
                 }
 
                 Text(L("noteReady.title"))
-                    .font(.system(size: 28, weight: .semibold))
+                    .aurionFont(28, weight: .semibold, relativeTo: .title)
                     .tracking(-0.3)
                     .foregroundColor(.aurionTextPrimary)
                     .padding(.top, 18)
 
                 Text(L("noteReady.subtitle"))
-                    .font(.system(size: 15))
+                    .aurionFont(15, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)

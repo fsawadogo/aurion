@@ -47,7 +47,7 @@ struct PostEncounterView: View {
                                 } label: {
                                     HStack {
                                         Text(localizedSpecialty(template.key))
-                                            .font(.system(size: 15))
+                                            .aurionFont(15, relativeTo: .subheadline)
                                             .foregroundColor(.aurionTextPrimary)
                                         Spacer()
                                         if selectedTemplate == template.key {
@@ -85,9 +85,9 @@ struct PostEncounterView: View {
                                 selectedLanguage = key
                             } label: {
                                 HStack(spacing: 12) {
-                                    Text(flag).font(.system(size: 22))
+                                    Text(flag).aurionFont(22, relativeTo: .title2)
                                     Text(name)
-                                        .font(.system(size: 15))
+                                        .aurionFont(15, relativeTo: .subheadline)
                                         .foregroundColor(.aurionTextPrimary)
                                     Spacer()
                                     if selectedLanguage == key {
