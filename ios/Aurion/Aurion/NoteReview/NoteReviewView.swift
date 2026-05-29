@@ -234,13 +234,13 @@ struct NoteReviewView: View {
         )
         return VStack(alignment: .leading, spacing: 16) {
             Text(L("noteReview.editConflict"))
-                .font(.system(size: 20, weight: .bold))
+                .aurionFont(20, weight: .bold, relativeTo: .title2)
                 .foregroundColor(.aurionTextPrimary)
             Text(L("noteReview.editConflictSub"))
-                .font(.system(size: 13))
+                .aurionFont(13, relativeTo: .footnote)
                 .foregroundColor(.aurionTextSecondary)
             TextEditor(text: draftBinding)
-                .font(.system(size: 15))
+                .aurionFont(15, relativeTo: .body)
                 .foregroundColor(.aurionTextPrimary)
                 .frame(minHeight: 140)
                 .padding(8)
@@ -293,7 +293,7 @@ struct NoteReviewView: View {
                     // re-fires the effect for the remaining ones.
                     .symbolEffect(.pulse, options: .repeating, value: count)
                 Text(Lplural("noteReview.conflictsToResolve", count))
-                    .font(.system(size: 14, weight: .semibold))
+                    .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
                     .foregroundColor(.aurionStatusConflict)
                 Spacer()
                 if let firstID = note.firstConflictSectionID {
@@ -304,7 +304,7 @@ struct NoteReviewView: View {
                         }
                     } label: {
                         Text(L("noteReview.show"))
-                            .font(.system(size: 13, weight: .semibold))
+                            .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                             .foregroundColor(.aurionStatusConflict)
                             .padding(.horizontal, 12)
                             .padding(.vertical, 6)
@@ -337,7 +337,7 @@ struct NoteReviewView: View {
                 ProgressView()
                     .controlSize(.small)
                 Text(L("noteReview.stage2InProgress"))
-                    .font(.system(size: 13, weight: .medium))
+                    .aurionFont(13, weight: .medium, relativeTo: .footnote)
                     .foregroundColor(.aurionTextPrimary)
                 Spacer()
             }
@@ -389,7 +389,7 @@ struct NoteReviewView: View {
         VStack(spacing: 12) {
             AurionIconBubble(symbol: "checkmark", tint: .aurionGreen, size: 64, symbolWeight: .bold)
             Text(L("noteReview.approved"))
-                .font(.system(size: 16, weight: .semibold))
+                .aurionFont(16, weight: .semibold, relativeTo: .body)
                 .foregroundColor(.aurionTextPrimary)
         }
         .padding(.horizontal, 28)
@@ -456,7 +456,7 @@ struct NoteReviewView: View {
             // Section title — bold, similar to a Word heading
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(s.title)
-                    .font(.system(size: 18, weight: .bold))
+                    .aurionFont(18, weight: .bold, relativeTo: .title3)
                     .foregroundColor(.aurionTextPrimary)
                 if s.hasConflicts {
                     Text(L("noteReview.conflictBadge"))
@@ -488,7 +488,7 @@ struct NoteReviewView: View {
                 Text(s.status == "pending_video"
                      ? L("noteReview.optionalPlaceholder")
                      : L("noteReview.noContent"))
-                    .font(.system(size: 14).italic())
+                    .aurionFont(14, relativeTo: .subheadline).italic()
                     .foregroundColor(.aurionTextSecondary)
             } else {
                 Button {
@@ -499,7 +499,7 @@ struct NoteReviewView: View {
                     }
                 } label: {
                     Text(body)
-                        .font(.system(size: 15))
+                        .aurionFont(15, relativeTo: .body)
                         .foregroundColor(.aurionTextPrimary)
                         .lineSpacing(5)
                         .multilineTextAlignment(.leading)
@@ -558,7 +558,7 @@ struct NoteReviewView: View {
                         }
                         if !claim.sourceQuote.isEmpty {
                             Text("\u{201C}\(claim.sourceQuote)\u{201D}")
-                                .font(.system(size: 13).italic())
+                                .aurionFont(13, relativeTo: .footnote).italic()
                                 .foregroundColor(.aurionTextSecondary)
                                 .lineSpacing(2)
                         }
@@ -587,7 +587,7 @@ struct NoteReviewView: View {
                         .tracking(0.4)
                         .foregroundColor(.aurionStatusConflict)
                     Text(claim.text)
-                        .font(.system(size: 14))
+                        .aurionFont(14, relativeTo: .subheadline)
                         .foregroundColor(.aurionTextPrimary)
                         .lineSpacing(3)
                 }
@@ -616,7 +616,7 @@ struct NoteReviewView: View {
     private func conflictActionButton(_ label: String, inFlight: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
-                .font(.system(size: 12, weight: .semibold))
+                .aurionFont(12, weight: .semibold, relativeTo: .caption)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(Color.aurionBackground)
@@ -662,13 +662,13 @@ struct NoteReviewView: View {
             ForEach(note.sections, id: \.id) { section in
                 VStack(alignment: .leading, spacing: 8) {
                     Text(section.title)
-                        .font(.system(size: 18, weight: .bold))
+                        .aurionFont(18, weight: .bold, relativeTo: .title3)
                         .foregroundColor(.aurionTextPrimary)
                     TextEditor(text: Binding(
                         get: { draftEdits[section.id] ?? "" },
                         set: { draftEdits[section.id] = $0 }
                     ))
-                    .font(.system(size: 15))
+                    .aurionFont(15, relativeTo: .body)
                     .foregroundColor(.aurionTextPrimary)
                     .frame(minHeight: 90)
                     .padding(8)
@@ -691,7 +691,7 @@ struct NoteReviewView: View {
     private func editingBar(_ n: NoteResponse) -> some View {
         HStack(spacing: 14) {
             Text(Lplural("noteReview.sectionsEdited", draftEdits.count))
-                .font(.system(size: 13))
+                .aurionFont(13, relativeTo: .footnote)
                 .foregroundColor(.aurionTextSecondary)
                 .frame(maxWidth: .infinity, alignment: .leading)
             AurionGoldButton(
@@ -758,7 +758,7 @@ struct NoteReviewView: View {
                     size: 48
                 )
                 Text("\(Int(displayedCompleteness * 100))%")
-                    .font(.system(size: 12, weight: .bold))
+                    .aurionFont(12, weight: .bold, relativeTo: .caption)
                     .foregroundColor(.aurionTextPrimary)
                     .contentTransition(.numericText())
                     .animation(AurionAnimation.smooth, value: displayedCompleteness)
@@ -767,10 +767,10 @@ struct NoteReviewView: View {
                 // Numerator/denominator — the missing "5 of 6 sections" hint
                 // so the percentage isn't the only signal.
                 Text(L("noteReview.sectionsCount", populated, totalSections))
-                    .font(.system(size: 13, weight: .semibold))
+                    .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                     .foregroundColor(.aurionTextPrimary)
                 Text(helpText)
-                    .font(.system(size: 12))
+                    .aurionFont(12, relativeTo: .caption)
                     .foregroundColor(.aurionTextSecondary)
                     .lineSpacing(2)
                     .contentTransition(.opacity)
