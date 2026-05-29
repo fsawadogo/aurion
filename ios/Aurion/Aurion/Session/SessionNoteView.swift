@@ -56,6 +56,13 @@ struct NoteDocumentBody: View {
     let dateString: String
     let forPDF: Bool
 
+    // On-screen reading text scales with Dynamic Type so physicians can size
+    // the note to their preference. The PDF path always uses the literal point
+    // sizes below, so exported documents render identically regardless of the
+    // reader's text-size setting.
+    @ScaledMetric(relativeTo: .title2) private var sectionHeadingSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .body) private var claimBodySize: CGFloat = 17
+
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
             // Title block — specialty (Notes-size title), then meta row.
@@ -110,7 +117,7 @@ struct NoteDocumentBody: View {
         VStack(alignment: .leading, spacing: 8) {
             HStack(alignment: .firstTextBaseline, spacing: 8) {
                 Text(section.title)
-                    .font(.system(size: 20, weight: .semibold))
+                    .font(.system(size: forPDF ? 20 : sectionHeadingSize, weight: .semibold))
                     .foregroundColor(forPDF ? .black : .aurionTextPrimary)
                 if !forPDF, section.status != "populated" {
                     Text(statusLabel(section.status))
@@ -144,7 +151,7 @@ struct NoteDocumentBody: View {
         var attr = AttributedString()
         for (i, claim) in claims.enumerated() {
             var sentence = AttributedString(claim.text)
-            sentence.font = .system(size: 17)
+            sentence.font = .system(size: forPDF ? 17 : claimBodySize)
             sentence.foregroundColor = forPDF ? .black : .aurionTextPrimary
             attr.append(sentence)
 

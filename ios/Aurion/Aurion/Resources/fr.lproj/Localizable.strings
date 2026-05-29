@@ -421,6 +421,7 @@
 
 /* ── Accessibilit\U00E9 ───────────────────────────────── */
 "a11y.openProfile" = "Ouvrir le profil";
+"a11y.startEncounterHint" = "D\U00E9marre une nouvelle consultation";
 "a11y.profileAvatar" = "Avatar du profil";
 "a11y.progress" = "Progression";
 "a11y.logoTagline" = "Aurion \U2014 la r\U00E9f\U00E9rence en IA clinique";

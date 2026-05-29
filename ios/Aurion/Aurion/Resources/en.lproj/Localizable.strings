@@ -421,6 +421,7 @@
 
 /* ── Accessibility ────────────────────────────────────── */
 "a11y.openProfile" = "Open profile";
+"a11y.startEncounterHint" = "Starts a new encounter";
 "a11y.profileAvatar" = "Profile avatar";
 "a11y.progress" = "Progress";
 "a11y.logoTagline" = "Aurion \U2014 the gold standard in clinical AI";
