@@ -1,46 +1,6 @@
 import SwiftUI
 import UIKit
 
-// MARK: - Section Styling Helpers
-
-private extension String {
-    /// Map section ID to a left-border color.
-    var sectionBorderColor: Color {
-        switch self {
-        case "chief_complaint", "hpi":
-            return .clinicalInfo
-        case "physical_exam", "wound_assessment", "functional_assessment":
-            return .clinicalNormal
-        case "imaging_review", "investigations", "vital_signs":
-            return .clinicalInfo
-        case "assessment":
-            return .clinicalWarning
-        case "plan", "disposition":
-            return .aurionNavy
-        default:
-            return .secondary.opacity(0.3)
-        }
-    }
-
-    /// Map section ID to an SF Symbol icon.
-    var sectionIcon: String {
-        switch self {
-        case "chief_complaint": return "exclamationmark.bubble.fill"
-        case "hpi": return "clock.fill"
-        case "physical_exam": return "hand.raised.fill"
-        case "wound_assessment": return "bandage.fill"
-        case "functional_assessment": return "figure.walk"
-        case "imaging_review": return "photo.on.rectangle.angled"
-        case "investigations": return "flask.fill"
-        case "vital_signs": return "heart.fill"
-        case "assessment": return "list.clipboard.fill"
-        case "plan": return "arrow.right.circle.fill"
-        case "disposition": return "arrow.uturn.right.circle.fill"
-        default: return "doc.text.fill"
-        }
-    }
-}
-
 // MARK: - NoteDocumentBody — Apple-Notes-style flowing document
 //
 // Renders the entire note as a single continuous document: large title,

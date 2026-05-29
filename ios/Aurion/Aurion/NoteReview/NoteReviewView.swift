@@ -39,25 +39,6 @@ private extension NoteResponse {
     }
 }
 
-/// Maps a section id to its design-system accent color (left bar + icon).
-/// Per `colors_and_type.css`: info=blue, exam=green, assessment=amber, plan=navy.
-private extension String {
-    var sectionAccent: Color {
-        switch self {
-        case "chief_complaint", "hpi", "imaging_review", "investigations", "vital_signs":
-            return .aurionSectionInfo
-        case "physical_exam", "wound_assessment", "functional_assessment":
-            return .aurionSectionExam
-        case "assessment":
-            return .aurionSectionAssessment
-        case "plan", "disposition":
-            return .aurionSectionPlan
-        default:
-            return .aurionTextSecondary
-        }
-    }
-}
-
 /// Selection carrier for the conflict edit sheet. Bundling the claim id with
 /// the seed text means the sheet always opens against the same claim it was
 /// summoned for, even if the note refreshes mid-edit.
