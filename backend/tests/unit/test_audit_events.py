@@ -35,6 +35,7 @@ EXPECTED_VALUES: dict[str, str] = {
     "FULL_NOTE_DELIVERED": "full_note_delivered",
     "NOTE_EXPORTED": "note_exported",
     "SESSION_PURGED": "session_purged",
+    "SESSION_DISCARDED": "session_discarded",
     # Notes
     "STAGE1_APPROVED": "stage1_approved",
     "STAGE1_FAILED": "stage1_failed",
