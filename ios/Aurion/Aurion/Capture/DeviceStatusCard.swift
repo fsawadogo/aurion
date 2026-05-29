@@ -76,8 +76,8 @@ enum DeviceStatus {
 
     var color: Color {
         switch self {
-        case .connected: return .green
-        case .disconnected: return .red
+        case .connected: return .aurionGreen
+        case .disconnected: return .aurionRed
         case .scanning: return .aurionGold
         case .recovering: return .aurionAmber
         case .unavailable: return .secondary

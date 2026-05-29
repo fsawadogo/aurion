@@ -191,6 +191,7 @@ struct SessionsInboxView: View {
             .accessibilityValue(L(dateRange.labelKey))
 
             Button {
+                AurionHaptics.selection()
                 withAnimation(.aurionIOS) { sortNewestFirst.toggle() }
             } label: {
                 Image(systemName: sortNewestFirst ? "arrow.down" : "arrow.up")
