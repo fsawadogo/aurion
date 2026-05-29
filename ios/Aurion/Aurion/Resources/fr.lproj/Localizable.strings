@@ -253,6 +253,11 @@
 "profile.noteLanguage" = "Langue des notes cliniques";
 "profile.languageHelp" = "La langue de l\U2019application contr\U00F4le l\U2019interface. La langue des notes contr\U00F4le la langue dans laquelle vos notes cliniques sont g\U00E9n\U00E9r\U00E9es.";
 "profile.sectionLanguage" = "Langue";
+"profile.sectionAppearance" = "Apparence";
+"profile.appearance" = "Th\U00E8me";
+"appearance.system" = "Syst\U00E8me";
+"appearance.light" = "Clair";
+"appearance.dark" = "Sombre";
 "profile.sessionAlerts" = "Alertes de session";
 "profile.noteReady" = "Note pr\U00EAte";
 "profile.sectionNotifications" = "Pr\U00E9f\U00E9rences de notification";
