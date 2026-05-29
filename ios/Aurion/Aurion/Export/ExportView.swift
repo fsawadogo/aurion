@@ -117,11 +117,11 @@ struct ExportView: View {
                 } label: {
                     VStack(spacing: AurionSpacing.xxs) {
                         Text(format.rawValue)
-                            .font(.system(size: 13, weight: .bold))
+                            .aurionFont(13, weight: .bold, relativeTo: .footnote)
 
                         if !format.isAvailable {
                             Text(L("export.comingSoon"))
-                                .font(.system(size: 9, weight: .medium))
+                                .aurionFont(9, weight: .medium, relativeTo: .caption2)
                                 .foregroundColor(.secondary.opacity(0.6))
                         }
                     }
@@ -165,7 +165,7 @@ struct ExportView: View {
                     .aurionTitle()
 
                 Text(L("export.subtitle", selectedFormat.mimeDescription))
-                    .font(.system(size: 15, weight: .regular))
+                    .aurionFont(15, weight: .regular, relativeTo: .subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, AurionSpacing.xl)
@@ -221,11 +221,11 @@ struct ExportView: View {
 
             VStack(spacing: AurionSpacing.sm) {
                 Text(L("export.exporting"))
-                    .font(.system(size: 17, weight: .semibold))
+                    .aurionFont(17, weight: .semibold, relativeTo: .headline)
                     .foregroundColor(.aurionTextPrimary)
 
                 Text(progressLabel)
-                    .font(.system(size: 13, weight: .medium))
+                    .aurionFont(13, weight: .medium, relativeTo: .footnote)
                     .foregroundColor(.secondary)
             }
 
@@ -277,7 +277,7 @@ struct ExportView: View {
                     .aurionTitle()
 
                 Text(L("export.doneSub", selectedFormat.rawValue))
-                    .font(.system(size: 15, weight: .regular))
+                    .aurionFont(15, weight: .regular, relativeTo: .subheadline)
                     .foregroundColor(.secondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, AurionSpacing.xl)
@@ -310,7 +310,7 @@ struct ExportView: View {
                     Image(systemName: "checkmark.shield.fill")
                         .foregroundColor(.clinicalNormal)
                     Text(Lplural("export.purged", report.totalArtifactsPurged))
-                        .font(.system(size: 12, weight: .medium))
+                        .aurionFont(12, weight: .medium, relativeTo: .caption)
                         .foregroundColor(.aurionTextSecondary)
                 }
                 .padding(.horizontal, AurionSpacing.md)
@@ -329,7 +329,7 @@ struct ExportView: View {
                 .font(.system(size: 14, weight: .semibold))
                 .foregroundColor(.aurionGold)
             Text(value)
-                .font(.system(size: 13, weight: .bold))
+                .aurionFont(13, weight: .bold, relativeTo: .footnote)
                 .foregroundColor(.aurionTextPrimary)
             Text(label)
                 .aurionMicro()
