@@ -89,13 +89,13 @@ struct PhysicianProfileSetupView: View {
         VStack(spacing: 8) {
             HStack {
                 Text(L("setup.step", step + 1, totalSteps))
-                    .font(.system(size: 12))
+                    .aurionFont(12, relativeTo: .caption)
                     .foregroundColor(.aurionTextSecondary)
                 Spacer()
                 Button(L("setup.skip")) {
                     appState.hasCompletedProfileSetup = true
                 }
-                .font(.system(size: 12))
+                .aurionFont(12, relativeTo: .caption)
                 .foregroundColor(.aurionTextSecondary)
             }
             AurionProgressBar(value: Double(step + 1) / Double(totalSteps))
@@ -258,10 +258,10 @@ struct PhysicianProfileSetupView: View {
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold))
+                    .aurionFont(16, weight: .semibold, relativeTo: .body)
                     .foregroundColor(.aurionTextPrimary)
                 Text(subtitle)
-                    .font(.system(size: 13))
+                    .aurionFont(13, relativeTo: .footnote)
                     .foregroundColor(.aurionTextSecondary)
             }
             Spacer(minLength: 8)
@@ -286,23 +286,23 @@ struct PhysicianProfileSetupView: View {
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 16, weight: .semibold))
+                    .aurionFont(16, weight: .semibold, relativeTo: .body)
                     .foregroundColor(.aurionTextPrimary)
                 Text(subtitle)
-                    .font(.system(size: 13))
+                    .aurionFont(13, relativeTo: .footnote)
                     .foregroundColor(.aurionTextSecondary)
             }
             Spacer(minLength: 8)
             Stepper(value: value, in: range) {
                 Text("\(value.wrappedValue) \(unit)")
-                    .font(.system(size: 15, weight: .medium))
+                    .aurionFont(15, weight: .medium, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextPrimary)
                     .monospacedDigit()
             }
             .labelsHidden()
             .fixedSize()
             Text("\(value.wrappedValue) \(unit)")
-                .font(.system(size: 14, weight: .medium))
+                .aurionFont(14, weight: .medium, relativeTo: .subheadline)
                 .foregroundColor(.aurionTextSecondary)
                 .monospacedDigit()
                 .frame(minWidth: 60, alignment: .trailing)
@@ -325,10 +325,10 @@ struct PhysicianProfileSetupView: View {
                     .frame(width: 28)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
-                        .font(.system(size: 16, weight: .semibold))
+                        .aurionFont(16, weight: .semibold, relativeTo: .body)
                         .foregroundColor(.aurionTextPrimary)
                     Text(subtitle)
-                        .font(.system(size: 13))
+                        .aurionFont(13, relativeTo: .footnote)
                         .foregroundColor(.aurionTextSecondary)
                 }
                 Spacer(minLength: 0)
@@ -357,13 +357,13 @@ struct PhysicianProfileSetupView: View {
                     outputLanguage = o.id
                 } label: {
                     HStack(spacing: 14) {
-                        Text(o.flag).font(.system(size: 32))
+                        Text(o.flag).aurionFont(32, relativeTo: .title)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(o.label)
-                                .font(.system(size: 17, weight: .semibold))
+                                .aurionFont(17, weight: .semibold, relativeTo: .headline)
                                 .foregroundColor(.aurionTextPrimary)
                             Text(o.sub)
-                                .font(.system(size: 13))
+                                .aurionFont(13, relativeTo: .footnote)
                                 .foregroundColor(.aurionTextSecondary)
                         }
                         Spacer(minLength: 0)
@@ -405,7 +405,7 @@ struct PhysicianProfileSetupView: View {
                     }
                 }
                 Text(label)
-                    .font(.system(size: 16))
+                    .aurionFont(16, relativeTo: .body)
                     .foregroundColor(.aurionTextPrimary)
                 Spacer(minLength: 0)
             }
