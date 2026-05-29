@@ -189,13 +189,11 @@ struct ExportView: View {
             .buttonStyle(AurionPrimaryButtonStyle())
 
             if let error = errorMessage {
-                HStack(spacing: AurionSpacing.xs) {
-                    Image(systemName: "exclamationmark.circle")
-                        .foregroundColor(.clinicalAlert)
-                    Text(error)
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.clinicalAlert)
-                }
+                ErrorBanner(
+                    error,
+                    onRetry: { exportNote() },
+                    onDismiss: { errorMessage = nil }
+                )
             }
         }
     }

@@ -299,6 +299,7 @@
 "common.done" = "Termin\U00E9";
 "common.cancel" = "Annuler";
 "common.retry" = "R\U00E9essayer";
+"common.dismiss" = "Ignorer";
 "common.skip" = "Passer";
 
 /* ── Connexion (suite) ────────────────────────────────── */

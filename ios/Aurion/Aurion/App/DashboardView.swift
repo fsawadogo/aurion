@@ -317,10 +317,7 @@ struct DashboardView: View {
                 .buttonStyle(.plain)
             }
             if let err = sessionManager.error {
-                Text(err)
-                    .font(.system(size: 12))
-                    .foregroundColor(.aurionRed)
-                    .padding(.horizontal, 4)
+                ErrorBanner(err, onDismiss: { sessionManager.error = nil })
             }
         }
     }
@@ -426,11 +423,7 @@ struct DashboardView: View {
                 }
             }
             if let error = sessionManager.error {
-                Text(error)
-                    .font(.system(size: 13))
-                    .foregroundColor(.aurionRed)
-                    .multilineTextAlignment(.center)
-                    .frame(maxWidth: .infinity)
+                ErrorBanner(error, onDismiss: { sessionManager.error = nil })
             }
         }
     }
