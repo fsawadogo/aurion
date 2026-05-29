@@ -347,11 +347,11 @@ struct SessionsInboxView: View {
             }
             VStack(alignment: .leading, spacing: 2) {
                 Text(localizedSpecialty(s.specialty))
-                    .font(.system(size: 15, weight: .semibold))
+                    .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextPrimary)
                     .lineLimit(1)
                 Text(formatRelativeTime(s.createdAt))
-                    .font(.system(size: 12))
+                    .aurionFont(12, relativeTo: .caption)
                     .foregroundColor(.aurionTextSecondary)
                     .lineLimit(1)
             }

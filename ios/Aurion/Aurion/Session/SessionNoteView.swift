@@ -60,7 +60,11 @@ struct NoteDocumentBody: View {
     // the note to their preference. The PDF path always uses the literal point
     // sizes below, so exported documents render identically regardless of the
     // reader's text-size setting.
+    @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 32
+    @ScaledMetric(relativeTo: .subheadline) private var dateSize: CGFloat = 15
+    @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 12
     @ScaledMetric(relativeTo: .title2) private var sectionHeadingSize: CGFloat = 20
+    @ScaledMetric(relativeTo: .body) private var emptySectionSize: CGFloat = 16
     @ScaledMetric(relativeTo: .body) private var claimBodySize: CGFloat = 17
 
     var body: some View {
@@ -68,10 +72,10 @@ struct NoteDocumentBody: View {
             // Title block — specialty (Notes-size title), then meta row.
             VStack(alignment: .leading, spacing: 6) {
                 Text(specialtyTitle)
-                    .font(.system(size: 32, weight: .bold))
+                    .font(.system(size: forPDF ? 32 : titleSize, weight: .bold))
                     .foregroundColor(forPDF ? .black : .aurionTextPrimary)
                 Text(dateString)
-                    .font(.system(size: 15))
+                    .font(.system(size: forPDF ? 15 : dateSize))
                     .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
                 HStack(spacing: 12) {
                     Text(L("noteDoc.percentComplete", Int(note.completenessScore * 100)))
@@ -80,7 +84,7 @@ struct NoteDocumentBody: View {
                     Text("·").foregroundColor((forPDF ? Color.black : .aurionTextSecondary).opacity(0.4))
                     Text(note.providerUsed)
                 }
-                .font(.system(size: 12))
+                .font(.system(size: forPDF ? 12 : metaSize))
                 .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
                 .padding(.top, 4)
             }
@@ -134,7 +138,7 @@ struct NoteDocumentBody: View {
                 Text(section.status == "pending_video"
                      ? L("noteDoc.awaitingVisual")
                      : L("noteDoc.noContent"))
-                    .font(.system(size: 16))
+                    .font(.system(size: forPDF ? 16 : emptySectionSize))
                     .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
                     .italic()
             } else {
