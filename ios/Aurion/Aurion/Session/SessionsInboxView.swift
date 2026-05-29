@@ -171,7 +171,7 @@ struct SessionsInboxView: View {
     private var titleHeader: some View {
         HStack {
             Text(L("sessions.title"))
-                .font(.system(size: 28, weight: .bold))
+                .aurionFont(28, weight: .bold, relativeTo: .title)
                 .tracking(-0.56)
                 .foregroundColor(.aurionTextPrimary)
             Spacer()
