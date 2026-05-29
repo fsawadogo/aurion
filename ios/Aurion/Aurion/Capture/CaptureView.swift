@@ -89,7 +89,7 @@ struct CaptureView: View {
                         .accessibilityValue(accessibleElapsedTime)
 
                     Text(L("capture.recordingMode", session.captureMode.displayName))
-                        .font(.system(size: 13))
+                        .aurionFont(13, relativeTo: .footnote)
                         .tracking(0.4)
                         .foregroundColor(Color.aurionOnNavySecondary)
 
@@ -428,7 +428,7 @@ struct CaptureView: View {
                 .font(.system(size: 11, weight: .semibold))
                 .foregroundColor(.aurionGold)
             Text(label)
-                .font(.system(size: 12, weight: .medium))
+                .aurionFont(12, weight: .medium, relativeTo: .caption)
                 .foregroundColor(.white.opacity(0.92))
                 .lineLimit(1)
         }
@@ -455,7 +455,7 @@ struct CaptureView: View {
                 .opacity(0.85)
                 .padding(.top, 6)
             Text(text)
-                .font(.system(size: 15, weight: .regular, design: .default))
+                .aurionFont(15, weight: .regular, relativeTo: .body)
                 .italic()
                 .foregroundColor(.aurionGold.opacity(0.85))
                 .lineLimit(2)
@@ -491,7 +491,7 @@ struct CaptureView: View {
             Image(systemName: method.icon)
                 .font(.system(size: 10, weight: .semibold))
             Text(L("capture.consentChip", method.displayName, Self.consentTimeFormatter.string(from: timestamp)))
-                .font(.system(size: 12, weight: .medium))
+                .aurionFont(12, weight: .medium, relativeTo: .caption)
         }
         .foregroundColor(.aurionGold)
         .padding(.horizontal, 10)
@@ -521,12 +521,12 @@ struct CaptureView: View {
                 }
 
                 Text(L("capture.consentTitle"))
-                    .font(.system(size: 20, weight: .semibold))
+                    .aurionFont(20, weight: .semibold, relativeTo: .title3)
                     .foregroundColor(.aurionTextPrimary)
                     .multilineTextAlignment(.center)
 
                 Text(L("capture.consentSub"))
-                    .font(.system(size: 14))
+                    .aurionFont(14, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
                     .multilineTextAlignment(.center)
                     .lineSpacing(3)
@@ -538,7 +538,7 @@ struct CaptureView: View {
                 }
 
                 Button(L("common.cancel")) {}
-                    .font(.system(size: 14))
+                    .aurionFont(14, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
             }
             .padding(28)
@@ -553,7 +553,7 @@ struct CaptureView: View {
     private var consentMethodPicker: some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(L("capture.consentMethodQ"))
-                .font(.system(size: 13, weight: .medium))
+                .aurionFont(13, weight: .medium, relativeTo: .footnote)
                 .foregroundColor(.aurionTextSecondary)
             Picker(L("capture.consentMethodQ"), selection: $pendingConsentMethod) {
                 ForEach(ConsentMethod.allCases) { method in
