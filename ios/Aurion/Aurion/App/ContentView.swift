@@ -400,7 +400,7 @@ struct LoginView: View {
 
                 VStack(spacing: 16) {
                     Text(L("login.signIn"))
-                        .font(.system(size: 20, weight: .semibold))
+                        .aurionFont(20, weight: .semibold, relativeTo: .title3)
                         .foregroundColor(.white)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
@@ -591,9 +591,9 @@ struct LoginView: View {
             } label: {
                 HStack(spacing: 10) {
                     Image(systemName: BiometricAuth.iconName)
-                        .font(.system(size: 18, weight: .semibold))
+                        .aurionFont(18, weight: .semibold, relativeTo: .title3)
                     Text(L("login.signInWith", BiometricAuth.typeLabel))
-                        .font(.system(size: 15, weight: .semibold))
+                        .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                 }
                 .foregroundColor(.white)
                 .frame(maxWidth: .infinity)
@@ -783,7 +783,7 @@ private struct NewPasswordView: View {
                 VStack(spacing: 16) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(L("newpw.title"))
-                            .font(.system(size: 22, weight: .semibold))
+                            .aurionFont(22, weight: .semibold, relativeTo: .title2)
                             .foregroundColor(.white)
                         Text(L("newpw.forUser", challenge.username))
                             .font(.system(size: 13))
@@ -960,7 +960,7 @@ struct RegisterView: View {
 
                     VStack(spacing: 14) {
                         Text(L("register.title"))
-                            .font(.system(size: 18, weight: .semibold))
+                            .aurionFont(18, weight: .semibold, relativeTo: .title3)
                             .foregroundColor(.white)
                             .frame(maxWidth: .infinity, alignment: .leading)
                             .padding(.bottom, 4)

@@ -30,7 +30,7 @@ struct ErrorBanner: View {
 
             VStack(alignment: .leading, spacing: hasActions ? 10 : 0) {
                 Text(message)
-                    .font(.system(size: 13))
+                    .aurionFont(13, relativeTo: .footnote)
                     .foregroundColor(.aurionTextPrimary)
                     .fixedSize(horizontal: false, vertical: true)
 
@@ -41,12 +41,12 @@ struct ErrorBanner: View {
                                 AurionHaptics.impact(.light)
                                 onRetry()
                             }
-                            .font(.system(size: 13, weight: .semibold))
+                            .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                             .foregroundColor(.aurionGold)
                         }
                         if let onDismiss {
                             Button(L("common.dismiss"), action: onDismiss)
-                                .font(.system(size: 13))
+                                .aurionFont(13, relativeTo: .footnote)
                                 .foregroundColor(.aurionTextSecondary)
                         }
                     }
