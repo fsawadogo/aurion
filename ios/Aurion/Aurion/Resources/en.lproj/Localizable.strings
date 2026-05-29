@@ -544,3 +544,16 @@
 "sessions.discard" = "Discard";
 "sessions.discardConfirmTitle" = "Discard this session?";
 "sessions.discardConfirmMessage" = "This permanently deletes the session and its note. This can\U2019t be undone.";
+/* ── First-run tour ───────────────────────────────────── */
+"tour.welcome.title" = "Welcome to Aurion";
+"tour.welcome.body" = "A quick tour of how you\U2019ll capture and review encounters \U2014 about 20 seconds.";
+"tour.start.title" = "Start an encounter";
+"tour.start.body" = "Tap a Quick Start card to begin recording. Aurion captures audio, video, and screen together.";
+"tour.review.title" = "Review with confidence";
+"tour.review.body" = "Finished encounters appear here. Every claim traces back to what was said or shown.";
+"tour.explore.title" = "Find your way around";
+"tour.explore.body" = "Switch between Home, Sessions, Devices, and your Profile from the tab bar.";
+"tour.dontShowAgain" = "Don\U2019t show again";
+"tour.next" = "Next";
+"profile.replayTour" = "Replay app tour";
+"profile.sectionHelp" = "Help";

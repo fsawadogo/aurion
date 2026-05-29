@@ -8,6 +8,7 @@ import SwiftUI
 struct DashboardView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var sessionManager: SessionManager
+    @EnvironmentObject var tour: TourCoordinator
     /// Drives the iPad readable-measure clamp. ``.regular`` means
     /// we're on iPad in regular size class — content gets centred
     /// and capped at ~720pt so the dashboard doesn't stretch absurdly
@@ -144,11 +145,14 @@ struct DashboardView: View {
                 VStack(spacing: 20) {
                     OfflineStatusBanner()
                     greetingHeader
+                        .tourAnchor(.greeting)
                     if !resumableSessions.isEmpty { resumableSection }
                     if !stage2InProgressSessions.isEmpty { stage2InProgressSection }
                     if !pendingReviewSessions.isEmpty { pendingReviewSection }
                     quickStartSection
+                        .tourAnchor(.startSession)
                     recentSessionsSection
+                        .tourAnchor(.recentSessions)
                 }
                 .aurionScreenEdge()
                 .padding(.top, 8)
@@ -174,6 +178,14 @@ struct DashboardView: View {
                 // paint is the pre-reveal state — gives the springs a delta.
                 DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
                     dashboardAppeared = true
+                }
+                // First-run coach-mark tour. Delay lets the dashboard finish
+                // laying out so the spotlight anchors resolve; the coordinator
+                // self-guards against re-firing on later tab returns.
+                if !appState.hasSeenTour {
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        tour.autoStartIfNeeded(seen: appState.hasSeenTour)
+                    }
                 }
             }
             .onChange(of: todayCount) { _, newCount in

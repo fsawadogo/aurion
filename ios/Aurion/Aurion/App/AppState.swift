@@ -24,6 +24,11 @@ final class AppState: ObservableObject {
     @Published var hasCompletedProfileSetup: Bool {
         didSet { writeUserFlag(Keys.profile, value: hasCompletedProfileSetup) }
     }
+    /// Whether the first-run coach-mark tour has been dismissed with "Don't
+    /// show again". Per-user, same as the other first-run flags.
+    @Published var hasSeenTour: Bool {
+        didSet { writeUserFlag(Keys.tour, value: hasSeenTour) }
+    }
     @Published var appLanguage: String {
         didSet {
             Self.defaults.set(appLanguage, forKey: Keys.language)
@@ -52,10 +57,12 @@ final class AppState: ObservableObject {
         }
         let onboarding = Self.readUserFlag(Keys.onboarding, userId: userId)
         let profile = Self.readUserFlag(Keys.profile, userId: userId)
+        let tour = Self.readUserFlag(Keys.tour, userId: userId)
         let lang = Self.defaults.string(forKey: Keys.language) ?? "en"
         _isAuthenticated = Published(initialValue: auth)
         _isOnboardingComplete = Published(initialValue: onboarding)
         _hasCompletedProfileSetup = Published(initialValue: profile)
+        _hasSeenTour = Published(initialValue: tour)
         _appLanguage = Published(initialValue: lang)
         currentUserId = userId
         Localization.setLanguage(lang)
@@ -73,6 +80,7 @@ final class AppState: ObservableObject {
         userRole = role
         isOnboardingComplete = Self.readUserFlag(Keys.onboarding, userId: userId)
         hasCompletedProfileSetup = Self.readUserFlag(Keys.profile, userId: userId)
+        hasSeenTour = Self.readUserFlag(Keys.tour, userId: userId)
         isAuthenticated = true
     }
 
@@ -117,6 +125,7 @@ final class AppState: ObservableObject {
         static let auth = "aurion.is_authenticated"
         static let onboarding = "aurion.onboarding_complete"
         static let profile = "aurion.profile_setup_complete"
+        static let tour = "aurion.tour_seen"
         static let language = "aurion.app_language"
     }
 }

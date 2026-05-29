@@ -5,6 +5,7 @@ import SwiftUI
 struct ProfileView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var appLock: AppLockManager
+    @EnvironmentObject var tour: TourCoordinator
     @State private var showDeleteConfirmation = false
     @State private var showDataExport = false
     @State private var isLoadingData = false
@@ -261,6 +262,23 @@ struct ProfileView: View {
             } footer: {
                 Text(L("profile.appLockHelp"))
                     .font(.caption2)
+            }
+
+            // ── Help ──────────────────────────────────────────
+            Section {
+                Button {
+                    // Switch to Home so the dashboard anchors exist, then
+                    // replay once it's had a moment to lay out.
+                    AppNavigation.shared.requestTab(.home)
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                        tour.replay()
+                    }
+                } label: {
+                    Label(L("profile.replayTour"), systemImage: "sparkles")
+                        .foregroundColor(.aurionTextPrimary)
+                }
+            } header: {
+                SectionHeader(title: L("profile.sectionHelp"))
             }
 
             // ── Privacy & Data (Law 25) ───────────────────────

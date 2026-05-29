@@ -544,3 +544,16 @@
 "sessions.discard" = "Supprimer";
 "sessions.discardConfirmTitle" = "Supprimer cette session ?";
 "sessions.discardConfirmMessage" = "Cette action supprime d\U00E9finitivement la session et sa note. Elle est irr\U00E9versible.";
+/* ── Guide de premi\U00E8re utilisation ───────────────────── */
+"tour.welcome.title" = "Bienvenue sur Aurion";
+"tour.welcome.body" = "Un bref aper\U00E7u de la capture et de la r\U00E9vision des consultations \U2014 environ 20 secondes.";
+"tour.start.title" = "D\U00E9marrer une consultation";
+"tour.start.body" = "Touchez une carte D\U00E9marrage rapide pour lancer l\U2019enregistrement. Aurion capture l\U2019audio, la vid\U00E9o et l\U2019\U00E9cran ensemble.";
+"tour.review.title" = "R\U00E9viser en toute confiance";
+"tour.review.body" = "Les consultations termin\U00E9es apparaissent ici. Chaque \U00E9nonc\U00E9 est tra\U00E7able \U00E0 ce qui a \U00E9t\U00E9 dit ou montr\U00E9.";
+"tour.explore.title" = "Se rep\U00E9rer";
+"tour.explore.body" = "Basculez entre l\U2019Accueil, les Consultations, les Appareils et votre Profil depuis la barre d\U2019onglets.";
+"tour.dontShowAgain" = "Ne plus afficher";
+"tour.next" = "Suivant";
+"profile.replayTour" = "Revoir le guide";
+"profile.sectionHelp" = "Aide";

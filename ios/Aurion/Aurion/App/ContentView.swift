@@ -5,6 +5,7 @@ import SwiftUI
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var sessionManager = SessionManager()
+    @StateObject private var tour = TourCoordinator()
     @State private var showRecoveryAlert = false
     @State private var recoveredSession: CaptureSession?
     @State private var showSplash = true
@@ -67,9 +68,33 @@ struct ContentView: View {
         .animation(AurionAnimation.smooth, value: sessionManager.session?.id)
         .animation(AurionAnimation.smooth, value: sessionManager.note?.sessionId)
         .animation(AurionAnimation.smooth, value: sessionManager.uiState)
+        // First-run coach-mark tour. Hosted at the root so the scrim can dim
+        // the whole app (incl. the tab bar); anchors are published by the
+        // dashboard and resolved here into one coordinate space.
+        .overlayPreferenceValue(TourAnchorKey.self) { prefs in
+            GeometryReader { proxy in
+                if tour.isActive {
+                    TourOverlay(
+                        tour: tour,
+                        frames: prefs.reduce(into: [TourAnchor: CGRect]()) { dict, kv in
+                            dict[kv.key] = proxy[kv.value]
+                        },
+                        containerSize: proxy.size
+                    )
+                    .transition(.opacity)
+                }
+            }
+            .ignoresSafeArea()
+            .allowsHitTesting(tour.isActive)
+        }
+        .environmentObject(tour)
         .onAppear {
             appState.checkVoiceEnrollment()
             checkForCrashRecovery()
+            // Persist "seen" only when dismissed with "Don't show again".
+            tour.configure { dontShowAgain in
+                if dontShowAgain { appState.hasSeenTour = true }
+            }
         }
         .alert(L("recovery.title"), isPresented: $showRecoveryAlert) {
             Button(L("recovery.recover")) {
