@@ -134,10 +134,10 @@ struct AppLockView: View {
                     .foregroundColor(.aurionGold)
 
                 Text(L("applock.title"))
-                    .font(.system(size: 20, weight: .semibold))
+                    .aurionFont(20, weight: .semibold, relativeTo: .title3)
                     .foregroundColor(.white)
                 Text(L("applock.subtitle"))
-                    .font(.system(size: 14))
+                    .aurionFont(14, relativeTo: .subheadline)
                     .foregroundColor(Color.aurionOnNavySecondary)
 
                 Button {

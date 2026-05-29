@@ -98,10 +98,10 @@ struct TourOverlay: View {
     private var card: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text(L(step.titleKey))
-                .font(.system(size: 18, weight: .bold))
+                .aurionFont(18, weight: .bold, relativeTo: .title3)
                 .foregroundColor(.aurionTextPrimary)
             Text(L(step.messageKey))
-                .font(.system(size: 14))
+                .aurionFont(14, relativeTo: .subheadline)
                 .foregroundColor(.aurionTextSecondary)
                 .fixedSize(horizontal: false, vertical: true)
 
@@ -117,7 +117,7 @@ struct TourOverlay: View {
                         Image(systemName: tour.dontShowAgain ? "checkmark.square.fill" : "square")
                             .foregroundColor(tour.dontShowAgain ? .aurionGold : .aurionTextSecondary)
                         Text(L("tour.dontShowAgain"))
-                            .font(.system(size: 12))
+                            .aurionFont(12, relativeTo: .caption)
                             .foregroundColor(.aurionTextSecondary)
                     }
                 }
@@ -127,12 +127,12 @@ struct TourOverlay: View {
 
             HStack {
                 Button(L("common.skip")) { tour.skip() }
-                    .font(.system(size: 15, weight: .medium))
+                    .aurionFont(15, weight: .medium, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
                 Spacer()
                 Button { tour.next() } label: {
                     Text(tour.isLastStep ? L("common.done") : L("tour.next"))
-                        .font(.system(size: 15, weight: .semibold))
+                        .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                         .foregroundColor(.aurionNavy)
                         .padding(.horizontal, 22)
                         .padding(.vertical, 10)
