@@ -205,6 +205,19 @@ struct ProfileView: View {
                 SectionHeader(title: L("profile.sectionTeam"))
             }
 
+            // ── Appearance ───────────────────────────────────
+            Section {
+                Picker(L("profile.appearance"), selection: $appState.appearance) {
+                    Text(L("appearance.system")).tag("system")
+                    Text(L("appearance.light")).tag("light")
+                    Text(L("appearance.dark")).tag("dark")
+                }
+                .pickerStyle(.segmented)
+                .sensoryFeedback(.selection, trigger: appState.appearance)
+            } header: {
+                SectionHeader(title: L("profile.sectionAppearance"))
+            }
+
             // ── Language ─────────────────────────────────────
             Section {
                 Picker(selection: $appState.appLanguage) {

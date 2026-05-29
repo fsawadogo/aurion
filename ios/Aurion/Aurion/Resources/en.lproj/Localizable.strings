@@ -253,6 +253,11 @@
 "profile.noteLanguage" = "Note Output Language";
 "profile.languageHelp" = "App Language controls the interface. Note Output Language controls the language your clinical notes are generated in.";
 "profile.sectionLanguage" = "Language";
+"profile.sectionAppearance" = "Appearance";
+"profile.appearance" = "Theme";
+"appearance.system" = "System";
+"appearance.light" = "Light";
+"appearance.dark" = "Dark";
 "profile.sessionAlerts" = "Session Alerts";
 "profile.noteReady" = "Note Ready";
 "profile.sectionNotifications" = "Notification Preferences";

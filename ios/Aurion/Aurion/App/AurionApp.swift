@@ -23,6 +23,9 @@ struct AurionApp: App {
                     }
                 }
                 .animation(AurionAnimation.smooth, value: appLock.isLocked)
+                // User-selectable Light/Dark/System theme (Profile › Appearance).
+                // nil follows the device; the system cross-fades the switch.
+                .preferredColorScheme(appState.colorSchemeOverride)
                 // Dark mode shipped under AUR-DESIGN-DARK (muted slate
                 // palette). Adaptive tokens in Theme.swift carry the
                 // light + dark pairs; brand-fixed surfaces (login

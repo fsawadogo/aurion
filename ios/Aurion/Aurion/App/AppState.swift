@@ -35,6 +35,21 @@ final class AppState: ObservableObject {
             Localization.setLanguage(appLanguage)
         }
     }
+    /// User-chosen appearance: "system" (follow device), "light", or "dark".
+    /// App-level (not per-user), like ``appLanguage``.
+    @Published var appearance: String {
+        didSet { Self.defaults.set(appearance, forKey: Keys.appearance) }
+    }
+
+    /// The override to hand `.preferredColorScheme`. `nil` = follow the
+    /// system; otherwise force light/dark.
+    var colorSchemeOverride: ColorScheme? {
+        switch appearance {
+        case "light": return .light
+        case "dark":  return .dark
+        default:      return nil
+        }
+    }
     @Published var hasVoiceProfile = false
     @Published var currentSession: CaptureSession?
     @Published var userRole: UserRole = .clinician
@@ -64,6 +79,7 @@ final class AppState: ObservableObject {
         _hasCompletedProfileSetup = Published(initialValue: profile)
         _hasSeenTour = Published(initialValue: tour)
         _appLanguage = Published(initialValue: lang)
+        _appearance = Published(initialValue: Self.defaults.string(forKey: Keys.appearance) ?? "system")
         currentUserId = userId
         Localization.setLanguage(lang)
         if let role = KeychainHelper.shared.loadUserRole(),
@@ -127,6 +143,7 @@ final class AppState: ObservableObject {
         static let profile = "aurion.profile_setup_complete"
         static let tour = "aurion.tour_seen"
         static let language = "aurion.app_language"
+        static let appearance = "aurion.appearance"
     }
 }
 
