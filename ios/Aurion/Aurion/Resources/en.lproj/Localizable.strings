@@ -540,3 +540,7 @@
 "offline.syncing.many" = "Syncing %d encounters\U2026";
 "offline.queued.title" = "Saved on this device";
 "offline.queued.detail" = "You\U2019re offline. This encounter is safely stored and will upload automatically when you reconnect.";
+/* ── Discard session ──────────────────────────────────── */
+"sessions.discard" = "Discard";
+"sessions.discardConfirmTitle" = "Discard this session?";
+"sessions.discardConfirmMessage" = "This permanently deletes the session and its note. This can\U2019t be undone.";

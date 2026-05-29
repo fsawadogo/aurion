@@ -25,6 +25,9 @@ struct SessionsInboxView: View {
     /// hunt for the row.
     @State private var path: [String] = []
     @ObservedObject private var navigation = AppNavigation.shared
+    /// Session the user long-pressed "Discard" on, pending confirmation.
+    /// Non-nil drives the confirmation dialog; cleared on confirm/cancel.
+    @State private var sessionToDiscard: SessionResponse?
 
     private enum Filter: String, CaseIterable, Hashable {
         case all = "All"
@@ -233,6 +236,13 @@ struct SessionsInboxView: View {
                             sessionRow(session)
                         }
                         .buttonStyle(.plain)
+                        .contextMenu {
+                            Button(role: .destructive) {
+                                sessionToDiscard = session
+                            } label: {
+                                Label(L("sessions.discard"), systemImage: "trash")
+                            }
+                        }
                         if index < filtered.count - 1 {
                             Rectangle().fill(Color.aurionBorder).frame(height: 1).padding(.leading, 64)
                         }
@@ -249,6 +259,37 @@ struct SessionsInboxView: View {
         // so the last session row doesn't read as clipped.
         .contentMargins(.bottom, 24, for: .scrollContent)
         .refreshable { await loadSessions() }
+        .confirmationDialog(
+            L("sessions.discardConfirmTitle"),
+            isPresented: Binding(
+                get: { sessionToDiscard != nil },
+                set: { if !$0 { sessionToDiscard = nil } }
+            ),
+            titleVisibility: .visible,
+            presenting: sessionToDiscard
+        ) { session in
+            Button(L("sessions.discard"), role: .destructive) {
+                Task { await discard(session) }
+            }
+            Button(L("common.cancel"), role: .cancel) { sessionToDiscard = nil }
+        } message: { _ in
+            Text(L("sessions.discardConfirmMessage"))
+        }
+    }
+
+    /// Delete a session server-side, then drop it from the local list. On
+    /// failure, resync from the server so the inbox reflects reality rather
+    /// than optimistically hiding a row that wasn't actually removed.
+    private func discard(_ s: SessionResponse) async {
+        sessionToDiscard = nil
+        do {
+            try await APIClient.shared.discardSession(sessionId: s.id)
+            withAnimation { sessions.removeAll { $0.id == s.id } }
+            AurionHaptics.notification(.success)
+        } catch {
+            AurionHaptics.notification(.error)
+            await loadSessions()
+        }
     }
 
     private func sessionRow(_ s: SessionResponse) -> some View {

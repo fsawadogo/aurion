@@ -540,3 +540,7 @@
 "offline.syncing.many" = "Synchronisation de %d consultations\U2026";
 "offline.queued.title" = "Enregistr\U00E9 sur cet appareil";
 "offline.queued.detail" = "Vous \U00EAtes hors ligne. Cette consultation est conserv\U00E9e en toute s\U00E9curit\U00E9 et sera t\U00E9l\U00E9vers\U00E9e automatiquement \U00E0 la reconnexion.";
+/* ── Suppression de session ───────────────────────────── */
+"sessions.discard" = "Supprimer";
+"sessions.discardConfirmTitle" = "Supprimer cette session ?";
+"sessions.discardConfirmMessage" = "Cette action supprime d\U00E9finitivement la session et sa note. Elle est irr\U00E9versible.";

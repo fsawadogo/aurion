@@ -143,6 +143,19 @@ final class APIClient: Sendable {
         try validateResponse(response, data: data)
     }
 
+    /// Permanently delete a session and its data (clinician-scoped on the
+    /// backend — you can only discard your own). Returns 204 with no body, so
+    /// it goes through a non-decoding path rather than `mutate`.
+    func discardSession(sessionId: String) async throws {
+        let url = URL(string: "\(baseURL)/sessions/\(sessionId)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "DELETE"
+        request.timeoutInterval = 30
+        addAuth(&request)
+        let (data, response) = try await performRequest(request)
+        try validateResponse(response, data: data)
+    }
+
     // MARK: - Notes
 
     func getStage1Note(sessionId: String) async throws -> NoteResponse {
