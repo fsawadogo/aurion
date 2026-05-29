@@ -49,6 +49,7 @@ class AuditEventType(StrEnum):
     FULL_NOTE_DELIVERED = "full_note_delivered"
     NOTE_EXPORTED = "note_exported"
     SESSION_PURGED = "session_purged"
+    SESSION_DISCARDED = "session_discarded"
 
     # ── Notes / review ───────────────────────────────────────────────────
     STAGE1_APPROVED = "stage1_approved"
@@ -141,6 +142,7 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
         {"format", "version", "stage", "bytes_produced", "origin"}
     ),
     AuditEventType.SESSION_PURGED: frozenset(),
+    AuditEventType.SESSION_DISCARDED: frozenset({"prior_state"}),
     # Notes / review
     AuditEventType.STAGE1_APPROVED: frozenset(
         {"version", "provider_used", "completeness_score"}

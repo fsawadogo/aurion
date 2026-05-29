@@ -22,6 +22,7 @@ from app.modules.session.service import (
     InvalidTransitionError,
     confirm_consent,
     create_session,
+    delete_session,
     get_audit_event_for_state,
     list_sessions,
     transition_session,
@@ -197,6 +198,39 @@ async def list_sessions_route(
 ):
     sessions = await list_sessions(db, clinician_id=user.user_id)
     return [_to_response(s) for s in sessions]
+
+
+@router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def discard_session_route(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete a session and all of its data.
+
+    Clinician-scoped self-service cleanup (e.g. clearing a session that
+    got wedged in PROCESSING_STAGE1 after a failed Stage 1). The caller may
+    only discard their own sessions — another clinician's session 404s so
+    its existence isn't revealed. Removes the session plus its transcript /
+    note-version / pilot-metric / stage-2 rows.
+
+    The DynamoDB audit trail is append-only and is NOT erased: a
+    ``session_discarded`` event is written instead, after the delete is
+    durably committed, so the record of the deletion survives.
+    """
+    session = await get_session_or_404(db, session_id)
+    if session.clinician_id != user.user_id:
+        raise HTTPException(status_code=404, detail="Session not found")
+    prior_state = (
+        session.state.value
+        if isinstance(session.state, SessionState)
+        else str(session.state)
+    )
+    await delete_session(db, session)
+    await db.commit()
+    await write_audit(
+        session_id, AuditEventType.SESSION_DISCARDED, prior_state=prior_state
+    )
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────

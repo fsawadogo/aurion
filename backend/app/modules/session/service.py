@@ -9,12 +9,20 @@ from __future__ import annotations
 import uuid
 from typing import Optional
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_events import AuditEventType
 from app.core.clock import utcnow
-from app.core.models import SessionModel
+from app.core.models import (
+    EvalAssignmentModel,
+    EvalScoreModel,
+    NoteVersionModel,
+    PilotMetricsModel,
+    SessionModel,
+    Stage2JobModel,
+    TranscriptModel,
+)
 from app.core.types import SessionState
 
 # ── Valid Transitions ──────────────────────────────────────────────────────
@@ -173,3 +181,42 @@ async def list_sessions(
         stmt = stmt.where(SessionModel.clinician_id == clinician_id)
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+# Tables keyed by ``session_id`` that must be cleared when a session is
+# discarded. There are no DB-level FK cascades from these to ``sessions``
+# (the columns are plain UUIDs), so deleting the session row alone would
+# orphan them — delete them explicitly first.
+_SESSION_CHILD_MODELS = (
+    TranscriptModel,
+    NoteVersionModel,
+    PilotMetricsModel,
+    Stage2JobModel,
+    EvalScoreModel,
+    EvalAssignmentModel,
+)
+
+
+async def delete_session(
+    db: AsyncSession, session: SessionModel
+) -> dict[str, int]:
+    """Hard-delete a session and every row that references it.
+
+    Runs as one transaction (the caller commits): child rows first, then
+    the session itself. Returns per-table deleted-row counts for auditing.
+    The DynamoDB audit trail is append-only and is intentionally NOT
+    touched — the deletion is recorded by the caller writing a
+    ``SESSION_DISCARDED`` event, not by erasing history.
+    """
+    counts: dict[str, int] = {}
+    for model in _SESSION_CHILD_MODELS:
+        result = await db.execute(
+            delete(model).where(model.session_id == session.id)
+        )
+        counts[model.__tablename__] = result.rowcount or 0
+    result = await db.execute(
+        delete(SessionModel).where(SessionModel.id == session.id)
+    )
+    counts["sessions"] = result.rowcount or 0
+    await db.flush()
+    return counts
