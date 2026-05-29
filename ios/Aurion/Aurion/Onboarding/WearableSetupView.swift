@@ -134,11 +134,11 @@ struct WearableSetupView: View {
                     .foregroundColor(.aurionGold)
                 VStack(alignment: .leading, spacing: 2) {
                     Text(device.name)
-                        .font(.system(size: 15, weight: .semibold))
+                        .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                         .foregroundColor(.aurionTextPrimary)
                         .lineLimit(1)
                     Text(rssiLabel(device.rssi))
-                        .font(.system(size: 11))
+                        .aurionFont(11, relativeTo: .caption2)
                         .foregroundColor(.aurionTextSecondary)
                 }
                 Spacer(minLength: 0)
