@@ -431,7 +431,7 @@ struct LoginView: View {
                     if biometricsAvailable {
                         Toggle(isOn: $rememberMe) {
                             Text(L("login.rememberMeWith", BiometricAuth.typeLabel))
-                                .font(.system(size: 13))
+                                .aurionFont(13, relativeTo: .footnote)
                                 .foregroundColor(.white.opacity(0.85))
                         }
                         .tint(.aurionGold)
@@ -465,7 +465,7 @@ struct LoginView: View {
 
                     if let loginError {
                         Text(loginError)
-                            .font(.system(size: 12))
+                            .aurionFont(12, relativeTo: .caption)
                             .foregroundColor(Color.aurionOnNavyError)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -476,7 +476,7 @@ struct LoginView: View {
                     }
 
                     Text(L("login.firstTimeHint"))
-                        .font(.system(size: 11))
+                        .aurionFont(11, relativeTo: .caption2)
                         .foregroundColor(Color.aurionOnNavyFootnote)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(3)
@@ -502,7 +502,7 @@ struct LoginView: View {
                 Spacer()
 
                 Text(L("login.footer"))
-                    .font(.system(size: 12))
+                    .aurionFont(12, relativeTo: .caption)
                     .tracking(0.4)
                     .foregroundColor(Color.aurionOnNavyFootnote)
                     .padding(.bottom, 40)
@@ -540,7 +540,7 @@ struct LoginView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 11, weight: .semibold))
+                .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                 .tracking(0.5)
                 .foregroundColor(Color.aurionOnNavyFootnote)
             Group {
@@ -580,7 +580,7 @@ struct LoginView: View {
             HStack(spacing: 10) {
                 Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
                 Text(L("login.or"))
-                    .font(.system(size: 11))
+                    .aurionFont(11, relativeTo: .caption2)
                     .foregroundColor(Color.aurionOnNavyFootnote)
                 Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
             }
@@ -608,7 +608,7 @@ struct LoginView: View {
             .disabled(isSigningIn || signInSucceeded)
 
             Button(L("login.forgetSaved")) { forgetSavedLogin() }
-                .font(.system(size: 12))
+                .aurionFont(12, relativeTo: .caption)
                 .foregroundColor(Color.aurionOnNavyFootnote)
         }
     }
@@ -770,7 +770,7 @@ private struct NewPasswordView: View {
                             Image(systemName: "chevron.left")
                             Text(L("common.cancel"))
                         }
-                        .font(.system(size: 14, weight: .semibold))
+                        .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
                         .foregroundColor(.white.opacity(0.8))
                     }
                     Spacer()
@@ -786,7 +786,7 @@ private struct NewPasswordView: View {
                             .aurionFont(22, weight: .semibold, relativeTo: .title2)
                             .foregroundColor(.white)
                         Text(L("newpw.forUser", challenge.username))
-                            .font(.system(size: 13))
+                            .aurionFont(13, relativeTo: .footnote)
                             .foregroundColor(Color.aurionOnNavySecondary)
                     }
                     .frame(maxWidth: .infinity, alignment: .leading)
@@ -822,7 +822,7 @@ private struct NewPasswordView: View {
 
                     if let error {
                         Text(error)
-                            .font(.system(size: 12))
+                            .aurionFont(12, relativeTo: .caption)
                             .foregroundColor(Color.aurionOnNavyError)
                             .multilineTextAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
@@ -852,7 +852,7 @@ private struct NewPasswordView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 11, weight: .semibold))
+                .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                 .tracking(0.5)
                 .foregroundColor(Color.aurionOnNavyFootnote)
             SecureField("", text: text)
@@ -889,10 +889,10 @@ private struct NewPasswordView: View {
     private func policyRow(_ text: String, ok: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: ok ? "checkmark.circle.fill" : "circle")
-                .font(.system(size: 11))
+                .aurionFont(11, relativeTo: .caption2)
                 .foregroundColor(ok ? Color.aurionGold : Color.aurionOnNavyFootnote)
             Text(text)
-                .font(.system(size: 11))
+                .aurionFont(11, relativeTo: .caption2)
                 .foregroundColor(ok ? Color.aurionOnNavySecondary : Color.aurionOnNavyFootnote)
         }
     }
@@ -1007,7 +1007,7 @@ struct RegisterView: View {
 
                         if !confirmPassword.isEmpty && password != confirmPassword {
                             Text(L("register.passwordMismatch"))
-                                .font(.system(size: 12))
+                                .aurionFont(12, relativeTo: .caption)
                                 .foregroundColor(Color.aurionOnNavyError)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                         }
@@ -1030,17 +1030,17 @@ struct RegisterView: View {
 
                         if let registerError {
                             Text(registerError)
-                                .font(.system(size: 12))
+                                .aurionFont(12, relativeTo: .caption)
                                 .foregroundColor(Color.aurionOnNavyError)
                                 .multilineTextAlignment(.center)
                         }
 
                         HStack(spacing: 6) {
                             Text(L("register.haveAccount"))
-                                .font(.system(size: 13))
+                                .aurionFont(13, relativeTo: .footnote)
                                 .foregroundColor(Color.aurionOnNavySecondary)
                             Button(L("login.signIn"), action: onSwitchToLogin)
-                                .font(.system(size: 13, weight: .semibold))
+                                .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                                 .foregroundColor(.aurionGold)
                         }
                         .padding(.top, 4)
@@ -1055,7 +1055,7 @@ struct RegisterView: View {
                     .padding(.horizontal, 24)
 
                     Text(L("register.phiNotice"))
-                        .font(.system(size: 11))
+                        .aurionFont(11, relativeTo: .caption2)
                         .tracking(0.2)
                         .foregroundColor(Color.aurionOnNavyFootnote)
                         .multilineTextAlignment(.center)
@@ -1079,7 +1079,7 @@ struct RegisterView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(label)
-                .font(.system(size: 12, weight: .semibold))
+                .aurionFont(12, weight: .semibold, relativeTo: .caption)
                 .tracking(0.8)
                 .foregroundColor(Color.aurionOnNavySecondary)
             Group {
