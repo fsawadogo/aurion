@@ -551,6 +551,9 @@ struct LoginView: View {
                 }
             }
             .focused($focusedField, equals: field)
+            // The visible label is a separate Text above, so the field itself
+            // has no accessible name — give it one for VoiceOver.
+            .accessibilityLabel(label)
             .submitLabel(submit)
             .onSubmit(onSubmit)
             .textInputAutocapitalization(.never)

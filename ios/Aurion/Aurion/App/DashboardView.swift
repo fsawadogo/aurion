@@ -420,6 +420,11 @@ struct DashboardView: View {
                             .delay(0.12 + Double(idx) * 0.08),
                         value: dashboardAppeared
                     )
+                    // Announce as one button with a clear action hint rather
+                    // than reading the specialty + label as separate fragments.
+                    .accessibilityElement(children: .combine)
+                    .accessibilityAddTraits(.isButton)
+                    .accessibilityHint(L("a11y.startEncounterHint"))
                 }
             }
             if let error = sessionManager.error {
