@@ -1,8 +1,14 @@
 name: iOS — TestFlight
 
-# Builds the iOS app and uploads to TestFlight on every push to main
-# that touches iOS code. PRs build but don't upload (saves Mac runner
-# minutes — they're expensive — and avoids spurious TestFlight builds).
+# Compiles the iOS app on every push to main / PR that touches iOS code
+# (the green-check gate). The TestFlight UPLOAD runs ONLY on a manual
+# trigger (workflow_dispatch) — NOT on every merge — so a burst of merges
+# doesn't blow App Store Connect's daily build-upload quota (error 90382:
+# "Upload limit reached. Please wait 1 day").
+#
+# To ship a build to testers: GitHub → Actions → "iOS — TestFlight" →
+# Run workflow, or `gh workflow run "iOS — TestFlight"`. It builds + uploads
+# main HEAD, so one dispatch carries every change merged since the last upload.
 #
 # Gated on the App Store Connect API key secret being present. Until
 # the Apple Developer Program membership processes (~48h) and you've
@@ -18,6 +24,7 @@ on:
     branches: [main]
     paths:
       - "ios/**"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -50,12 +57,12 @@ jobs:
                      build | xcpretty || true
 
   testflight:
-    # Only runs on main + only if the App Store Connect API key secret
-    # is set. Until the user has their Apple Developer membership +
-    # generated a key, this job is a graceful no-op.
+    # Manual-only (workflow_dispatch) so routine merges don't auto-upload
+    # and exhaust Apple's daily build-upload limit. Still gated on the App
+    # Store Connect API key secret — a graceful no-op until the key is wired.
     runs-on: macos-26
     needs: build
-    if: github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch'
     env:
       APP_STORE_CONNECT_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
