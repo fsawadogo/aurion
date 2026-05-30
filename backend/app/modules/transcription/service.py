@@ -17,6 +17,7 @@ from app.core.audit_events import AuditEventType
 from app.core.retry import with_retry
 from app.core.s3 import AUDIO_BUCKET, get_s3_client
 from app.core.types import ProviderError, Transcript, TranscriptSegment
+from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.provider_registry import get_registry
 
@@ -181,6 +182,13 @@ async def transcribe_audio(
             event_type=AuditEventType.TRANSCRIPTION_FAILED,
             error_message="Provider raised ProviderError",
         )
+        await try_publish_alert(
+            alert_type=AuditEventType.TRANSCRIPTION_FAILED.value,
+            severity=AlertSeverity.CRITICAL,
+            source="transcription_service",
+            message="Transcription provider raised ProviderError",
+            metadata={"session_id": str(session_id)},
+        )
         raise
     except Exception as e:
         audit = get_audit_log_service()
@@ -188,6 +196,13 @@ async def transcribe_audio(
             session_id=str(session_id),
             event_type=AuditEventType.TRANSCRIPTION_FAILED,
             error_message=str(e),
+        )
+        await try_publish_alert(
+            alert_type=AuditEventType.TRANSCRIPTION_FAILED.value,
+            severity=AlertSeverity.CRITICAL,
+            source="transcription_service",
+            message="Transcription failed with unexpected exception",
+            metadata={"session_id": str(session_id), "reason": str(e)[:200]},
         )
         raise ProviderError(
             provider_override or "transcription",

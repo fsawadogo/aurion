@@ -21,6 +21,7 @@ from app.core.audit_events import AuditEventType
 from app.core.database import async_session_factory, get_db
 from app.core.models import TranscriptModel
 from app.core.types import SessionState, Transcript
+from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.note_gen.service import (
     approve_note,
@@ -335,6 +336,18 @@ async def _run_stage2_in_background(session_id: uuid.UUID, job_id: uuid.UUID) ->
                 AuditEventType.STAGE2_FAILED,
                 job_id=str(job_id),
                 reason=str(exc)[:200],
+            )
+            # Issue #76 — Stage 2 background-job failure is CRITICAL.
+            await try_publish_alert(
+                alert_type=AuditEventType.STAGE2_FAILED.value,
+                severity=AlertSeverity.CRITICAL,
+                source="stage2_job",
+                message="Stage 2 background job failed",
+                metadata={
+                    "session_id": str(session_id),
+                    "job_id": str(job_id),
+                    "reason": str(exc)[:200],
+                },
             )
 
 

@@ -29,6 +29,7 @@ from app.core.types import (
     ProviderError,
     TranscriptSegment,
 )
+from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
@@ -174,6 +175,18 @@ async def caption_frames(
                     frame_id=frame.frame_id,
                     error_message=str(fallback_err),
                 )
+                # A single failed frame is a WARNING — the pipeline
+                # discards it and continues. Issue #76.
+                await try_publish_alert(
+                    alert_type=AuditEventType.VISION_FRAME_FAILED.value,
+                    severity=AlertSeverity.WARNING,
+                    source="vision_service",
+                    message="Vision captioning failed on a frame after fallback",
+                    metadata={
+                        "session_id": str(frame.session_id),
+                        "frame_id": str(frame.frame_id),
+                    },
+                )
                 return None
 
     # Caption all frames concurrently
@@ -202,6 +215,18 @@ async def caption_frames(
             event_type=AuditEventType.STAGE2_FAILED,
             total_frames=len(frames),
             failed_frames=failed_count,
+        )
+        await try_publish_alert(
+            alert_type=AuditEventType.STAGE2_FAILED.value,
+            severity=AlertSeverity.CRITICAL,
+            source="vision_service",
+            message=(
+                f"Stage 2 vision failed: all {len(frames)} frames failed"
+            ),
+            metadata={
+                "session_id": str(session_id),
+                "total_frames": len(frames),
+            },
         )
 
     logger.info(
