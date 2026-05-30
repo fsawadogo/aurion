@@ -17,11 +17,11 @@ Last seeded: 2026-05-14. Last updated: 2026-05-30 (seeded 17 backend issues from
 - [x] #72 Portal · Template + visual-trigger keyword mgmt — foundation shipped 2026-05-30 (PR #112, commit 7631eaa); runtime cache + UI = follow-ups
 - [x] #76 Portal · Alerting & notifications — foundation shipped 2026-05-30 (PR #111, commit e3a4a22); SLA trigger + email/SMS sinks + ack flow + UI = follow-ups
 
-### Cohort 2 — Telemetry + Compliance
+### Cohort 2 — Telemetry + Compliance — ✅ FOUNDATIONS COMPLETE
 - [x] #73 Portal · Provider cost & usage dashboard — foundation shipped 2026-05-30 (PR #114, commit c402d55); base.py interface refactor + vision/transcription wiring + web UI = follow-ups
-- [ ] #74 Portal · Model/provider A-B comparison at scale — 8d — lane: backend — depends on #73 ✅ (unblocked)
-- [ ] #77 Portal · Automated compliance reporting (Law 25, scheduled exports) — 5d — lane: backend — depends on #76
-- [ ] #70 Specialty template expansion (beyond 5 MVP templates) — 5d — lane: backend — depends on #72
+- [x] #74 Portal · Model/provider A-B comparison — foundation shipped 2026-05-30 (PR #116, commit 714b7c8); quality-side join with eval_scores + web UI = follow-ups
+- [x] #77 Portal · Automated compliance reporting — foundation shipped 2026-05-30 (PR #117, commit d87b992); cron scheduling + masking/retention types + HSM signing + web UI = follow-ups
+- [x] #70 Specialty template expansion — shipped 2026-05-30 (PR #118, commit 4343c48); family_medicine + internal_medicine + pediatrics added (5 → 8)
 
 ### Cohort 3 — Scribe extensions
 - [ ] #61 iOS · Longitudinal patient context across encounters — 8d — lane: backend — no blockers (unblocks #60, #59)
