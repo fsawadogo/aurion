@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 import uuid
 from pathlib import Path
 from typing import Optional
@@ -22,6 +23,7 @@ from app.core.models import NoteVersionModel
 from app.core.types import Note, NoteClaim, Template, Transcript
 from app.modules.config.provider_registry import get_registry
 from app.modules.note_gen import repository as note_repo
+from app.modules.providers.usage_service import get_provider_usage_service
 
 logger = logging.getLogger("aurion.note_gen")
 
@@ -278,6 +280,44 @@ def build_stage1_user_prompt(
     return prompt
 
 
+# ── Provider telemetry helper ────────────────────────────────────────────
+
+async def _record_provider_usage(
+    *,
+    db: AsyncSession,
+    provider_type: str,
+    provider_name: str,
+    operation: str,
+    latency_ms: int,
+    success: bool,
+    session_id: str | None,
+) -> None:
+    """Best-effort write to ``provider_usage`` (issue #73).
+
+    Swallows any DB error so a telemetry hiccup never alters the
+    surrounding code path. Mirrors the wrapping pattern used at the
+    alerts trigger sites (#76).
+    """
+    try:
+        await get_provider_usage_service().record(
+            db,
+            provider_type=provider_type,
+            provider_name=provider_name,
+            operation=operation,
+            latency_ms=latency_ms,
+            success=success,
+            session_id=uuid.UUID(session_id) if session_id else None,
+        )
+    except Exception:  # noqa: BLE001 — telemetry is best-effort
+        logger.warning(
+            "provider_usage record failed: type=%s op=%s session=%s",
+            provider_type,
+            operation,
+            session_id,
+            exc_info=True,
+        )
+
+
 # ── Stage 1 Note Generation ──────────────────────────────────────────────
 
 async def generate_stage1_note(
@@ -314,9 +354,35 @@ async def generate_stage1_note(
         type(provider).__name__,
     )
 
-    note = await provider.generate_note(
-        transcript, template, stage=1, output_language=output_language
-    )
+    # Wrap the registry call to capture per-call telemetry (issue #73).
+    # Both the success and failure paths record so dashboards can show
+    # failure / fallback rates accurately. Telemetry is best-effort —
+    # a writer hiccup never alters the surrounding code path.
+    _usage_started = time.monotonic()
+    try:
+        note = await provider.generate_note(
+            transcript, template, stage=1, output_language=output_language
+        )
+        await _record_provider_usage(
+            db=db,
+            provider_type="note_generation",
+            provider_name=getattr(note, "provider_used", "unknown"),
+            operation="generate_note",
+            latency_ms=int((time.monotonic() - _usage_started) * 1000),
+            success=True,
+            session_id=session_id,
+        )
+    except Exception:
+        await _record_provider_usage(
+            db=db,
+            provider_type="note_generation",
+            provider_name=type(provider).__name__,
+            operation="generate_note",
+            latency_ms=int((time.monotonic() - _usage_started) * 1000),
+            success=False,
+            session_id=session_id,
+        )
+        raise
 
     note.session_id = session_id
     note.stage = 1
