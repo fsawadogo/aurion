@@ -14,8 +14,8 @@ Last seeded: 2026-05-14. Last updated: 2026-05-30 (seeded 17 backend issues from
 
 ### Cohort 1 — Foundations (post-pilot)
 - [ ] #75 Portal · Org / multi-clinic + SSO (SAML/OIDC) — 15d — lane: backend — no blockers
-- [ ] #72 Portal · Template + visual-trigger keyword mgmt — 5d — lane: backend — no blockers (unblocks #70)
-- [ ] #76 Portal · Alerting & notifications (masking failures, SLA breaches) — 5d — lane: backend — no blockers
+- [x] #72 Portal · Template + visual-trigger keyword mgmt — foundation shipped 2026-05-30 (PR #112, commit 7631eaa); runtime cache + UI = follow-ups
+- [x] #76 Portal · Alerting & notifications — foundation shipped 2026-05-30 (PR #111, commit e3a4a22); SLA trigger + email/SMS sinks + ack flow + UI = follow-ups
 
 ### Cohort 2 — Telemetry + Compliance
 - [ ] #73 Portal · Provider cost & usage dashboard — 8d — lane: backend — no blockers
@@ -40,7 +40,7 @@ Last seeded: 2026-05-14. Last updated: 2026-05-30 (seeded 17 backend issues from
 
 ## In flight
 
-- [ ] #76 Portal · Alerting & notifications — started 2026-05-30, branch lane-backend/76-alerting-foundation — foundation PR (Alert model + AlertService + masking-failure trigger + GET /admin/alerts); follow-ups: SLA breach trigger, email/SMS sinks, web UI, acknowledge flow
+(none — autonomous run checkpoint 2026-05-30; see digests/2026-05-30.md)
 
 ## Blocked
 
