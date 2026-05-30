@@ -192,8 +192,10 @@ platform :ios do
     app = Spaceship::ConnectAPI::App.find("com.aurionclinical.physician")
     UI.user_error!("App not found — run `fastlane bootstrap` first") unless app
 
-    # Ensure the external group exists.
-    existing = Spaceship::ConnectAPI::BetaGroup.all(
+    # Ensure the external group exists. The current Spaceship API
+    # surfaces listing as a module-level call (BetaGroup.all was
+    # removed when ConnectAPI replaced TestFlight in spaceship/pilot).
+    existing = Spaceship::ConnectAPI.get_beta_groups(
       filter: { app: app.id }, limit: 200
     ).find { |g| g.name == group_name }
 
@@ -201,9 +203,10 @@ platform :ios do
       UI.success("Using existing external group '#{group_name}'")
     else
       UI.message("Creating external beta group '#{group_name}' (one-time)")
-      Spaceship::ConnectAPI::BetaGroup.create(
+      Spaceship::ConnectAPI.post_beta_group(
         app_id:                   app.id,
-        name:                     group_name,
+        group_name:               group_name,
+        is_internal_group:        false,
         public_link_enabled:      false,
         has_access_to_all_builds: false,
       )
@@ -238,14 +241,16 @@ platform :ios do
 
     UI.message ""
     UI.success "Beta groups:"
-    groups = Spaceship::ConnectAPI::BetaGroup.all(filter: { app: app.id }, limit: 200)
+    groups = Spaceship::ConnectAPI.get_beta_groups(
+      filter: { app: app.id }, limit: 200
+    )
     groups.each do |g|
       UI.message "  - #{g.name}  (#{g.is_internal_group ? 'internal' : 'external'})"
     end
 
     UI.message ""
     UI.success "Testers:"
-    testers = Spaceship::ConnectAPI::BetaTester.all(
+    testers = Spaceship::ConnectAPI.get_beta_testers(
       filter: { app: app.id }, limit: 200, includes: "betaGroups"
     )
     testers.each do |t|
