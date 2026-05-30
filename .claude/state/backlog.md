@@ -18,8 +18,8 @@ Last seeded: 2026-05-14. Last updated: 2026-05-30 (seeded 17 backend issues from
 - [x] #76 Portal · Alerting & notifications — foundation shipped 2026-05-30 (PR #111, commit e3a4a22); SLA trigger + email/SMS sinks + ack flow + UI = follow-ups
 
 ### Cohort 2 — Telemetry + Compliance
-- [ ] #73 Portal · Provider cost & usage dashboard — 8d — lane: backend — no blockers
-- [ ] #74 Portal · Model/provider A-B comparison at scale — 8d — lane: backend — depends on #73
+- [x] #73 Portal · Provider cost & usage dashboard — foundation shipped 2026-05-30 (PR #114, commit c402d55); base.py interface refactor + vision/transcription wiring + web UI = follow-ups
+- [ ] #74 Portal · Model/provider A-B comparison at scale — 8d — lane: backend — depends on #73 ✅ (unblocked)
 - [ ] #77 Portal · Automated compliance reporting (Law 25, scheduled exports) — 5d — lane: backend — depends on #76
 - [ ] #70 Specialty template expansion (beyond 5 MVP templates) — 5d — lane: backend — depends on #72
 
