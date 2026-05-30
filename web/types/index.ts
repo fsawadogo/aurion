@@ -30,6 +30,7 @@ export interface CreateUserPayload {
 export interface UpdateUserPayload {
   full_name?: string;
   role?: UserRole;
+  is_active?: boolean;
 }
 
 /* ─── Audit ──────────────────────────────────────────────────────────────── */
