@@ -16,6 +16,7 @@ from app.api.v1.admin import (
     config,
     eval,
     metrics,
+    providers,
     sessions,
     templates,
     users,
@@ -30,3 +31,4 @@ router.include_router(metrics.router)
 router.include_router(config.router)
 router.include_router(alerts.router)
 router.include_router(templates.router)
+router.include_router(providers.router)
