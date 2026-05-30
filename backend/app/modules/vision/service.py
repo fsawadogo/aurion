@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -33,6 +34,7 @@ from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
+from app.modules.providers.usage_service import try_record_provider_usage
 
 logger = logging.getLogger("aurion.vision")
 
@@ -137,8 +139,20 @@ async def caption_frames(
         if not anchor:
             return None
 
+        # Issue #73 — per-frame telemetry, best-effort. Primary path,
+        # then on ProviderError the fallback path below records its own
+        # row with fallback_used=True.
+        _started = time.monotonic()
         try:
             caption = await provider.caption_frame(frame, anchor)
+            await try_record_provider_usage(
+                provider_type="vision",
+                provider_name=caption.provider_used,
+                operation="caption_frame",
+                latency_ms=int((time.monotonic() - _started) * 1000),
+                success=True,
+                session_id=frame.session_id,
+            )
             if caption.confidence == "low":
                 logger.info(
                     "Low confidence frame discarded: frame=%s reason=%s",
@@ -147,13 +161,31 @@ async def caption_frames(
                 return None
             return caption
         except ProviderError as e:
+            await try_record_provider_usage(
+                provider_type="vision",
+                provider_name=type(provider).__name__,
+                operation="caption_frame",
+                latency_ms=int((time.monotonic() - _started) * 1000),
+                success=False,
+                session_id=frame.session_id,
+            )
             logger.warning(
                 "Primary vision provider failed on frame=%s: %s — trying fallback",
                 frame.frame_id, str(e),
             )
+            _fb_started = time.monotonic()
             try:
                 fallback_provider = registry.get_vision_provider_with_fallback()
                 caption = await fallback_provider.caption_frame(frame, anchor)
+                await try_record_provider_usage(
+                    provider_type="vision",
+                    provider_name=caption.provider_used,
+                    operation="caption_frame",
+                    latency_ms=int((time.monotonic() - _fb_started) * 1000),
+                    success=True,
+                    fallback_used=True,
+                    session_id=frame.session_id,
+                )
                 await audit.write_event(
                     session_id=frame.session_id,
                     event_type=AuditEventType.PROVIDER_FALLBACK,
@@ -168,6 +200,15 @@ async def caption_frames(
                 logger.error(
                     "Vision captioning failed (all providers): frame=%s error=%s",
                     frame.frame_id, str(fallback_err),
+                )
+                await try_record_provider_usage(
+                    provider_type="vision",
+                    provider_name=type(fallback_provider).__name__,
+                    operation="caption_frame",
+                    latency_ms=int((time.monotonic() - _fb_started) * 1000),
+                    success=False,
+                    fallback_used=True,
+                    session_id=frame.session_id,
                 )
                 await audit.write_event(
                     session_id=frame.session_id,
