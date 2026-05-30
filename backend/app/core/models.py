@@ -462,6 +462,56 @@ class AlertModel(Base):
     )
 
 
+class ProviderUsageModel(Base):
+    """Per-call AI-provider telemetry (issue #73).
+
+    One row per call to the provider registry — written by trigger sites
+    (note_gen/service.py, vision/service.py, transcription/service.py).
+    Latency + success + fallback fields are captured today; token counts
+    and ``cost_usd`` are nullable so this PR can land without waiting on
+    the ``base.py`` provider‑interface refactor that surfaces ``usage``
+    per call.
+
+    Lives in Postgres next to ``alerts`` (operational telemetry) rather
+    than ``pilot_metrics`` (per‑session clinical KPIs) so the dashboards
+    can be queried independently.
+    """
+
+    __tablename__ = "provider_usage"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # "transcription" | "note_generation" | "vision"
+    provider_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    # "openai" | "anthropic" | "gemini" | "whisper" | "assemblyai" | …
+    provider_name: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # Concrete model used for the call (e.g. "gpt-4o", "claude-sonnet-4-6").
+    # Nullable until the base.py refactor surfaces it.
+    model_name: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    # "generate_note" | "caption_frame" | "transcribe"
+    operation: Mapped[str] = mapped_column(String(32), nullable=False)
+    # Per‑session attribution for the eval team; nullable for non‑session
+    # contexts (health pings, future synthetic calls).
+    session_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True, index=True
+    )
+    input_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    output_tokens: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    cost_usd: Mapped[float | None] = mapped_column(Float, nullable=True)
+    latency_ms: Mapped[int] = mapped_column(Integer, nullable=False)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
+    fallback_used: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+
+
 class TemplateOverrideModel(Base):
     """Admin-managed override for a specialty template (issue #72).
 
