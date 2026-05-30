@@ -218,18 +218,25 @@ platform :ios do
         UI.success("Using existing #{is_internal ? 'internal' : 'external'} group '#{name}'")
       else
         UI.message("Creating #{is_internal ? 'internal' : 'external'} beta group '#{name}' (one-time)")
-        # The create is an INSTANCE method on App (not a class method
-        # on BetaGroup, not module-level on ConnectAPI). Verified
+        # The create is an INSTANCE method on App (not class-level on
+        # BetaGroup, not module-level on ConnectAPI). Verified
         # against spaceship 2.234.0 source:
         # spaceship/lib/spaceship/connect_api/models/app.rb:395
-        app.create_beta_group(
+        #
+        # Apple's API rejects public_link_* attributes for internal
+        # groups ("Public link limit cannot be applied to internal
+        # group"). Only pass them for external groups.
+        attrs = {
           group_name:               name,
           is_internal_group:        is_internal,
-          public_link_enabled:      false,
-          public_link_limit:        10_000,
-          public_link_limit_enabled: false,
           has_access_to_all_builds: false,
-        )
+        }
+        unless is_internal
+          attrs[:public_link_enabled]       = false
+          attrs[:public_link_limit]         = 10_000
+          attrs[:public_link_limit_enabled] = false
+        end
+        app.create_beta_group(**attrs)
       end
     end
 
