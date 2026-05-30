@@ -218,7 +218,10 @@ platform :ios do
         UI.success("Using existing #{is_internal ? 'internal' : 'external'} group '#{name}'")
       else
         UI.message("Creating #{is_internal ? 'internal' : 'external'} beta group '#{name}' (one-time)")
-        Spaceship::ConnectAPI.post_beta_group(
+        # Create lives on the model class, not the module — the
+        # module-level get_beta_groups/get_beta_testers ARE the public
+        # listing API, but writes go through BetaGroup.create.
+        Spaceship::ConnectAPI::BetaGroup.create(
           app_id:                   app.id,
           group_name:               name,
           is_internal_group:        is_internal,
