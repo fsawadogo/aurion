@@ -1,0 +1,101 @@
+{
+  "key": "internal_medicine",
+  "display_name": "Internal Medicine",
+  "version": "1.0",
+  "sections": [
+    {
+      "id": "chief_complaint",
+      "title": "Chief Complaint",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Primary presenting concern in the patient's own words"
+    },
+    {
+      "id": "hpi",
+      "title": "History of Present Illness",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Onset, duration, character, severity, associated symptoms, prior workup, response to prior interventions"
+    },
+    {
+      "id": "review_of_systems",
+      "title": "Review of Systems",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Symptoms across constitutional, cardiovascular, pulmonary, GI, GU, endocrine, hematologic, neurologic, psychiatric systems"
+    },
+    {
+      "id": "past_medical_history",
+      "title": "Past Medical & Surgical History",
+      "required": true,
+      "visual_trigger_keywords": [
+        "history of",
+        "previously diagnosed",
+        "prior surgery",
+        "hospitalisation"
+      ],
+      "description": "Active and historical conditions, surgical history, transplants, current medications, allergies"
+    },
+    {
+      "id": "vital_signs",
+      "title": "Vital Signs",
+      "required": false,
+      "visual_trigger_keywords": [
+        "blood pressure",
+        "heart rate",
+        "temperature",
+        "respiratory rate",
+        "oxygen saturation",
+        "BMI"
+      ],
+      "description": "Vitals literally observed on a monitor or read aloud"
+    },
+    {
+      "id": "physical_exam",
+      "title": "Physical Examination",
+      "required": true,
+      "visual_trigger_keywords": [
+        "auscultation",
+        "palpation",
+        "percussion",
+        "listening",
+        "looking at",
+        "edema",
+        "JVD",
+        "lymph"
+      ],
+      "description": "System-specific findings as directly observed during the exam"
+    },
+    {
+      "id": "investigations",
+      "title": "Investigations & Labs Reviewed",
+      "required": true,
+      "visual_trigger_keywords": [
+        "lab result",
+        "blood work",
+        "imaging",
+        "EKG",
+        "ECG",
+        "X-ray",
+        "CT scan",
+        "looking at",
+        "pulling up"
+      ],
+      "description": "Labs and imaging literally observed on screen — values, modality, findings as described aloud only"
+    },
+    {
+      "id": "assessment",
+      "title": "Assessment",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Working diagnosis or differential as explicitly stated — no inference"
+    },
+    {
+      "id": "plan",
+      "title": "Plan",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Investigations ordered, medication adjustments, specialist referrals, admission decisions, follow-up timeline as stated"
+    }
+  ]
+}
