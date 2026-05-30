@@ -28,9 +28,10 @@ from app.modules.note_gen.service import (
     create_note_version,
     get_latest_note,
 )
+from app.modules.vision.reconcile import reconcile_captions
 from app.modules.vision.service import (
     caption_frames,
-    classify_conflicts,
+    classify_conflicts,  # noqa: F401 — kept for backward-compat; new code uses reconcile_captions
     has_unresolved_conflicts,
     merge_visual_citations,
     retrieve_frames_for_triggers,
@@ -132,8 +133,11 @@ async def run_stage2_vision(
     captions_filtered = [c for c in captions_raw if c.confidence != "low"]
     discarded = len(captions_raw) - len(captions_filtered)
 
-    # 5. Conflict classification
-    captions = classify_conflicts(captions_filtered, note)
+    # 5. Conflict reconciliation — real LLM comparison of the Stage 1
+    #    note's claims against the captions sharing each audio anchor.
+    #    Replaces the previous "trust the vision provider's
+    #    integration_status" shortcut. See vision/reconcile.py.
+    captions = await reconcile_captions(captions_filtered, note)
 
     # 6. Merge into a new Stage 2 note version
     enriched = merge_visual_citations(note, captions)
