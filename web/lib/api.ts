@@ -130,12 +130,19 @@ export async function login(
   return data;
 }
 
-/** Sign out via Cognito's /logout endpoint so the hosted-UI session
- * terminates server-side too. Also clears the legacy `aurion_token`
- * cookie for any in-flight dev sessions. */
+/** Sign out. For Cognito hosted-UI sessions, redirects through Cognito's
+ * /logout so the server-side session terminates too. For native JWT
+ * sessions (no Cognito tokens present), just clears the cookie and bounces
+ * to /login — Cognito's /logout would otherwise force a redirect through
+ * an account they never had. */
 export function logout(): void {
   document.cookie = "aurion_token=; path=/; max-age=0";
-  cognitoSignOut();
+  if (typeof window === "undefined") return;
+  if (getStoredIdToken()) {
+    cognitoSignOut();
+  } else {
+    window.location.href = "/login";
+  }
 }
 
 export async function getMe(): Promise<CurrentUser> {
