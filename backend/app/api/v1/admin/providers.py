@@ -19,6 +19,7 @@ from app.core.database import get_db
 from app.core.types import UserRole
 from app.modules.auth.service import CurrentUser, require_role
 from app.modules.providers.usage_service import (
+    ComparisonResult,
     ProviderUsageService,
     get_provider_usage_service,
 )
@@ -58,6 +59,71 @@ class ProviderUsageResponse(BaseModel):
     provider_type: str | None
     totals: TotalsResponse
     by_provider: list[ProviderRollupResponse]
+
+
+class ComparisonDeltaResponse(BaseModel):
+    avg_latency_ms: float
+    success_rate: float
+    fallback_rate: float
+
+
+class ProviderCompareResponse(BaseModel):
+    provider_type: str
+    a: str
+    b: str
+    since: datetime | None
+    until: datetime | None
+    a_rollup: ProviderRollupResponse | None
+    b_rollup: ProviderRollupResponse | None
+    delta: ComparisonDeltaResponse
+
+
+def _rollup_to_response(rollup) -> ProviderRollupResponse | None:
+    if rollup is None:
+        return None
+    return ProviderRollupResponse(**rollup.__dict__)
+
+
+@router.get("/providers/compare", response_model=ProviderCompareResponse)
+async def compare_providers(
+    a: str = Query(..., min_length=1, max_length=64, description="Provider A name."),
+    b: str = Query(..., min_length=1, max_length=64, description="Provider B name."),
+    provider_type: str = Query(
+        ...,
+        pattern="^(transcription|note_generation|vision)$",
+        description="Provider type to compare within.",
+    ),
+    since: Optional[datetime] = Query(None),
+    until: Optional[datetime] = Query(None),
+    user: CurrentUser = Depends(
+        require_role(UserRole.ADMIN, UserRole.COMPLIANCE_OFFICER)
+    ),
+    db: AsyncSession = Depends(get_db),
+    service: ProviderUsageService = Depends(get_provider_usage_service),
+) -> ProviderCompareResponse:
+    """Side-by-side comparison of two providers over a window.
+
+    A provider with zero calls returns ``null`` for its rollup; the delta
+    block is still present (deltas use 0.0 for absent sides).
+    """
+    result: ComparisonResult = await service.compare(
+        db,
+        provider_type=provider_type,
+        a=a,
+        b=b,
+        since=since,
+        until=until,
+    )
+    return ProviderCompareResponse(
+        provider_type=result.provider_type,
+        a=result.a,
+        b=result.b,
+        since=since,
+        until=until,
+        a_rollup=_rollup_to_response(result.a_rollup),
+        b_rollup=_rollup_to_response(result.b_rollup),
+        delta=ComparisonDeltaResponse(**result.delta.__dict__),
+    )
 
 
 @router.get("/providers/usage", response_model=ProviderUsageResponse)

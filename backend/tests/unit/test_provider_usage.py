@@ -158,6 +158,68 @@ class TestAggregate:
         assert db.execute.await_count == 2
 
 
+class TestCompare:
+    @pytest.mark.asyncio
+    async def test_compare_both_present(self) -> None:
+        svc = ProviderUsageService()
+        db = _mock_db()
+        # Two aggregate() calls are made — each returns the same rollups
+        # list because `aggregate` doesn't filter by provider_name. We
+        # prime two identical results.
+        rows = [
+            ("note_generation", "openai", 8, 8, 0, 0, 700.0, 800, 400, 0.30),
+            ("note_generation", "anthropic", 2, 1, 1, 2, 1200.0, 200, 100, 0.12),
+        ]
+        db.execute = AsyncMock(
+            side_effect=[
+                _exec_result(scalar_one=(10, 9, 1, 2, 800.0, 1000, 500, 0.42)),
+                _exec_result(rows=rows),
+                _exec_result(scalar_one=(10, 9, 1, 2, 800.0, 1000, 500, 0.42)),
+                _exec_result(rows=rows),
+            ]
+        )
+
+        out = await svc.compare(
+            db, provider_type="note_generation", a="openai", b="anthropic"
+        )
+
+        assert out.a == "openai"
+        assert out.b == "anthropic"
+        assert out.a_rollup is not None
+        assert out.b_rollup is not None
+        assert out.a_rollup.provider_name == "openai"
+        assert out.b_rollup.provider_name == "anthropic"
+        # Delta = b - a → anthropic (1200ms) - openai (700ms) = 500ms
+        assert out.delta.avg_latency_ms == 500.0
+        # openai success_rate = 1.0, anthropic = 0.5 → delta -0.5
+        assert out.delta.success_rate == -0.5
+        # openai fallback_rate = 0.0, anthropic = 1.0 → delta 1.0
+        assert out.delta.fallback_rate == 1.0
+
+    @pytest.mark.asyncio
+    async def test_compare_missing_provider(self) -> None:
+        svc = ProviderUsageService()
+        db = _mock_db()
+        # Empty rows on both aggregate calls — neither provider has data.
+        empty = (0, 0, 0, 0, 0.0, 0, 0, 0.0)
+        db.execute = AsyncMock(
+            side_effect=[
+                _exec_result(scalar_one=empty),
+                _exec_result(rows=[]),
+                _exec_result(scalar_one=empty),
+                _exec_result(rows=[]),
+            ]
+        )
+        out = await svc.compare(
+            db, provider_type="note_generation", a="openai", b="anthropic"
+        )
+        assert out.a_rollup is None
+        assert out.b_rollup is None
+        assert out.delta.avg_latency_ms == 0.0
+        assert out.delta.success_rate == 0.0
+        assert out.delta.fallback_rate == 0.0
+
+
 class TestServiceFactory:
     def test_get_provider_usage_service_is_singleton(self) -> None:
         a = get_provider_usage_service()
