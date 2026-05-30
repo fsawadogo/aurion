@@ -287,6 +287,7 @@ platform :ios do
       upload_to_testflight(
         api_key:                  api_key,
         app_identifier:           "com.aurionclinical.physician",
+        app_platform:             "ios",
         app_version:              app_version,
         build_number:             build_number,
         distribute_only:          true,
@@ -303,6 +304,7 @@ platform :ios do
       upload_to_testflight(
         api_key:                  api_key,
         app_identifier:           "com.aurionclinical.physician",
+        app_platform:             "ios",
         app_version:              app_version,
         build_number:             build_number,
         distribute_only:          true,
