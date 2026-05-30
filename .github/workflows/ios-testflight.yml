@@ -225,7 +225,14 @@ jobs:
           # change which external group receives the build. The group is
           # created in App Store Connect if it doesn't already exist.
           TESTFLIGHT_GROUP_NAME: ${{ vars.TESTFLIGHT_GROUP_NAME || 'Pilot Physicians' }}
+          # CFBundleVersion is overridden to GITHUB_RUN_NUMBER in the
+          # Archive step above; pass the same here so the lane knows
+          # exactly which build to wait for + distribute (no ambiguity
+          # if other builds happen to share the marketing version).
+          BUILD_NUMBER: ${{ github.run_number }}
+          APP_VERSION: "1.0"
         run: |
           # Apple's processing pipeline takes 5-15min after altool reports
-          # SUCCESS; we let fastlane handle the wait + distribution.
+          # SUCCESS; the lane polls until processing_state=VALID then
+          # distributes. 25min ceiling.
           fastlane distribute_latest
