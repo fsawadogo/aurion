@@ -19,6 +19,7 @@ from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import utcnow
+from app.core.database import async_session_factory
 from app.core.models import AlertModel
 
 logger = logging.getLogger("aurion.alerts")
@@ -111,3 +112,45 @@ def get_alert_service() -> AlertService:
     if _INSTANCE is None:
         _INSTANCE = AlertService()
     return _INSTANCE
+
+
+async def try_publish_alert(
+    *,
+    alert_type: str,
+    severity: AlertSeverity,
+    source: str,
+    message: str,
+    metadata: dict[str, Any] | None = None,
+) -> None:
+    """Fire-and-forget alert publish for trigger sites without an existing
+    AsyncSession.
+
+    Opens its own short-lived session, commits, and swallows any errors
+    (logged with ``exc_info``) so an alerts-DB hiccup never alters the
+    audited code path it sits next to. Use this from ``transcribe_audio``,
+    ``caption_frames``, Stage 2 background jobs — anywhere the
+    surrounding code can't / shouldn't take an extra dependency on the
+    request's DB session.
+
+    Callers that already have a session should call
+    ``get_alert_service().publish(db, ...)`` directly so the alert lands
+    in the same transaction as the surrounding work.
+    """
+    try:
+        async with async_session_factory() as db:
+            await get_alert_service().publish(
+                db,
+                alert_type=alert_type,
+                severity=severity,
+                source=source,
+                message=message,
+                metadata=metadata,
+            )
+            await db.commit()
+    except Exception:  # noqa: BLE001 — best-effort by design
+        logger.warning(
+            "alert publish failed: type=%s source=%s",
+            alert_type,
+            source,
+            exc_info=True,
+        )

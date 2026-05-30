@@ -140,3 +140,60 @@ class TestServiceFactory:
         a = get_alert_service()
         b = get_alert_service()
         assert a is b
+
+
+class TestTryPublishAlert:
+    """The fire-and-forget helper that the trigger sites use. It must
+    swallow any error so the audited code path it sits next to never
+    sees an exception from telemetry."""
+
+    @pytest.mark.asyncio
+    async def test_swallows_session_factory_failure(self, monkeypatch) -> None:
+        """If async_session_factory raises (DB down / pool exhausted),
+        the helper logs and returns None — never re-raises."""
+        from app.modules.alerts import service as alerts_mod
+
+        def boom():  # noqa: ANN202
+            raise RuntimeError("DB pool exhausted")
+
+        monkeypatch.setattr(alerts_mod, "async_session_factory", boom)
+
+        # Should not raise.
+        await alerts_mod.try_publish_alert(
+            alert_type="t",
+            severity=AlertSeverity.CRITICAL,
+            source="test",
+            message="m",
+        )
+
+    @pytest.mark.asyncio
+    async def test_swallows_publish_failure(self, monkeypatch) -> None:
+        """If the underlying publish raises, the helper still swallows."""
+        from contextlib import asynccontextmanager
+
+        from app.modules.alerts import service as alerts_mod
+
+        @asynccontextmanager
+        async def fake_session_ctx():  # noqa: ANN202
+            yield AsyncMock()  # commit is awaitable on AsyncMock by default
+
+        # Replace the factory so __aenter__/__aexit__ work.
+        def fake_factory():
+            return fake_session_ctx()
+
+        monkeypatch.setattr(alerts_mod, "async_session_factory", fake_factory)
+
+        # Force the publish to raise.
+        fake_svc = MagicMock()
+        fake_svc.publish = AsyncMock(side_effect=RuntimeError("alert table missing"))
+        monkeypatch.setattr(
+            alerts_mod, "get_alert_service", lambda: fake_svc
+        )
+
+        await alerts_mod.try_publish_alert(
+            alert_type="t",
+            severity=AlertSeverity.CRITICAL,
+            source="test",
+            message="m",
+        )
+        fake_svc.publish.assert_awaited()
