@@ -207,3 +207,25 @@ jobs:
                        --file "$IPA_PATH" \
                        --apiKey "$APP_STORE_CONNECT_KEY_ID" \
                        --apiIssuer "$APP_STORE_CONNECT_ISSUER_ID"
+
+      # altool only uploads bytes — it does not assign the build to any
+      # tester group. Without this step the build sits in App Store
+      # Connect "Ready to Submit" forever and external testers never
+      # see it (we shipped builds 5-105 this way; only build 4 ever
+      # reached anyone because it was the last one manually assigned to
+      # a group). fastlane's `distribute_latest` lane picks the most
+      # recently uploaded build, creates the external group on the fly
+      # if missing, submits for Beta App Review, and notifies testers.
+      # The group name is overridable via TESTFLIGHT_GROUP_NAME below.
+      - name: Distribute to external testers
+        if: steps.gate.outputs.skip == 'false'
+        working-directory: ${{ env.IOS_PROJECT_DIR }}
+        env:
+          # Override in the workflow_dispatch UI (or this default) to
+          # change which external group receives the build. The group is
+          # created in App Store Connect if it doesn't already exist.
+          TESTFLIGHT_GROUP_NAME: ${{ vars.TESTFLIGHT_GROUP_NAME || 'Pilot Physicians' }}
+        run: |
+          # Apple's processing pipeline takes 5-15min after altool reports
+          # SUCCESS; we let fastlane handle the wait + distribution.
+          fastlane distribute_latest
