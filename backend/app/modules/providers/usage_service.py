@@ -38,6 +38,27 @@ class UsageTotals:
 
 
 @dataclass(frozen=True)
+class ComparisonDelta:
+    """Pre-computed ``b - a`` deltas. Positive means b is higher."""
+
+    avg_latency_ms: float
+    success_rate: float
+    fallback_rate: float
+
+
+@dataclass(frozen=True)
+class ComparisonResult:
+    """Side-by-side comparison of two providers over a window."""
+
+    provider_type: str
+    a: str
+    b: str
+    a_rollup: "ProviderRollup | None"
+    b_rollup: "ProviderRollup | None"
+    delta: ComparisonDelta
+
+
+@dataclass(frozen=True)
 class ProviderRollup:
     """Per-(provider_type, provider_name) rollup."""
 
@@ -181,6 +202,58 @@ class ProviderUsageService:
                 )
             )
         return totals, by_provider
+
+    async def compare(
+        self,
+        db: AsyncSession,
+        *,
+        provider_type: str,
+        a: str,
+        b: str,
+        since: datetime | None = None,
+        until: datetime | None = None,
+    ) -> ComparisonResult:
+        """Side-by-side comparison of two providers over a window (#74).
+
+        Reuses ``aggregate(...)``: one rollup per provider, then computes
+        ``b - a`` deltas. A provider with zero calls in the window
+        produces ``None`` for its rollup (UI shows "no data"); the delta
+        falls back to the present rollup's values for legibility.
+        """
+        _, by_a = await self.aggregate(
+            db, since=since, until=until, provider_type=provider_type
+        )
+        a_rollup = next(
+            (r for r in by_a if r.provider_name == a), None
+        )
+        # Second call — we only need provider b's rollup, but reusing
+        # aggregate keeps a single source of truth for the rollup shape.
+        _, by_b = await self.aggregate(
+            db, since=since, until=until, provider_type=provider_type
+        )
+        b_rollup = next(
+            (r for r in by_b if r.provider_name == b), None
+        )
+
+        a_lat = a_rollup.avg_latency_ms if a_rollup else 0.0
+        b_lat = b_rollup.avg_latency_ms if b_rollup else 0.0
+        a_succ = a_rollup.success_rate if a_rollup else 0.0
+        b_succ = b_rollup.success_rate if b_rollup else 0.0
+        a_fb = a_rollup.fallback_rate if a_rollup else 0.0
+        b_fb = b_rollup.fallback_rate if b_rollup else 0.0
+
+        return ComparisonResult(
+            provider_type=provider_type,
+            a=a,
+            b=b,
+            a_rollup=a_rollup,
+            b_rollup=b_rollup,
+            delta=ComparisonDelta(
+                avg_latency_ms=b_lat - a_lat,
+                success_rate=b_succ - a_succ,
+                fallback_rate=b_fb - a_fb,
+            ),
+        )
 
 
 _INSTANCE: ProviderUsageService | None = None
