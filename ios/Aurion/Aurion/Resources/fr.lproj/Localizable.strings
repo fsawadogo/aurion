@@ -518,7 +518,10 @@
 "sessionNote.a11yCopy" = "Copier la note";
 "sessionNote.a11yCopyHint" = "Copie le texte format\U00E9 de la note dans le presse-papiers.";
 "sessionNote.a11yExport" = "Exporter la note";
-"sessionNote.a11yExportHint" = "Exporte la note sous forme de document Word.";
+"sessionNote.a11yExportHint" = "Choisissez un format et partagez la note.";
+"sessionNote.exportFormatTitle" = "Exporter la note en";
+"sessionNote.exportPDF" = "PDF";
+"sessionNote.exportDOCX" = "Document Word";
 
 /* ── Verrouillage de l\U2019application ─────────────────── */
 "profile.sectionSecurity" = "S\U00E9curit\U00E9";
