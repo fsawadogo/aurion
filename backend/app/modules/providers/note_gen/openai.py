@@ -13,6 +13,7 @@ import os
 import httpx
 
 from app.core.types import Note, ProviderError, Template, Transcript
+from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import NoteGenerationProvider
 from app.modules.providers.note_gen.shared import (
     NOTE_GEN_SYSTEM_PROMPT,
@@ -40,6 +41,11 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
             raise ProviderError("openai", "OPENAI_API_KEY not configured")
 
         user_prompt = build_user_prompt(transcript, template, stage, output_language)
+        # Read model params from AppConfig at call time so admins can
+        # tune temperature / max_tokens at runtime without a redeploy
+        # (CLAUDE.md §"Runtime Configuration"). Falls back to the
+        # documented 0.1 / 2000 defaults if AppConfig is unreachable.
+        params = get_config().model_params.note_generation
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -51,8 +57,8 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
                     },
                     json={
                         "model": _MODEL,
-                        "temperature": 0.1,
-                        "max_tokens": 2000,
+                        "temperature": params.temperature,
+                        "max_tokens": params.max_tokens,
                         "messages": [
                             {"role": "system", "content": NOTE_GEN_SYSTEM_PROMPT},
                             {"role": "user", "content": user_prompt},

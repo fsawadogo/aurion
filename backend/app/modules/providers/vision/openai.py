@@ -15,6 +15,7 @@ import httpx
 
 from app.core.s3 import load_frame_image_base64
 from app.core.types import FrameCaption, MaskedFrame, ProviderError, TranscriptSegment
+from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import VisionProvider
 from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT, build_frame_caption
 
@@ -68,8 +69,9 @@ class OpenAIVisionProvider(VisionProvider):
                     },
                     json={
                         "model": _MODEL,
-                        "temperature": 0.1,
-                        "max_tokens": 500,
+                        # AppConfig vision params — admin-tunable at runtime.
+                        "temperature": get_config().model_params.vision.temperature,
+                        "max_tokens": get_config().model_params.vision.max_tokens,
                         "messages": messages,
                         "response_format": {"type": "json_object"},
                     },

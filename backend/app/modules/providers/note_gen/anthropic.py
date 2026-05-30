@@ -13,6 +13,7 @@ import os
 import httpx
 
 from app.core.types import Note, ProviderError, Template, Transcript
+from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import NoteGenerationProvider
 from app.modules.providers.note_gen.shared import (
     NOTE_GEN_SYSTEM_PROMPT,
@@ -40,6 +41,10 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
             raise ProviderError("anthropic", "ANTHROPIC_API_KEY not configured")
 
         user_prompt = build_user_prompt(transcript, template, stage, output_language)
+        # Read model params from AppConfig at call time (CLAUDE.md
+        # §"Runtime Configuration") — admins can tune temp / max_tokens
+        # without a redeploy.
+        params = get_config().model_params.note_generation
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
@@ -52,8 +57,8 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
                     },
                     json={
                         "model": _MODEL,
-                        "max_tokens": 2000,
-                        "temperature": 0.1,
+                        "max_tokens": params.max_tokens,
+                        "temperature": params.temperature,
                         "system": NOTE_GEN_SYSTEM_PROMPT,
                         "messages": [
                             {"role": "user", "content": user_prompt},
