@@ -218,25 +218,36 @@ platform :ios do
         UI.success("Using existing #{is_internal ? 'internal' : 'external'} group '#{name}'")
       else
         UI.message("Creating #{is_internal ? 'internal' : 'external'} beta group '#{name}' (one-time)")
-        # The create is an INSTANCE method on App (not class-level on
-        # BetaGroup, not module-level on ConnectAPI). Verified
-        # against spaceship 2.234.0 source:
-        # spaceship/lib/spaceship/connect_api/models/app.rb:395
-        #
-        # Apple's API rejects public_link_* attributes for internal
-        # groups ("Public link limit cannot be applied to internal
-        # group"). Only pass them for external groups.
+        # fastlane's `app.create_beta_group` / `client.create_beta_group`
+        # ALWAYS forward `publicLinkEnabled / publicLinkLimit /
+        # publicLinkLimitEnabled` into the JSON body — even when the
+        # caller omits them — because the method signature carries
+        # defaults that bypass `**attrs` suppression. Apple rejects:
+        #   "Public link limit cannot be applied to internal group
+        #    /data/attributes/publicLinkLimitEnabled"
+        # Workaround: POST the JSON body directly via the testflight
+        # request client so we control exactly which attrs go on the
+        # wire. Internal omits all publicLink_*; external keeps them.
         attrs = {
-          group_name:               name,
-          is_internal_group:        is_internal,
-          has_access_to_all_builds: false,
+          name:                  name,
+          isInternalGroup:       is_internal,
+          hasAccessToAllBuilds:  is_internal,   # only internal groups can opt all-builds
         }
         unless is_internal
-          attrs[:public_link_enabled]       = false
-          attrs[:public_link_limit]         = 10_000
-          attrs[:public_link_limit_enabled] = false
+          attrs[:publicLinkEnabled]       = false
+          attrs[:publicLinkLimit]         = 10_000
+          attrs[:publicLinkLimitEnabled]  = false
         end
-        app.create_beta_group(**attrs)
+        body = {
+          data: {
+            type:          "betaGroups",
+            attributes:    attrs,
+            relationships: { app: { data: { type: "apps", id: app.id } } },
+          },
+        }
+        Spaceship::ConnectAPI.client.test_flight_request_client.post(
+          "v1/betaGroups", body
+        )
       end
     end
 
