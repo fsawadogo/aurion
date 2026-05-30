@@ -16,7 +16,11 @@ import httpx
 from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError, jwt
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.database import get_db
+from app.core.models import UserModel
 from app.core.types import UserRole
 
 logger = logging.getLogger("aurion.auth")
@@ -47,11 +51,13 @@ class CurrentUser:
 
 async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_security),
+    db: AsyncSession = Depends(get_db),
 ) -> CurrentUser:
     """FastAPI dependency — extract and validate the current user from JWT.
 
     In local dev, accepts a simple token format: <role>:<user_id>
-    In production, validates against Cognito JWKS.
+    In production, validates against Cognito JWKS, then enforces account
+    activation (a deactivated user is blocked on their next request).
     """
     token = credentials.credentials
 
@@ -59,7 +65,32 @@ async def get_current_user(
         return _parse_dev_token(token)
 
     # Production: validate JWT against Cognito JWKS
-    return await _validate_cognito_jwt(token)
+    user = await _validate_cognito_jwt(token)
+    await _ensure_active(db, user.user_id)
+    return user
+
+
+async def _ensure_active(db: AsyncSession, user_id: uuid.UUID) -> None:
+    """Block requests from an admin-deactivated account.
+
+    The token may still be cryptographically valid (Cognito access tokens
+    live ~1h), so deactivation is enforced here on every request by checking
+    the DB ``is_active`` flag — immediate, no per-user Cognito round-trip.
+    A user with no DB row yet (first authenticated call, pre-provisioning)
+    is allowed through. The dependency-injected session is shared with the
+    route via FastAPI's per-request dependency cache, so this adds no extra
+    connection. (Cognito-side AdminDisableUser is a defense-in-depth
+    follow-up, tracked separately.)
+    """
+    result = await db.execute(
+        select(UserModel.is_active).where(UserModel.id == user_id)
+    )
+    is_active = result.scalar_one_or_none()
+    if is_active is False:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Account deactivated. Contact your administrator.",
+        )
 
 
 def _parse_dev_token(token: str) -> CurrentUser:
