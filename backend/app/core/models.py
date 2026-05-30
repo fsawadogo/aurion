@@ -414,3 +414,50 @@ class ProviderOverrideModel(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class AlertModel(Base):
+    """Operational alert — surfaced when a clinical-pipeline trigger fires
+    (a Stage failure, a masking issue, an SLA breach, etc.).
+
+    Lives in Postgres alongside ``users`` and ``sessions`` rather than in
+    the audit log because alerts are *operational* signals consumed by
+    ADMIN and COMPLIANCE_OFFICER; the audit log remains the canonical,
+    append-only clinical trail. An alert is an out-of-band notification
+    of an event already recorded in the audit log (see issue #76).
+
+    Best-effort publish at the trigger site keeps the audited code path
+    independent of alert-DB availability.
+    """
+
+    __tablename__ = "alerts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # e.g. "stage1_failed", "stage2_failed", "transcription_failed",
+    # "masking_failed", "sla_breach_stage1". Mirrors AuditEventType when
+    # the trigger is an audit event; freeform when synthesised (SLA).
+    alert_type: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    # "info" | "warning" | "critical" — mirrors AlertSeverity enum.
+    severity: Mapped[str] = mapped_column(String(16), nullable=False, index=True)
+    # "transcription_service" | "vision_service" | "scheduler" | etc.
+    source: Mapped[str] = mapped_column(String(64), nullable=False)
+    # Short human-readable summary. Never carries PHI.
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    # Structured context (session_id, provider, retry_count, etc.).
+    alert_metadata: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+    # Set by future PATCH /admin/alerts/{id}/acknowledge — null while open.
+    acknowledged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    acknowledged_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+

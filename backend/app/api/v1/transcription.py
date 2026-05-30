@@ -25,6 +25,7 @@ from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import PilotMetricsModel, TranscriptModel
 from app.core.types import SessionState
+from app.modules.alerts.service import AlertSeverity, get_alert_service
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.note_gen.service import generate_stage1_note
 from app.modules.phi_audit.service import scan_transcript_for_phi
@@ -164,7 +165,25 @@ async def submit_transcription(
             output_language=session.output_language,
         )
     except Exception as exc:
-        await write_audit(session_id, AuditEventType.STAGE1_FAILED, reason=str(exc)[:200])
+        reason = str(exc)[:200]
+        await write_audit(session_id, AuditEventType.STAGE1_FAILED, reason=reason)
+        # Best-effort alert publish — DO NOT let an alerts-DB hiccup take
+        # down the audited 5xx path. Issue #76.
+        try:
+            await get_alert_service().publish(
+                db,
+                alert_type=AuditEventType.STAGE1_FAILED.value,
+                severity=AlertSeverity.CRITICAL,
+                source="transcription_service",
+                message="Stage 1 note generation failed",
+                metadata={"session_id": str(session_id), "reason": reason},
+            )
+        except Exception:  # noqa: BLE001 — best-effort by design
+            logger.warning(
+                "alert publish failed for STAGE1_FAILED session=%s",
+                session_id,
+                exc_info=True,
+            )
         raise HTTPException(
             status_code=500,
             detail=f"Stage 1 note generation failed: {exc}",
