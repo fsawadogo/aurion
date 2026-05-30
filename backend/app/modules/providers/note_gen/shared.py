@@ -12,6 +12,58 @@ import json
 
 from app.core.types import Note, NoteClaim, NoteSection, Template, Transcript
 
+# JSON Schema for the Note response. Used by providers that support
+# schema-enforced output (Anthropic tool_use, Gemini responseSchema)
+# so the model can't return malformed shapes. OpenAI gets the same
+# guarantees via response_format: json_object (no per-field schema
+# but valid JSON only). Mirrors the Note Pydantic model surface that
+# parse_note_response will validate against.
+NOTE_RESPONSE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "sections": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "title": {"type": "string"},
+                    "status": {
+                        "type": "string",
+                        "enum": ["populated", "pending_video", "not_captured"],
+                    },
+                    "claims": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "id": {"type": "string"},
+                                "text": {"type": "string"},
+                                "source_type": {
+                                    "type": "string",
+                                    "enum": ["transcript", "visual", "screen"],
+                                },
+                                "source_id": {"type": "string"},
+                                "source_quote": {"type": "string"},
+                            },
+                            "required": [
+                                "id",
+                                "text",
+                                "source_type",
+                                "source_id",
+                                "source_quote",
+                            ],
+                        },
+                    },
+                },
+                "required": ["id", "status", "claims"],
+            },
+        }
+    },
+    "required": ["sections"],
+}
+
+
 # EXACT system prompt from CLAUDE.md -- no variations.
 # Shared across all note generation providers.
 NOTE_GEN_SYSTEM_PROMPT = """You are a clinical documentation assistant for Aurion Clinical AI. Your role is to accurately document what was observed and said during a clinical encounter.

@@ -9,6 +9,25 @@ from __future__ import annotations
 
 from app.core.types import FrameCaption, MaskedFrame, TranscriptSegment
 
+# JSON Schema for the vision caption response. Used by providers that
+# support schema-enforced output (Anthropic tool_use, Gemini
+# responseSchema). The integration_status is NOT in the schema — that
+# field is computed downstream in vision/service.py classify_captions;
+# the LLM just describes what it sees.
+VISION_RESPONSE_SCHEMA: dict = {
+    "type": "object",
+    "properties": {
+        "description": {"type": "string"},
+        "confidence": {
+            "type": "string",
+            "enum": ["high", "medium", "low"],
+        },
+        "confidence_reason": {"type": "string"},
+    },
+    "required": ["description", "confidence", "confidence_reason"],
+}
+
+
 # EXACT vision system prompt from CLAUDE.md -- no variations.
 # Shared across all vision providers.
 VISION_SYSTEM_PROMPT = """You are a clinical visual documentation assistant. Describe only what is literally visible in this image. Do not diagnose, interpret, or infer clinical meaning.

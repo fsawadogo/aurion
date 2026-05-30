@@ -17,6 +17,7 @@ from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import NoteGenerationProvider
 from app.modules.providers.note_gen.shared import (
     NOTE_GEN_SYSTEM_PROMPT,
+    NOTE_RESPONSE_SCHEMA,
     build_user_prompt,
     parse_note_response,
 )
@@ -62,6 +63,10 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
                             "temperature": params.temperature,
                             "maxOutputTokens": params.max_tokens,
                             "responseMimeType": "application/json",
+                            # Schema-enforced output — Gemini validates
+                            # the response shape server-side and rejects
+                            # the generation if it can't conform.
+                            "responseSchema": NOTE_RESPONSE_SCHEMA,
                         },
                     },
                 )
