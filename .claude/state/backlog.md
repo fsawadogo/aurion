@@ -40,7 +40,7 @@ Last seeded: 2026-05-14. Last updated: 2026-05-30 (seeded 17 backend issues from
 
 ## In flight
 
-- [ ] #43 F1 User Management Backend — started 2026-05-30, branch lane-backend/43-user-mgmt-deactivation — closes #43 + #44 + includes web-side JWT-login switch
+- [ ] #76 Portal · Alerting & notifications — started 2026-05-30, branch lane-backend/76-alerting-foundation — foundation PR (Alert model + AlertService + masking-failure trigger + GET /admin/alerts); follow-ups: SLA breach trigger, email/SMS sinks, web UI, acknowledge flow
 
 ## Blocked
 
@@ -48,6 +48,7 @@ Last seeded: 2026-05-14. Last updated: 2026-05-30 (seeded 17 backend issues from
 
 ## Done
 
+- [x] #43 F1 User Management Backend (+ #44 frontend + web JWT-login switch) — merged 2026-05-30 (PR #109, commit 0b5071b); follow-up #110 for Cognito-side AdminDisableUser hardening
 - [x] WEB-COGNITO-UI web portal Cognito hosted UI shipped 2026-05-28 (PR #28-30) — superseded 2026-05-29 by JWT-login switch in #43's PR; lib/cognito.ts retained for restoration
 - [x] WEB-METRICS-CHARTS pilot metrics time-series (GET /admin/metrics/timeseries + 8-panel dashboard sparklines) — 3d — lane: backend — merged: 2026-05-26 (PR #17, commit 4a77f66)
 - [x] EVAL-3 eval session assignment (admin assigns; list filtered for EVAL_TEAM; score completes assignment) — 1d — lane: backend — merged: 2026-05-26 (PR #16, commit 38212df)
