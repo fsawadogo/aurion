@@ -6,7 +6,7 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Enum, Float, Integer, LargeBinary, String, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -460,6 +460,43 @@ class AlertModel(Base):
     acknowledged_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True
     )
+
+
+class ComplianceReportModel(Base):
+    """Persisted, hash-signed compliance report snapshot (issue #77).
+
+    One row per generated report. ``content_bytes`` is the CSV payload
+    stored inline at pilot scale — S3-backed storage is a follow-up
+    when sizes grow. ``sha256`` is the hex digest of ``content_bytes``
+    at generation time so a compliance officer can verify the
+    downloaded file against the metadata row.
+    """
+
+    __tablename__ = "compliance_reports"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # "audit" | "masking" | "retention" (foundation: only "audit" wired).
+    report_type: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    since: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    generated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        index=True,
+    )
+    generated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    content_bytes: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    byte_size: Mapped[int] = mapped_column(Integer, nullable=False)
 
 
 class ProviderUsageModel(Base):
