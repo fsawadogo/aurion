@@ -23,6 +23,7 @@ from app.core.models import NoteVersionModel
 from app.core.types import Note, NoteClaim, Template, Transcript
 from app.modules.config.provider_registry import get_registry
 from app.modules.note_gen import repository as note_repo
+from app.modules.note_gen.critique import critique_note
 from app.modules.providers.usage_service import get_provider_usage_service
 
 logger = logging.getLogger("aurion.note_gen")
@@ -388,6 +389,15 @@ async def generate_stage1_note(
     note.stage = 1
     note.specialty = specialty
 
+    # Self-critique pass — second LLM call audits the just-generated
+    # note for unanchored claims and section-status mistakes. Mutates
+    # ``note`` in place; best-effort, no-op on any failure. Runs in
+    # series after generation (~1-2s typical) so the persisted v1 is
+    # the cleaned-up version, not the raw output.
+    await critique_note(note, transcript)
+
+    # Re-score after critique — dropping unanchored claims or flipping
+    # populated -> not_captured changes the completeness denominator.
     note.completeness_score = round(calculate_completeness(note, template), 4)
 
     logger.info(
