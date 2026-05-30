@@ -8,16 +8,39 @@ topmost Active item matching its lane. Format per line:
 When a task moves through states, the loop edits this file in place:
 Active → In flight → Done (or → Blocked on triple failure).
 
-Last seeded: 2026-05-14. Last updated: 2026-05-26 (post PR #15 — eval scoring spec).
+Last seeded: 2026-05-14. Last updated: 2026-05-30 (seeded 17 backend issues from GitHub per CTO's "implement all backend" directive).
 
 ## Active
 
-- [ ] WEB-COGNITO-UI web portal switches from /auth/login to Cognito hosted UI (parity with iOS) — 2d — lane: backend — no blockers
+### Cohort 1 — Foundations (post-pilot)
+- [ ] #75 Portal · Org / multi-clinic + SSO (SAML/OIDC) — 15d — lane: backend — no blockers
+- [ ] #72 Portal · Template + visual-trigger keyword mgmt — 5d — lane: backend — no blockers (unblocks #70)
+- [ ] #76 Portal · Alerting & notifications (masking failures, SLA breaches) — 5d — lane: backend — no blockers
+
+### Cohort 2 — Telemetry + Compliance
+- [ ] #73 Portal · Provider cost & usage dashboard — 8d — lane: backend — no blockers
+- [ ] #74 Portal · Model/provider A-B comparison at scale — 8d — lane: backend — depends on #73
+- [ ] #77 Portal · Automated compliance reporting (Law 25, scheduled exports) — 5d — lane: backend — depends on #76
+- [ ] #70 Specialty template expansion (beyond 5 MVP templates) — 5d — lane: backend — depends on #72
+
+### Cohort 3 — Scribe extensions
+- [ ] #61 iOS · Longitudinal patient context across encounters — 8d — lane: backend — no blockers (unblocks #60, #59)
+- [ ] #60 iOS · Physician style learning, macros & smart phrases — 8d — lane: backend — depends on #61
+- [ ] #59 iOS · After-visit summary & patient instructions — 5d — lane: backend — depends on #60
+- [ ] #58 iOS · Orders, referrals & prescription drafting — 8d — lane: backend — no blockers
+- [ ] #69 Coding & billing assist (E/M, ICD-10/CPT) — 8d — lane: backend — depends on #58
+- [ ] #57 iOS · EMR/EHR write-back (FHIR DocumentReference / HL7) — 15d — lane: backend — depends on #58, #59, #69
+
+### Cohort 4 — iOS-backed
+- [ ] #64 iOS · Live note preview during recording — 5d — lane: backend — no blockers
+- [ ] #62 iOS · Procedural / Post-Op capture mode — 15d — lane: backend — no blockers
+
+### Other
 - [ ] AUR-MP-CROSSCHECK Add MediaPipe as independent second face detector for Apple Vision (pilot follow-up; revisit only if clinical safety committee asks) — 5d — lane: ios — no blockers
 
 ## In flight
 
-- [ ] WEB-COGNITO-UI started 2026-05-26, branch lane-backend/web-cognito-ui
+- [ ] #43 F1 User Management Backend — started 2026-05-30, branch lane-backend/43-user-mgmt-deactivation — closes #43 + #44 + includes web-side JWT-login switch
 
 ## Blocked
 
@@ -25,6 +48,7 @@ Last seeded: 2026-05-14. Last updated: 2026-05-26 (post PR #15 — eval scoring 
 
 ## Done
 
+- [x] WEB-COGNITO-UI web portal Cognito hosted UI shipped 2026-05-28 (PR #28-30) — superseded 2026-05-29 by JWT-login switch in #43's PR; lib/cognito.ts retained for restoration
 - [x] WEB-METRICS-CHARTS pilot metrics time-series (GET /admin/metrics/timeseries + 8-panel dashboard sparklines) — 3d — lane: backend — merged: 2026-05-26 (PR #17, commit 4a77f66)
 - [x] EVAL-3 eval session assignment (admin assigns; list filtered for EVAL_TEAM; score completes assignment) — 1d — lane: backend — merged: 2026-05-26 (PR #16, commit 38212df)
 - [x] EVAL-2 eval scoring per spec (descriptive_mode_pass + soap_section_scores + hallucination_count + discrepancies) — 1d — lane: backend — merged: 2026-05-26 (PR #15, commit ac45f7b)

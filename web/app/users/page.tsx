@@ -89,9 +89,17 @@ export default function UsersPage() {
     }
   }
 
-  async function handleDeactivate(userId: string) {
+  async function handleSetActive(userId: string, isActive: boolean) {
+    if (
+      !isActive &&
+      !window.confirm(
+        "Deactivate this account? The user will be blocked on their next request.",
+      )
+    ) {
+      return;
+    }
     try {
-      await updateUser(userId, { role: undefined });
+      await updateUser(userId, { is_active: isActive });
       await fetchUsers();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to update user");
@@ -190,14 +198,23 @@ export default function UsersPage() {
                         {relativeTime(user.last_login_at)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
-                        {user.is_active && (
+                        {user.is_active ? (
                           <Button
                             variant="ghost"
                             size="sm"
-                            onClick={() => handleDeactivate(user.id)}
+                            onClick={() => handleSetActive(user.id, false)}
                             className="text-red-500 hover:text-red-700 hover:bg-red-50"
                           >
                             Deactivate
+                          </Button>
+                        ) : (
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => handleSetActive(user.id, true)}
+                            className="text-emerald-600 hover:text-emerald-700 hover:bg-emerald-50"
+                          >
+                            Activate
                           </Button>
                         )}
                       </td>
