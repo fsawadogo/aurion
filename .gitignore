@@ -96,3 +96,15 @@ infrastructure/node_modules/
 AuthKey_*.p8
 ApiKey_*.p8
 credentials.json
+
+# macOS iCloud / Dropbox sync conflict duplicates ("name 2.ext", "name 3.ext").
+# Cosmetic for git, but they also confuse Alembic (duplicate revision ids)
+# so we proactively keep them out of the tracking surface.
+* [0-9].py
+* [0-9].md
+* [0-9].swift
+* [0-9].tf
+* [0-9].xlsx
+* [0-9].mov
+* [0-9].docx
+* [0-9].json
