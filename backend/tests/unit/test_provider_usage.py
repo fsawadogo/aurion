@@ -220,6 +220,55 @@ class TestCompare:
         assert out.delta.fallback_rate == 0.0
 
 
+class TestTryRecordProviderUsage:
+    """The fire-and-forget helper that the trigger sites use. It must
+    swallow any error so the audited code path it sits next to never
+    sees an exception from telemetry."""
+
+    @pytest.mark.asyncio
+    async def test_swallows_session_factory_failure(self, monkeypatch) -> None:
+        from app.modules.providers import usage_service as us_mod
+
+        def boom():  # noqa: ANN202
+            raise RuntimeError("DB pool exhausted")
+
+        monkeypatch.setattr(us_mod, "async_session_factory", boom)
+
+        # Should not raise.
+        await us_mod.try_record_provider_usage(
+            provider_type="note_generation",
+            provider_name="openai",
+            operation="generate_note",
+            latency_ms=42,
+            success=True,
+        )
+
+    @pytest.mark.asyncio
+    async def test_swallows_record_failure(self, monkeypatch) -> None:
+        from contextlib import asynccontextmanager
+
+        from app.modules.providers import usage_service as us_mod
+
+        @asynccontextmanager
+        async def fake_session_ctx():  # noqa: ANN202
+            yield AsyncMock()
+
+        monkeypatch.setattr(us_mod, "async_session_factory", fake_session_ctx)
+
+        fake_svc = MagicMock()
+        fake_svc.record = AsyncMock(side_effect=RuntimeError("table missing"))
+        monkeypatch.setattr(us_mod, "get_provider_usage_service", lambda: fake_svc)
+
+        await us_mod.try_record_provider_usage(
+            provider_type="vision",
+            provider_name="anthropic",
+            operation="caption_frame",
+            latency_ms=200,
+            success=True,
+        )
+        fake_svc.record.assert_awaited()
+
+
 class TestServiceFactory:
     def test_get_provider_usage_service_is_singleton(self) -> None:
         a = get_provider_usage_service()
