@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import os
+import time
 import uuid
 from typing import Optional
 
@@ -20,6 +21,7 @@ from app.core.types import ProviderError, Transcript, TranscriptSegment
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.provider_registry import get_registry
+from app.modules.providers.usage_service import try_record_provider_usage
 
 logger = logging.getLogger("aurion.transcription")
 
@@ -166,6 +168,7 @@ async def transcribe_audio(
     registry = get_registry()
     provider = registry.get_transcription_provider(override=provider_override)
 
+    _started = time.monotonic()
     try:
         transcript = await provider.transcribe(audio_bytes, str(session_id))
         logger.info(
@@ -174,6 +177,15 @@ async def transcribe_audio(
             transcript.provider_used,
             len(transcript.segments),
         )
+        # Issue #73 — capture per-call telemetry; best-effort.
+        await try_record_provider_usage(
+            provider_type="transcription",
+            provider_name=transcript.provider_used,
+            operation="transcribe",
+            latency_ms=int((time.monotonic() - _started) * 1000),
+            success=True,
+            session_id=session_id,
+        )
         return transcript
     except ProviderError:
         audit = get_audit_log_service()
@@ -181,6 +193,14 @@ async def transcribe_audio(
             session_id=str(session_id),
             event_type=AuditEventType.TRANSCRIPTION_FAILED,
             error_message="Provider raised ProviderError",
+        )
+        await try_record_provider_usage(
+            provider_type="transcription",
+            provider_name=provider_override or type(provider).__name__,
+            operation="transcribe",
+            latency_ms=int((time.monotonic() - _started) * 1000),
+            success=False,
+            session_id=session_id,
         )
         await try_publish_alert(
             alert_type=AuditEventType.TRANSCRIPTION_FAILED.value,
@@ -196,6 +216,14 @@ async def transcribe_audio(
             session_id=str(session_id),
             event_type=AuditEventType.TRANSCRIPTION_FAILED,
             error_message=str(e),
+        )
+        await try_record_provider_usage(
+            provider_type="transcription",
+            provider_name=provider_override or type(provider).__name__,
+            operation="transcribe",
+            latency_ms=int((time.monotonic() - _started) * 1000),
+            success=False,
+            session_id=session_id,
         )
         await try_publish_alert(
             alert_type=AuditEventType.TRANSCRIPTION_FAILED.value,

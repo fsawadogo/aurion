@@ -18,6 +18,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.clock import utcnow
+from app.core.database import async_session_factory
 from app.core.models import ProviderUsageModel
 
 logger = logging.getLogger("aurion.providers.usage")
@@ -265,3 +266,69 @@ def get_provider_usage_service() -> ProviderUsageService:
     if _INSTANCE is None:
         _INSTANCE = ProviderUsageService()
     return _INSTANCE
+
+
+def _coerce_session_id(value: str | uuid.UUID | None) -> uuid.UUID | None:
+    """Coerce to UUID, returning None for anything that doesn't parse —
+    so trigger sites can pass ``frame.session_id`` (which may be a
+    legacy / synthetic identifier) without raising. The telemetry row
+    just records null for that case."""
+    if value is None:
+        return None
+    if isinstance(value, uuid.UUID):
+        return value
+    try:
+        return uuid.UUID(str(value))
+    except (ValueError, TypeError):
+        return None
+
+
+async def try_record_provider_usage(
+    *,
+    provider_type: str,
+    provider_name: str,
+    operation: str,
+    latency_ms: int,
+    success: bool,
+    fallback_used: bool = False,
+    model_name: str | None = None,
+    session_id: str | uuid.UUID | None = None,
+    input_tokens: int | None = None,
+    output_tokens: int | None = None,
+    cost_usd: float | None = None,
+) -> None:
+    """Fire-and-forget telemetry write for trigger sites without an
+    existing AsyncSession (caption_frames, transcribe_audio, …).
+
+    Mirrors ``try_publish_alert`` in alerts: opens a short-lived
+    session, commits, and swallows any error so a telemetry-DB hiccup
+    never alters the audited code path it sits next to.
+
+    Callers that already have a session should call
+    ``get_provider_usage_service().record(db, ...)`` directly so the
+    row lands in the same transaction.
+    """
+    try:
+        async with async_session_factory() as db:
+            await get_provider_usage_service().record(
+                db,
+                provider_type=provider_type,
+                provider_name=provider_name,
+                operation=operation,
+                latency_ms=latency_ms,
+                success=success,
+                fallback_used=fallback_used,
+                model_name=model_name,
+                session_id=_coerce_session_id(session_id),
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                cost_usd=cost_usd,
+            )
+            await db.commit()
+    except Exception:  # noqa: BLE001 — best-effort by design
+        logger.warning(
+            "provider_usage record failed: type=%s op=%s",
+            provider_type,
+            operation,
+            exc_info=True,
+        )
