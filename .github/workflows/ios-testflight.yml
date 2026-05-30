@@ -217,14 +217,15 @@ jobs:
       # recently uploaded build, creates the external group on the fly
       # if missing, submits for Beta App Review, and notifies testers.
       # The group name is overridable via TESTFLIGHT_GROUP_NAME below.
-      - name: Distribute to external testers
+      - name: Distribute to internal + external testers
         if: steps.gate.outputs.skip == 'false'
         working-directory: ${{ env.IOS_PROJECT_DIR }}
         env:
-          # Override in the workflow_dispatch UI (or this default) to
-          # change which external group receives the build. The group is
-          # created in App Store Connect if it doesn't already exist.
-          TESTFLIGHT_GROUP_NAME: ${{ vars.TESTFLIGHT_GROUP_NAME || 'Pilot Physicians' }}
+          # Every dispatch hits BOTH groups — internal QA + external
+          # pilot physicians. Override either via repo Variables; set
+          # to an empty string to skip that tier (rare).
+          TESTFLIGHT_INTERNAL_GROUP_NAME: ${{ vars.TESTFLIGHT_INTERNAL_GROUP_NAME || 'Aurion Internal' }}
+          TESTFLIGHT_EXTERNAL_GROUP_NAME: ${{ vars.TESTFLIGHT_EXTERNAL_GROUP_NAME || vars.TESTFLIGHT_GROUP_NAME || 'Pilot Physicians' }}
           # CFBundleVersion is overridden to GITHUB_RUN_NUMBER in the
           # Archive step above; pass the same here so the lane knows
           # exactly which build to wait for + distribute (no ambiguity
@@ -234,5 +235,6 @@ jobs:
         run: |
           # Apple's processing pipeline takes 5-15min after altool reports
           # SUCCESS; the lane polls until processing_state=VALID then
-          # distributes. 25min ceiling.
+          # distributes to internal (no Beta App Review) and external
+          # (with Beta App Review). 25min processing ceiling.
           fastlane distribute_latest
