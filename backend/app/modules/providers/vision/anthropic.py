@@ -14,6 +14,7 @@ import httpx
 
 from app.core.s3 import load_frame_image_base64
 from app.core.types import FrameCaption, MaskedFrame, ProviderError, TranscriptSegment
+from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import VisionProvider
 from app.modules.providers.note_gen.shared import strip_markdown_fences
 from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT, build_frame_caption
@@ -46,8 +47,9 @@ class AnthropicVisionProvider(VisionProvider):
                     },
                     json={
                         "model": _MODEL,
-                        "max_tokens": 500,
-                        "temperature": 0.1,
+                        # AppConfig vision params — admin-tunable at runtime.
+                        "max_tokens": get_config().model_params.vision.max_tokens,
+                        "temperature": get_config().model_params.vision.temperature,
                         "system": VISION_SYSTEM_PROMPT,
                         "messages": [
                             {
