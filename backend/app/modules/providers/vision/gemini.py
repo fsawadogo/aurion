@@ -16,7 +16,11 @@ from app.core.s3 import load_frame_image_base64
 from app.core.types import FrameCaption, MaskedFrame, ProviderError, TranscriptSegment
 from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import VisionProvider
-from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT, build_frame_caption
+from app.modules.providers.vision.shared import (
+    VISION_RESPONSE_SCHEMA,
+    VISION_SYSTEM_PROMPT,
+    build_frame_caption,
+)
 
 logger = logging.getLogger("aurion.providers.vision.gemini")
 
@@ -66,6 +70,9 @@ class GeminiVisionProvider(VisionProvider):
                             "temperature": get_config().model_params.vision.temperature,
                             "maxOutputTokens": get_config().model_params.vision.max_tokens,
                             "responseMimeType": "application/json",
+                            # Schema-enforced output — eliminates malformed
+                            # JSON returns; Gemini validates server-side.
+                            "responseSchema": VISION_RESPONSE_SCHEMA,
                         },
                     },
                 )

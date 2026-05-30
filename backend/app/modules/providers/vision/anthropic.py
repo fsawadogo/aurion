@@ -17,7 +17,11 @@ from app.core.types import FrameCaption, MaskedFrame, ProviderError, TranscriptS
 from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import VisionProvider
 from app.modules.providers.note_gen.shared import strip_markdown_fences
-from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT, build_frame_caption
+from app.modules.providers.vision.shared import (
+    VISION_RESPONSE_SCHEMA,
+    VISION_SYSTEM_PROMPT,
+    build_frame_caption,
+)
 
 logger = logging.getLogger("aurion.providers.vision.anthropic")
 
@@ -73,12 +77,44 @@ class AnthropicVisionProvider(VisionProvider):
                                 ],
                             }
                         ],
+                        # Force the visual description through a schema-
+                        # validated tool call so we can't get malformed
+                        # JSON back. See vision/shared.py for the schema.
+                        "tools": [
+                            {
+                                "name": "emit_frame_caption",
+                                "description": (
+                                    "Emit a literal visual description of "
+                                    "the frame per the descriptive-only "
+                                    "rules in the system prompt."
+                                ),
+                                "input_schema": VISION_RESPONSE_SCHEMA,
+                            }
+                        ],
+                        "tool_choice": {
+                            "type": "tool",
+                            "name": "emit_frame_caption",
+                        },
                     },
                 )
                 response.raise_for_status()
                 data = response.json()
-                text = data["content"][0]["text"]
-                content = json.loads(strip_markdown_fences(text))
+                # Tool-use response: pull the structured input directly.
+                # Fallback to text block if a future API change drops tool_use.
+                content = None
+                for block in data.get("content", []):
+                    if block.get("type") == "tool_use" and block.get("name") == "emit_frame_caption":
+                        content = block["input"]
+                        break
+                if content is None:
+                    # Defensive fallback — accept any text-bearing block
+                    # for resilience to API shape changes.
+                    for block in data.get("content", []):
+                        if "text" in block:
+                            content = json.loads(strip_markdown_fences(block["text"]))
+                            break
+                if content is None:
+                    raise ProviderError("anthropic", "No tool_use or text in vision response")
                 return build_frame_caption(frame, anchor, content, "anthropic")
 
         except httpx.HTTPError as e:
