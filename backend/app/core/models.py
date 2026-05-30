@@ -461,3 +461,33 @@ class AlertModel(Base):
         UUID(as_uuid=True), nullable=True
     )
 
+
+class TemplateOverrideModel(Base):
+    """Admin-managed override for a specialty template (issue #72).
+
+    Layered on top of the disk-bundled JSON templates in
+    ``app/modules/note_gen/templates/``. The CRUD endpoints persist here;
+    runtime integration (in-memory cache + poller mirroring
+    ``provider_overrides``) ships in a follow-up PR.
+
+    One row per template key — upsert in place; delete to revert to the
+    bundled default. The audit log preserves the full edit history.
+    """
+
+    __tablename__ = "template_overrides"
+
+    # Matches Template.key (e.g. "musculoskeletal", "orthopedic_surgery").
+    template_key: Mapped[str] = mapped_column(String(64), primary_key=True)
+    # Full Template JSON as serialised by Template.model_dump().
+    content: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    updated_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
