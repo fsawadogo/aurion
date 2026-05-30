@@ -159,6 +159,16 @@ struct SessionNoteView: View {
     @State private var isLoading = true
     @State private var showCopiedToast = false
     @State private var error: String?
+    // Share / export state. The format picker is a confirmation dialog
+    // (HIG: "Action sheets present 2-4 short, related options"). The
+    // bytes are rendered locally — see `Export/NotePDFRenderer.swift`
+    // and `Export/NoteDocumentBuilder.swift` — and surfaced via the
+    // system share sheet so the physician can save to Files, mail it,
+    // or send via Messages without leaving the note.
+    @State private var showExportPicker = false
+    @State private var exportFileURL: URL?
+    @State private var showShareSheet = false
+    @State private var isPreparingExport = false
     /// Clamps the note's reading column to a comfortable measure on
     /// iPad. Without this the SOAP section paragraphs run edge-to-edge
     /// at ~1000pt — too wide for sustained reading per HIG.
@@ -234,16 +244,35 @@ struct SessionNoteView: View {
                 .accessibilityHint(L("sessionNote.a11yCopyHint"))
 
                 Button {
-                    exportNote()
+                    showExportPicker = true
                 } label: {
-                    Image(systemName: "square.and.arrow.up")
+                    if isPreparingExport {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "square.and.arrow.up")
+                    }
                 }
-                .disabled(note == nil)
+                .disabled(note == nil || isPreparingExport)
                 .accessibilityLabel(L("sessionNote.a11yExport"))
                 .accessibilityHint(L("sessionNote.a11yExportHint"))
             }
         }
         .task { await loadNote() }
+        // Confirmation dialog presents the two formats; the system
+        // adds a localized Cancel via `.cancel` role automatically.
+        .confirmationDialog(
+            L("sessionNote.exportFormatTitle"),
+            isPresented: $showExportPicker,
+            titleVisibility: .visible
+        ) {
+            Button(L("sessionNote.exportPDF")) { exportNote(as: .pdf) }
+            Button(L("sessionNote.exportDOCX")) { exportNote(as: .docx) }
+        }
+        .sheet(isPresented: $showShareSheet) {
+            if let url = exportFileURL {
+                ShareSheet(items: [url])
+            }
+        }
     }
 
     // MARK: - Loading skeleton (document-shaped)
@@ -413,15 +442,102 @@ struct SessionNoteView: View {
         }
     }
 
-    private func exportNote() {
-        guard let note else { return }
-        Task {
-            do {
-                _ = try await APIClient.shared.exportNote(sessionId: note.sessionId)
-                AurionHaptics.notification(.success)
-            } catch {
-                self.error = L("export.failedShort")
+    /// Format options on the toolbar share button. Mirrors the
+    /// subset of `ExportView.ExportFormat` that makes sense as a
+    /// quick "save a copy" affordance on the note review screen —
+    /// plain text isn't presented here because no clinician asks
+    /// for a .txt of a SOAP note from this surface.
+    private enum SharedExportFormat {
+        case pdf, docx
+
+        var fileExtension: String {
+            switch self {
+            case .pdf:  return "pdf"
+            case .docx: return "docx"
             }
         }
+
+        /// Server-side `format` value for the audit POST. Matches the
+        /// strings ExportView sends so the dashboard's by-format
+        /// rollup stays single-source.
+        var auditFormatName: String {
+            switch self {
+            case .pdf:  return "pdf"
+            case .docx: return "docx"
+            }
+        }
+    }
+
+    /// Render the note locally, stage it as a temp file, audit, then
+    /// present the system share sheet. The renderers
+    /// (`NotePDFRenderer` + `NoteDocumentBuilder`) are on-device and
+    /// synchronous — the bytes never leave the simulator/device
+    /// before the share sheet asks where to send them.
+    ///
+    /// Audit is best-effort: a backend hiccup must not stop the user
+    /// from saving a copy locally. Errors at the audit boundary are
+    /// logged and the share sheet still presents.
+    private func exportNote(as format: SharedExportFormat) {
+        guard let note else { return }
+        isPreparingExport = true
+        Task {
+            do {
+                let data: Data
+                switch format {
+                case .pdf:
+                    data = try await MainActor.run {
+                        try NotePDFRenderer.render(
+                            note: note,
+                            specialtyTitle: displaySpecialty,
+                            dateString: displayDate
+                        )
+                    }
+                case .docx:
+                    data = try NoteDocumentBuilder.makeDocx(
+                        note, sessionId: note.sessionId
+                    )
+                }
+
+                let url = try writeToTempFile(
+                    data: data, sessionId: note.sessionId, ext: format.fileExtension
+                )
+
+                // Best-effort audit so the export shows up in the
+                // compliance officer's dashboard (parity with the
+                // ExportView path). A 4xx/5xx here should not block
+                // the share sheet — saving a local copy isn't a
+                // state-altering action.
+                _ = try? await APIClient.shared.recordExportAudit(
+                    sessionId: note.sessionId,
+                    format: format.auditFormatName,
+                    bytesProduced: data.count
+                )
+
+                await MainActor.run {
+                    self.exportFileURL = url
+                    self.showShareSheet = true
+                    self.isPreparingExport = false
+                }
+                AurionHaptics.notification(.success)
+            } catch {
+                await MainActor.run {
+                    self.error = L("export.failedShort")
+                    self.isPreparingExport = false
+                }
+            }
+        }
+    }
+
+    /// Stage the rendered bytes under the system temp dir with the
+    /// right filename + extension so the share sheet labels it
+    /// clearly (Files / Mail / Messages all show the extension).
+    private func writeToTempFile(
+        data: Data, sessionId: String, ext: String
+    ) throws -> URL {
+        let dir = FileManager.default.temporaryDirectory
+        let filename = "aurion_note_\(sessionId).\(ext)"
+        let url = dir.appendingPathComponent(filename)
+        try data.write(to: url, options: [.atomic])
+        return url
     }
 }

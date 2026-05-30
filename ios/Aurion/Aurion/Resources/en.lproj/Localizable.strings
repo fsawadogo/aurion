@@ -518,7 +518,10 @@
 "sessionNote.a11yCopy" = "Copy note";
 "sessionNote.a11yCopyHint" = "Copies the formatted note text to the clipboard.";
 "sessionNote.a11yExport" = "Export note";
-"sessionNote.a11yExportHint" = "Exports the note as a Word document.";
+"sessionNote.a11yExportHint" = "Choose a format and share the note.";
+"sessionNote.exportFormatTitle" = "Export note as";
+"sessionNote.exportPDF" = "PDF";
+"sessionNote.exportDOCX" = "Word document";
 
 /* ── App Lock (security) ──────────────────────────────── */
 "profile.sectionSecurity" = "Security";
