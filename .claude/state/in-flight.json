@@ -1,4 +1,9 @@
 {
-  "backend": {"task_id": null, "branch": null, "pr": null, "started_at": null},
+  "backend": {
+    "task_id": "#43",
+    "branch": "lane-backend/43-user-mgmt-deactivation",
+    "pr": null,
+    "started_at": "2026-05-30T00:30:00Z"
+  },
   "ios": {"task_id": null, "branch": null, "pr": null, "started_at": null}
 }
