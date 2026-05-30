@@ -1,0 +1,93 @@
+{
+  "key": "pediatrics",
+  "display_name": "Pediatrics",
+  "version": "1.0",
+  "sections": [
+    {
+      "id": "chief_complaint",
+      "title": "Chief Complaint",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Presenting concern in the caregiver's (or where applicable, child's) own words"
+    },
+    {
+      "id": "hpi",
+      "title": "History of Present Illness",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Onset, duration, character, severity, associated symptoms, sick contacts, exposure history"
+    },
+    {
+      "id": "developmental_history",
+      "title": "Developmental & Birth History",
+      "required": false,
+      "visual_trigger_keywords": [
+        "milestone",
+        "developmental",
+        "born at",
+        "gestational age",
+        "birth weight",
+        "growth chart"
+      ],
+      "description": "Pregnancy/birth context, developmental milestones, growth trajectory as discussed or shown on a growth chart"
+    },
+    {
+      "id": "immunization_status",
+      "title": "Immunization Status",
+      "required": false,
+      "visual_trigger_keywords": [
+        "immunization",
+        "vaccine",
+        "up to date",
+        "vaccine card",
+        "schedule"
+      ],
+      "description": "Immunization record as reviewed (caregiver report or vaccine card/record displayed) — no inference about appropriateness"
+    },
+    {
+      "id": "vital_signs",
+      "title": "Vital Signs & Growth Parameters",
+      "required": false,
+      "visual_trigger_keywords": [
+        "weight",
+        "height",
+        "head circumference",
+        "temperature",
+        "heart rate",
+        "respiratory rate",
+        "oxygen saturation",
+        "percentile"
+      ],
+      "description": "Vitals and growth percentiles as observed on a monitor or growth chart"
+    },
+    {
+      "id": "physical_exam",
+      "title": "Physical Examination",
+      "required": true,
+      "visual_trigger_keywords": [
+        "auscultation",
+        "palpation",
+        "ears",
+        "throat",
+        "abdomen",
+        "looking at",
+        "checking"
+      ],
+      "description": "Age-appropriate exam findings as directly observed (HEENT, cardiopulmonary, abdomen, neuro, skin)"
+    },
+    {
+      "id": "assessment",
+      "title": "Assessment",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Working diagnosis as explicitly stated by the clinician — no inference"
+    },
+    {
+      "id": "plan",
+      "title": "Plan",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Treatment, caregiver education, follow-up timing, when-to-return-immediately advice as stated"
+    }
+  ]
+}

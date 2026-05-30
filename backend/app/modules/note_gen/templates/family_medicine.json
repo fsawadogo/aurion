@@ -1,0 +1,87 @@
+{
+  "key": "family_medicine",
+  "display_name": "Family Medicine",
+  "version": "1.0",
+  "sections": [
+    {
+      "id": "chief_complaint",
+      "title": "Chief Complaint",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Primary presenting concern in the patient's own words"
+    },
+    {
+      "id": "hpi",
+      "title": "History of Present Illness",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Onset, duration, character, location, severity, associated symptoms, modifying factors"
+    },
+    {
+      "id": "review_of_systems",
+      "title": "Review of Systems",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Patient-reported symptoms across constitutional, cardiopulmonary, GI, GU, neuro, MSK, psych systems"
+    },
+    {
+      "id": "past_medical_history",
+      "title": "Past Medical, Social & Family History",
+      "required": false,
+      "visual_trigger_keywords": [
+        "history of",
+        "diagnosed with",
+        "previously",
+        "family history",
+        "social history",
+        "smoking",
+        "alcohol"
+      ],
+      "description": "Active conditions, prior surgeries, current medications, allergies, social and family context that change the differential"
+    },
+    {
+      "id": "vital_signs",
+      "title": "Vital Signs",
+      "required": false,
+      "visual_trigger_keywords": [
+        "blood pressure",
+        "heart rate",
+        "pulse",
+        "temperature",
+        "respiratory rate",
+        "oxygen saturation",
+        "weight",
+        "BMI"
+      ],
+      "description": "Vitals literally observed on a monitor or read aloud during the visit"
+    },
+    {
+      "id": "physical_exam",
+      "title": "Physical Examination",
+      "required": true,
+      "visual_trigger_keywords": [
+        "auscultation",
+        "palpation",
+        "percussion",
+        "listening",
+        "looking at",
+        "inspecting"
+      ],
+      "description": "General appearance, system-specific findings as observed during the exam"
+    },
+    {
+      "id": "assessment",
+      "title": "Assessment",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Working diagnosis as explicitly stated by the physician — no inference"
+    },
+    {
+      "id": "plan",
+      "title": "Plan",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Investigations, prescriptions, referrals, follow-up timeline, patient education as stated"
+    }
+  ]
+}
