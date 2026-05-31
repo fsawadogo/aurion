@@ -125,7 +125,7 @@ async def submit_transcription(
         segment_count=len(transcript.segments),
     )
 
-    transcript = classify_triggers(transcript)
+    transcript = await classify_triggers(transcript)
 
     # Persist the transcript so the Stage 2 vision pipeline can find
     # trigger-flagged segments after /approve-stage1 fires (which happens in
