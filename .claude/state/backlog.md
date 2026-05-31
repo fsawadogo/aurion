@@ -48,6 +48,15 @@ Last seeded: 2026-05-14. Last updated: 2026-05-30 (seeded 17 backend issues from
 
 ## Done
 
+- [x] LLM Tier 2 F semantic trigger classifier — merged 2026-05-30 (PR #139, commit d334b03); embeddings fallback for paraphrases, opt-in via AURION_SEMANTIC_TRIGGER_ENABLED
+- [x] LLM Tier 2 E few-shot examples per specialty — merged 2026-05-30 (PR #138, commit 2af474f); 3 example files (ortho/peds/plastic), loader + render
+- [x] LLM Tier 2 G specialty-aware style snippets — merged 2026-05-30 (PR #137, commit 009aa5e); 8 specialties covered
+- [x] LLM Tier 1 D self-critique pass — merged 2026-05-30 (PR #136, commit be16ac9); drops unanchored claims + flips bad section statuses
+- [x] LLM Tier 1 C real Stage 2 conflict reconciliation — merged 2026-05-30 (PR #135, commit 132ace3); Anthropic Sonnet compares note vs captions
+- [x] LLM Tier 1 B structured output on Anthropic + Gemini — merged 2026-05-30 (PR #134, commit 1434150); tool_use + responseSchema
+- [x] LLM Tier 1 A AppConfig-driven temperature/max_tokens — merged 2026-05-30 (PR #133, commit 3719704)
+- [x] iOS-CI auto-distribute (Uzziel build-4 saga) — merged 2026-05-30 (PRs #123–#132, final run #135); 9 hotfixes deep
+- [x] iOS share button → PDF/Word picker — merged 2026-05-30 (PR #122, commit ce72152)
 - [x] #43 F1 User Management Backend (+ #44 frontend + web JWT-login switch) — merged 2026-05-30 (PR #109, commit 0b5071b); follow-up #110 for Cognito-side AdminDisableUser hardening
 - [x] WEB-COGNITO-UI web portal Cognito hosted UI shipped 2026-05-28 (PR #28-30) — superseded 2026-05-29 by JWT-login switch in #43's PR; lib/cognito.ts retained for restoration
 - [x] WEB-METRICS-CHARTS pilot metrics time-series (GET /admin/metrics/timeseries + 8-panel dashboard sparklines) — 3d — lane: backend — merged: 2026-05-26 (PR #17, commit 4a77f66)
