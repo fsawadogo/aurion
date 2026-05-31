@@ -472,7 +472,19 @@ platform :ios do
       tester_ids = testers.map(&:id)
       testers.each { |t| UI.message "  · #{t.email}" }
       begin
-        group.delete_beta_testers(beta_tester_ids: tester_ids)
+        # remove_beta_testers is the parallel of add_beta_testers (we use
+        # the latter in add_to_pilot_internal). The earlier `delete_beta_testers`
+        # name doesn't exist on BetaGroup.
+        if group.respond_to?(:remove_beta_testers)
+          group.remove_beta_testers(beta_tester_ids: tester_ids)
+        else
+          # Fallback to the lower-level Connect API call directly. Some
+          # spaceship versions only expose the model-level add_*; the
+          # remove side is reachable via the module function.
+          Spaceship::ConnectAPI.delete_beta_groups_beta_testers(
+            beta_group_id: group.id, beta_tester_ids: tester_ids
+          )
+        end
         UI.success "  ✓ Removed #{tester_count} tester(s)"
       rescue => e
         UI.error "  ✗ Failed to remove testers: #{e.message.to_s.lines.first&.strip}"
