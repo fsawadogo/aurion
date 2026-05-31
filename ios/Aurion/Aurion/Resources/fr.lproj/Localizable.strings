@@ -410,6 +410,13 @@
 "captureMode.smartDictation.title" = "Dict\U00E9e intelligente";
 "captureMode.smartDictation.sub" = "Audio + sous-titres en direct \U2014 axe dict\U00E9e";
 
+/* ── Sous-titres en direct \U2014 indisponibilit\U00E9 ─── */
+"captions.unavailable.permission"  = "Sous-titres en direct \U2014 autorisation Reconnaissance vocale requise dans R\U00E9glages";
+"captions.unavailable.model"       = "Mod\U00E8le vocal hors-ligne non install\U00E9 pour cette langue";
+"captions.unavailable.offline"     = "Sous-titres en direct temporairement indisponibles";
+"captions.unavailable.locale"      = "Sous-titres en direct indisponibles pour cette langue";
+"captions.unavailable.dismissA11y" = "Masquer l\U2019avis sous-titres";
+
 /* ── \U00C9tats de session ─────────────────────────────── */
 "state.exported" = "Export\U00E9e";
 "state.completed" = "Termin\U00E9e";

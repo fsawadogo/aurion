@@ -20,6 +20,11 @@ struct CaptureView: View {
     /// recording" — pocket / patient-not-on-camera scenarios — and the
     /// choice sticks for the next session.
     @AppStorage("aurion.show_camera_preview") private var showCameraPreview = true
+    /// Per-session dismissal of the "captions unavailable" hint. Reset each
+    /// time the view recomposes (i.e. each capture session) so the hint
+    /// resurfaces if the cause persists; per-launch persistence would hide
+    /// a permanently denied permission and never resurface it.
+    @State private var captionsHintDismissed = false
 
     var body: some View {
         ZStack {
@@ -110,16 +115,26 @@ struct CaptureView: View {
                     }
 
                     // Live captions — on-device, runs alongside the canonical
-                    // Whisper batch transcription. Hidden when the device or
-                    // locale lacks an on-device speech model.
+                    // Whisper batch transcription. When the device or locale
+                    // lacks an on-device speech model we show a small
+                    // dismissable hint instead of silently rendering nothing;
+                    // otherwise the feature feels broken when it's just gated
+                    // on a system toggle.
                     if let live = sessionManager.liveTranscriber,
-                       live.isAvailable,
-                       !live.transcript.isEmpty,
                        session.state == .recording || session.state == .paused {
-                        liveCaptionStrip(text: live.transcript)
-                            .padding(.top, 28)
-                            .padding(.horizontal, 24)
-                            .transition(.opacity)
+                        if live.isAvailable, !live.transcript.isEmpty {
+                            liveCaptionStrip(text: live.transcript)
+                                .padding(.top, 28)
+                                .padding(.horizontal, 24)
+                                .transition(.opacity)
+                        } else if !live.isAvailable,
+                                  let reason = live.unavailableReason,
+                                  !captionsHintDismissed {
+                            liveCaptionsUnavailableChip(reason: reason)
+                                .padding(.top, 28)
+                                .padding(.horizontal, 24)
+                                .transition(.opacity)
+                        }
                     }
                 }
 
@@ -439,6 +454,60 @@ struct CaptureView: View {
     }
 
     // MARK: - Live Captions
+
+    /// One-line muted chip explaining why live captions aren't showing
+    /// (permission denied, no on-device speech model for the current locale,
+    /// recognizer temporarily offline). Dismissable per-session so the
+    /// physician acknowledges and recording UI returns to its normal layout.
+    /// Recording itself is never affected — Whisper batch transcription on
+    /// stop is the canonical source of truth.
+    private func liveCaptionsUnavailableChip(reason: UnavailableReason) -> some View {
+        let message = Self.captionsUnavailableMessage(for: reason)
+        return HStack(alignment: .center, spacing: 8) {
+            Image(systemName: "captions.bubble")
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundColor(.white.opacity(0.55))
+            Text(message)
+                .aurionFont(13, weight: .medium, relativeTo: .footnote)
+                .foregroundColor(.white.opacity(0.7))
+                .lineLimit(1)
+                .truncationMode(.tail)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            Button {
+                withAnimation(AurionAnimation.smooth) {
+                    captionsHintDismissed = true
+                }
+            } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 10, weight: .bold))
+                    .foregroundColor(.white.opacity(0.55))
+                    .padding(6)
+                    .contentShape(Rectangle())
+            }
+            .accessibilityLabel(Text(L("captions.unavailable.dismissA11y")))
+        }
+        .padding(.horizontal, 12)
+        .padding(.vertical, 8)
+        .background(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .fill(Color.white.opacity(0.05))
+        )
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(Color.white.opacity(0.12), lineWidth: 1)
+        )
+    }
+
+    /// Map the LiveTranscriber's structured unavailable reason to a localized
+    /// one-liner. Static so it doesn't accidentally close over view state.
+    private static func captionsUnavailableMessage(for reason: UnavailableReason) -> String {
+        switch reason {
+        case .notAuthorized:     return L("captions.unavailable.permission")
+        case .noOnDeviceModel:   return L("captions.unavailable.model")
+        case .recognizerOffline: return L("captions.unavailable.offline")
+        case .localeUnsupported: return L("captions.unavailable.locale")
+        }
+    }
 
     /// Two-line italic gold-tint preview of the on-device speech recognizer's
     /// running transcript. Visually distinct from final SOAP output so the

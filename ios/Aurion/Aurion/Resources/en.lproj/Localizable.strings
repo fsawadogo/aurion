@@ -410,6 +410,13 @@
 "captureMode.smartDictation.title" = "Smart Dictation";
 "captureMode.smartDictation.sub" = "Audio + live captions \U2014 dictation focus";
 
+/* ── Live Caption Unavailable Hints ───────────────────── */
+"captions.unavailable.permission"  = "Live captions need Speech permission \U2014 enable in Settings";
+"captions.unavailable.model"       = "On-device speech model not installed for this language";
+"captions.unavailable.offline"     = "Live captions temporarily unavailable";
+"captions.unavailable.locale"      = "Live captions unavailable for this language";
+"captions.unavailable.dismissA11y" = "Dismiss live captions notice";
+
 /* ── Session State Labels ─────────────────────────────── */
 "state.exported" = "Exported";
 "state.completed" = "Completed";
