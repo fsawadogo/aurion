@@ -302,8 +302,15 @@ platform :ios do
   # -------------------------------------------------------------------------
   desc "List beta groups + tester memberships"
   lane :list_groups do
-    api_key = asc_api_key
-    Spaceship::ConnectAPI.login(use_portal: false, use_tunes: true, api_token: api_key)
+    asc_api_key   # build the api key object (also sets up env defaults)
+    # ConnectAPI.login(api_token:) was removed in newer spaceship —
+    # token must be set directly. Same pattern distribute_latest uses.
+    Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
+      key_id:    ENV["APP_STORE_CONNECT_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key:       Base64.decode64(ENV["APP_STORE_CONNECT_KEY_P8"]),
+      duration:  1200,
+    )
     app = Spaceship::ConnectAPI::App.find("com.aurionclinical.physician")
     UI.user_error! "App not found" unless app
     UI.success "App: #{app.name} (id=#{app.id})"
