@@ -1,0 +1,42 @@
+name: iOS — ASC diagnostic
+
+# Manual-only. Runs the `fastlane list_groups` lane (defined in
+# ios/Aurion/fastlane/Fastfile) so we can see TestFlight beta-group
+# membership without poking the App Store Connect dashboard. Useful
+# when planning who to invite as internal testers, debugging "X tester
+# doesn't see the build", etc. Read-only; no uploads, no distribution.
+# No untrusted input flows into any `run:` block — only secrets +
+# constant strings, which is safe.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  diagnostic:
+    runs-on: macos-26
+    env:
+      APP_STORE_CONNECT_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_P8:    ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if Apple Dev account not yet wired
+        id: gate
+        run: |
+          if [ -z "$APP_STORE_CONNECT_KEY_ID" ] || \
+             [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] || \
+             [ -z "$APP_STORE_CONNECT_KEY_P8" ]; then
+            echo "::notice::App Store Connect secrets not set — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: List beta groups + tester memberships
+        if: steps.gate.outputs.skip == 'false'
+        working-directory: ios/Aurion
+        run: fastlane list_groups
