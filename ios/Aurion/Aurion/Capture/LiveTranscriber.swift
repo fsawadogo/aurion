@@ -11,6 +11,25 @@ private struct SampleBufferEnvelope: @unchecked Sendable {
     let buffer: CMSampleBuffer
 }
 
+/// Why live captions aren't running, when they aren't. The capture screen
+/// maps each case to a localized one-liner so the physician sees a concrete
+/// reason ("permission needed", "model not downloaded for fr_FR") instead of
+/// the strip just silently failing to appear.
+enum UnavailableReason: Equatable {
+    /// `SFSpeechRecognizer.requestAuthorization` returned anything other
+    /// than `.authorized` (denied, restricted, notDetermined).
+    case notAuthorized(SFSpeechRecognizerAuthorizationStatus)
+    /// Recognizer exists but `supportsOnDeviceRecognition` is false. Apple's
+    /// on-device model for this locale isn't downloaded / isn't supported.
+    case noOnDeviceModel
+    /// Recognizer + on-device model exist but `recognizer.isAvailable` is
+    /// false right now (often a transient network or system-load condition).
+    case recognizerOffline
+    /// `SFSpeechRecognizer(locale:)` returned nil — locale is entirely
+    /// unsupported by Apple's Speech framework.
+    case localeUnsupported
+}
+
 /// On-device live captioning during a recording session.
 ///
 /// Fed by a parallel tap on `CaptureManager`'s audio delegate, this passes
@@ -41,8 +60,11 @@ final class LiveTranscriber: ObservableObject {
 
     // MARK: - Published
 
-    /// Best-guess running transcript of the current encounter.
-    /// Reset to "" on each `start()` and on `stop()`.
+    /// Best-guess running transcript of the current encounter, accumulated
+    /// across however many `SFSpeechAudioBufferRecognitionRequest`s the
+    /// session needed. Reset to "" on `stop()` only — `start()` preserves
+    /// prior text so the ~1-minute auto-restart at `isFinal` doesn't blank
+    /// the caption strip mid-encounter.
     @Published private(set) var transcript: String = ""
 
     /// Whether the live caption strip should be shown. False when:
@@ -52,9 +74,16 @@ final class LiveTranscriber: ObservableObject {
     /// continues regardless.
     @Published private(set) var isAvailable: Bool = false
 
-    /// Last user-facing error, if any. Surfaced for debug logging only — the
-    /// capture screen does not currently show it (failures are silent so
-    /// recording is never interrupted).
+    /// Structured reason captions aren't available. `nil` when isAvailable
+    /// is true or when prepare() hasn't run yet. The capture screen uses
+    /// this to show a small one-line hint ("Captions need Speech permission",
+    /// etc.) instead of silently rendering nothing — silence makes the
+    /// feature feel broken when it's just gated on a system toggle.
+    @Published private(set) var unavailableReason: UnavailableReason?
+
+    /// Last user-facing error, if any. Kept around for debug logging; the
+    /// capture screen reads `unavailableReason` (above) rather than this raw
+    /// string so it can localize.
     @Published private(set) var error: String?
 
     // MARK: - Internals
@@ -74,6 +103,13 @@ final class LiveTranscriber: ObservableObject {
     /// request when SFSpeechRecognizer hits its 1-minute cap mid-recording.
     private var isRunning = false
 
+    /// Text from previously-finalized recognition requests. When the recognizer
+    /// hits its ~1-minute cap and reports `isFinal`, we move the current
+    /// request's text into this prefix and start a fresh request. The displayed
+    /// `transcript` is rendered as `finalizedPrefix` + currentRequestText so
+    /// the caption strip continues unbroken across the seam. Reset on stop().
+    private var finalizedPrefix: String = ""
+
     // MARK: - Lifecycle
 
     /// Prepare the recognizer for the given language code (e.g. "en", "fr").
@@ -88,8 +124,7 @@ final class LiveTranscriber: ObservableObject {
 
         // SFSpeechRecognizer is nil if the locale is entirely unsupported.
         guard let r else {
-            isAvailable = false
-            error = "Live captions not available for \(locale.identifier)."
+            markUnavailable(.localeUnsupported, "Live captions not available for \(locale.identifier).")
             return
         }
 
@@ -97,26 +132,30 @@ final class LiveTranscriber: ObservableObject {
         // the device/locale lacks a downloaded on-device model we surface
         // unavailable rather than fall back to Apple's cloud.
         guard r.supportsOnDeviceRecognition else {
-            isAvailable = false
-            error = "On-device speech model unavailable for \(locale.identifier)."
+            markUnavailable(.noOnDeviceModel, "On-device speech model unavailable for \(locale.identifier).")
             return
         }
 
         let auth = await Self.requestAuthorization()
         guard auth == .authorized else {
-            isAvailable = false
-            error = "Speech recognition permission \(auth)."
+            markUnavailable(.notAuthorized(auth), "Speech recognition permission \(auth).")
             return
         }
 
         guard r.isAvailable else {
-            isAvailable = false
-            error = "Speech recognizer not available right now."
+            markUnavailable(.recognizerOffline, "Speech recognizer not available right now.")
             return
         }
 
         isAvailable = true
+        unavailableReason = nil
         error = nil
+    }
+
+    private func markUnavailable(_ reason: UnavailableReason, _ message: String) {
+        isAvailable = false
+        unavailableReason = reason
+        error = message
     }
 
     /// Begin a live recognition request. Safe to call repeatedly — if
@@ -140,12 +179,27 @@ final class LiveTranscriber: ObservableObject {
             guard let self else { return }
             Task { @MainActor [weak self] in
                 guard let self else { return }
+                // Late callbacks after pause() / stop() must not mutate state —
+                // both lifecycle calls clear isRunning before tearing down,
+                // and pause() seals `finalizedPrefix = transcript`; a late
+                // callback here would otherwise re-compose against the freshly
+                // sealed prefix and double-paste the in-flight text.
+                guard self.isRunning else { return }
                 if let result {
-                    self.transcript = result.bestTranscription.formattedString
+                    // bestTranscription.formattedString is the cumulative text
+                    // for THIS request only — not the whole encounter. The
+                    // displayed transcript is finalizedPrefix (sealed text from
+                    // earlier requests) + the current request's running text.
+                    let current = result.bestTranscription.formattedString
+                    self.transcript = Self.compose(prefix: self.finalizedPrefix, current: current)
                     if result.isFinal {
                         // Apple finalized this segment — either silence
-                        // detected or the ~1-minute cap hit. Restart so
-                        // captions continue without a frozen line.
+                        // detected or the ~1-minute cap hit. Bake this
+                        // request's text into the prefix BEFORE restarting,
+                        // so the next request's first partial result doesn't
+                        // overwrite the accumulated history with just its
+                        // first few words.
+                        self.finalizedPrefix = self.transcript
                         self.handleFinalSegment()
                     }
                 } else if taskError != nil {
@@ -196,14 +250,34 @@ final class LiveTranscriber: ObservableObject {
         request.append(pcmBuffer)
     }
 
-    /// Stop the current recognition task and discard interim text. Called
-    /// on session pause and on session stop. Resets `transcript` so the
-    /// caption strip clears between sessions.
+    /// Stop the current recognition task and clear all accumulated text.
+    /// Called when the session ends — between sessions the caption strip
+    /// must start blank. For mid-session pause use `pause()` instead.
     func stop() {
         isRunning = false
         request?.endAudio()
         cancelCurrentTask()
         transcript = ""
+        finalizedPrefix = ""
+        inputFormat = nil
+    }
+
+    /// Pause caption capture *without* clearing the accumulated transcript.
+    /// The current request is closed and any in-flight text is baked into
+    /// the prefix, so a later `start()` continues from where we left off
+    /// rather than blanking the strip. This matches the plan's "old text
+    /// remains visible (frozen) during pause" behavior.
+    func pause() {
+        guard isRunning else { return }
+        isRunning = false
+        // Seal anything the current request has produced so far into the
+        // prefix — the in-flight `result.bestTranscription.formattedString`
+        // would otherwise be lost when we cancel the task. `transcript`
+        // already reads as `finalizedPrefix + currentRequestText` so a
+        // single assignment captures the full visible history.
+        finalizedPrefix = transcript
+        request?.endAudio()
+        cancelCurrentTask()
         inputFormat = nil
     }
 
@@ -228,6 +302,16 @@ final class LiveTranscriber: ObservableObject {
     }
 
     // MARK: - Static helpers
+
+    /// Join two transcript fragments with a single space, skipping the join
+    /// when either side is empty. Avoids double-spaces / leading-space artifacts
+    /// when stitching successive recognition requests together.
+    private static func compose(prefix: String, current: String) -> String {
+        if prefix.isEmpty { return current }
+        if current.isEmpty { return prefix }
+        let needsSpace = !prefix.hasSuffix(" ") && !current.hasPrefix(" ")
+        return needsSpace ? prefix + " " + current : prefix + current
+    }
 
     /// Map our 2-letter language codes to Apple-locale identifiers.
     /// Falls back to en_US for anything we don't recognize.

@@ -298,7 +298,10 @@ final class SessionManager: ObservableObject {
         // currently lost — M-12 (audited purge lifecycle) will decide
         // whether to preserve them across pauses.
         stopScreenCaptureIfRunning()
-        liveTranscriber?.stop()
+        // pause() (not stop()) so the accumulated caption text survives the
+        // pause/resume cycle and stays frozen on screen until recording
+        // continues. stop() is reserved for end-of-session teardown.
+        liveTranscriber?.pause()
         session?.pause()
         Task {
             guard let session else { return }
