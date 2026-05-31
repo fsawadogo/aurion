@@ -18,7 +18,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1._helpers import get_session_or_404, require_state, write_audit
+from app.api.v1._helpers import get_owned_session_or_404, require_state, write_audit
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import TranscriptModel
@@ -198,6 +198,6 @@ async def process_vision_frames(
     db: AsyncSession = Depends(get_db),
 ):
     """Process masked frames for a session through the vision pipeline."""
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
     require_state(session, SessionState.PROCESSING_STAGE2)
     return await run_stage2_vision(session_id, db)

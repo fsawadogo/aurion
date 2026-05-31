@@ -14,7 +14,7 @@ import httpx
 
 from app.core.types import Note, ProviderError, Template, Transcript
 from app.modules.config.appconfig_client import get_config
-from app.modules.providers.base import NoteGenerationProvider
+from app.modules.providers.base import ChatMessage, NoteGenerationProvider
 from app.modules.providers.note_gen.shared import (
     NOTE_GEN_SYSTEM_PROMPT,
     NOTE_RESPONSE_SCHEMA,
@@ -81,3 +81,50 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
         except (json.JSONDecodeError, KeyError, IndexError) as e:
             logger.error("Gemini response parse failed: session=%s error=%s", transcript.session_id, str(e))
             raise ProviderError("gemini", f"Response parse failed: {e}", e)
+
+    async def generate_text(
+        self, system: str, messages: list[ChatMessage]
+    ) -> str:
+        """Structural-chat completion against Gemini.
+
+        Used by the conversational template authoring service. Gemini's
+        REST API uses `systemInstruction` for the system prompt and
+        `contents` for the alternating turns. We map `assistant` → `model`
+        because that's Gemini's convention.
+        """
+        if not _GOOGLE_AI_API_KEY:
+            raise ProviderError("gemini", "GOOGLE_AI_API_KEY not configured")
+        if not messages:
+            raise ProviderError("gemini", "generate_text requires at least one message")
+
+        params = get_config().model_params.note_generation
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{_MODEL}:generateContent",
+                    params={"key": _GOOGLE_AI_API_KEY},
+                    json={
+                        "systemInstruction": {"parts": [{"text": system}]},
+                        "contents": [
+                            {
+                                "role": "user" if m.role == "user" else "model",
+                                "parts": [{"text": m.content}],
+                            }
+                            for m in messages
+                        ],
+                        "generationConfig": {
+                            "temperature": params.temperature,
+                            "maxOutputTokens": params.max_tokens,
+                        },
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["candidates"][0]["content"]["parts"][0]["text"]
+
+        except httpx.HTTPError as e:
+            logger.error("Gemini generate_text failed: error=%s", str(e))
+            raise ProviderError("gemini", f"generate_text failed: {e}", e)
+        except (KeyError, IndexError) as e:
+            logger.error("Gemini generate_text parse failed: error=%s", str(e))
+            raise ProviderError("gemini", f"generate_text parse failed: {e}", e)

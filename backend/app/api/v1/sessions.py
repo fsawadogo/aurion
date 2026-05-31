@@ -12,7 +12,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1._helpers import get_session_or_404, require_state, write_audit
+from app.api.v1._helpers import (
+    get_owned_session_or_404,
+    require_state,
+    write_audit,
+)
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.types import SessionState
@@ -106,7 +110,7 @@ async def confirm_consent_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
     await confirm_consent(db, session)
     await write_audit(
         session.id,
@@ -122,7 +126,7 @@ async def start_recording_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
     return await _do_transition(db, session, SessionState.RECORDING)
 
 
@@ -132,7 +136,7 @@ async def pause_session_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
     return await _do_transition(db, session, SessionState.PAUSED)
 
 
@@ -142,7 +146,7 @@ async def resume_session_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
     return await _do_transition(db, session, SessionState.RECORDING)
 
 
@@ -152,7 +156,7 @@ async def stop_recording_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
     return await _do_transition(db, session, SessionState.PROCESSING_STAGE1)
 
 
@@ -172,7 +176,7 @@ async def update_session_template(
     Only valid when the session is in PROCESSING_STAGE1 state (audio submitted
     but note not yet generated).
     """
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
     require_state(session, SessionState.PROCESSING_STAGE1)
     session.specialty = body.specialty
     await db.flush()
@@ -187,7 +191,7 @@ async def get_session_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
     return _to_response(session)
 
 
@@ -218,9 +222,9 @@ async def discard_session_route(
     ``session_discarded`` event is written instead, after the delete is
     durably committed, so the record of the deletion survives.
     """
-    session = await get_session_or_404(db, session_id)
-    if session.clinician_id != user.user_id:
-        raise HTTPException(status_code=404, detail="Session not found")
+    # get_owned_session_or_404 already enforces ownership (clinician must
+    # match; 404 leaks nothing about other clinicians' sessions).
+    session = await get_owned_session_or_404(db, session_id, user)
     prior_state = (
         session.state.value
         if isinstance(session.state, SessionState)

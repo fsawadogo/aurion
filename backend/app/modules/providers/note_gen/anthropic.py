@@ -14,7 +14,7 @@ import httpx
 
 from app.core.types import Note, ProviderError, Template, Transcript
 from app.modules.config.appconfig_client import get_config
-from app.modules.providers.base import NoteGenerationProvider
+from app.modules.providers.base import ChatMessage, NoteGenerationProvider
 from app.modules.providers.note_gen.shared import (
     NOTE_GEN_SYSTEM_PROMPT,
     NOTE_RESPONSE_SCHEMA,
@@ -115,3 +115,50 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
         except (json.JSONDecodeError, KeyError, IndexError) as e:
             logger.error("Anthropic response parse failed: session=%s error=%s", transcript.session_id, str(e))
             raise ProviderError("anthropic", f"Response parse failed: {e}", e)
+
+    async def generate_text(
+        self, system: str, messages: list[ChatMessage]
+    ) -> str:
+        """Structural-chat completion against Claude.
+
+        Used by the conversational template authoring service. No tools,
+        no JSON schema — the model returns plain assistant text. Any
+        JSON the service needs is emitted by the model inside fenced
+        code blocks per the system prompt, and parsed by the service.
+        """
+        if not _ANTHROPIC_API_KEY:
+            raise ProviderError("anthropic", "ANTHROPIC_API_KEY not configured")
+        if not messages:
+            raise ProviderError("anthropic", "generate_text requires at least one message")
+
+        params = get_config().model_params.note_generation
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    "https://api.anthropic.com/v1/messages",
+                    headers={
+                        "x-api-key": _ANTHROPIC_API_KEY,
+                        "anthropic-version": "2023-06-01",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": _MODEL,
+                        "max_tokens": params.max_tokens,
+                        "temperature": params.temperature,
+                        "system": system,
+                        "messages": [
+                            {"role": m.role, "content": m.content} for m in messages
+                        ],
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+
+            for block in data.get("content", []):
+                if block.get("type") == "text" and "text" in block:
+                    return block["text"]
+            raise ProviderError("anthropic", "No text block in response")
+
+        except httpx.HTTPError as e:
+            logger.error("Anthropic generate_text failed: error=%s", str(e))
+            raise ProviderError("anthropic", f"generate_text failed: {e}", e)

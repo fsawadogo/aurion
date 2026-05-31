@@ -20,7 +20,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1._helpers import get_session_or_404, require_state, write_audit
+from app.api.v1._helpers import get_owned_session_or_404, require_state, write_audit
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import PilotMetricsModel, TranscriptModel
@@ -106,7 +106,7 @@ async def submit_transcription(
 
     Pipeline: S3 upload → transcription → trigger classification → PHI audit.
     """
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
     require_state(session, SessionState.PROCESSING_STAGE1)
 
     # M-06: end-to-end Stage 1 latency. Measured from request-entry rather

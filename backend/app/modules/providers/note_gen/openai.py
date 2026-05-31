@@ -14,7 +14,7 @@ import httpx
 
 from app.core.types import Note, ProviderError, Template, Transcript
 from app.modules.config.appconfig_client import get_config
-from app.modules.providers.base import NoteGenerationProvider
+from app.modules.providers.base import ChatMessage, NoteGenerationProvider
 from app.modules.providers.note_gen.shared import (
     NOTE_GEN_SYSTEM_PROMPT,
     build_user_prompt,
@@ -77,3 +77,51 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
         except (json.JSONDecodeError, KeyError, IndexError) as e:
             logger.error("OpenAI response parse failed: session=%s error=%s", transcript.session_id, str(e))
             raise ProviderError("openai", f"Response parse failed: {e}", e)
+
+    async def generate_text(
+        self, system: str, messages: list[ChatMessage]
+    ) -> str:
+        """Structural-chat completion against GPT-4o.
+
+        Used by the conversational template authoring service. The
+        system prompt becomes a `system` message; user/assistant turns
+        follow in order. No response_format constraint — JSON drafts
+        are emitted inline in fenced code blocks per the system prompt.
+        """
+        if not _OPENAI_API_KEY:
+            raise ProviderError("openai", "OPENAI_API_KEY not configured")
+        if not messages:
+            raise ProviderError("openai", "generate_text requires at least one message")
+
+        params = get_config().model_params.note_generation
+        try:
+            async with httpx.AsyncClient(timeout=60.0) as client:
+                response = await client.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {_OPENAI_API_KEY}",
+                        "Content-Type": "application/json",
+                    },
+                    json={
+                        "model": _MODEL,
+                        "max_tokens": params.max_tokens,
+                        "temperature": params.temperature,
+                        "messages": [
+                            {"role": "system", "content": system},
+                            *[
+                                {"role": m.role, "content": m.content}
+                                for m in messages
+                            ],
+                        ],
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
+                return data["choices"][0]["message"]["content"]
+
+        except httpx.HTTPError as e:
+            logger.error("OpenAI generate_text failed: error=%s", str(e))
+            raise ProviderError("openai", f"generate_text failed: {e}", e)
+        except (KeyError, IndexError) as e:
+            logger.error("OpenAI generate_text parse failed: error=%s", str(e))
+            raise ProviderError("openai", f"generate_text parse failed: {e}", e)
