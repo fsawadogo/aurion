@@ -125,6 +125,8 @@
 
 /* ── Traitement ───────────────────────────────────────── */
 "processing.title" = "Traitement de la session";
+"processing.generatingNote" = "G\U00E9n\U00E9ration de la note\U2026";
+"processing.a11yProgress" = "Traitement \U00E0 %@ pour cent";
 
 /* ── Connexion ────────────────────────────────────────── */
 "login.appName" = "Aurion";

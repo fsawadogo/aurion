@@ -158,7 +158,26 @@ struct ProcessingView: View {
         VStack(spacing: 24) {
             Spacer()
 
-            CircularProgressRing(progress: 0.7, color: .aurionGold, lineWidth: 6, size: 80)
+            ZStack {
+                CircularProgressRing(
+                    progress: sessionManager.processingProgress,
+                    color: .aurionGold,
+                    lineWidth: 6,
+                    size: 80
+                )
+                // Percentage centered inside the ring — visible
+                // confirmation the app is making progress, not
+                // frozen. Time-based estimate (backend doesn't
+                // emit per-step events today).
+                Text("\(Int(sessionManager.processingProgress * 100))%")
+                    .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                    .foregroundColor(.aurionTextPrimary)
+                    .monospacedDigit()
+                    .accessibilityLabel(
+                        Text(L("processing.a11yProgress",
+                               "\(Int(sessionManager.processingProgress * 100))"))
+                    )
+            }
 
             Text(L("processing.title"))
                 .aurionHeadline()

@@ -64,8 +64,43 @@ enum NotePDFRenderer {
         let printableHeight = pageSize.height - pageMargin * 2
         let pdfData = NSMutableData()
         UIGraphicsBeginPDFContextToData(pdfData, .init(origin: .zero, size: pageSize), nil)
-        defer { UIGraphicsEndPDFContext() }
+        // CRITICAL: UIGraphicsEndPDFContext writes the PDF trailer +
+        // xref table. Until it runs, `pdfData` holds only the PDF
+        // header (~53 bytes). A naïve `defer { End() }` would run
+        // AFTER the `return pdfData as Data` expression is evaluated,
+        // and the `as Data` conversion COPIES the bytes — so the
+        // returned Data captures the pre-trailer header-only snapshot
+        // and downstream readers (Adobe, Preview, etc.) reject the
+        // file as corrupt. End() must run BEFORE the return.
+        // We still need the error-path guarantee that End() is called
+        // on any throw — wrap the drawing loop in do/catch.
+        do {
+            try _drawPaginatedSlices(
+                cgImage: cgImage,
+                renderedWidth: renderedWidth,
+                renderedHeight: renderedHeight,
+                printableHeight: printableHeight,
+                renderer: renderer
+            )
+        } catch {
+            UIGraphicsEndPDFContext()
+            throw error
+        }
+        UIGraphicsEndPDFContext()
+        return pdfData as Data
+    }
 
+    /// Pagination loop extracted so `render()` can wrap it in a
+    /// do/catch around the PDF context lifecycle. Assumes a PDF
+    /// context is already open via `UIGraphicsBeginPDFContextToData`.
+    @MainActor
+    private static func _drawPaginatedSlices(
+        cgImage: CGImage,
+        renderedWidth: CGFloat,
+        renderedHeight: CGFloat,
+        printableHeight: CGFloat,
+        renderer: ImageRenderer<some View>
+    ) throws {
         var yOffsetInRendered: CGFloat = 0
         while yOffsetInRendered < renderedHeight {
             UIGraphicsBeginPDFPage()
@@ -109,8 +144,6 @@ enum NotePDFRenderer {
 
             yOffsetInRendered += sliceHeight
         }
-
-        return pdfData as Data
     }
 }
 

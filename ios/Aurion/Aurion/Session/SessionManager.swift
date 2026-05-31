@@ -78,8 +78,17 @@ struct FailedMaskingFrame: Identifiable {
 final class SessionManager: ObservableObject {
     @Published var session: CaptureSession?
     @Published var note: NoteResponse?
-    @Published private(set) var uiState: SessionUIState = .idle
+    @Published private(set) var uiState: SessionUIState = .idle {
+        didSet { handleProcessingProgress(from: oldValue, to: uiState) }
+    }
     @Published var processingStatus = ""
+    /// 0.0–1.0 estimated progress for the processing screen. Animated
+    /// 0 → 0.95 over the Stage 1 SLA window (~25s) the moment uiState
+    /// becomes ``.processing``; held at 0.95 if the backend runs longer;
+    /// reset to 0.0 outside of processing. Time-based estimate, not
+    /// true progress — the backend doesn't emit per-step events today.
+    @Published var processingProgress: Double = 0.0
+    private var processingProgressTask: Task<Void, Never>?
     @Published var error: String?
     @Published var stage1Status: Stage1Status = .idle
     /// Wall-clock when the capture pipeline last began streaming. Used by
@@ -684,7 +693,7 @@ final class SessionManager: ObservableObject {
             request.httpBody = builder.finish()
 
             stage1Status = .generating
-            processingStatus = "Generating note…"
+            processingStatus = L("processing.generatingNote")
             let (data, response) = try await session.data(for: request)
 
             guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
@@ -1040,4 +1049,51 @@ final class SessionManager: ObservableObject {
         )
     }
     #endif
+
+    // MARK: - Processing progress estimator
+
+    /// uiState didSet hook — starts a smooth 0 → 0.95 animation over
+    /// the Stage 1 SLA window when we enter ``.processing``, tears it
+    /// down when we leave. The percentage is an estimate (the backend
+    /// doesn't emit per-step events today), but it visibly moves so
+    /// the physician knows the app is working instead of frozen.
+    private func handleProcessingProgress(
+        from oldState: SessionUIState, to newState: SessionUIState
+    ) {
+        if newState == .processing && oldState != .processing {
+            startProcessingProgressAnimation()
+        } else if newState != .processing && oldState == .processing {
+            processingProgressTask?.cancel()
+            processingProgressTask = nil
+            processingProgress = 0.0
+        }
+    }
+
+    private func startProcessingProgressAnimation() {
+        processingProgressTask?.cancel()
+        processingProgress = 0.0
+        processingProgressTask = Task { [weak self] in
+            // Stage 1 SLA is < 30s (CLAUDE.md). Climb 0 → 0.95 over
+            // 25s in small steps so the ring moves continuously; the
+            // last 5% (.95 → 1.0) is reserved for "actually done".
+            // If the backend runs LONGER than 25s we hold at 0.95
+            // rather than overshoot; the uiState transition off
+            // .processing will then reset.
+            let totalSteps = 50
+            let stepSeconds: Double = 0.5
+            for step in 1...totalSteps {
+                try? await Task.sleep(
+                    nanoseconds: UInt64(stepSeconds * 1_000_000_000)
+                )
+                if Task.isCancelled { return }
+                let target = min(0.95, Double(step) / Double(totalSteps) * 0.95)
+                await MainActor.run { [weak self] in
+                    guard let self else { return }
+                    withAnimation(.easeOut(duration: stepSeconds)) {
+                        self.processingProgress = target
+                    }
+                }
+            }
+        }
+    }
 }
