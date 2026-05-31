@@ -24,6 +24,7 @@ from app.core.types import Note, NoteClaim, Template, Transcript
 from app.modules.config.provider_registry import get_registry
 from app.modules.note_gen import repository as note_repo
 from app.modules.note_gen.critique import critique_note
+from app.modules.note_gen.few_shot import get_few_shot_examples, render_examples_block
 from app.modules.note_gen.specialty_style import get_specialty_style
 from app.modules.providers.usage_service import get_provider_usage_service
 
@@ -71,6 +72,11 @@ def load_templates() -> dict[str, Template]:
         return _templates_cache
 
     for template_file in sorted(_TEMPLATES_DIR.glob("*.json")):
+        # Skip few-shot example files (templates/{key}.examples.json) —
+        # they live in the same directory but parse as examples, not
+        # as Templates. See few_shot.py.
+        if template_file.name.endswith(".examples.json"):
+            continue
         try:
             raw = json.loads(template_file.read_text(encoding="utf-8"))
             template = Template(**raw)
@@ -239,12 +245,19 @@ def build_stage1_user_prompt(
         if style_snippet else ""
     )
 
+    # Few-shot examples (Tier 2 / E). One good worked example beats
+    # three more rule sentences. Examples live at
+    # templates/{key}.examples.json — empty for specialties without
+    # examples authored yet (degrades to no examples block).
+    few_shot_block = render_examples_block(get_few_shot_examples(template.key))
+
     prompt = (
         f"Specialty: {template.display_name}\n\n"
         f"{style_block}"
         f"{language_block}"
         f"{participants_block}"
         f"{context_block}"
+        f"{few_shot_block}"
         f"TRANSCRIPT:\n{transcript_text}\n\n"
         f"TEMPLATE SECTIONS:\n{json.dumps(sections_spec, indent=2)}\n\n"
         "Generate a structured clinical note from this transcript. "

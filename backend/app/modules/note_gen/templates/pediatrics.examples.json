@@ -1,0 +1,96 @@
+{
+  "examples": [
+    {
+      "description": "toddler well-child check, immunization status discussed",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 5000,
+         "text": "What brings you in today?"},
+        {"id": "seg_002", "start_ms": 5000, "end_ms": 16000,
+         "text": "Just the 18-month check-up. He's doing well, walking everywhere, says about ten words."},
+        {"id": "seg_003", "start_ms": 16000, "end_ms": 24000,
+         "text": "Any concerns with eating or sleeping? He eats well, sleeps through the night."},
+        {"id": "seg_004", "start_ms": 24000, "end_ms": 34000,
+         "text": "Weight is at the 50th percentile, height 60th. Up to date on vaccines including MMR."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_001",
+                "text": "18-month well-child check.",
+                "source_type": "transcript",
+                "source_id": "seg_002",
+                "source_quote": "Just the 18-month check-up."
+              }
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_002",
+                "text": "Caregiver reports child is walking everywhere and saying about ten words.",
+                "source_type": "transcript",
+                "source_id": "seg_002",
+                "source_quote": "walking everywhere, says about ten words"
+              },
+              {
+                "id": "claim_003",
+                "text": "Caregiver reports child eats well and sleeps through the night.",
+                "source_type": "transcript",
+                "source_id": "seg_003",
+                "source_quote": "He eats well, sleeps through the night."
+              }
+            ]
+          },
+          {
+            "id": "developmental_history",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_004",
+                "text": "Caregiver reports the child is walking and using approximately ten words at 18 months.",
+                "source_type": "transcript",
+                "source_id": "seg_002",
+                "source_quote": "walking everywhere, says about ten words"
+              }
+            ]
+          },
+          {
+            "id": "immunization_status",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_005",
+                "text": "Physician noted child is up to date on vaccines including MMR.",
+                "source_type": "transcript",
+                "source_id": "seg_004",
+                "source_quote": "Up to date on vaccines including MMR."
+              }
+            ]
+          },
+          {
+            "id": "vital_signs",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_006",
+                "text": "Physician noted weight at the 50th percentile and height at the 60th percentile.",
+                "source_type": "transcript",
+                "source_id": "seg_004",
+                "source_quote": "Weight is at the 50th percentile, height 60th."
+              }
+            ]
+          },
+          {"id": "physical_exam", "status": "not_captured", "claims": []},
+          {"id": "assessment", "status": "not_captured", "claims": []},
+          {"id": "plan", "status": "not_captured", "claims": []}
+        ]
+      }
+    }
+  ]
+}

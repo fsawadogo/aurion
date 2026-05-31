@@ -1,0 +1,77 @@
+{
+  "examples": [
+    {
+      "description": "post-op wound check, lower leg flap follow-up",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 6000,
+         "text": "How's the leg feeling today, three weeks out from surgery?"},
+        {"id": "seg_002", "start_ms": 6000, "end_ms": 14000,
+         "text": "Sore but tolerable. I'm taking only Tylenol."},
+        {"id": "seg_003", "start_ms": 14000, "end_ms": 28000,
+         "text": "Wound measures 6 by 3 centimetres. Edges are well approximated. No drainage. Granulation tissue visible centrally."},
+        {"id": "seg_004", "start_ms": 28000, "end_ms": 38000,
+         "text": "Flap colour matches the surrounding tissue. Capillary refill brisk at under 2 seconds."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_001",
+                "text": "Three-week post-operative wound check, lower leg.",
+                "source_type": "transcript",
+                "source_id": "seg_001",
+                "source_quote": "three weeks out from surgery"
+              }
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_002",
+                "text": "Patient reports soreness, tolerable, controlled with Tylenol only.",
+                "source_type": "transcript",
+                "source_id": "seg_002",
+                "source_quote": "Sore but tolerable. I'm taking only Tylenol."
+              }
+            ]
+          },
+          {
+            "id": "wound_assessment",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_003",
+                "text": "Physician noted wound dimensions 6 × 3 cm with well-approximated edges and no drainage.",
+                "source_type": "transcript",
+                "source_id": "seg_003",
+                "source_quote": "Wound measures 6 by 3 centimetres. Edges are well approximated. No drainage."
+              },
+              {
+                "id": "claim_004",
+                "text": "Physician noted granulation tissue visible centrally.",
+                "source_type": "transcript",
+                "source_id": "seg_003",
+                "source_quote": "Granulation tissue visible centrally."
+              },
+              {
+                "id": "claim_005",
+                "text": "Physician noted flap colour matches surrounding tissue and capillary refill under 2 seconds.",
+                "source_type": "transcript",
+                "source_id": "seg_004",
+                "source_quote": "Flap colour matches the surrounding tissue. Capillary refill brisk at under 2 seconds."
+              }
+            ]
+          },
+          {"id": "imaging_review", "status": "not_captured", "claims": []},
+          {"id": "assessment", "status": "not_captured", "claims": []},
+          {"id": "plan", "status": "not_captured", "claims": []}
+        ]
+      }
+    }
+  ]
+}
