@@ -17,10 +17,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_events import AuditEventType
 from app.core.models import SessionModel
-from app.core.types import MaskingProof, SessionState
+from app.core.types import MaskingProof, SessionState, UserRole
 from app.core.uuids import to_uuid
 from app.modules.audit_log.service import get_audit_log_service
+from app.modules.auth.service import CurrentUser
 from app.modules.session.service import get_session
+
+# Roles that bypass row-level ownership checks. Compliance and admin both
+# need cross-clinician access — compliance for audit, admin for support.
+# Eval team is intentionally excluded: they should only ever see explicitly-
+# assigned eval sessions, not arbitrary clinician sessions.
+_OWNER_BYPASS_ROLES: frozenset[UserRole] = frozenset(
+    {UserRole.ADMIN, UserRole.COMPLIANCE_OFFICER}
+)
 
 
 async def get_session_or_404(
@@ -36,6 +45,50 @@ async def get_session_or_404(
     session = await get_session(db, to_uuid(session_id))
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    return session
+
+
+def assert_owner(session: SessionModel, user: CurrentUser) -> None:
+    """Raise 404/403 if ``user`` doesn't own ``session`` and isn't a bypass role.
+
+    Row-level authorization gate for every clinician-facing
+    ``/sessions/*`` and ``/notes/*`` route. Before the web portal existed
+    this was implicit (iOS only fetches its own sessions), but with web
+    as a second consumer the assertion has to be explicit at the route
+    layer.
+
+    Bypass roles: ADMIN, COMPLIANCE_OFFICER. Eval team is NOT a bypass —
+    they need explicitly-assigned eval rows, not arbitrary clinician
+    access.
+
+    Surfaces as 404 (not 403) when the user is a CLINICIAN — leaking the
+    existence of another clinician's session is itself a soft PHI
+    disclosure. Other non-bypass roles get a 403 because they're at
+    least authenticated to some scope; the 404 hide is for clinician-to-
+    clinician cross-talk specifically.
+    """
+    if user.role in _OWNER_BYPASS_ROLES:
+        return
+    if session.clinician_id != user.user_id:
+        if user.role == UserRole.CLINICIAN:
+            raise HTTPException(status_code=404, detail="Session not found")
+        raise HTTPException(status_code=403, detail="Not session owner")
+
+
+async def get_owned_session_or_404(
+    db: AsyncSession,
+    session_id: str | uuid.UUID,
+    user: CurrentUser,
+) -> SessionModel:
+    """Fetch a session by ID, raise 404 if absent, raise 404/403 if not owned.
+
+    Convenience wrapper that combines ``get_session_or_404`` with
+    ``assert_owner`` so route handlers don't repeat the same two lines.
+    Prefer this over the unscoped ``get_session_or_404`` everywhere a
+    clinician-facing route consumes a session by path id.
+    """
+    session = await get_session_or_404(db, session_id)
+    assert_owner(session, user)
     return session
 
 

@@ -80,6 +80,15 @@ class SessionModel(Base):
     )
     consent_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     provider_overrides: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # PHI — KMS-envelope-encrypted patient identifier (MRN hash, EMR
+    # encounter ID, etc.). Stored as ciphertext + IV; reading the row alone
+    # never yields plaintext. Decryption goes through
+    # app.core.kms_encryption.decrypt_str. Forward-compatible with FHIR
+    # DocumentReference.identifier for the future EMR write-back path (#57).
+    # Never logged, never returned to non-owner / non-admin roles.
+    external_reference_id_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -569,6 +578,52 @@ class TemplateOverrideModel(Base):
     content: Mapped[dict] = mapped_column(JSONB, nullable=False)
     updated_by: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True), nullable=True
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class TemplateAuthoringSessionModel(Base):
+    """In-progress conversational template-builder sessions.
+
+    Each row tracks one ChatGPT-style authoring conversation between a
+    clinician and the template-authoring LLM. Resumable across devices —
+    state lives here, not in browser storage.
+
+    On finalize, the draft_template_json is validated against the Template
+    Pydantic schema and inserted as a `custom_templates` row owned by the
+    same clinician; this row stays for audit but flips to status=completed.
+    """
+
+    __tablename__ = "template_authoring_sessions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    # JSON-encoded list of {"role": "user" | "assistant", "content": "..."}
+    # objects. Bounded by an application-level message limit (default 40)
+    # so a runaway conversation doesn't bloat the row indefinitely.
+    messages_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # Latest LLM-emitted draft, JSON-encoded. None until the assistant
+    # produces a valid Template-schema candidate. Replaced (not appended)
+    # each time the LLM emits a new draft.
+    draft_template_json: Mapped[str | None] = mapped_column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(
+        Enum("active", "completed", "abandoned", name="template_authoring_status"),
+        nullable=False,
+        default="active",
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

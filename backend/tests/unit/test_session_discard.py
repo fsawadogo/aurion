@@ -46,7 +46,7 @@ class TestDiscardSession:
         user = MagicMock()
         user.user_id = cid
 
-        with patch.object(sessions_route, "get_session_or_404",
+        with patch.object(sessions_route, "get_owned_session_or_404",
                           AsyncMock(return_value=session)), \
              patch.object(sessions_route, "write_audit",
                           AsyncMock()) as audit:
@@ -63,13 +63,21 @@ class TestDiscardSession:
 
     @pytest.mark.asyncio
     async def test_non_owner_gets_404_and_nothing_deleted(self):
+        """Non-owner clinicians get a 404 from the auth helper itself —
+        nothing in the route body executes, nothing gets deleted, nothing
+        gets audited. The helper-side test (test_assert_owner.py) locks
+        in the 404-not-403 behavior; here we just confirm the route
+        propagates the helper's HTTPException without partial side
+        effects."""
         session = _session(uuid.uuid4())  # owned by another clinician
         db = _mock_db()
         user = MagicMock()
         user.user_id = uuid.uuid4()  # not the owner
 
-        with patch.object(sessions_route, "get_session_or_404",
-                          AsyncMock(return_value=session)), \
+        with patch.object(sessions_route, "get_owned_session_or_404",
+                          AsyncMock(side_effect=HTTPException(
+                              status_code=404, detail="Session not found"
+                          ))), \
              patch.object(sessions_route, "write_audit",
                           AsyncMock()) as audit:
             with pytest.raises(HTTPException) as exc:

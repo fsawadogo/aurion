@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1._helpers import get_session_or_404, write_audit
+from app.api.v1._helpers import get_owned_session_or_404, write_audit
 from app.core.audit_events import AuditEventType
 from app.core.database import async_session_factory, get_db
 from app.core.models import TranscriptModel
@@ -197,7 +197,7 @@ async def get_stage1_note(
     The session must be in AWAITING_REVIEW or later state for the
     Stage 1 note to be available.
     """
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
 
     valid_states = {
         SessionState.AWAITING_REVIEW,
@@ -235,7 +235,7 @@ async def approve_stage1_note(
     Transitions the session from AWAITING_REVIEW to PROCESSING_STAGE2.
     Writes audit log events for the approval and state transition.
     """
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
 
     if session.state != SessionState.AWAITING_REVIEW:
         raise HTTPException(
@@ -362,7 +362,7 @@ async def get_full_note(
     Returns the most recent note version, which may include Stage 2
     visual enrichments if processing is complete.
     """
-    await get_session_or_404(db, session_id)
+    await get_owned_session_or_404(db, session_id, user)
 
     note = await get_latest_note(str(session_id), db)
     if not note:
@@ -387,7 +387,7 @@ async def approve_final_note(
     CONFLICTS must be resolved before approval -- no note with unresolved
     CONFLICTS can be approved.
     """
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
 
     allowed_states = {SessionState.PROCESSING_STAGE2, SessionState.REVIEW_COMPLETE}
     if session.state not in allowed_states:
@@ -471,7 +471,7 @@ async def get_note_detail(
     # Session has to come back first — 404 short-circuit. The remaining
     # three reads (note, transcript, approved-flag) are independent, so
     # fan them out with gather to keep the detail page snappy on web.
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
 
     note, transcript, approved = await asyncio.gather(
         get_latest_note(str(session_id), db),
@@ -515,7 +515,7 @@ async def get_stage2_status(
     been approved yet — clients should treat that as "Stage 2 hasn't
     started" rather than an error.
     """
-    await get_session_or_404(db, session_id)
+    await get_owned_session_or_404(db, session_id, user)
 
     job = await get_latest_job(session_id, db)
     if job is None:
@@ -552,7 +552,7 @@ async def resolve_conflict_endpoint(
     Session must be in AWAITING_REVIEW or PROCESSING_STAGE2 — conflicts
     only exist after Stage 2, and resolution must precede final approval.
     """
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
 
     if session.state not in _NOTE_MUTABLE_STATES:
         raise HTTPException(
@@ -597,7 +597,7 @@ async def edit_note_endpoint(
     Creates a new immutable version -- the original is preserved.
     Session must be in AWAITING_REVIEW or REVIEW_COMPLETE state.
     """
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
 
     allowed_states = {SessionState.AWAITING_REVIEW, SessionState.REVIEW_COMPLETE}
     if session.state not in allowed_states:

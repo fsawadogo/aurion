@@ -21,7 +21,7 @@ from fastapi.responses import Response
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1._helpers import get_session_or_404, write_audit
+from app.api.v1._helpers import get_owned_session_or_404, write_audit
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.types import SessionState
@@ -65,7 +65,7 @@ async def export_note(
 
     Returns the DOCX file as a downloadable attachment.
     """
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
     # Session must be in REVIEW_COMPLETE to export
     if session.state != SessionState.REVIEW_COMPLETE:
         raise HTTPException(
@@ -127,7 +127,7 @@ async def record_on_device_export(
     REVIEW_COMPLETE with an approved note. On success the session
     transitions to EXPORTED so the cleanup pipeline can fire.
     """
-    session = await get_session_or_404(db, session_id)
+    session = await get_owned_session_or_404(db, session_id, user)
 
     if session.state not in {SessionState.REVIEW_COMPLETE, SessionState.EXPORTED}:
         raise HTTPException(

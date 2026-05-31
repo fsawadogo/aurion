@@ -22,7 +22,7 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import (
-    get_session_or_404,
+    get_owned_session_or_404,
     parse_masking_proof,
     write_audit,
 )
@@ -66,7 +66,7 @@ async def upload_frame(
         faces_detected=faces_detected,
         phi_regions_redacted=phi_regions_redacted,
     )
-    await get_session_or_404(db, session_id)
+    await get_owned_session_or_404(db, session_id, user)
 
     body = await frame_file.read()
     if not body:
