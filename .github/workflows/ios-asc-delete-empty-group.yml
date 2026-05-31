@@ -21,6 +21,11 @@ on:
         required: true
         type: string
         default: "Aurion Internal"
+      force_remove_testers:
+        description: "If checked, remove all testers from the group first (only safe when members are also in another internal group)"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -33,6 +38,7 @@ jobs:
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
       APP_STORE_CONNECT_KEY_P8:    ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
       GROUP_NAME:                  ${{ inputs.group_name }}
+      FORCE_REMOVE_TESTERS:        ${{ inputs.force_remove_testers }}
     steps:
       - uses: actions/checkout@v4
 
