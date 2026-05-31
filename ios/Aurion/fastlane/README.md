@@ -1,118 +1,88 @@
-# Aurion — fastlane
+fastlane documentation
+----
 
-CLI automation for Apple Developer Portal + App Store Connect. Uses
-the **App Store Connect API key** (the same one CI uses for TestFlight
-uploads) — no 2FA prompts, no session cookies.
+# Installation
 
-## One-time setup
+Make sure you have the latest version of the Xcode command line tools installed:
 
-### 1. Install fastlane
-
-```bash
-brew install fastlane
-fastlane --version   # expect 2.220+ for App Store Connect API key support
+```sh
+xcode-select --install
 ```
 
-### 2. Generate the App Store Connect API key (web UI, bootstrap-only)
+For _fastlane_ installation instructions, see [Installing _fastlane_](https://docs.fastlane.tools/#installing-fastlane)
 
-Same key serves both CI and these local lanes. If you already created
-it for `.github/workflows/ios-testflight.yml`, **reuse it** — don't
-generate two.
+# Available Actions
 
-1. **App Store Connect → Users and Access → Integrations → Keys → Generate API Key**
-2. Name: `Aurion CI`. Role: **Admin**.
-3. Download the `.p8`. Note the **Key ID** (10 chars) + **Issuer ID** (UUID).
+## iOS
 
-### 3. Set environment variables
+### ios bootstrap
 
-Add to `~/.zshrc`:
-
-```bash
-# Apple Developer
-export APPLE_DEV_EMAIL="faical.sawadogo@aurionclinical.com"
-export APPLE_TEAM_ID="ABCDEFGHIJ"   # 10-char Team ID from developer.apple.com → Membership
-
-# App Store Connect API (reused from CI)
-export APP_STORE_CONNECT_KEY_ID="ABC1234567"
-export APP_STORE_CONNECT_ISSUER_ID="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
-export APP_STORE_CONNECT_KEY_P8="$(base64 -i ~/Downloads/AuthKey_ABC1234567.p8)"
-
-# Pilot tester emails — used by `fastlane invite_pilot_physicians`
-export PILOT_TESTER_EMAILS="perry@creoq.ca,marie@creoq.ca"
+```sh
+[bundle exec] fastlane ios bootstrap
 ```
 
-Reload: `exec zsh`.
+Create App IDs + App Store Connect app record (one-time)
 
-## Lanes
+### ios upload_testflight
 
-All lanes run from `ios/Aurion/`:
-
-```bash
-cd ios/Aurion
+```sh
+[bundle exec] fastlane ios upload_testflight
 ```
 
-### `fastlane bootstrap`
+Build + upload to TestFlight (mirrors ios-testflight.yml)
 
-**Run once.** Creates both App IDs (`com.aurionclinical.aurion` + the
-`AurionWidgets` extension bundle id) in the developer portal AND the
-App Store Connect app record. Idempotent — re-running with existing
-IDs is a no-op.
+### ios invite_pilot_physicians
 
-```bash
-fastlane bootstrap
+```sh
+[bundle exec] fastlane ios invite_pilot_physicians
 ```
 
-Expected output ends with:
+Invite pilot physicians as TestFlight internal testers
 
-```
-[16:42:13]: ✅ App Store Connect record for 'Aurion' is ready.
-```
+### ios distribute_latest
 
-### `fastlane upload_testflight`
-
-Local build + TestFlight upload. Mirrors the CI workflow — useful for
-the very first build, or as a one-off if CI is wedged.
-
-```bash
-fastlane upload_testflight
+```sh
+[bundle exec] fastlane ios distribute_latest
 ```
 
-### `fastlane invite_pilot_physicians`
+Distribute the latest uploaded build (external group + internal auto-delivery)
 
-Invites the emails in `$PILOT_TESTER_EMAILS` as internal testers.
+### ios invite_internal_testers
 
-```bash
-fastlane invite_pilot_physicians
+```sh
+[bundle exec] fastlane ios invite_internal_testers
 ```
 
-### `fastlane list_testers`
+Invite emails as ASC team members (Customer Support role) for internal-tester access
 
-Sanity check — prints currently-invited testers.
+### ios add_to_pilot_internal
 
-```bash
-fastlane list_testers
+```sh
+[bundle exec] fastlane ios add_to_pilot_internal
 ```
 
-## What's intentionally NOT here
+Add team members to the Pilot internal beta group
 
-- **`fastlane match`** (cert/profile sync). The
-  `xcodebuild -allowProvisioningUpdates` flag in CI uses the API key
-  to fetch/refresh certs on demand — simpler than match for a single-
-  developer team. Add match when a second developer needs the same
-  signing identity.
-- **App Store submission** (`upload_to_app_store`). Pilot uses
-  TestFlight internal testing only. When you submit to App Store
-  proper, add a `release` lane.
-- **Screenshots automation**. App Store listing isn't needed for
-  TestFlight pilot.
+### ios list_groups
 
-## Troubleshooting
+```sh
+[bundle exec] fastlane ios list_groups
+```
 
-- **`Could not find action 'app_store_connect_api_key'`** — your
-  fastlane is older than 2.196.0. Update: `brew upgrade fastlane`.
-- **`No team selected, multiple teams found`** — `APPLE_TEAM_ID` env
-  var isn't set. Get it from developer.apple.com → top-right account
-  menu → Membership → Team ID.
-- **`Invalid API key`** — the `.p8` decoding is wrong. Re-run the
-  `base64 -i` command in step 3; make sure no newlines got into the
-  middle of the value.
+List beta groups + tester memberships
+
+### ios list_testers
+
+```sh
+[bundle exec] fastlane ios list_testers
+```
+
+List current TestFlight testers
+
+----
+
+This README.md is auto-generated and will be re-generated every time [_fastlane_](https://fastlane.tools) is run.
+
+More information about _fastlane_ can be found on [fastlane.tools](https://fastlane.tools).
+
+The documentation of _fastlane_ can be found on [docs.fastlane.tools](https://docs.fastlane.tools).
