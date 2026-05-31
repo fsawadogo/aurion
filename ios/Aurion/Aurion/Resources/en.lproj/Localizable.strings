@@ -125,6 +125,8 @@
 
 /* ── Processing ───────────────────────────────────────── */
 "processing.title" = "Processing Session";
+"processing.generatingNote" = "Generating note\U2026";
+"processing.a11yProgress" = "Processing %@ percent";
 
 /* ── Login ─────────────────────────────────────────────── */
 "login.appName" = "Aurion";
