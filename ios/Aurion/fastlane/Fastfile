@@ -338,7 +338,10 @@ platform :ios do
       last  = (parts[1] || "Physician").capitalize
 
       begin
-        Spaceship::ConnectAPI::User.create(
+        # UserInvitation (not User) is the right class for sending team
+        # invites. Spaceship::ConnectAPI::User represents users that
+        # already exist on the team; .create is not defined on it.
+        Spaceship::ConnectAPI::UserInvitation.create(
           email:                 email,
           first_name:            first,
           last_name:             last,
@@ -347,11 +350,12 @@ platform :ios do
           all_apps_visible:      true,
         )
         UI.success "  ✓ invited #{email} (#{first} #{last})"
-      rescue Spaceship::UnexpectedResponse => e
+      rescue => e
         msg = e.message.to_s
-        if msg.include?("already exists") || msg.include?("USER_INVITE_EXISTS") ||
-           msg.include?("USER_ALREADY_EXISTS") || msg.include?("USER_ASSOCIATION_ERROR")
-          UI.message "  · #{email} already on the team — skipping"
+        # Apple returns various error strings for the "already on the
+        # team / invite already sent" cases; treat them all as soft skips.
+        if msg.match?(/already exists|USER_INVITE_EXISTS|USER_ALREADY_EXISTS|USER_ASSOCIATION_ERROR|already an active user|email.*already/i)
+          UI.message "  · #{email} already on the team or has a pending invite — skipping"
         else
           UI.error "  ✗ #{email} failed: #{msg.lines.first&.strip}"
           # Don't crash the whole lane on one bad email — surface + continue.
