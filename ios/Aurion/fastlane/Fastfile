@@ -425,16 +425,19 @@ platform :ios do
   #   - Group name comes from ENV (GROUP_NAME), defaulting to "Aurion
   #     Internal" — explicit input so the lane can't accidentally delete
   #     "Pilot" or any other group with members.
-  #   - Refuses to delete if the group has any testers. Prints the count
-  #     and aborts. To intentionally delete a populated group, you'd have
-  #     to clear it via the ASC dashboard first.
   #   - Refuses to delete external groups (only `is_internal_group: true`
   #     are in scope here — external groups carry Beta App Review state
   #     that's painful to recreate).
+  #   - By default, refuses to delete if the group has any testers. Prints
+  #     the count and aborts. Pass FORCE_REMOVE_TESTERS=true to remove all
+  #     testers from the group first; only meaningful for internal groups
+  #     where every member is also in another group (otherwise you'd be
+  #     stripping their TestFlight access).
   # -------------------------------------------------------------------------
   desc "Delete an internal beta group if it has zero testers"
   lane :delete_empty_internal_group do
     group_name = ENV["GROUP_NAME"] || "Aurion Internal"
+    force_remove = %w[1 true yes].include?(ENV["FORCE_REMOVE_TESTERS"].to_s.downcase)
 
     asc_api_key
     Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
@@ -456,11 +459,25 @@ platform :ios do
       UI.user_error!("'#{group_name}' is an external group — this lane only deletes internal groups")
     end
 
-    tester_count = (group.beta_testers || []).size
+    testers = group.beta_testers || []
+    tester_count = testers.size
     if tester_count > 0
-      UI.error "Refusing to delete '#{group_name}': it has #{tester_count} tester(s)."
-      UI.error "Clear the group via the ASC dashboard first if removal is intentional."
-      UI.user_error!("delete_empty_internal_group: group not empty")
+      if !force_remove
+        UI.error "Refusing to delete '#{group_name}': it has #{tester_count} tester(s)."
+        UI.error "Set FORCE_REMOVE_TESTERS=true to remove all testers first, or clear via dashboard."
+        UI.user_error!("delete_empty_internal_group: group not empty")
+      end
+
+      UI.message "FORCE_REMOVE_TESTERS=true — removing #{tester_count} tester(s) from '#{group_name}'…"
+      tester_ids = testers.map(&:id)
+      testers.each { |t| UI.message "  · #{t.email}" }
+      begin
+        group.delete_beta_testers(beta_tester_ids: tester_ids)
+        UI.success "  ✓ Removed #{tester_count} tester(s)"
+      rescue => e
+        UI.error "  ✗ Failed to remove testers: #{e.message.to_s.lines.first&.strip}"
+        UI.user_error!("delete_empty_internal_group: tester removal failed")
+      end
     end
 
     UI.message "Deleting internal beta group '#{group_name}' (id=#{group.id})…"
