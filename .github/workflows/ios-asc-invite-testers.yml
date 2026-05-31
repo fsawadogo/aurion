@@ -1,0 +1,65 @@
+name: iOS — ASC invite internal testers
+
+# Manual-only. Invites comma-separated emails as App Store Connect team
+# members with the Customer Support role (the narrowest role with
+# TestFlight access). Optionally adds them to the "Pilot" internal
+# beta group in the same run (only meaningful for emails that have
+# already accepted a prior team invite).
+#
+# Use case: moving pilot testers from external ("Pilot Physicians",
+# requires Beta App Review per build) to internal (auto-receives every
+# processed build with no review wait).
+#
+# Inputs never reach a `run:` block as raw shell — `inputs.emails` is
+# routed via env (INVITE_EMAILS) and read as data by the fastlane lane;
+# `inputs.also_add_to_pilot` is consumed only in a workflow `if:`
+# expression. Safe against the standard workflow-injection patterns.
+
+on:
+  workflow_dispatch:
+    inputs:
+      emails:
+        description: "Comma-separated emails to invite (e.g. a@x.com,b@y.com)"
+        required: true
+        type: string
+      also_add_to_pilot:
+        description: "Also add to the Pilot internal group after invite (only works for already-accepted users)"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  invite:
+    runs-on: macos-26
+    env:
+      APP_STORE_CONNECT_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_P8:    ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+      INVITE_EMAILS:               ${{ inputs.emails }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if Apple Dev account not yet wired
+        id: gate
+        run: |
+          if [ -z "$APP_STORE_CONNECT_KEY_ID" ] || \
+             [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] || \
+             [ -z "$APP_STORE_CONNECT_KEY_P8" ]; then
+            echo "::notice::App Store Connect secrets not set — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Send App Store Connect team invites
+        if: steps.gate.outputs.skip == 'false'
+        working-directory: ios/Aurion
+        run: fastlane invite_internal_testers
+
+      - name: Add accepted users to Pilot internal group
+        if: steps.gate.outputs.skip == 'false' && inputs.also_add_to_pilot == true
+        working-directory: ios/Aurion
+        run: fastlane add_to_pilot_internal
