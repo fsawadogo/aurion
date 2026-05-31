@@ -24,6 +24,7 @@ from app.core.types import Note, NoteClaim, Template, Transcript
 from app.modules.config.provider_registry import get_registry
 from app.modules.note_gen import repository as note_repo
 from app.modules.note_gen.critique import critique_note
+from app.modules.note_gen.specialty_style import get_specialty_style
 from app.modules.providers.usage_service import get_provider_usage_service
 
 logger = logging.getLogger("aurion.note_gen")
@@ -228,8 +229,19 @@ def build_stage1_user_prompt(
             "or similar attribution\n"
         )
 
+    # Per-specialty style snippet (Tier 2 / G). Layered on top of the
+    # base system prompt's strict-rules section so the model picks up
+    # specialty-appropriate terminology + structure preferences without
+    # weakening descriptive mode.
+    style_snippet = get_specialty_style(template.key)
+    style_block = (
+        f"STYLE GUIDANCE FOR {template.display_name}:\n{style_snippet}\n\n"
+        if style_snippet else ""
+    )
+
     prompt = (
         f"Specialty: {template.display_name}\n\n"
+        f"{style_block}"
         f"{language_block}"
         f"{participants_block}"
         f"{context_block}"
