@@ -1,0 +1,91 @@
+{
+  "examples": [
+    {
+      "description": "right knee pain after sports injury, condensed",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 4500,
+         "text": "Hi, what brings you in today?"},
+        {"id": "seg_002", "start_ms": 4500, "end_ms": 14000,
+         "text": "I've had pain in my right knee for about a year, ever since I twisted it playing soccer."},
+        {"id": "seg_003", "start_ms": 14000, "end_ms": 22000,
+         "text": "It bothers me with walking and especially with sports."},
+        {"id": "seg_004", "start_ms": 22000, "end_ms": 38000,
+         "text": "Let me have a look. There's a small effusion. Tenderness along the medial joint line on the right."},
+        {"id": "seg_005", "start_ms": 38000, "end_ms": 48000,
+         "text": "AP and lateral views of the right knee show medial joint space narrowing."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_001",
+                "text": "Patient reports right knee pain.",
+                "source_type": "transcript",
+                "source_id": "seg_002",
+                "source_quote": "I've had pain in my right knee for about a year"
+              }
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_002",
+                "text": "Patient reports onset approximately one year ago, attributed to twisting the right knee playing soccer.",
+                "source_type": "transcript",
+                "source_id": "seg_002",
+                "source_quote": "ever since I twisted it playing soccer"
+              },
+              {
+                "id": "claim_003",
+                "text": "Patient reports symptoms with walking and worsening with sports.",
+                "source_type": "transcript",
+                "source_id": "seg_003",
+                "source_quote": "It bothers me with walking and especially with sports."
+              }
+            ]
+          },
+          {
+            "id": "physical_exam",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_004",
+                "text": "Physician noted small effusion on the right knee.",
+                "source_type": "transcript",
+                "source_id": "seg_004",
+                "source_quote": "There's a small effusion."
+              },
+              {
+                "id": "claim_005",
+                "text": "Physician noted tenderness along the medial joint line on the right.",
+                "source_type": "transcript",
+                "source_id": "seg_004",
+                "source_quote": "Tenderness along the medial joint line on the right."
+              }
+            ]
+          },
+          {
+            "id": "imaging_review",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_006",
+                "text": "Physician described AP and lateral views of the right knee showing medial joint space narrowing.",
+                "source_type": "transcript",
+                "source_id": "seg_005",
+                "source_quote": "AP and lateral views of the right knee show medial joint space narrowing."
+              }
+            ]
+          },
+          {"id": "assessment", "status": "not_captured", "claims": []},
+          {"id": "plan", "status": "not_captured", "claims": []}
+        ]
+      }
+    }
+  ]
+}
