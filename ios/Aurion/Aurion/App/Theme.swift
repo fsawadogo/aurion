@@ -905,25 +905,63 @@ func sessionStateBadge(_ state: String) -> (text: String, color: Color) {
 
 /// Shared ISO date formatting with cached formatters.
 func formatISODate(_ iso: String) -> String {
-    guard let date = _isoFormatter.date(from: iso) else { return iso }
+    guard let date = _parseISODate(iso) else { return iso }
+    _displayFormatter.locale = Localization.locale
     return _displayFormatter.string(from: date)
 }
 
-/// Relative time like "11 min ago", "2 hr ago", "Yesterday". Falls back to absolute date for older entries.
+/// Smart human-friendly time renderer.
+///
+///   <60s ago         → "Just now" / "À l'instant"
+///   Today            → "Today at 2:26 AM" / "Aujourd'hui à 02:26"
+///   Yesterday        → "Yesterday at 7:33 PM" / "Hier à 19:33"
+///   Older this year  → "May 28 at 3:15 PM" / "28 mai à 15:15"
+///   Different year   → "Jan 15, 2025 at 3:15 PM" / "15 janv. 2025 à 15:15"
+///
+/// Uses DateFormatter with ``doesRelativeDateFormatting = true``, which
+/// is what Apple's own Mail / Calendar / Messages do — auto-handles
+/// locale, 12h/24h, and the Today/Yesterday substitution for free.
+/// Locale is read from ``Localization.locale`` (the app's selected
+/// language, not necessarily the device's) on every call so the in-app
+/// language picker takes effect immediately.
 func formatRelativeTime(_ iso: String) -> String {
-    guard let date = _isoFormatter.date(from: iso) else { return iso }
+    guard let date = _parseISODate(iso) else { return iso }
     let elapsed = Date().timeIntervalSince(date)
-    if elapsed < 60 { return L("time.justNow") }
-    if elapsed < 3600 { return L("time.minAgo", Int(elapsed / 60)) }
-    if elapsed < 86_400 { return L("time.hrAgo", Int(elapsed / 3600)) }
-    if elapsed < 172_800 { return L("time.yesterday") }
-    return _displayFormatter.string(from: date)
+    // The ~minute window where "Just now" reads more naturally than
+    // "Today at 2:26 AM" for a moment that just happened.
+    if elapsed >= 0 && elapsed < 60 { return L("time.justNow") }
+    _smartDateFormatter.locale = Localization.locale
+    return _smartDateFormatter.string(from: date)
 }
 
-private let _isoFormatter = ISO8601DateFormatter()
+/// Try fractional-seconds parser first (the backend's default since
+/// the LLM-intelligence batch — timestamps now look like
+/// `2026-05-31T02:26:51.629Z`), then fall back to the plain parser
+/// for legacy entries. Returns nil if neither matches.
+private func _parseISODate(_ iso: String) -> Date? {
+    if let d = _isoFractionalFormatter.date(from: iso) { return d }
+    return _isoPlainFormatter.date(from: iso)
+}
+
+private let _isoFractionalFormatter: ISO8601DateFormatter = {
+    let f = ISO8601DateFormatter()
+    f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+    return f
+}()
+
+private let _isoPlainFormatter = ISO8601DateFormatter()
+
 private let _displayFormatter: DateFormatter = {
     let f = DateFormatter()
     f.dateStyle = .medium
     f.timeStyle = .short
+    return f
+}()
+
+private let _smartDateFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateStyle = .medium
+    f.timeStyle = .short
+    f.doesRelativeDateFormatting = true
     return f
 }()
