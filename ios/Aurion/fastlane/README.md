@@ -63,6 +63,14 @@ Invite emails as ASC team members (Customer Support role) for internal-tester ac
 
 Add team members to the Pilot internal beta group
 
+### ios delete_empty_internal_group
+
+```sh
+[bundle exec] fastlane ios delete_empty_internal_group
+```
+
+Delete an internal beta group if it has zero testers
+
 ### ios list_groups
 
 ```sh

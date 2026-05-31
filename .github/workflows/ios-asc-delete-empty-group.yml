@@ -1,0 +1,54 @@
+name: iOS — ASC delete empty internal group
+
+# Manual-only. Deletes an internal beta group from App Store Connect if
+# it has zero testers. Used for one-off cleanup of leftover groups from
+# earlier TestFlight bring-up (e.g. "Aurion Internal" parked empty).
+#
+# Hard-gated by the fastlane lane on both:
+#   * group has zero testers (refuses non-empty groups)
+#   * group is internal (refuses to delete external groups, which carry
+#     non-trivial Beta App Review state)
+#
+# `inputs.group_name` flows through env (GROUP_NAME) and is read as data
+# by the fastlane lane — never inlined into a `run:` shell. Safe against
+# the standard workflow-injection patterns.
+
+on:
+  workflow_dispatch:
+    inputs:
+      group_name:
+        description: "Name of the internal beta group to delete"
+        required: true
+        type: string
+        default: "Aurion Internal"
+
+permissions:
+  contents: read
+
+jobs:
+  delete:
+    runs-on: macos-26
+    env:
+      APP_STORE_CONNECT_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_P8:    ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+      GROUP_NAME:                  ${{ inputs.group_name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Skip if Apple Dev account not yet wired
+        id: gate
+        run: |
+          if [ -z "$APP_STORE_CONNECT_KEY_ID" ] || \
+             [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] || \
+             [ -z "$APP_STORE_CONNECT_KEY_P8" ]; then
+            echo "::notice::App Store Connect secrets not set — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Delete empty internal beta group
+        if: steps.gate.outputs.skip == 'false'
+        working-directory: ios/Aurion
+        run: fastlane delete_empty_internal_group
