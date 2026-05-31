@@ -325,9 +325,12 @@ platform :ios do
     end
 
     UI.message ""
-    UI.success "Testers:"
+    UI.success "Testers (all team-wide; 'app' is not a valid BetaTester filter):"
+    # No `app:` filter — Apple's API rejects it for BetaTester. We have
+    # one app on the team so this returns everyone relevant; with
+    # `includes: betaGroups` the group memberships come with each row.
     testers = Spaceship::ConnectAPI.get_beta_testers(
-      filter: { app: app.id }, limit: 200, includes: "betaGroups"
+      limit: 200, includes: "betaGroups"
     )
     testers.each do |t|
       names = (t.beta_groups || []).map(&:name).join(", ")
