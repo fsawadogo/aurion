@@ -674,3 +674,44 @@ class PhysicianMacroModel(Base):
     )
 
 
+class PatientSummaryModel(Base):
+    """Plain-language after-visit summary derived from an approved note.
+
+    One-to-many on session — physicians can regenerate or edit. The
+    latest row (max `version` for the session) is what the UI shows.
+    Ownership flows through `sessions.clinician_id`; this table does
+    not duplicate it (single source of truth, avoids drift if a
+    session is ever reassigned).
+
+    Body is PHI (it references the encounter) — stored as plain text
+    on the encrypted-at-rest RDS volume; no extra column-level
+    encryption needed (would over-engineer the threat model for a
+    physician-only read surface).
+    """
+
+    __tablename__ = "patient_summaries"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    generated_by_provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    physician_edited: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+

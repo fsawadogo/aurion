@@ -126,6 +126,19 @@ export interface PhysicianMacroUpdate {
   clear_specialty?: boolean;
 }
 
+/** Plain-language after-visit summary for the patient. Generated
+ * from the approved note by the LLM; physician can edit. */
+export interface PatientSummary {
+  id: string;
+  session_id: string;
+  version: number;
+  body: string;
+  generated_by_provider: string;
+  physician_edited: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export type NoteSectionStatus =
   | "populated"
   | "pending_video"
