@@ -142,3 +142,22 @@
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
+
+/* ── Shared form input styles ───────────────────────────────────
+   Component-layer classes (.form-input, .form-select) collapse the
+   ~140-char Tailwind utility tail repeated at every input in the
+   portal pages. Matches the existing rendered look from
+   /users/page.tsx (gray-50 fill, gold-100 focus ring). */
+
+@layer components {
+  .form-input {
+    @apply w-full rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm
+      transition-colors focus:border-gold-400 focus:bg-white focus:outline-none
+      focus:ring-2 focus:ring-gold-100;
+  }
+  .form-select {
+    @apply w-full rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm
+      transition-colors focus:border-gold-400 focus:bg-white focus:outline-none
+      focus:ring-2 focus:ring-gold-100;
+  }
+}
