@@ -633,3 +633,44 @@ class TemplateAuthoringSessionModel(Base):
     )
 
 
+class PhysicianMacroModel(Base):
+    """Per-physician text shortcut → expansion mapping.
+
+    Typing the shortcut in a note edit field expands to the body.
+    Owner-scoped via the (owner_id, shortcut) unique constraint —
+    two physicians can independently use `/ros` to mean different
+    things; one physician can't accidentally collide their own
+    shortcuts.
+
+    Body is treated as non-PHI (clinical phrases, not patient data)
+    but is never logged regardless. Audit events capture create /
+    update / delete without including the body text.
+    """
+
+    __tablename__ = "physician_macros"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    shortcut: Mapped[str] = mapped_column(String(64), nullable=False)
+    body: Mapped[str] = mapped_column(Text, nullable=False)
+    # Optional specialty scope. Null = available everywhere this
+    # physician records; non-null = only inside that specialty's notes.
+    specialty: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    is_shared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+

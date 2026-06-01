@@ -20,6 +20,9 @@ import type {
   NoteDetail,
   PaginatedResponse,
   PatientSessionMatch,
+  PhysicianMacro,
+  PhysicianMacroCreate,
+  PhysicianMacroUpdate,
   PhysicianProfile,
   PhysicianProfileUpdate,
   Session as SessionRow,
@@ -331,6 +334,41 @@ export async function exportNote(sessionId: string): Promise<Blob> {
     method: "POST",
   });
   return r.blob();
+}
+
+/* ─── Macros (physician phrase shortcuts) ────────────────────────────────── */
+
+export async function listMyMacros(
+  specialty?: string,
+): Promise<PhysicianMacro[]> {
+  const q = specialty ? `?specialty=${encodeURIComponent(specialty)}` : "";
+  const r = await fetchWithAuth(`/api/v1/me/macros${q}`);
+  return r.json();
+}
+
+export async function createMyMacro(
+  body: PhysicianMacroCreate,
+): Promise<PhysicianMacro> {
+  const r = await fetchWithAuth("/api/v1/me/macros", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+export async function updateMyMacro(
+  macroId: string,
+  body: PhysicianMacroUpdate,
+): Promise<PhysicianMacro> {
+  const r = await fetchWithAuth(`/api/v1/me/macros/${macroId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+export async function deleteMyMacro(macroId: string): Promise<void> {
+  await fetchWithAuth(`/api/v1/me/macros/${macroId}`, { method: "DELETE" });
 }
 
 /* ─── Bulk export ────────────────────────────────────────────────────────── */

@@ -50,6 +50,9 @@ class AuditEventType(StrEnum):
     NOTE_EXPORTED = "note_exported"
     BULK_NOTE_EXPORT = "bulk_note_export"
     EXTERNAL_REFERENCE_ID_SET = "external_reference_id_set"
+    MACRO_CREATED = "macro_created"
+    MACRO_UPDATED = "macro_updated"
+    MACRO_DELETED = "macro_deleted"
     SESSION_PURGED = "session_purged"
     SESSION_DISCARDED = "session_discarded"
 
@@ -155,6 +158,19 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     # leaking who-is-which-patient into the immutable trail.
     AuditEventType.EXTERNAL_REFERENCE_ID_SET: frozenset(
         {"actor_id", "cleared"}
+    ),
+    # Macro lifecycle — never carry the body itself (might be
+    # personal-style phrasing the physician wouldn't want quoted in
+    # an audit query). Capturing `macro_id` + `shortcut` + actor is
+    # enough to reconstruct the change set.
+    AuditEventType.MACRO_CREATED: frozenset(
+        {"actor_id", "macro_id", "shortcut", "specialty"}
+    ),
+    AuditEventType.MACRO_UPDATED: frozenset(
+        {"actor_id", "macro_id", "shortcut", "specialty"}
+    ),
+    AuditEventType.MACRO_DELETED: frozenset(
+        {"actor_id", "macro_id", "shortcut"}
     ),
     AuditEventType.SESSION_PURGED: frozenset(),
     AuditEventType.SESSION_DISCARDED: frozenset({"prior_state"}),

@@ -1,13 +1,24 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { PencilIcon, CheckIcon, XMarkIcon } from "@heroicons/react/24/outline";
+import { useEffect, useRef, useState } from "react";
+import {
+  PencilIcon,
+  CheckIcon,
+  XMarkIcon,
+  BoltIcon,
+} from "@heroicons/react/24/outline";
 
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import ClaimChip from "@/components/portal/ClaimChip";
 import ConflictResolver from "@/components/portal/ConflictResolver";
-import type { CitationExpansion, Claim, NoteSection } from "@/types";
+import { tryExpand } from "@/lib/portal-macros-expand";
+import type {
+  CitationExpansion,
+  Claim,
+  NoteSection,
+  PhysicianMacro,
+} from "@/types";
 
 /**
  * One section of a note in the review pane.
@@ -41,6 +52,9 @@ interface NoteSectionCardProps {
   ) => Promise<void>;
   /** Globally disable interaction (e.g. during Stage 2 processing). */
   busy?: boolean;
+  /** Macros available for inline expansion. Filtered upstream by
+   * specialty; this component just hands them to tryExpand. */
+  macros?: PhysicianMacro[];
 }
 
 export default function NoteSectionCard({
@@ -51,10 +65,13 @@ export default function NoteSectionCard({
   onSaveEdit,
   onResolveConflict,
   busy = false,
+  macros = [],
 }: NoteSectionCardProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(() => joinClaims(section.claims));
   const [saving, setSaving] = useState(false);
+  const [expandedHint, setExpandedHint] = useState<string | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Reset draft if the underlying section text changes outside of edit
   // mode (e.g. parent re-fetched after a conflict resolve elsewhere).
@@ -100,11 +117,41 @@ export default function NoteSectionCard({
       {editing ? (
         <div>
           <textarea
+            ref={textareaRef}
             className="form-input w-full min-h-[120px] resize-y mb-2"
             value={draft}
-            onChange={(e) => setDraft(e.target.value)}
+            onChange={(e) => {
+              const newText = e.target.value;
+              const caret = e.target.selectionStart ?? newText.length;
+              // Only try expansion when text grew — pure deletes /
+              // pastes shouldn't fire.
+              if (macros.length > 0 && newText.length > draft.length) {
+                const result = tryExpand(newText, caret, macros);
+                if (result) {
+                  setDraft(result.text);
+                  setExpandedHint(result.macro.shortcut);
+                  window.setTimeout(() => setExpandedHint(null), 1500);
+                  // Restore the caret on the next tick, after React
+                  // has painted the new value.
+                  window.setTimeout(() => {
+                    if (textareaRef.current) {
+                      textareaRef.current.selectionStart = result.caret;
+                      textareaRef.current.selectionEnd = result.caret;
+                    }
+                  }, 0);
+                  return;
+                }
+              }
+              setDraft(newText);
+            }}
             disabled={saving}
           />
+          {expandedHint && (
+            <p className="aurion-caption text-gold-700 mb-2 flex items-center gap-1.5 animate-aurion-fade-in">
+              <BoltIcon className="h-3.5 w-3.5" />
+              Expanded <span className="font-mono">{expandedHint}</span>
+            </p>
+          )}
           <div className="flex gap-2">
             <Button
               size="sm"
