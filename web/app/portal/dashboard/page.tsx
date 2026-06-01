@@ -16,6 +16,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import PageHeader from "@/components/portal/PageHeader";
 import { listMySessions, listMyCustomTemplates } from "@/lib/portal-api";
 import type { CustomTemplate, Session, SessionState } from "@/types";
 
@@ -85,27 +86,26 @@ export default function PortalDashboardPage() {
   );
 
   return (
-    <div className="p-6 lg:p-8 max-w-6xl mx-auto">
-      <div className="mb-6 flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-navy-800">Dashboard</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Your overview at a glance.
-          </p>
-        </div>
-        <Button variant="secondary" size="sm" onClick={() => void load()}>
-          Refresh
-        </Button>
-      </div>
+    <div className="aurion-page-padded aurion-container">
+      <PageHeader
+        eyebrow="Clinician portal"
+        title="Dashboard"
+        description="Your overview at a glance."
+        actions={
+          <Button variant="secondary" size="sm" onClick={() => void load()}>
+            Refresh
+          </Button>
+        }
+      />
 
       {error && !loading && (
-        <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">
+        <div className="mb-4 rounded-aurion-md bg-red-50 border border-red-200 px-4 py-3 text-aurion-callout text-red-700">
           {error}
         </div>
       )}
 
-      {/* ── Headline tiles ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+      {/* ── Headline tiles — staggered slide-up on first paint. ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 aurion-stagger">
         <StatTile
           icon={<ClockIcon className="h-5 w-5 text-amber-600" />}
           label="Awaiting review"
@@ -213,15 +213,17 @@ function StatTile({
   return (
     <Link
       href={href}
-      className="block rounded-lg border border-gray-200 bg-white p-4 transition-colors hover:border-gold-300"
+      className="block rounded-aurion-lg border border-hairline bg-surface px-4 py-3.5 shadow-card transition-all duration-aurion ease-aurion hover:shadow-card-hover hover:border-gold-300 hover:-translate-y-px"
     >
-      <div className="flex items-start justify-between">
-        {icon}
-        <span className="text-2xl font-semibold text-navy-800 tabular-nums">
+      <div className="flex items-start justify-between gap-2">
+        <span className="text-navy-300 transition-colors duration-short group-hover:text-gold-500">
+          {icon}
+        </span>
+        <span className="aurion-display text-navy-800 tabular-nums">
           {loading ? "…" : value}
         </span>
       </div>
-      <p className="mt-1 text-xs text-gray-500">{label}</p>
+      <p className="mt-2 aurion-micro">{label}</p>
     </Link>
   );
 }

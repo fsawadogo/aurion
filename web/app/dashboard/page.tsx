@@ -1,11 +1,12 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { getMetrics, getMetricsTimeseries, getSessions } from "@/lib/api";
+import { getMe, getMetrics, getMetricsTimeseries, getSessions } from "@/lib/api";
 import type {
   MetricTimeseriesBucket,
   MetricTimeseriesResponse,
@@ -44,13 +45,42 @@ const summaryIcons = [
 ];
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [metricsData, setMetricsData] = useState<PilotMetric[]>([]);
   const [sessionsData, setSessionsData] = useState<Session[]>([]);
   const [timeseries, setTimeseries] = useState<MetricTimeseriesResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [authChecked, setAuthChecked] = useState(false);
+
+  // Role guard: clinicians who land here (root redirect, bookmark, etc.)
+  // get bounced to /portal/dashboard. The admin metrics endpoints are
+  // ADMIN/EVAL_TEAM only, so a CLINICIAN would otherwise see a wall of
+  // 403s in the network tab.
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((me) => {
+        if (cancelled) return;
+        if (me.role === "CLINICIAN") {
+          router.replace("/portal/dashboard");
+        } else {
+          setAuthChecked(true);
+        }
+      })
+      .catch(() => {
+        // 401 already routes to /login via fetchWithAuth; treat
+        // anything else as "let the page render and surface its own
+        // error" rather than blocking.
+        if (!cancelled) setAuthChecked(true);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   useEffect(() => {
+    if (!authChecked) return;
     async function fetchData() {
       setLoading(true);
       setError(null);
@@ -72,7 +102,7 @@ export default function DashboardPage() {
       }
     }
     fetchData();
-  }, []);
+  }, [authChecked]);
 
   const totalSessions = sessionsData.length;
   const uniqueClinicians = new Set(sessionsData.map((s) => s.clinician_id)).size;

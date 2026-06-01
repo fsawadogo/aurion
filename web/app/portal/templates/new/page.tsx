@@ -1,13 +1,13 @@
 "use client";
 
 import { Suspense, useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { ArrowLeftIcon, CheckIcon } from "@heroicons/react/24/outline";
+import { CheckIcon } from "@heroicons/react/24/outline";
 
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import PageHeader from "@/components/portal/PageHeader";
 import TemplateChat from "@/components/portal/TemplateChat";
 import TemplateDraftPreview from "@/components/portal/TemplateDraftPreview";
 import {
@@ -107,23 +107,16 @@ function NewTemplateInner() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-6xl mx-auto">
-      <div className="mb-4">
-        <Link
-          href="/portal/templates"
-          className="inline-flex items-center gap-1.5 text-sm text-navy-700 hover:text-navy-900"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Back to templates
-        </Link>
-        <h1 className="text-2xl font-semibold text-navy-800 mt-2">
-          New template
-        </h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Chat with the builder to design a custom note template. When
-          you&apos;re happy with the preview, click Save.
-        </p>
-      </div>
+    <div className="aurion-page-padded aurion-container">
+      <PageHeader
+        breadcrumb={[
+          { label: "Templates", href: "/portal/templates" },
+          { label: "New" },
+        ]}
+        eyebrow="Conversational builder"
+        title="New template"
+        description="Chat with the builder to design a custom note template. When you're happy with the preview, click Save."
+      />
 
       {bootstrapping ? (
         <Card>

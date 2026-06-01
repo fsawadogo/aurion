@@ -15,6 +15,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import PageHeader from "@/components/portal/PageHeader";
 import {
   deleteMyCustomTemplate,
   listMyCustomTemplates,
@@ -89,50 +90,45 @@ export default function PortalTemplatesPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-4xl mx-auto">
-      <div className="mb-6 flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-navy-800">Templates</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Your custom note templates. Build a new one with the chat-style
-            builder, or upload an existing template to have it extracted
-            automatically.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <label className="inline-flex">
-            <input
-              type="file"
-              accept=".txt,.json,.md,.docx"
-              className="sr-only"
-              onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void onUpload(f);
-                e.target.value = "";
-              }}
-              disabled={uploading}
-            />
-            <Button
-              variant="secondary"
-              size="sm"
-              loading={uploading}
-              disabled={uploading}
-              // The label wraps the input; clicking the button focuses
-              // the label, which triggers the file picker.
-              onClick={(ev) => (ev.currentTarget.parentElement as HTMLLabelElement)?.click()}
-            >
-              <ArrowUpTrayIcon className="h-4 w-4 mr-1" />
-              Upload
-            </Button>
-          </label>
-          <Link href="/portal/templates/new">
-            <Button variant="primary" size="sm">
-              <PlusIcon className="h-4 w-4 mr-1" />
-              New template
-            </Button>
-          </Link>
-        </div>
-      </div>
+    <div className="aurion-page-padded aurion-container-narrow">
+      <PageHeader
+        eyebrow="Clinician portal"
+        title="Templates"
+        description="Your custom note templates. Build a new one with the chat-style builder, or upload an existing template to have it extracted automatically."
+        actions={
+          <>
+            <label className="inline-flex">
+              <input
+                type="file"
+                accept=".txt,.json,.md,.docx"
+                className="sr-only"
+                onChange={(e) => {
+                  const f = e.target.files?.[0];
+                  if (f) void onUpload(f);
+                  e.target.value = "";
+                }}
+                disabled={uploading}
+              />
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={uploading}
+                disabled={uploading}
+                onClick={(ev) => (ev.currentTarget.parentElement as HTMLLabelElement)?.click()}
+              >
+                <ArrowUpTrayIcon className="h-4 w-4 mr-1" />
+                Upload
+              </Button>
+            </label>
+            <Link href="/portal/templates/new">
+              <Button variant="primary" size="sm">
+                <PlusIcon className="h-4 w-4 mr-1" />
+                New template
+              </Button>
+            </Link>
+          </>
+        }
+      />
 
       {error && (
         <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">

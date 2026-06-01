@@ -11,7 +11,15 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import {
+  EyeIcon,
+  EyeSlashIcon,
+  ExclamationCircleIcon,
+  LockClosedIcon,
+} from "@heroicons/react/24/outline";
+
 import Button from "@/components/ui/Button";
+import { AurionLogoLockup } from "@/components/AurionLogo";
 import { login } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -31,12 +39,14 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      await login(email.trim().toLowerCase(), password);
-      router.push("/dashboard");
+      const auth = await login(email.trim().toLowerCase(), password);
+      // CLINICIAN lands on the portal; everyone else gets the admin
+      // /dashboard which the existing admin/eval/compliance pages
+      // already route off.
+      router.push(auth.role === "CLINICIAN" ? "/portal/dashboard" : "/dashboard");
       router.refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Sign-in failed";
-      // Friendlier surfaces for the two most common local-dev failures.
       if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
         setError(
           `Cannot reach the backend at ${API_BASE}. Is \`docker-compose up\` running?`,
@@ -55,64 +65,47 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-navy px-4">
-      {/* Ambient glow */}
-      <div className="pointer-events-none absolute -top-40 left-1/2 h-[500px] w-[600px] -translate-x-1/2 rounded-full bg-gold-500/[0.06] blur-3xl" />
-      <div className="pointer-events-none absolute -bottom-32 right-0 h-[400px] w-[400px] rounded-full bg-navy-400/20 blur-3xl" />
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden aurion-chrome-navy px-4">
+      {/* Ambient gold halo — premium hero glow behind the form card. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-48 left-1/2 h-[640px] w-[760px] -translate-x-1/2 rounded-full bg-gold-500/[0.10] blur-3xl animate-aurion-glow"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -bottom-40 right-[-10%] h-[440px] w-[440px] rounded-full bg-navy-500/30 blur-3xl"
+      />
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -top-20 -left-20 h-[360px] w-[360px] rounded-full bg-navy-500/20 blur-3xl"
+      />
 
-      <div className="relative w-full max-w-sm animate-slide-up">
-        {/* Logo */}
-        <div className="mb-10 text-center">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-gold-400 to-gold-600 shadow-lg shadow-gold-500/20">
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 16 16"
-              fill="none"
-              className="text-navy-900"
-            >
-              <path
-                d="M8 1L14 4.5V11.5L8 15L2 11.5V4.5L8 1Z"
-                stroke="currentColor"
-                strokeWidth="1.5"
-                fill="none"
-              />
-              <circle cx="8" cy="8" r="2.5" fill="currentColor" />
-            </svg>
-          </div>
-          <h1 className="text-2xl font-bold text-gradient-gold">Aurion</h1>
-          <p className="mt-1 text-sm text-gray-500">Clinical AI Admin Portal</p>
+      <div className="relative z-10 w-full max-w-[400px] animate-aurion-slide-up">
+        {/* Brand lockup — pixel-identical to the iOS splash hero. */}
+        <div className="mb-10 flex justify-center">
+          <AurionLogoLockup height={220} glow />
         </div>
 
         {/* Card */}
-        <div className="rounded-2xl bg-white p-8 shadow-2xl shadow-black/20 ring-1 ring-white/10">
-          <h2 className="mb-2 text-lg font-semibold text-navy-700">Sign in</h2>
-          <p className="mb-6 text-sm text-gray-500">
+        <div className="rounded-aurion-xl bg-white/[0.98] p-8 shadow-[0_24px_60px_-12px_rgba(8,18,38,0.50)] ring-1 ring-white/10 backdrop-blur">
+          <h2 className="aurion-title-3 mb-1.5">Sign in</h2>
+          <p className="aurion-caption mb-6">
             Use your Aurion email and password.
           </p>
 
           {error && (
-            <div className="mb-4 flex items-start gap-2 rounded-lg bg-red-50 px-4 py-3 text-sm text-red-700 ring-1 ring-inset ring-red-600/10">
-              <svg
-                className="mt-0.5 h-4 w-4 shrink-0 text-red-500"
-                viewBox="0 0 16 16"
-                fill="currentColor"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M8 15A7 7 0 108 1a7 7 0 000 14zm1-4a1 1 0 11-2 0 1 1 0 012 0zm0-3V5a1 1 0 10-2 0v3a1 1 0 102 0z"
-                  clipRule="evenodd"
-                />
-              </svg>
-              <span>{error}</span>
+            <div
+              role="alert"
+              className="mb-5 flex items-start gap-2 rounded-aurion-md bg-red-50 px-3.5 py-3 text-[13px] text-red-700 ring-1 ring-inset ring-red-600/15"
+            >
+              <ExclamationCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+              <span className="leading-snug">{error}</span>
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Email
-              </span>
+              <span className="aurion-micro mb-1.5 block">Email</span>
               <input
                 type="email"
                 value={email}
@@ -122,14 +115,12 @@ export default function LoginPage() {
                 required
                 disabled={loading}
                 placeholder="you@aurionclinical.com"
-                className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-navy-900 shadow-sm placeholder:text-gray-400 focus:border-gold-400 focus:outline-none focus:ring-2 focus:ring-gold-400/20 disabled:opacity-50"
+                className="form-input"
               />
             </label>
 
             <label className="block">
-              <span className="mb-1 block text-xs font-semibold uppercase tracking-wider text-gray-500">
-                Password
-              </span>
+              <span className="aurion-micro mb-1.5 block">Password</span>
               <div className="relative">
                 <input
                   type={showPassword ? "text" : "password"}
@@ -138,15 +129,20 @@ export default function LoginPage() {
                   autoComplete="current-password"
                   required
                   disabled={loading}
-                  className="block w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 pr-14 text-sm text-navy-900 shadow-sm focus:border-gold-400 focus:outline-none focus:ring-2 focus:ring-gold-400/20 disabled:opacity-50"
+                  className="form-input pr-11"
                 />
                 <button
                   type="button"
                   onClick={() => setShowPassword((v) => !v)}
-                  className="absolute inset-y-0 right-0 flex items-center px-3 text-xs font-medium text-gray-400 hover:text-navy-700"
+                  className="absolute inset-y-0 right-0 flex items-center px-3 text-navy-400 hover:text-navy-700 transition-colors duration-short"
                   tabIndex={-1}
+                  aria-label={showPassword ? "Hide password" : "Show password"}
                 >
-                  {showPassword ? "Hide" : "Show"}
+                  {showPassword ? (
+                    <EyeSlashIcon className="h-4 w-4" />
+                  ) : (
+                    <EyeIcon className="h-4 w-4" />
+                  )}
                 </button>
               </div>
             </label>
@@ -157,39 +153,28 @@ export default function LoginPage() {
               size="lg"
               loading={loading}
               fullWidth
+              className="mt-2"
             >
               Sign in
             </Button>
           </form>
 
           {IS_LOCAL && (
-            <details className="mt-6 rounded-lg bg-gray-50 p-3 text-xs text-gray-600 ring-1 ring-inset ring-gray-200/50">
-              <summary className="cursor-pointer font-semibold text-gray-700">
-                Local dev credentials
+            <details className="group mt-6 rounded-aurion-md bg-canvas px-3.5 py-3 ring-1 ring-inset ring-hairline">
+              <summary className="cursor-pointer text-[12.5px] font-semibold text-navy-700 marker:hidden flex items-center justify-between">
+                <span>Local dev credentials</span>
+                <span className="text-navy-300 group-open:rotate-180 transition-transform duration-short">
+                  ▾
+                </span>
               </summary>
-              <ul className="mt-2 space-y-1 font-mono">
-                <li>
-                  <span className="text-gray-400">ADMIN</span> ·
-                  admin@aurionclinical.com / admin
-                </li>
-                <li>
-                  <span className="text-gray-400">CLINICIAN</span> ·
-                  perry@creoq.ca / perry
-                </li>
-                <li>
-                  <span className="text-gray-400">CLINICIAN</span> ·
-                  marie@creoq.ca / marie
-                </li>
-                <li>
-                  <span className="text-gray-400">COMPLIANCE</span> ·
-                  compliance@aurionclinical.com / compliance
-                </li>
-                <li>
-                  <span className="text-gray-400">EVAL</span> ·
-                  eval@aurionclinical.com / eval
-                </li>
+              <ul className="mt-3 space-y-1.5 text-[12px] font-mono text-navy-700">
+                <DevCredRow role="ADMIN" email="admin@aurionclinical.com" pw="admin" />
+                <DevCredRow role="CLINICIAN" email="perry@creoq.ca" pw="perry" />
+                <DevCredRow role="CLINICIAN" email="marie@creoq.ca" pw="marie" />
+                <DevCredRow role="COMPLIANCE" email="compliance@aurionclinical.com" pw="compliance" />
+                <DevCredRow role="EVAL" email="eval@aurionclinical.com" pw="eval" />
               </ul>
-              <p className="mt-2 text-[11px] text-gray-400">
+              <p className="mt-2.5 text-[11px] text-navy-400">
                 Seeded by the backend when <code>APP_ENV=local</code>. Cognito
                 hosted UI is paused.
               </p>
@@ -197,10 +182,32 @@ export default function LoginPage() {
           )}
         </div>
 
-        <p className="mt-8 text-center text-xs text-gray-600">
+        <p className="mt-8 flex items-center justify-center gap-1.5 text-center text-[11.5px] text-white/55 tracking-wide">
+          <LockClosedIcon className="h-3 w-3" />
           Aurion Clinical AI &middot; For authorized personnel only
         </p>
       </div>
     </div>
+  );
+}
+
+function DevCredRow({
+  role,
+  email,
+  pw,
+}: {
+  role: string;
+  email: string;
+  pw: string;
+}) {
+  return (
+    <li className="flex items-baseline gap-2">
+      <span className="inline-flex shrink-0 items-center rounded-aurion-xs bg-navy-50 px-1.5 py-0.5 text-[9.5px] font-bold tracking-wider text-navy-600 uppercase">
+        {role}
+      </span>
+      <span>{email}</span>
+      <span className="text-navy-300">/</span>
+      <span className="text-navy-500">{pw}</span>
+    </li>
   );
 }

@@ -1,10 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
-  ArrowLeftIcon,
   ArrowDownTrayIcon,
   ExclamationTriangleIcon,
   CheckBadgeIcon,
@@ -16,6 +14,7 @@ import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import CompletenessRing from "@/components/portal/CompletenessRing";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
+import PageHeader from "@/components/portal/PageHeader";
 import StageTwoProgressBanner from "@/components/portal/StageTwoProgressBanner";
 import TranscriptPane, {
   TranscriptPaneHandle,
@@ -56,16 +55,27 @@ export default function NoteReviewPage() {
   const [highlightedSourceId, setHighlightedSourceId] = useState<string | null>(
     null,
   );
+  const [noNoteYet, setNoNoteYet] = useState(false);
   const transcriptRef = useRef<TranscriptPaneHandle>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setNoNoteYet(false);
     try {
       const d = await getNoteDetail(sessionId);
       setDetail(d);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load note.");
+      const msg = e instanceof Error ? e.message : "Failed to load note.";
+      // /detail 404s when the session exists but has no note yet —
+      // typical for CONSENT_PENDING / RECORDING / freshly-discarded
+      // sessions. Surface a friendly empty state instead of a raw
+      // error.
+      if (/\b404\b/.test(msg)) {
+        setNoNoteYet(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -133,44 +143,53 @@ export default function NoteReviewPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-      <div className="mb-4 flex items-center justify-between">
-        <Link
-          href="/portal/notes"
-          className="inline-flex items-center gap-1.5 text-sm text-navy-700 hover:text-navy-900"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Back to notes
-        </Link>
-        {detail && (
-          <div className="hidden sm:flex items-center gap-3 text-xs text-gray-500">
-            <span>
-              Stage <span className="font-semibold">{detail.note.stage}</span>
-            </span>
-            <span>·</span>
-            <span>
-              v<span className="font-semibold">{detail.note.version}</span>
-            </span>
-            <span>·</span>
-            <span>
-              Provider:{" "}
-              <span className="font-semibold">{detail.note.provider_used}</span>
-            </span>
-            <span>·</span>
-            <Badge variant="neutral">
-              {humanSpecialty(detail.note.specialty)}
-            </Badge>
-          </div>
-        )}
-      </div>
+    <div className="aurion-page-padded aurion-container">
+      <PageHeader
+        breadcrumb={[
+          { label: "My Notes", href: "/portal/notes" },
+          { label: detail ? humanSpecialty(detail.note.specialty) : "Review" },
+        ]}
+        eyebrow="Note review"
+        title={detail ? humanSpecialty(detail.note.specialty) : "Review"}
+        description={
+          detail
+            ? <>
+                Stage <span className="font-semibold text-navy-700">{detail.note.stage}</span>
+                {" · "}v<span className="font-semibold text-navy-700">{detail.note.version}</span>
+                {" · "}Provider <span className="font-semibold text-navy-700">{detail.note.provider_used}</span>
+              </>
+            : undefined
+        }
+      />
 
       {loading && !detail ? (
         <Card>
           <LoadingSkeleton lines={12} />
         </Card>
+      ) : noNoteYet ? (
+        <Card>
+          <div className="text-center py-10">
+            <p className="aurion-headline text-navy-700 mb-1.5">
+              No note yet
+            </p>
+            <p className="aurion-callout text-navy-500 max-w-md mx-auto">
+              This session is still in capture or hasn&apos;t reached
+              the review stage. Once recording stops and Stage 1
+              generation completes, the note will appear here.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-5"
+              onClick={() => void load()}
+            >
+              Check again
+            </Button>
+          </div>
+        </Card>
       ) : error && !detail ? (
         <Card>
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="aurion-callout text-red-600">{error}</p>
           <Button variant="secondary" className="mt-3" onClick={() => void load()}>
             Retry
           </Button>

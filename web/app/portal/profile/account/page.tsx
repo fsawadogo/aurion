@@ -1,12 +1,11 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import PageHeader from "@/components/portal/PageHeader";
 import { getMe, logout } from "@/lib/api";
 import { getMyProfile, updateMyProfile } from "@/lib/portal-api";
 import type { CurrentUser, PhysicianProfile } from "@/types";
@@ -65,19 +64,16 @@ export default function PortalAccountPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-2xl mx-auto">
-      <div className="mb-6">
-        <Link
-          href="/portal/profile"
-          className="inline-flex items-center gap-1.5 text-sm text-navy-700 hover:text-navy-900"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Back to profile
-        </Link>
-        <h1 className="text-2xl font-semibold text-navy-800 mt-2">
-          Account settings
-        </h1>
-      </div>
+    <div className="aurion-page-padded aurion-container-form">
+      <PageHeader
+        breadcrumb={[
+          { label: "My Profile", href: "/portal/profile" },
+          { label: "Account" },
+        ]}
+        eyebrow="Clinician portal"
+        title="Account settings"
+        description="Identity, language preferences, and sign-out."
+      />
 
       {loading ? (
         <Card>

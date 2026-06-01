@@ -1,10 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import {
-  ArrowLeftIcon,
   ArrowDownTrayIcon,
   CodeBracketIcon,
   Squares2X2Icon,
@@ -13,6 +11,7 @@ import {
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import PageHeader from "@/components/portal/PageHeader";
 import TemplateDraftPreview from "@/components/portal/TemplateDraftPreview";
 import {
   deleteMyCustomTemplate,
@@ -125,16 +124,20 @@ export default function TemplateDetailPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-4xl mx-auto">
-      <div className="mb-4">
-        <Link
-          href="/portal/templates"
-          className="inline-flex items-center gap-1.5 text-sm text-navy-700 hover:text-navy-900"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Back to templates
-        </Link>
-      </div>
+    <div className="aurion-page-padded aurion-container-narrow">
+      <PageHeader
+        breadcrumb={[
+          { label: "Templates", href: "/portal/templates" },
+          { label: row?.display_name ?? "Template" },
+        ]}
+        eyebrow="Custom template"
+        title={row?.display_name ?? "Template"}
+        description={
+          row
+            ? <><span className="font-mono">{row.key}</span> · v{row.version} · {row.template.sections.length} section{row.template.sections.length === 1 ? "" : "s"}</>
+            : undefined
+        }
+      />
 
       {loading ? (
         <Card>

@@ -1,3 +1,9 @@
+/**
+ * Aurion loading skeleton — shimmering bars with descending width
+ * so the placeholder reads as a settled-into-place column rather
+ * than a uniform block. Backed by the global `.aurion-shimmer`
+ * keyframe utility for animation consistency.
+ */
 interface LoadingSkeletonProps {
   lines?: number;
   className?: string;
@@ -8,12 +14,12 @@ export default function LoadingSkeleton({
   className = "",
 }: LoadingSkeletonProps) {
   return (
-    <div className={`space-y-3 ${className}`}>
+    <div className={"space-y-3 " + className}>
       {Array.from({ length: lines }).map((_, i) => (
         <div
           key={i}
-          className="h-4 rounded animate-shimmer"
-          style={{ width: `${85 - i * 10}%` }}
+          className="h-3.5 rounded-aurion-xs aurion-shimmer"
+          style={{ width: `${92 - i * 9}%` }}
         />
       ))}
     </div>
