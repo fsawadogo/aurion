@@ -346,10 +346,22 @@ struct SessionsInboxView: View {
                     .foregroundColor(.aurionTextSecondary)
             }
             VStack(alignment: .leading, spacing: 2) {
-                Text(localizedSpecialty(s.specialty))
-                    .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
-                    .foregroundColor(.aurionTextPrimary)
-                    .lineLimit(1)
+                HStack(spacing: 6) {
+                    Text(localizedSpecialty(s.specialty))
+                        .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                        .foregroundColor(.aurionTextPrimary)
+                        .lineLimit(1)
+                    // Patient identifier chip (#61). Only visible when
+                    // the physician has actually set one. Monospaced so
+                    // visually-similar codes (1/l, 0/O) read cleanly
+                    // even at small size. Truncates with ellipsis so a
+                    // long identifier doesn't push the row layout out
+                    // of shape — full value remains accessible on the
+                    // session detail screen.
+                    if let identifier = s.externalReferenceId, !identifier.isEmpty {
+                        InboxIdentifierChip(value: identifier)
+                    }
+                }
                 Text(formatRelativeTime(s.createdAt))
                     .aurionFont(12, relativeTo: .caption)
                     .foregroundColor(.aurionTextSecondary)
@@ -392,5 +404,41 @@ struct SessionsInboxView: View {
                 SessionResponse(id: "demo-4", clinicianId: "c1", specialty: "orthopedic_surgery", state: "PURGED", encounterType: "doctor_patient", createdAt: "2026-04-11T08:00:00Z", updatedAt: "2026-04-11T09:00:00Z"),
             ]
         }
+    }
+}
+
+
+/// Inline chip rendering the session's patient identifier (#61) in
+/// the inbox row.
+///
+/// Visual contract:
+///   * monospaced font for character disambiguation (1/l, 0/O)
+///   * gold-tinted border + matching gold-50 background so the chip
+///     reads as "linked to a chart" without competing with the
+///     specialty title for visual weight
+///   * truncates with ellipsis at the trailing edge; full value
+///     remains accessible on the session detail / post-encounter
+///     screen
+///   * accessibilityLabel uses the localized hint so VoiceOver
+///     announces "Patient identifier MRN-12345" instead of just
+///     reading the bare code
+struct InboxIdentifierChip: View {
+    let value: String
+
+    var body: some View {
+        Text(value)
+            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            .foregroundColor(.aurionGold)
+            .lineLimit(1)
+            .truncationMode(.tail)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 2)
+            .background(Color.aurionGold.opacity(0.12))
+            .overlay(
+                Capsule()
+                    .stroke(Color.aurionGold.opacity(0.35), lineWidth: 1)
+            )
+            .clipShape(Capsule())
+            .accessibilityLabel(Text("\(L("patientId.set")) \(value)"))
     }
 }
