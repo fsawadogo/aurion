@@ -77,6 +77,26 @@
 "patientId.privacyHint" = "Chiffr\U00E9 au repos. N\U2019appara\U00EEt jamais dans le journal d\U2019audit ni dans les prompts IA.";
 "patientId.saveFailed" = "Impossible d\U2019enregistrer l\U2019identifiant. Veuillez r\U00E9essayer.";
 
+/* ── R\U00E9sum\U00E9 patient (#59) ───────────────────────────── */
+"summary.title" = "R\U00E9sum\U00E9 patient";
+"summary.subtitle" = "Document en langage simple pour le patient. G\U00E9n\U00E9r\U00E9 uniquement apr\U00E8s votre approbation de la note.";
+"summary.generate" = "G\U00E9n\U00E9rer";
+"summary.generating" = "G\U00E9n\U00E9ration\U2026";
+"summary.regenerate" = "R\U00E9g\U00E9n\U00E9rer";
+"summary.copy" = "Copier";
+"summary.copied" = "Copi\U00E9";
+"summary.share" = "Partager";
+"summary.edit" = "Modifier";
+"summary.cancel" = "Annuler";
+"summary.save" = "Enregistrer";
+"summary.versionLabel" = "v%d";
+"summary.providerLabel" = "par %@";
+"summary.editedTag" = "Modifi\U00E9";
+"summary.gateMessage" = "Approuvez la note pour g\U00E9n\U00E9rer un r\U00E9sum\U00E9 pour le patient.";
+"summary.generateFailed" = "Impossible de g\U00E9n\U00E9rer le r\U00E9sum\U00E9. Veuillez r\U00E9essayer.";
+"summary.saveFailed" = "Impossible d\U2019enregistrer vos modifications. Veuillez r\U00E9essayer.";
+"summary.charLimit" = "%d / %d";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "ENR";
 "capture.recording" = "Enregistrement";

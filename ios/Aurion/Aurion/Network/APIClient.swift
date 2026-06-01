@@ -209,6 +209,37 @@ final class APIClient: Sendable {
         return try await patch(path: "/notes/\(sessionId)/edit", body: ["edits": edits])
     }
 
+    // MARK: - Patient summary (#59)
+
+    /// Latest patient summary for the session, or `nil` when none generated.
+    /// Server returns null literally when none exists — we model that as
+    /// optional rather than a 404 because a freshly-approved note legitimately
+    /// has no summary yet.
+    func getPatientSummary(sessionId: String) async throws -> PatientSummaryResponse? {
+        // The endpoint returns a JSON object OR the literal `null`; decode
+        // optionally so the `null` branch lands as `nil` without throwing.
+        let value: PatientSummaryResponse? = try? await get(
+            path: "/me/notes/\(sessionId)/patient-summary"
+        )
+        return value
+    }
+
+    /// Generate a fresh patient summary. 409 when the note isn't approved
+    /// yet (the caller should hide the action in that state); 502 on
+    /// upstream LLM failure.
+    func generatePatientSummary(sessionId: String) async throws -> PatientSummaryResponse {
+        return try await post(path: "/me/notes/\(sessionId)/patient-summary")
+    }
+
+    /// Save physician edits to the summary text. Bumps the version on the
+    /// server side; preserves the original provider attribution.
+    func editPatientSummary(sessionId: String, body: String) async throws -> PatientSummaryResponse {
+        return try await patch(
+            path: "/me/notes/\(sessionId)/patient-summary",
+            body: ["body": body]
+        )
+    }
+
     // MARK: - Config
 
     /// Pulls the public AppConfig subset (providers, pipeline timing, feature flags).
@@ -750,6 +781,34 @@ struct NoteApprovalResponse: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case stage, version, approved, message
         case sessionId = "session_id"
+    }
+}
+
+/// Patient-facing after-visit summary (#59).
+///
+/// Lives on its own table on the server; one row per session, with
+/// version bumped on each regenerate / physician edit. The body is the
+/// Grade-8 plain-language summary the LLM produced — never the clinical
+/// note. `generatedByProvider` is the provider tag at *original*
+/// generation; physician edits preserve this so the audit story stays
+/// attributable.
+struct PatientSummaryResponse: Codable, Sendable, Equatable {
+    let id: String
+    let sessionId: String
+    let version: Int
+    let body: String
+    let generatedByProvider: String
+    let physicianEdited: Bool
+    let createdAt: String
+    let updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, version, body
+        case sessionId = "session_id"
+        case generatedByProvider = "generated_by_provider"
+        case physicianEdited = "physician_edited"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 }
 
