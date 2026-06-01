@@ -49,6 +49,9 @@ EXPECTED_VALUES: dict[str, str] = {
     "CODING_SUGGESTION_CONFIRMED": "coding_suggestion_confirmed",
     "CODING_SUGGESTION_REJECTED": "coding_suggestion_rejected",
     "CODING_SUGGESTION_EDITED": "coding_suggestion_edited",
+    "EMR_WRITE_BACK_QUEUED": "emr_write_back_queued",
+    "EMR_WRITE_BACK_SENT": "emr_write_back_sent",
+    "EMR_WRITE_BACK_FAILED": "emr_write_back_failed",
     "SESSION_PURGED": "session_purged",
     "SESSION_DISCARDED": "session_discarded",
     # Notes

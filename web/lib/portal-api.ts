@@ -17,6 +17,8 @@ import type {
   AuditFilters,
   CodingSuggestion,
   CustomTemplate,
+  EmrConnectorsCatalog,
+  EmrWriteBack,
   Note,
   NoteDetail,
   NoteOrder,
@@ -538,6 +540,42 @@ export async function editMyCodingSuggestion(
   const r = await fetchWithAuth(
     `/api/v1/me/notes/${sessionId}/coding-suggestions/${suggestionId}`,
     { method: "PATCH", body: JSON.stringify(patch) },
+  );
+  return r.json();
+}
+
+/* ─── EMR write-back (#57) ────────────────────────────────────────────────── */
+
+/** GET /me/emr/connectors — what's available in this deployment. */
+export async function listEmrConnectors(): Promise<EmrConnectorsCatalog> {
+  const r = await fetchWithAuth("/api/v1/me/emr/connectors");
+  return r.json();
+}
+
+/** GET /me/notes/{id}/emr — full write-back history for the session. */
+export async function listMySessionEmrWriteBacks(
+  sessionId: string,
+): Promise<EmrWriteBack[]> {
+  const r = await fetchWithAuth(`/api/v1/me/notes/${sessionId}/emr`);
+  return r.json();
+}
+
+/** POST /me/notes/{id}/emr/send — kick off a write-back attempt.
+ *
+ * The returned row may be in any terminal state (sent or failed) — the
+ * orchestration runs the connector synchronously today. Connector
+ * errors land as `status=failed` rows (NOT HTTP errors); only auth /
+ * not-approved / unknown-connector conditions surface as HTTP errors. */
+export async function sendMySessionToEmr(
+  sessionId: string,
+  connector?: string,
+): Promise<EmrWriteBack> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/emr/send`,
+    {
+      method: "POST",
+      body: JSON.stringify({ connector: connector ?? null }),
+    },
   );
   return r.json();
 }
