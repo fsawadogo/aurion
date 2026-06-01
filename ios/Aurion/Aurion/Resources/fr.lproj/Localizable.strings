@@ -166,6 +166,35 @@
 "coding.system.icd10" = "CIM-10";
 "coding.system.cpt" = "CPT";
 
+/* ── Envoi EMR (#57) ───────────────────────────────────── */
+"emr.title" = "Envoi vers l\U2019EMR";
+"emr.subtitle" = "Envoyez la note approuv\U00E9e \U00E0 l\U2019EMR. Chaque tentative est journalis\U00E9e avec piste d\U2019audit compl\U00E8te.";
+"emr.gateMessage" = "Approuvez la note pour activer l\U2019envoi vers l\U2019EMR.";
+"emr.pilotMode" = "Mode pilote \U2014 connecteur stub";
+"emr.pilotDetail" = "Les envois sont journalis\U00E9s localement avec piste d\U2019audit compl\U00E8te mais ne sont pas transmis \U00E0 un EMR externe. Les vrais connecteurs arrivent dans des suivis.";
+"emr.send" = "Envoyer \U00E0 l\U2019EMR";
+"emr.sendAgain" = "Renvoyer";
+"emr.sendFreshNow" = "Envoyer maintenant (ignorer l\U2019attente)";
+"emr.sending" = "Envoi\U2026";
+"emr.lastSent" = "Envoy\U00E9 %@";
+"emr.connectorLabel" = "Connecteur";
+"emr.autoRetryHeader" = "R\U00E9essai automatique pr\U00E9vu pour %@.";
+"emr.autoRetryDetail" = "Le syst\U00E8me renverra automatiquement la m\U00EAme charge utile. Utilisez \U00AB Envoyer maintenant \U00BB pour cr\U00E9er une nouvelle tentative plus t\U00F4t.";
+"emr.terminalHeader" = "Plus de r\U00E9essais automatiques.";
+"emr.terminalDetail" = "La derni\U00E8re tentative a rencontr\U00E9 une erreur terminale ou \U00E9puis\U00E9 le budget de r\U00E9essais. Corrigez le probl\U00E8me sous-jacent (auth, endpoint) avant de renvoyer.";
+"emr.status.queued" = "En attente";
+"emr.status.sending" = "Envoi";
+"emr.status.sent" = "Envoy\U00E9";
+"emr.status.failed" = "\U00C9chec";
+"emr.retryQueued" = "R\U00E9essai automatique en attente";
+"emr.noMoreRetries" = "Plus de r\U00E9essais";
+"emr.attemptCount" = "Tentative %d";
+"emr.viaConnector" = "via %@";
+"emr.externalIdLabel" = "ID EMR : %@";
+"emr.fingerprintLabel" = "empreinte %@\U2026";
+"emr.nextAttempt" = "Prochaine tentative \U00E0 %@";
+"emr.sendFailed" = "Impossible d\U2019envoyer \U00E0 l\U2019EMR. Veuillez r\U00E9essayer.";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "ENR";
 "capture.recording" = "Enregistrement";
