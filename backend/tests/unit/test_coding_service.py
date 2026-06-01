@@ -274,3 +274,41 @@ def test_audit_enum_values_are_stable():
         AuditEventType.CODING_SUGGESTION_EDITED.value
         == "coding_suggestion_edited"
     )
+
+
+# ── Catalog validation integration (#69 follow-up) ───────────────────────
+
+
+def test_validate_code_helper_imported():
+    """Sanity — the validate_code import is wired into the service
+    module. A future refactor that drops it would surface here."""
+    from app.modules.coding import service as svc
+
+    assert hasattr(svc, "validate_code")
+
+
+def test_known_em_code_validates_true():
+    """The exemplar case: 99213 is in our curated catalog."""
+    from app.modules.coding.catalog import validate_code
+
+    assert validate_code("em", "99213") is True
+
+
+def test_unknown_em_code_validates_false():
+    """Bogus code → False (actively not in catalog)."""
+    from app.modules.coding.catalog import validate_code
+
+    assert validate_code("em", "99999") is False
+
+
+def test_catalog_validation_distinguishes_false_from_none():
+    """The False / None distinction is the audit-story difference
+    between 'checked and not found' and 'never checked'."""
+    from app.modules.coding.catalog import validate_code
+
+    # In-catalog: True
+    assert validate_code("icd10", "M25.561") is True
+    # Out-of-catalog but valid system: False (caution-worthy)
+    assert validate_code("icd10", "Q99.999") is False
+    # Unknown system: None (defensive)
+    assert validate_code("hcpcs", "G0438") is None

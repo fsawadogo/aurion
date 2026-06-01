@@ -693,6 +693,16 @@ export interface CodingSuggestion {
   source_claim_ids: string[];
   confidence: CodingConfidence;
   status: CodingSuggestionStatus;
+  /** Catalog validation flag (#69 follow-up).
+   *
+   *  true  — in our curated billing catalog; silent success
+   *  false — checked and NOT in catalog; UI surfaces "verify before
+   *          billing" amber warning
+   *  null  — legacy row from before validation existed; UI stays neutral
+   *
+   *  The three states are distinct in the UI; do NOT collapse to a
+   *  boolean. */
+  code_validated?: boolean | null;
   physician_action_at?: string | null;
   created_at: string;
   updated_at: string;

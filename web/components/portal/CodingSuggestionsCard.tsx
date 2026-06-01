@@ -174,6 +174,13 @@ export default function CodingSuggestionsCard({
   const confirmedCount = sorted.filter(
     (s) => s.status === "confirmed" || s.status === "edited",
   ).length;
+  // Surfaces an actionable header callout when the LLM emitted codes
+  // that aren't in our curated catalog. We exclude rejected rows
+  // because the physician already declined them — keeping the count
+  // limited to actionable rows.
+  const unvalidatedCount = sorted.filter(
+    (s) => s.code_validated === false && s.status !== "rejected",
+  ).length;
 
   return (
     <Card className="border-l-4 border-l-navy-300">
@@ -211,6 +218,27 @@ export default function CodingSuggestionsCard({
           edit, or reject each before billing.
         </div>
       </div>
+
+      {/* Header-level catalog miss callout — actionable summary so
+          the physician notices the unvalidated rows without having
+          to scan each one. Distinct from the "assistive" disclaimer
+          above: that's about the surface; this is about a specific
+          row's catalog status. */}
+      {unvalidatedCount > 0 && (
+        <div className="mb-3 flex items-start gap-2 rounded-aurion-md bg-amber-50 border border-amber-300 px-3 py-2 text-aurion-caption text-amber-900">
+          <ExclamationTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <strong>
+              {unvalidatedCount} code{unvalidatedCount === 1 ? "" : "s"}{" "}
+              not in catalog.
+            </strong>{" "}
+            Review the highlighted rows below — the LLM emitted billing
+            codes that aren&apos;t in our curated reference. They may
+            still be valid, but cross-reference your EMR before
+            submitting.
+          </div>
+        </div>
+      )}
 
       {error && (
         <div className="mb-3 rounded-aurion-md bg-amber-50 border border-amber-200 px-3 py-2 text-aurion-caption text-amber-800">
@@ -315,13 +343,24 @@ function SuggestionRow({
                 {suggestion.description}
               </span>
               <ConfidenceBadge confidence={suggestion.confidence} />
+              <CatalogBadge validated={suggestion.code_validated} />
               <StatusBadge status={suggestion.status} />
             </div>
           </button>
           {expanded && (
-            <p className="text-aurion-caption text-navy-500 mt-1 leading-snug">
-              {suggestion.justification}
-            </p>
+            <>
+              <p className="text-aurion-caption text-navy-500 mt-1 leading-snug">
+                {suggestion.justification}
+              </p>
+              {suggestion.code_validated === false && (
+                <p className="text-aurion-caption text-amber-700 mt-1 leading-snug">
+                  <strong>Verify before billing.</strong> This code
+                  wasn&apos;t found in our curated billing catalog. It may
+                  still be a valid code — cross-reference against your
+                  EMR&apos;s reference before submitting.
+                </p>
+              )}
+            </>
           )}
         </div>
         <div className="flex items-center gap-1 shrink-0">
@@ -441,6 +480,20 @@ function ConfidenceBadge({ confidence }: { confidence: "low" | "medium" | "high"
     case "high":
       return <Badge variant="success" dot>High</Badge>;
   }
+}
+
+/** Catalog validation surface — three-state.
+ *
+ *  true  → no chip (silent success; recognized code)
+ *  false → amber "Not in catalog" warning; the row body also gets
+ *          a verify-before-billing callout when expanded
+ *  null  → no chip (legacy row predating validation; UI stays neutral
+ *          rather than surfacing false uncertainty) */
+function CatalogBadge({ validated }: { validated?: boolean | null }) {
+  if (validated === false) {
+    return <Badge variant="warning" dot>Not in catalog</Badge>;
+  }
+  return null;
 }
 
 function StatusBadge({

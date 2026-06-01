@@ -28,6 +28,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import CodingSuggestionModel
 from app.core.types import Note
+from app.modules.coding.catalog import get_catalog_version, validate_code
 from app.modules.coding.system_prompt import SYSTEM_PROMPT
 from app.modules.config.provider_registry import get_registry
 from app.modules.providers.base import ChatMessage
@@ -197,7 +198,17 @@ async def extract_from_note(
     )
 
     rows: list[CodingSuggestionModel] = []
+    validation_misses = 0
     for cand in candidates:
+        # Catalog validation runs at extraction time, never recomputed
+        # on read. Result is stored on the row so the audit story
+        # reflects the catalog state at extraction time. A False here
+        # means the LLM emitted a code that's not in our curated subset
+        # — could still be a real billing code, but verify-before-billing
+        # caution applies. The UI surfaces this as a non-blocking warning.
+        is_validated = validate_code(cand["code_system"], cand["code"])
+        if is_validated is False:
+            validation_misses += 1
         row = CodingSuggestionModel(
             id=uuid.uuid4(),
             session_id=session_id,
@@ -208,11 +219,17 @@ async def extract_from_note(
             source_claim_ids=cand["source_claim_ids"],
             confidence=cand["confidence"],
             status="suggested",
+            code_validated=is_validated,
         )
         db.add(row)
         rows.append(row)
     if rows:
         await db.flush()
+    if validation_misses:
+        logger.info(
+            "coding extraction: %d/%d codes not in catalog (version=%s)",
+            validation_misses, len(rows), get_catalog_version(),
+        )
     return rows, provider_label
 
 
@@ -300,6 +317,11 @@ async def edit(
     previous_code = row.code
     row.code = code.upper().strip()
     row.description = description.strip()[:_DESCRIPTION_MAX]
+    # Re-run catalog validation since the code itself may have changed.
+    # The physician override flips this independently of the LLM's
+    # original validation result — a physician-typed code still gets
+    # the catalog warning if it's not recognized.
+    row.code_validated = validate_code(row.code_system, row.code)
     # Editing implies a physician decision — mark as `edited` so the
     # audit trail distinguishes "physician accepted as-is" from
     # "physician overrode the LLM's pick". UI treats both as eligible
