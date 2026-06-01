@@ -127,6 +127,21 @@ export default function EmrWriteBackCard({
 
   const lastSent = rows.find((r) => r.status === "sent");
 
+  // Latest (newest) row dictates the action-bar mode. The retry
+  // scheduler (#174) mutates this same row on each retry; we want
+  // the UI to read "auto-retry in flight" so the physician doesn't
+  // create a duplicate by clicking "Send again."
+  const latest = rows[0];
+  const isAutoRetryPending =
+    latest !== undefined
+    && latest.status === "failed"
+    && latest.scheduled_at !== null
+    && latest.scheduled_at !== undefined;
+  const isTerminalFailure =
+    latest !== undefined
+    && latest.status === "failed"
+    && (latest.scheduled_at === null || latest.scheduled_at === undefined);
+
   return (
     <Card>
       <div className="mb-3 flex items-center gap-2 text-aurion-headline">
@@ -190,17 +205,55 @@ export default function EmrWriteBackCard({
                 </select>
               </div>
             )}
+            {/* Button is always enabled (clinician escape hatch) but
+                the copy + callout below set expectations differently
+                when an auto-retry is already queued. A click while a
+                retry is pending creates a NEW write-back row
+                alongside the queued retry — explicit physician
+                action overrides the scheduler. */}
             <Button
-              variant="primary"
+              variant={isAutoRetryPending ? "ghost" : "primary"}
               size="sm"
               loading={sending}
               disabled={sending}
               onClick={() => void send()}
             >
               <PaperAirplaneIcon className="h-4 w-4 mr-1.5" />
-              {rows.length === 0 ? "Send to EMR" : "Send again"}
+              {rows.length === 0
+                ? "Send to EMR"
+                : isAutoRetryPending
+                ? "Send fresh now (skip wait)"
+                : "Send again"}
             </Button>
           </div>
+
+          {isAutoRetryPending && latest.scheduled_at && (
+            <div className="mb-3 flex items-start gap-2 rounded-aurion-md bg-amber-50 border border-amber-200 px-3 py-2 text-aurion-caption text-amber-900">
+              <ArrowUpTrayIcon className="h-4 w-4 mt-0.5 shrink-0 animate-pulse" />
+              <div>
+                <strong>
+                  Auto-retry scheduled for{" "}
+                  {new Date(latest.scheduled_at).toLocaleTimeString()}.
+                </strong>{" "}
+                The system will re-send the same payload automatically.
+                If you need to force a fresh attempt sooner, click
+                Send again — it creates a new write-back row alongside
+                the queued retry.
+              </div>
+            </div>
+          )}
+
+          {isTerminalFailure && (
+            <div className="mb-3 flex items-start gap-2 rounded-aurion-md bg-red-50 border border-red-200 px-3 py-2 text-aurion-caption text-red-900">
+              <ExclamationTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
+              <div>
+                <strong>No more auto-retries.</strong> The last attempt
+                hit a terminal error or exhausted the retry budget.
+                Use Send again to fresh-start the write-back; if the
+                problem is config (auth, endpoint), fix it first.
+              </div>
+            </div>
+          )}
 
           {rows.length > 0 && (
             <ul className="divide-y divide-hairline">
@@ -216,6 +269,8 @@ export default function EmrWriteBackCard({
 }
 
 function WriteBackRow({ row }: { row: EmrWriteBack }) {
+  const isRetryPending = row.status === "failed" && !!row.scheduled_at;
+  const isTerminal = row.status === "failed" && !row.scheduled_at;
   return (
     <li className="py-3 flex items-start gap-3">
       <StatusIcon status={row.status} />
@@ -230,6 +285,14 @@ function WriteBackRow({ row }: { row: EmrWriteBack }) {
               · attempt {row.attempt_count}
             </span>
           )}
+          {isRetryPending && (
+            <Badge variant="warning" dot>
+              Auto-retry queued
+            </Badge>
+          )}
+          {isTerminal && (
+            <Badge variant="neutral">No more retries</Badge>
+          )}
         </div>
         {row.external_id && (
           <p className="text-aurion-caption text-navy-700 mt-1 font-mono break-all">
@@ -239,6 +302,14 @@ function WriteBackRow({ row }: { row: EmrWriteBack }) {
         {row.error_reason && (
           <p className="text-aurion-caption text-amber-800 mt-1 leading-snug">
             {row.error_reason}
+          </p>
+        )}
+        {isRetryPending && row.scheduled_at && (
+          <p className="text-aurion-caption text-amber-700 mt-1">
+            Next attempt at{" "}
+            <strong>
+              {new Date(row.scheduled_at).toLocaleTimeString()}
+            </strong>
           </p>
         )}
         <p className="text-aurion-micro text-navy-400 mt-1">

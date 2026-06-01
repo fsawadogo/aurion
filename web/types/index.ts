@@ -685,6 +685,17 @@ export interface EmrWriteBack {
   error_reason?: string | null;
   attempt_count: number;
   sent_at?: string | null;
+  /** Auto-retry timestamp set by the orchestration on retryable
+   * failures. Three-state semantics paired with `status`:
+   *   - `null` + `status=failed` → terminal (no more retries budgeted)
+   *   - datetime + `status=failed` → auto-retry queued for that time
+   *   - `null` + `status=sent` → succeeded
+   *
+   * The UI surfaces "Will retry at HH:MM" when set and disables the
+   * "Send again" CTA in favor of "Cancel retry & send fresh" — a
+   * brand-new send creates a NEW row; this scheduled retry mutates
+   * the existing one. */
+  scheduled_at?: string | null;
   created_at: string;
   updated_at: string;
 }
