@@ -195,6 +195,19 @@
 "emr.nextAttempt" = "Prochaine tentative \U00E0 %@";
 "emr.sendFailed" = "Impossible d\U2019envoyer \U00E0 l\U2019EMR. Veuillez r\U00E9essayer.";
 
+/* ── Aper\U00E7u en direct (#64) ────────────────────────────── */
+"preview.title" = "Aper\U00E7u en direct";
+"preview.draftBadge" = "BROUILLON";
+"preview.disclaimer" = "Aper\U00E7u de la note qui s\U2019assemble en temps r\U00E9el. La note finale sera g\U00E9n\U00E9r\U00E9e \U00E0 l\U2019arr\U00EAt de l\U2019enregistrement avec la transcription compl\U00E8te et les preuves visuelles \U2014 ne la consid\U00E9rez pas comme document de dossier.";
+"preview.waiting" = "Le premier instantan\U00E9 arrive d\U00E8s qu\U2019il y a assez de transcription pour \U00E9bauche une section\U2026";
+"preview.refresh" = "Actualiser";
+"preview.refreshing" = "Actualisation\U2026";
+"preview.versionMeta" = "v%d \U00B7 %@";
+"preview.collapse" = "Masquer l\U2019aper\U00E7u";
+"preview.expand" = "Afficher l\U2019aper\U00E7u";
+"preview.failed" = "G\U00E9n\U00E9ration impossible \U2014 nouvelle tentative au prochain cycle.";
+"preview.noTranscript" = "En attente de contenu de transcription\U2026";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "ENR";
 "capture.recording" = "Enregistrement";

@@ -139,6 +139,12 @@ final class SessionManager: ObservableObject {
     /// session has been started.
     private var sessionLanguage: String = "en"
 
+    /// Read-accessor used by LivePreviewOverlay (#64) so the preview
+    /// generation request carries the physician's chosen output
+    /// language without leaking the private `sessionLanguage` storage
+    /// to the broader view layer.
+    var sessionLanguageForLivePreview: String { sessionLanguage }
+
     // MARK: - Session Lifecycle
 
     func startNewSession(_ request: SessionStartRequest) async {
