@@ -31,7 +31,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.admin._shared import (
-    AuditEventResponse,
     PaginatedAuditResponse,
     apply_audit_filters,
     event_to_response,

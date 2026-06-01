@@ -22,14 +22,12 @@ from __future__ import annotations
 
 import json
 import uuid
-from typing import Optional
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
 from app.modules.providers.base import ChatMessage
 from app.modules.template_authoring import service as ta_service
-
 
 # ── _extract_draft unit ────────────────────────────────────────────────────
 
