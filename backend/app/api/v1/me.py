@@ -462,6 +462,11 @@ class NoteOrderResponse(BaseModel):
     details: dict[str, Any]
     status: str
     source_claim_ids: list[str]
+    # Drug catalog validation flag (#58 follow-up). Same three-state
+    # semantics as CodingSuggestion.code_validated. Always None for
+    # non-prescription kinds (imaging / lab / referral don't have a
+    # drug field).
+    drug_validated: Optional[bool] = None
     physician_confirmed_at: Optional[str] = None
     sent_at: Optional[str] = None
     created_at: str
@@ -486,6 +491,7 @@ def _to_order_response(row) -> NoteOrderResponse:
         details=row.details,
         status=row.status,
         source_claim_ids=row.source_claim_ids or [],
+        drug_validated=getattr(row, "drug_validated", None),
         physician_confirmed_at=(
             row.physician_confirmed_at.isoformat()
             if row.physician_confirmed_at

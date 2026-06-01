@@ -11,6 +11,7 @@ import {
   CameraIcon,
   UserPlusIcon,
   ClipboardDocumentListIcon,
+  ExclamationTriangleIcon,
 } from "@heroicons/react/24/outline";
 
 import Badge from "@/components/ui/Badge";
@@ -167,6 +168,16 @@ export default function OrdersCard({
     return b.created_at.localeCompare(a.created_at);
   });
 
+  // Header-level summary of prescription rows whose drug name didn't
+  // resolve in the catalog. Excludes cancelled rows — they were
+  // already declined and don't need re-surfacing.
+  const unvalidatedDrugCount = visible.filter(
+    (o) =>
+      o.kind === "prescription"
+      && o.drug_validated === false
+      && o.status !== "cancelled",
+  ).length;
+
   return (
     <Card>
       <div className="mb-3 flex items-center gap-2 text-aurion-headline">
@@ -196,6 +207,21 @@ export default function OrdersCard({
       {error && (
         <div className="mb-3 rounded-aurion-md bg-amber-50 border border-amber-200 px-3 py-2 text-aurion-caption text-amber-800">
           {error}
+        </div>
+      )}
+
+      {unvalidatedDrugCount > 0 && (
+        <div className="mb-3 flex items-start gap-2 rounded-aurion-md bg-amber-50 border border-amber-300 px-3 py-2 text-aurion-caption text-amber-900">
+          <ExclamationTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
+          <div>
+            <strong>
+              {unvalidatedDrugCount} prescription
+              {unvalidatedDrugCount === 1 ? "" : "s"} flagged.
+            </strong>{" "}
+            The drug name wasn&apos;t found in our curated catalog —
+            cross-reference your EMR&apos;s formulary before signing
+            off on the order.
+          </div>
         </div>
       )}
 
@@ -269,10 +295,28 @@ function OrderRow({
             {KIND_LABEL[order.kind]}
           </span>
           <StatusBadge status={order.status} />
+          {/* Drug catalog miss badge (#58 follow-up). Surfaces ONLY
+              when the catalog actively returned False — prescription
+              row with an unrecognized drug. Other kinds + legacy NULL
+              rows show no chip (intentional: same visual treatment
+              as "no problem to flag"). */}
+          {order.kind === "prescription" && order.drug_validated === false && (
+            <Badge variant="warning" dot>
+              Drug not in catalog
+            </Badge>
+          )}
         </div>
         <p className="text-aurion-caption text-navy-700 leading-snug">
           {summarizeDetails(order)}
         </p>
+        {order.kind === "prescription" && order.drug_validated === false && (
+          <p className="text-aurion-caption text-amber-700 leading-snug mt-1">
+            <strong>Verify before prescribing.</strong> This drug
+            wasn&apos;t found in our curated catalog. It may still be
+            a valid prescription — cross-reference your EMR&apos;s
+            formulary before signing off.
+          </p>
+        )}
       </div>
       <div className="flex items-center gap-1 shrink-0">
         {isDraft && (

@@ -762,6 +762,14 @@ class NoteOrderModel(Base):
     sent_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Drug catalog validation flag — populated at extraction time for
+    # prescription rows only; NULL for imaging / lab / referral kinds
+    # (those don't have a drug field). Three-state semantics same as
+    # CodingSuggestionModel.code_validated: True = recognized,
+    # False = checked-and-not-in-catalog, None = unvalidated.
+    drug_validated: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
