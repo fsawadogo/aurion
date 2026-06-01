@@ -55,16 +55,27 @@ export default function NoteReviewPage() {
   const [highlightedSourceId, setHighlightedSourceId] = useState<string | null>(
     null,
   );
+  const [noNoteYet, setNoNoteYet] = useState(false);
   const transcriptRef = useRef<TranscriptPaneHandle>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setNoNoteYet(false);
     try {
       const d = await getNoteDetail(sessionId);
       setDetail(d);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load note.");
+      const msg = e instanceof Error ? e.message : "Failed to load note.";
+      // /detail 404s when the session exists but has no note yet —
+      // typical for CONSENT_PENDING / RECORDING / freshly-discarded
+      // sessions. Surface a friendly empty state instead of a raw
+      // error.
+      if (/\b404\b/.test(msg)) {
+        setNoNoteYet(true);
+      } else {
+        setError(msg);
+      }
     } finally {
       setLoading(false);
     }
@@ -155,9 +166,30 @@ export default function NoteReviewPage() {
         <Card>
           <LoadingSkeleton lines={12} />
         </Card>
+      ) : noNoteYet ? (
+        <Card>
+          <div className="text-center py-10">
+            <p className="aurion-headline text-navy-700 mb-1.5">
+              No note yet
+            </p>
+            <p className="aurion-callout text-navy-500 max-w-md mx-auto">
+              This session is still in capture or hasn&apos;t reached
+              the review stage. Once recording stops and Stage 1
+              generation completes, the note will appear here.
+            </p>
+            <Button
+              variant="secondary"
+              size="sm"
+              className="mt-5"
+              onClick={() => void load()}
+            >
+              Check again
+            </Button>
+          </div>
+        </Card>
       ) : error && !detail ? (
         <Card>
-          <p className="text-sm text-red-600">{error}</p>
+          <p className="aurion-callout text-red-600">{error}</p>
           <Button variant="secondary" className="mt-3" onClick={() => void load()}>
             Retry
           </Button>
