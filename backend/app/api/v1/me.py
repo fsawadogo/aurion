@@ -49,6 +49,7 @@ from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.custom_templates import service as custom_templates_service
 from app.modules.export.service import export_note_docx
+from app.modules.macros import service as macros_service
 from app.modules.note_gen.service import get_latest_note
 from app.modules.template_authoring import service as template_authoring_service
 
@@ -442,6 +443,155 @@ async def upload_template_for_extraction(
         )
     await db.commit()
     return _to_authoring_response(row, reply.assistant_message)
+
+
+# ── /me/macros — physician phrase shortcuts ───────────────────────────────
+
+
+class MacroResponse(BaseModel):
+    id: str
+    shortcut: str
+    body: str
+    specialty: Optional[str] = None
+    is_shared: bool
+    created_at: str
+    updated_at: str
+
+
+class MacroCreateRequest(BaseModel):
+    shortcut: str = Field(..., min_length=1)
+    body: str = Field(..., min_length=1)
+    specialty: Optional[str] = None
+
+
+class MacroUpdateRequest(BaseModel):
+    """Partial update. Each field is optional; only the set fields are
+    touched. `clear_specialty=true` removes the scope (you can't use
+    `specialty=null` here because that already means no-change)."""
+
+    shortcut: Optional[str] = None
+    body: Optional[str] = None
+    specialty: Optional[str] = None
+    clear_specialty: bool = False
+
+
+def _to_macro_response(row) -> MacroResponse:
+    return MacroResponse(
+        id=str(row.id),
+        shortcut=row.shortcut,
+        body=row.body,
+        specialty=row.specialty,
+        is_shared=row.is_shared,
+        created_at=row.created_at.isoformat(),
+        updated_at=row.updated_at.isoformat(),
+    )
+
+
+@router.get("/macros", response_model=list[MacroResponse])
+async def list_my_macros(
+    specialty: Optional[str] = Query(None),
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> list[MacroResponse]:
+    rows = await macros_service.list_for_owner(
+        user.user_id, db, specialty=specialty
+    )
+    return [_to_macro_response(r) for r in rows]
+
+
+@router.post(
+    "/macros",
+    response_model=MacroResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_my_macro(
+    body: MacroCreateRequest,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> MacroResponse:
+    try:
+        row = await macros_service.create_for_owner(
+            user.user_id, body.shortcut, body.body, db, specialty=body.specialty
+        )
+    except macros_service.MacroError as exc:
+        msg = str(exc)
+        status_code = 409 if "already exists" in msg else 400
+        raise HTTPException(status_code=status_code, detail=msg)
+
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=str(row.id),
+        event_type=AuditEventType.MACRO_CREATED,
+        actor_id=str(user.user_id),
+        macro_id=str(row.id),
+        shortcut=row.shortcut,
+        specialty=row.specialty or "",
+    )
+    await db.commit()
+    return _to_macro_response(row)
+
+
+@router.patch("/macros/{macro_id}", response_model=MacroResponse)
+async def update_my_macro(
+    macro_id: uuid.UUID,
+    body: MacroUpdateRequest,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> MacroResponse:
+    row = await macros_service.get_owned(macro_id, user.user_id, db)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Macro not found")
+    try:
+        row = await macros_service.update_owned(
+            row,
+            db,
+            shortcut=body.shortcut,
+            body=body.body,
+            specialty=body.specialty,
+            clear_specialty=body.clear_specialty,
+        )
+    except macros_service.MacroError as exc:
+        msg = str(exc)
+        status_code = 409 if "already" in msg else 400
+        raise HTTPException(status_code=status_code, detail=msg)
+
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=str(row.id),
+        event_type=AuditEventType.MACRO_UPDATED,
+        actor_id=str(user.user_id),
+        macro_id=str(row.id),
+        shortcut=row.shortcut,
+        specialty=row.specialty or "",
+    )
+    await db.commit()
+    return _to_macro_response(row)
+
+
+@router.delete(
+    "/macros/{macro_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_my_macro(
+    macro_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    row = await macros_service.get_owned(macro_id, user.user_id, db)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Macro not found")
+    shortcut = row.shortcut
+    macro_id_str = str(row.id)
+    await macros_service.delete_owned(row, db)
+
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=macro_id_str,
+        event_type=AuditEventType.MACRO_DELETED,
+        actor_id=str(user.user_id),
+        macro_id=macro_id_str,
+        shortcut=shortcut,
+    )
+    await db.commit()
 
 
 # ── /me/patients — longitudinal cross-encounter context ───────────────────

@@ -97,6 +97,35 @@ export interface PatientSessionMatch {
   created_at: string;
 }
 
+/** Per-physician text shortcut → expansion. Typing the shortcut (e.g.
+ * "/ros-cv") in a note edit field expands to the body. Owner-scoped
+ * server-side; the client never sees another clinician's macros. */
+export interface PhysicianMacro {
+  id: string;
+  shortcut: string;
+  body: string;
+  /** Optional specialty scope. Null = available everywhere. */
+  specialty?: string | null;
+  is_shared: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PhysicianMacroCreate {
+  shortcut: string;
+  body: string;
+  specialty?: string | null;
+}
+
+export interface PhysicianMacroUpdate {
+  shortcut?: string;
+  body?: string;
+  specialty?: string | null;
+  /** Flip to true to clear the specialty scope (specialty=null
+   * already means 'no change' in patch semantics). */
+  clear_specialty?: boolean;
+}
+
 export type NoteSectionStatus =
   | "populated"
   | "pending_video"

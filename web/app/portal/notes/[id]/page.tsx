@@ -25,9 +25,11 @@ import {
   editNote,
   exportNote,
   getNoteDetail,
+  listMyMacros,
   resolveConflict,
 } from "@/lib/portal-api";
-import type { Claim, NoteDetail } from "@/types";
+import { filterForSpecialty } from "@/lib/portal-macros-expand";
+import type { Claim, NoteDetail, PhysicianMacro } from "@/types";
 
 /**
  * /portal/notes/[id] — the note review screen.
@@ -57,7 +59,25 @@ export default function NoteReviewPage() {
     null,
   );
   const [noNoteYet, setNoNoteYet] = useState(false);
+  const [macros, setMacros] = useState<PhysicianMacro[]>([]);
   const transcriptRef = useRef<TranscriptPaneHandle>(null);
+
+  // Pull the user's macros once. Re-fetching on every render would
+  // burn API calls — physicians rarely tweak their macro library
+  // mid-review.
+  useEffect(() => {
+    let cancelled = false;
+    void listMyMacros()
+      .then((xs) => {
+        if (!cancelled) setMacros(xs);
+      })
+      .catch(() => {
+        // Quiet failure — the review still works without macros.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -262,6 +282,7 @@ export default function NoteReviewPage() {
                     onClaimClick={focusSource}
                     onSaveEdit={(text) => onSaveEdit(section.id, text)}
                     onResolveConflict={onResolveConflict}
+                    macros={filterForSpecialty(macros, detail.note.specialty)}
                     busy={
                       approving ||
                       detail.export_metadata.session_state ===

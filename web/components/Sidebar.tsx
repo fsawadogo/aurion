@@ -14,6 +14,7 @@ import {
   RectangleStackIcon,
   BeakerIcon,
   ArrowRightOnRectangleIcon,
+  BoltIcon,
   DocumentTextIcon,
   Squares2X2Icon,
   UserCircleIcon,
@@ -46,6 +47,7 @@ const navigation: {
   { name: "Dashboard", href: "/portal/dashboard", icon: ChartBarIcon, roles: ["CLINICIAN"] },
   { name: "My Notes", href: "/portal/notes", icon: DocumentTextIcon, roles: ["CLINICIAN", "ADMIN"] },
   { name: "Templates", href: "/portal/templates", icon: Squares2X2Icon, roles: ["CLINICIAN", "ADMIN"] },
+  { name: "Macros", href: "/portal/macros", icon: BoltIcon, roles: ["CLINICIAN", "ADMIN"] },
   { name: "My Profile", href: "/portal/profile", icon: UserCircleIcon, roles: ["CLINICIAN", "ADMIN"] },
 ];
 
