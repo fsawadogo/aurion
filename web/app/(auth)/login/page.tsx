@@ -81,9 +81,9 @@ export default function LoginPage() {
       />
 
       <div className="relative z-10 w-full max-w-[400px] animate-aurion-slide-up">
-        {/* Brand lockup */}
-        <div className="mb-9 flex justify-center">
-          <AurionLogoLockup size={48} tone="onDark" tagline />
+        {/* Brand lockup — pixel-identical to the iOS splash hero. */}
+        <div className="mb-10 flex justify-center">
+          <AurionLogoLockup height={220} glow />
         </div>
 
         {/* Card */}

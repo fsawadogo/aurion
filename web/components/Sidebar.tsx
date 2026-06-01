@@ -83,9 +83,9 @@ export default function Sidebar() {
 
   const navContent = (
     <div className="flex h-full flex-col">
-      {/* Brand header — hex logo + Aurion wordmark + role pill. */}
+      {/* Brand header — squircle icon (iOS app icon) + Aurion wordmark + role pill. */}
       <div className="flex h-[68px] items-center gap-3 px-5">
-        <AurionLogo size={32} tone="onDark" />
+        <AurionLogo size={36} />
         <div className="flex items-baseline gap-2">
           <span className="text-[17px] font-semibold tracking-tight text-white">
             Aurion
