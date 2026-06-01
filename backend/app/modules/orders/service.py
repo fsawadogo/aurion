@@ -23,6 +23,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.models import NoteOrderModel
 from app.core.types import Note
 from app.modules.config.provider_registry import get_registry
+from app.modules.orders.drug_catalog import get_catalog_version, validate_drug
 from app.modules.orders.system_prompt import SYSTEM_PROMPT
 from app.modules.providers.base import ChatMessage
 
@@ -169,7 +170,19 @@ async def extract_from_note(
     )
 
     rows: list[NoteOrderModel] = []
+    drug_misses = 0
     for cand in candidates:
+        # Drug catalog validation runs at extraction time for
+        # prescription rows only. Other kinds (imaging / lab /
+        # referral) don't have a drug field; their drug_validated
+        # column stays NULL. The False / None distinction matters in
+        # the audit story and in the UI badge.
+        drug_validated: bool | None = None
+        if cand["kind"] == "prescription":
+            raw_drug = cand["details"].get("drug", "")
+            drug_validated = validate_drug(raw_drug)
+            if drug_validated is False:
+                drug_misses += 1
         row = NoteOrderModel(
             id=uuid.uuid4(),
             session_id=session_id,
@@ -177,11 +190,17 @@ async def extract_from_note(
             details=cand["details"],
             source_claim_ids=cand["source_claim_ids"],
             status="draft",
+            drug_validated=drug_validated,
         )
         db.add(row)
         rows.append(row)
     if rows:
         await db.flush()
+    if drug_misses:
+        logger.info(
+            "orders extraction: %d prescription drugs not in catalog (version=%s)",
+            drug_misses, get_catalog_version(),
+        )
     return rows, provider_label
 
 
@@ -249,6 +268,12 @@ async def edit_details(
             f"Missing required {row.kind} keys: {sorted(missing)}"
         )
     row.details = details
+    # Re-run drug validation when the drug field may have changed
+    # (only meaningful for prescription rows). A physician-typed
+    # bogus drug name still gets the warning — same safety contract
+    # as the extraction path.
+    if row.kind == "prescription":
+        row.drug_validated = validate_drug(details.get("drug", ""))
     await db.flush()
     return row
 

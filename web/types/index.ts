@@ -604,6 +604,17 @@ export interface NoteOrder {
   details: Record<string, unknown>;
   status: NoteOrderStatus;
   source_claim_ids: string[];
+  /** Drug catalog validation flag (#58 follow-up).
+   *
+   *  true  — recognized in our curated drug catalog (generic or brand)
+   *  false — checked and NOT in catalog; UI surfaces "verify before
+   *          prescribing" amber warning
+   *  null  — non-prescription order (imaging/lab/referral don't have
+   *          a drug field) OR legacy row from before validation
+   *
+   *  The null state collapses two cases that the UI doesn't need to
+   *  distinguish: both render as "no badge". */
+  drug_validated?: boolean | null;
   physician_confirmed_at?: string | null;
   sent_at?: string | null;
   created_at: string;
