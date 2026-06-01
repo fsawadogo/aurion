@@ -15,6 +15,7 @@ from app.api.v1.admin import (
     audit,
     compliance,
     config,
+    emr,
     eval,
     metrics,
     providers,
@@ -34,3 +35,4 @@ router.include_router(alerts.router)
 router.include_router(templates.router)
 router.include_router(providers.router)
 router.include_router(compliance.router)
+router.include_router(emr.router)
