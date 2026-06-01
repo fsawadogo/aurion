@@ -1433,6 +1433,14 @@ class EmrWriteBackResponse(BaseModel):
     error_reason: Optional[str] = None
     attempt_count: int
     sent_at: Optional[str] = None
+    # Auto-retry timestamp set by the orchestration service on a
+    # retryable failure (#174). Three-state semantics:
+    #   * None + status=failed → terminal (no more retries budgeted)
+    #   * datetime + status=failed → retry queued for that time
+    #   * None + status=sent → succeeded (retry cleared on success)
+    # The portal uses this to surface "Will retry at HH:MM" vs
+    # "No more retries" and to gate the "Send again" CTA.
+    scheduled_at: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -1462,6 +1470,9 @@ def _to_emr_write_back_response(row) -> EmrWriteBackResponse:
         error_reason=row.error_reason,
         attempt_count=row.attempt_count,
         sent_at=row.sent_at.isoformat() if row.sent_at else None,
+        scheduled_at=(
+            row.scheduled_at.isoformat() if row.scheduled_at else None
+        ),
         created_at=row.created_at.isoformat(),
         updated_at=row.updated_at.isoformat(),
     )
