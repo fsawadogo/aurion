@@ -65,7 +65,12 @@ const config: Config = {
         canvas: "#F5F6FA",    // page background
         surface: "#FFFFFF",   // card / panel
         muted: "#EEF0F3",     // input fill / alt row
-        hairline: "rgba(12, 27, 55, 0.08)",
+        // Hairline = visible-but-quiet divider. Pre-composited result
+        // of rgba(12, 27, 55, 0.08) over #FFFFFF. Concrete hex (not
+        // rgba) so existing Tailwind utilities like `border-hairline`
+        // work without alpha-channel modifier acrobatics.
+        hairline: "#E6E9EE",
+        "hairline-strong": "#D1D6E0",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],

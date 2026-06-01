@@ -149,11 +149,11 @@
 
   /* ── Cards ── */
   .aurion-card {
-    @apply rounded-aurion-lg bg-surface shadow-card border border-hairline/60;
+    @apply rounded-aurion-lg bg-surface shadow-card border border-hairline;
   }
   .aurion-card-hoverable {
     @apply transition-all duration-aurion ease-aurion
-      hover:shadow-card-hover hover:border-hairline/80 hover:-translate-y-px;
+      hover:shadow-card-hover hover:border-hairline-strong hover:-translate-y-px;
   }
 
   /* ── Premium navy chrome (login background, hero sections). ── */
@@ -176,7 +176,7 @@
     @apply px-3 py-3 text-aurion-callout text-navy-700;
   }
   .aurion-row {
-    @apply hover:bg-canvas/60 transition-colors duration-short;
+    @apply hover:bg-canvas transition-colors duration-short;
   }
 }
 

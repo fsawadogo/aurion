@@ -139,7 +139,7 @@ export default function Sidebar() {
       {/* User chip + sign-out. */}
       <div className="px-4 py-4">
         <div className="flex items-center gap-3">
-          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-aurion-gold text-[13px] font-semibold text-navy-700 shadow-gold/40 ring-1 ring-gold-600/30">
+          <div className="flex h-9 w-9 items-center justify-center rounded-full bg-aurion-gold text-[13px] font-semibold text-navy-700 shadow-gold ring-1 ring-gold-600/30">
             {initial}
           </div>
           <div className="min-w-0 flex-1">

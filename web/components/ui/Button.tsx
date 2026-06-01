@@ -24,7 +24,7 @@ const variantStyles = {
     "border border-hairline bg-white text-navy-700 shadow-card " +
     "hover:bg-canvas hover:border-navy-200 hover:shadow-card-hover " +
     "active:bg-muted " +
-    "disabled:bg-white disabled:text-navy-300 disabled:border-hairline/40 disabled:shadow-none",
+    "disabled:bg-white disabled:text-navy-300 disabled:border-hairline disabled:shadow-none",
   destructive:
     "bg-accent-red text-white shadow-card " +
     "hover:bg-red-500 hover:shadow-card-hover " +
