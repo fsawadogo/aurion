@@ -1201,6 +1201,12 @@ class CodingSuggestionResponse(BaseModel):
     source_claim_ids: list[str]
     confidence: str
     status: str
+    # Catalog validation flag (#69 follow-up). True/False set at
+    # extraction time; None for legacy rows from before validation
+    # existed. The UI distinguishes the three states: True = silent
+    # success, False = amber "verify before billing" warning, None =
+    # neutral (no caution surfaced; validation hadn't run).
+    code_validated: Optional[bool] = None
     physician_action_at: Optional[str] = None
     created_at: str
     updated_at: str
@@ -1224,6 +1230,7 @@ def _to_coding_suggestion_response(row) -> CodingSuggestionResponse:
         source_claim_ids=row.source_claim_ids or [],
         confidence=row.confidence,
         status=row.status,
+        code_validated=getattr(row, "code_validated", None),
         physician_action_at=(
             row.physician_action_at.isoformat()
             if row.physician_action_at

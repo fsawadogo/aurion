@@ -823,6 +823,14 @@ class CodingSuggestionModel(Base):
     physician_action_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Catalog-validation flag computed at extraction time. True means
+    # the code was in our curated catalog; False means it actively
+    # wasn't; None means the row predates the validation feature.
+    # NEVER recomputed on read — the catalog evolves and we want the
+    # audit story to reflect the catalog state at extraction time.
+    code_validated: Mapped[bool | None] = mapped_column(
+        Boolean, nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
