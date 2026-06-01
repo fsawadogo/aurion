@@ -68,17 +68,11 @@ const config: Config = {
         // Hairline = visible-but-quiet divider. Pre-composited result
         // of rgba(12, 27, 55, 0.08) over #FFFFFF. Concrete hex (not
         // rgba) so existing Tailwind utilities like `border-hairline`
-        // work without alpha-channel modifier acrobatics.
-        //
-        // Two tones via nested object: bare `hairline` defaults via
-        // `DEFAULT`, `hairline.strong` reachable as `border-hairline-strong`.
-        // The flat-key-with-dash variant (`"hairline-strong": "..."`)
-        // doesn't survive Tailwind's color resolver — it expects either
-        // a string or a nested map.
-        hairline: {
-          DEFAULT: "#E6E9EE",
-          strong: "#D1D6E0",
-        },
+        // work without alpha-channel modifier acrobatics. The slightly-
+        // darker hover variant (#D1D6E0) is inlined as an arbitrary
+        // value at the only callsite — wasn't worth nesting the colour
+        // for one place.
+        hairline: "#E6E9EE",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],

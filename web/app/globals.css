@@ -153,7 +153,7 @@
   }
   .aurion-card-hoverable {
     @apply transition-all duration-aurion ease-aurion
-      hover:shadow-card-hover hover:border-hairline-strong hover:-translate-y-px;
+      hover:shadow-card-hover hover:border-[#D1D6E0] hover:-translate-y-px;
   }
 
   /* ── Premium navy chrome (login background, hero sections). ── */
