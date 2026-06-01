@@ -921,7 +921,8 @@ final class SessionManager: ObservableObject {
             specialty: response.specialty,
             captureMode: mode,
             encounterType: response.encounterType,
-            participants: []
+            participants: [],
+            externalReferenceId: response.externalReferenceId
         )
         // Past consent — anything in RECORDING/PAUSED on the backend already
         // logged consent_confirmed when this session was first started. We

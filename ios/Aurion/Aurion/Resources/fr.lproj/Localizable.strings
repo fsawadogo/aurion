@@ -63,6 +63,20 @@
 "postEncounter.generate" = "G\U00E9n\U00E9rer la note";
 "postEncounter.generating" = "G\U00E9n\U00E9ration\U2026";
 
+/* ── Identifiant patient (#61) ─────────────────────────── */
+"patientId.section" = "Identifiant patient";
+"patientId.subtitle" = "Optionnel. Sert \U00E0 rattacher la note au dossier et \U00E0 retrouver les visites pr\U00E9c\U00E9dentes.";
+"patientId.placeholder" = "NAM, identifiant de visite ou num\U00E9ro de dossier";
+"patientId.add" = "Ajouter un identifiant";
+"patientId.editTitle" = "Identifiant patient";
+"patientId.save" = "Enregistrer";
+"patientId.clear" = "Effacer";
+"patientId.cancel" = "Annuler";
+"patientId.set" = "D\U00E9fini";
+"patientId.empty" = "Aucun identifiant d\U00E9fini";
+"patientId.privacyHint" = "Chiffr\U00E9 au repos. N\U2019appara\U00EEt jamais dans le journal d\U2019audit ni dans les prompts IA.";
+"patientId.saveFailed" = "Impossible d\U2019enregistrer l\U2019identifiant. Veuillez r\U00E9essayer.";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "ENR";
 "capture.recording" = "Enregistrement";

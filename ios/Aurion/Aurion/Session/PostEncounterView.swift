@@ -10,6 +10,10 @@ struct PostEncounterView: View {
     @State private var preferredTemplates: [TemplateResponse] = []
     @State private var isLoadingTemplates = false
     @State private var isConfirming = false
+    /// Patient identifier (#61). Seeded from the session row on
+    /// load; the editor binding writes back here. Stays nil when
+    /// the physician doesn't set one — the backend accepts that.
+    @State private var patientIdentifier: String?
 
     private let languages = [
         ("en", "English", "\u{1F1FA}\u{1F1F8}"),
@@ -74,6 +78,20 @@ struct PostEncounterView: View {
                             .stroke(Color.aurionBorder, lineWidth: 1)
                     )
 
+                    // Patient identifier section (#61). Optional —
+                    // physician can skip it and the note still
+                    // generates normally. When set, the backend
+                    // attaches it to the FHIR DocumentReference
+                    // (#57) and surfaces prior encounters for the
+                    // same identifier in the inbox.
+                    if let session = sessionManager.session {
+                        SectionHeader(title: L("patientId.section"))
+                        PatientIdentifierEditor(
+                            sessionId: session.id,
+                            identifier: $patientIdentifier
+                        )
+                    }
+
                     // Language section
                     SectionHeader(title: L("postEncounter.outputLanguage"))
 
@@ -129,7 +147,24 @@ struct PostEncounterView: View {
             .background(Color.aurionCardBackground)
         }
         .background(Color.aurionBackground)
-        .task { await loadTemplates() }
+        .task {
+            await loadTemplates()
+            // Seed the identifier from the session row. The
+            // SessionResponse decoder reads `external_reference_id`
+            // when the server returns it (owning clinician + admin
+            // only); otherwise nil and the editor renders the
+            // "Add" CTA.
+            patientIdentifier = sessionManager.session?.externalReferenceId
+        }
+        // Propagate identifier changes from the editor back to the
+        // CaptureSession so other views (capture screen, inbox,
+        // export sheet) see the new value without an API round-trip.
+        // The editor itself has already persisted to the backend
+        // before this fires. Uses the iOS 16-compatible single-arg
+        // onChange signature (we ship iOS 16+ per CLAUDE.md).
+        .onChange(of: patientIdentifier) { newValue in
+            sessionManager.session?.externalReferenceId = newValue
+        }
     }
 
     private func loadTemplates() async {

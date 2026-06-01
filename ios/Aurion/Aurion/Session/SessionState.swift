@@ -154,6 +154,11 @@ final class CaptureSession: ObservableObject, Identifiable {
     @Published var consentConfirmedAt: Date?
     @Published var pausedAt: Date?
     @Published var isPauseExpired = false
+    /// Patient identifier (#61). Set / cleared by PatientIdentifierEditor
+    /// in the post-encounter screen; the editor calls the backend
+    /// PATCH route + writes back here on success. Stays nil until
+    /// the physician chooses to set one. Never logged.
+    @Published var externalReferenceId: String?
 
     /// Derived from the consent metadata so the three never desynchronize.
     /// Setting consent goes through `confirmConsent(method:)`; recovery
@@ -177,13 +182,15 @@ final class CaptureSession: ObservableObject, Identifiable {
         specialty: String,
         captureMode: CaptureMode = .multimodal,
         encounterType: String = "doctor_patient",
-        participants: [SessionParticipant] = []
+        participants: [SessionParticipant] = [],
+        externalReferenceId: String? = nil
     ) {
         self.id = id
         self.specialty = specialty
         self.captureMode = captureMode
         self.encounterType = encounterType
         self.participants = participants
+        self.externalReferenceId = externalReferenceId
     }
 
     /// `true` when there's more than just doctor + patient in the room —
