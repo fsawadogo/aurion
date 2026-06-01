@@ -97,6 +97,38 @@
 "summary.saveFailed" = "Impossible d\U2019enregistrer vos modifications. Veuillez r\U00E9essayer.";
 "summary.charLimit" = "%d / %d";
 
+/* ── Commandes (#58) ───────────────────────────────────── */
+"orders.title" = "Commandes";
+"orders.subtitle" = "Extrayez les commandes structur\U00E9es de la note \U2014 imagerie, laboratoires, r\U00E9f\U00E9rences, prescriptions. Vous confirmez chacune avant l\U2019envoi.";
+"orders.extract" = "Extraire les commandes";
+"orders.extracting" = "Extraction\U2026";
+"orders.reExtract" = "Re-extraire";
+"orders.empty" = "Aucune commande extraite";
+"orders.gateMessage" = "Approuvez la note pour extraire les commandes.";
+"orders.extractFailed" = "Impossible d\U2019extraire les commandes. Veuillez r\U00E9essayer.";
+"orders.extractEmpty" = "L\U2019extracteur n\U2019a trouv\U00E9 aucune action commandable dans cette note.";
+"orders.confirm" = "Confirmer";
+"orders.confirming" = "Confirmation\U2026";
+"orders.cancel" = "Annuler";
+"orders.cancelled" = "Annul\U00E9e";
+"orders.confirmed" = "Confirm\U00E9e";
+"orders.sent" = "Envoy\U00E9e";
+"orders.draft" = "Brouillon \U00B7 \U00E0 confirmer";
+"orders.draftBadge" = "Brouillon";
+"orders.confirmFailed" = "Confirmation impossible. Veuillez r\U00E9essayer.";
+"orders.cancelFailed" = "Annulation impossible. Veuillez r\U00E9essayer.";
+"orders.cancelConfirmTitle" = "Annuler cette %@?";
+"orders.cancelConfirmMessage" = "La ligne reste dans le journal d\U2019audit.";
+"orders.kind.imaging" = "Imagerie";
+"orders.kind.lab" = "Laboratoire";
+"orders.kind.referral" = "R\U00E9f\U00E9rence";
+"orders.kind.prescription" = "Prescription";
+"orders.drugNotInCatalog" = "M\U00E9dicament absent du catalogue";
+"orders.drugVerifyHint" = "V\U00E9rifiez dans le formulaire de votre EMR avant de signer.";
+"orders.unrecognizedSummary" = "%d prescription absente du catalogue \U2014 \U00E0 v\U00E9rifier avant de signer.";
+"orders.unrecognizedSummary.plural" = "%d prescriptions absentes du catalogue \U2014 \U00E0 v\U00E9rifier avant de signer.";
+"orders.countSummary" = "%d brouillon \U00B7 %d confirm\U00E9";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "ENR";
 "capture.recording" = "Enregistrement";
