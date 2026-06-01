@@ -14,6 +14,7 @@ import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import CodingSuggestionsCard from "@/components/portal/CodingSuggestionsCard";
 import CompletenessRing from "@/components/portal/CompletenessRing";
+import EmrWriteBackCard from "@/components/portal/EmrWriteBackCard";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
 import OrdersCard from "@/components/portal/OrdersCard";
 import PageHeader from "@/components/portal/PageHeader";
@@ -319,6 +320,17 @@ export default function NoteReviewPage() {
               the clinical note's sections. The card itself carries the
               "Assistive — physician must confirm" framing inline. */}
           <CodingSuggestionsCard
+            sessionId={sessionId}
+            noteApproved={detail.export_metadata.is_approved}
+          />
+
+          {/* EMR write-back — #57 foundation. Approval-gated.
+              Foundation deployment only ships the `stub` connector;
+              real Oscar / Epic / generic-FHIR backends land in
+              follow-ups. The card surfaces the "Pilot mode" banner
+              when only stub is available, so the physician doesn't
+              think the note actually went to a chart system. */}
+          <EmrWriteBackCard
             sessionId={sessionId}
             noteApproved={detail.export_metadata.is_approved}
           />

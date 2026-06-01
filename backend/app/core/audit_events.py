@@ -63,6 +63,9 @@ class AuditEventType(StrEnum):
     CODING_SUGGESTION_CONFIRMED = "coding_suggestion_confirmed"
     CODING_SUGGESTION_REJECTED = "coding_suggestion_rejected"
     CODING_SUGGESTION_EDITED = "coding_suggestion_edited"
+    EMR_WRITE_BACK_QUEUED = "emr_write_back_queued"
+    EMR_WRITE_BACK_SENT = "emr_write_back_sent"
+    EMR_WRITE_BACK_FAILED = "emr_write_back_failed"
     SESSION_PURGED = "session_purged"
     SESSION_DISCARDED = "session_discarded"
 
@@ -227,6 +230,33 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     # to join against the row history.
     AuditEventType.CODING_SUGGESTION_EDITED: frozenset(
         {"actor_id", "suggestion_id", "code_system", "previous_code", "new_code"}
+    ),
+    # EMR write-back lifecycle. We carry the connector key + external
+    # (EMR-side) id when the connector returned one — those are the
+    # traceability hooks for a billing or chart-mismatch dispute. The
+    # payload itself is NOT in the audit row (it's the note's PHI); we
+    # store a sha256 fingerprint instead so the audit chain ties to a
+    # specific serialization without persisting the serialization.
+    AuditEventType.EMR_WRITE_BACK_QUEUED: frozenset(
+        {"actor_id", "write_back_id", "connector", "payload_fingerprint"}
+    ),
+    AuditEventType.EMR_WRITE_BACK_SENT: frozenset(
+        {
+            "actor_id",
+            "write_back_id",
+            "connector",
+            "external_id",
+            "attempt_count",
+        }
+    ),
+    AuditEventType.EMR_WRITE_BACK_FAILED: frozenset(
+        {
+            "actor_id",
+            "write_back_id",
+            "connector",
+            "error_reason",
+            "attempt_count",
+        }
     ),
     AuditEventType.SESSION_PURGED: frozenset(),
     AuditEventType.SESSION_DISCARDED: frozenset({"prior_state"}),

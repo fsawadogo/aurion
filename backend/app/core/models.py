@@ -834,3 +834,64 @@ class CodingSuggestionModel(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class EmrWriteBackModel(Base):
+    """Outbound delivery attempt of an approved note to an EMR — #57.
+
+    One row per send attempt. Foundation supports the `stub` connector;
+    real backends (Oscar, Epic SMART, generic FHIR endpoint) land in
+    follow-up issues.
+
+    `payload_fingerprint` is sha256 hex of the serialized payload — we
+    don't store the payload itself (PHI-bound; EMR is the source of
+    truth post-send). The fingerprint lets us detect duplicate sends
+    of the same note without keeping the payload around.
+
+    Ownership flows through `sessions.clinician_id`.
+    """
+
+    __tablename__ = "emr_write_backs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    connector: Mapped[str] = mapped_column(String(32), nullable=False)
+    status: Mapped[str] = mapped_column(
+        Enum(
+            "queued", "sending", "sent", "failed",
+            name="emr_write_back_status",
+        ),
+        nullable=False,
+        default="queued",
+    )
+    external_id: Mapped[str | None] = mapped_column(
+        String(128), nullable=True
+    )
+    payload_fingerprint: Mapped[str] = mapped_column(
+        String(64), nullable=False
+    )
+    error_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    attempt_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    scheduled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

@@ -621,6 +621,33 @@ export type CodingSuggestionStatus =
   | "rejected"
   | "edited";
 
+/** EMR/EHR outbound write-back attempt — #57.
+ *
+ * One row per send attempt. Foundation supports `stub` connector
+ * only; real backends (Oscar, Epic, generic FHIR) land in follow-ups.
+ * `payload_fingerprint` is sha256 hex of the serialized payload —
+ * never the payload itself. */
+export type EmrWriteBackStatus = "queued" | "sending" | "sent" | "failed";
+
+export interface EmrWriteBack {
+  id: string;
+  session_id: string;
+  connector: string;
+  status: EmrWriteBackStatus;
+  external_id?: string | null;
+  payload_fingerprint: string;
+  error_reason?: string | null;
+  attempt_count: number;
+  sent_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface EmrConnectorsCatalog {
+  available: string[];
+  default: string;
+}
+
 export interface CodingSuggestion {
   id: string;
   session_id: string;

@@ -50,6 +50,8 @@ from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.coding import service as coding_service
 from app.modules.custom_templates import service as custom_templates_service
+from app.modules.emr import service as emr_service
+from app.modules.emr.registry import list_connector_keys as list_emr_connectors
 from app.modules.export.service import export_note_docx
 from app.modules.macros import service as macros_service
 from app.modules.note_gen.service import get_latest_note, is_note_approved
@@ -1402,3 +1404,176 @@ async def edit_my_coding_suggestion(
     )
     await db.commit()
     return _to_coding_suggestion_response(row)
+
+
+# ── /me/notes/{id}/emr — outbound EMR write-back (#57) ───────────────────
+
+
+class EmrWriteBackResponse(BaseModel):
+    id: str
+    session_id: str
+    connector: str
+    status: str
+    external_id: Optional[str] = None
+    payload_fingerprint: str
+    error_reason: Optional[str] = None
+    attempt_count: int
+    sent_at: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class EmrSendRequest(BaseModel):
+    """POST body — optional connector key. None falls back to the
+    deployment's default connector (currently `stub`)."""
+
+    connector: Optional[str] = Field(default=None, max_length=32)
+
+
+class EmrConnectorsResponse(BaseModel):
+    """GET /me/emr/connectors response — populates the portal dropdown."""
+
+    available: list[str]
+    default: str
+
+
+def _to_emr_write_back_response(row) -> EmrWriteBackResponse:
+    return EmrWriteBackResponse(
+        id=str(row.id),
+        session_id=str(row.session_id),
+        connector=row.connector,
+        status=row.status,
+        external_id=row.external_id,
+        payload_fingerprint=row.payload_fingerprint,
+        error_reason=row.error_reason,
+        attempt_count=row.attempt_count,
+        sent_at=row.sent_at.isoformat() if row.sent_at else None,
+        created_at=row.created_at.isoformat(),
+        updated_at=row.updated_at.isoformat(),
+    )
+
+
+@router.get(
+    "/emr/connectors",
+    response_model=EmrConnectorsResponse,
+)
+async def list_my_emr_connectors(
+    _user: CurrentUser = Depends(get_current_clinician),
+) -> EmrConnectorsResponse:
+    """Connector keys available in this deployment. Today only `stub`;
+    real connectors land in follow-ups."""
+    available = list_emr_connectors()
+    return EmrConnectorsResponse(available=available, default="stub")
+
+
+@router.get(
+    "/notes/{session_id}/emr",
+    response_model=list[EmrWriteBackResponse],
+)
+async def list_my_session_emr_write_backs(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> list[EmrWriteBackResponse]:
+    """All write-back attempts for the session (newest first)."""
+    await get_owned_session_or_404(db, session_id, user)
+    rows = await emr_service.list_for_session(session_id, db)
+    return [_to_emr_write_back_response(r) for r in rows]
+
+
+@router.post(
+    "/notes/{session_id}/emr/send",
+    response_model=EmrWriteBackResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def send_my_session_to_emr(
+    session_id: uuid.UUID,
+    body: EmrSendRequest,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> EmrWriteBackResponse:
+    """Push the approved note to the configured EMR connector.
+
+    Refuses unapproved notes (409). Refuses unknown connector keys
+    (400). The connector itself may still fail (network blip, EMR
+    rejection); those land as `status=failed` rows with an
+    `error_reason`, NOT as HTTP errors — the audit trail must capture
+    every attempt.
+    """
+    session = await get_owned_session_or_404(db, session_id, user)
+
+    approved = await is_note_approved(str(session_id), db)
+    if not approved:
+        raise HTTPException(
+            status_code=409,
+            detail="EMR write-back requires an approved note.",
+        )
+    note = await get_latest_note(str(session_id), db)
+    if note is None:
+        raise HTTPException(
+            status_code=409, detail="No note exists for this session.",
+        )
+
+    # Decrypt the patient identifier here so the FHIR serializer
+    # gets the plaintext — it doesn't touch crypto itself.
+    identifier_plain: Optional[str] = None
+    if session.external_reference_id_encrypted is not None:
+        try:
+            identifier_plain = decrypt_str(
+                session.external_reference_id_encrypted
+            )
+        except Exception:
+            logger.warning(
+                "EMR send: identifier decrypt failed session=%s — sending without",
+                session_id,
+            )
+
+    try:
+        row = await emr_service.send_to_emr(
+            session_id,
+            note,
+            author_user_id=str(user.user_id),
+            external_reference_id=identifier_plain,
+            connector_key=body.connector,
+            db=db,
+        )
+    except KeyError as exc:
+        # Unknown connector key. Map to 400 so the portal can surface
+        # "this connector isn't configured" cleanly.
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    # Audit the queued event first (always), then the terminal one.
+    # The queued row uses the fingerprint as its audit-trail anchor;
+    # the terminal row uses the connector + external_id (success) or
+    # connector + error_reason (failure).
+    await write_audit(
+        session_id,
+        AuditEventType.EMR_WRITE_BACK_QUEUED,
+        actor_id=str(user.user_id),
+        write_back_id=str(row.id),
+        connector=row.connector,
+        payload_fingerprint=row.payload_fingerprint,
+    )
+    if row.status == "sent":
+        await write_audit(
+            session_id,
+            AuditEventType.EMR_WRITE_BACK_SENT,
+            actor_id=str(user.user_id),
+            write_back_id=str(row.id),
+            connector=row.connector,
+            external_id=row.external_id,
+            attempt_count=row.attempt_count,
+        )
+    elif row.status == "failed":
+        await write_audit(
+            session_id,
+            AuditEventType.EMR_WRITE_BACK_FAILED,
+            actor_id=str(user.user_id),
+            write_back_id=str(row.id),
+            connector=row.connector,
+            error_reason=row.error_reason or "unknown",
+            attempt_count=row.attempt_count,
+        )
+
+    await db.commit()
+    return _to_emr_write_back_response(row)
