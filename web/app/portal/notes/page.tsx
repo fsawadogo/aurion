@@ -1,20 +1,298 @@
+"use client";
+
+import { useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import {
+  ArrowRightIcon,
+  MagnifyingGlassIcon,
+} from "@heroicons/react/24/outline";
+
+import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
+import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import { listMySessions } from "@/lib/portal-api";
+import type { Session, SessionState } from "@/types";
 
 /**
- * Placeholder so the Sidebar nav entry doesn't 404 between PR-C and
- * PR-D. PR-D replaces this with the real sessions inbox + note
- * review.
+ * /portal/notes — the clinician's sessions inbox.
+ *
+ * Mirrors iOS SessionsInboxView filter chips (All / Pending / Completed
+ * / Exported) plus a text search and a date-range select. Pagination
+ * is client-side at pilot scale; the backend returns the full list of
+ * the caller's own sessions.
+ *
+ * Clicking a row navigates to /portal/notes/[id] for the review pane.
  */
-export default function PortalNotesPlaceholder() {
+
+type StatusFilter = "all" | "pending" | "completed" | "exported";
+type DateFilter = "all" | "today" | "7d" | "30d";
+
+const PENDING_STATES: ReadonlySet<SessionState> = new Set<SessionState>([
+  "AWAITING_REVIEW",
+  "PROCESSING_STAGE1",
+  "PROCESSING_STAGE2",
+  "RECORDING",
+  "PAUSED",
+]);
+
+export default function PortalSessionsInboxPage() {
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [dateFilter, setDateFilter] = useState<DateFilter>("all");
+  const [search, setSearch] = useState("");
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const list = await listMySessions();
+      // Backend returns newest-first already; if it ever stops we'd
+      // see the order swap here — sort defensively.
+      list.sort((a, b) => b.created_at.localeCompare(a.created_at));
+      setSessions(list);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load sessions.");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  const filtered = useMemo(
+    () => filterSessions(sessions, statusFilter, dateFilter, search),
+    [sessions, statusFilter, dateFilter, search],
+  );
+
+  const counts = useMemo(() => countByStatus(sessions), [sessions]);
+
   return (
-    <div className="p-6 lg:p-8 max-w-3xl mx-auto">
-      <h1 className="text-2xl font-semibold text-navy-800 mb-6">My Notes</h1>
+    <div className="p-6 lg:p-8 max-w-5xl mx-auto">
+      <div className="mb-6 flex items-end justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold text-navy-800">My Notes</h1>
+          <p className="mt-1 text-sm text-gray-500">
+            Sessions you&apos;ve recorded, with their generated notes.
+          </p>
+        </div>
+        <Button variant="secondary" size="sm" onClick={() => void load()}>
+          Refresh
+        </Button>
+      </div>
+
       <Card>
-        <p className="text-sm text-gray-600">
-          Your sessions and generated notes will land here. Coming in the
-          next portal release.
-        </p>
+        <div className="flex flex-wrap gap-3 items-center mb-4">
+          <StatusChip
+            label={`All (${counts.all})`}
+            active={statusFilter === "all"}
+            onClick={() => setStatusFilter("all")}
+          />
+          <StatusChip
+            label={`Pending (${counts.pending})`}
+            active={statusFilter === "pending"}
+            onClick={() => setStatusFilter("pending")}
+          />
+          <StatusChip
+            label={`Completed (${counts.completed})`}
+            active={statusFilter === "completed"}
+            onClick={() => setStatusFilter("completed")}
+          />
+          <StatusChip
+            label={`Exported (${counts.exported})`}
+            active={statusFilter === "exported"}
+            onClick={() => setStatusFilter("exported")}
+          />
+          <div className="ml-auto flex items-center gap-3">
+            <select
+              className="form-select w-36"
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value as DateFilter)}
+              aria-label="Date range"
+            >
+              <option value="all">All time</option>
+              <option value="today">Today</option>
+              <option value="7d">Last 7 days</option>
+              <option value="30d">Last 30 days</option>
+            </select>
+            <div className="relative">
+              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                className="form-input pl-8 w-56"
+                placeholder="Search…"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                aria-label="Search sessions"
+              />
+            </div>
+          </div>
+        </div>
+
+        {loading ? (
+          <LoadingSkeleton lines={6} />
+        ) : error ? (
+          <div className="text-sm text-red-600">{error}</div>
+        ) : filtered.length === 0 ? (
+          <div className="text-center text-sm text-gray-500 py-8">
+            No sessions match these filters.
+          </div>
+        ) : (
+          <ul className="divide-y divide-gray-100">
+            {filtered.map((s) => (
+              <li key={s.id}>
+                <Link
+                  href={`/portal/notes/${s.id}`}
+                  className="flex items-center gap-4 py-3 px-1 hover:bg-gray-50 transition-colors rounded-md"
+                >
+                  <div className="flex-1 min-w-0">
+                    <p className="font-medium text-navy-800 truncate">
+                      {humanSpecialty(s.specialty)}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {formatRelative(s.created_at)} ·{" "}
+                      <span className="font-mono text-[10px]">
+                        {s.id.slice(0, 8)}
+                      </span>
+                    </p>
+                  </div>
+                  <div className="hidden sm:block w-32 shrink-0">
+                    <StateBadge state={s.state} />
+                  </div>
+                  <ArrowRightIcon className="h-4 w-4 text-gray-300 shrink-0" />
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </Card>
     </div>
   );
+}
+
+/* ── Sub-components ────────────────────────────────────────────────────── */
+
+function StatusChip({
+  label,
+  active,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={
+        "rounded-full border px-3 py-1 text-sm transition-colors " +
+        (active
+          ? "border-gold-500 bg-gold-50 text-navy-900 font-medium"
+          : "border-gray-200 text-gray-700 hover:border-gray-300")
+      }
+    >
+      {label}
+    </button>
+  );
+}
+
+function StateBadge({ state }: { state: SessionState }) {
+  if (state === "RECORDING" || state === "PAUSED")
+    return <Badge variant="info" dot>{state}</Badge>;
+  if (
+    state === "PROCESSING_STAGE1" ||
+    state === "PROCESSING_STAGE2"
+  )
+    return <Badge variant="info" dot>Processing</Badge>;
+  if (state === "AWAITING_REVIEW")
+    return <Badge variant="warning" dot>Review</Badge>;
+  if (state === "REVIEW_COMPLETE")
+    return <Badge variant="success" dot>Approved</Badge>;
+  if (state === "EXPORTED") return <Badge variant="success">Exported</Badge>;
+  if (state === "PURGED") return <Badge variant="neutral">Purged</Badge>;
+  if (state === "FAILED") return <Badge variant="error" dot>Failed</Badge>;
+  return <Badge variant="neutral">{state}</Badge>;
+}
+
+/* ── Filtering + formatting ────────────────────────────────────────────── */
+
+function countByStatus(list: Session[]) {
+  const counts = { all: list.length, pending: 0, completed: 0, exported: 0 };
+  for (const s of list) {
+    if (PENDING_STATES.has(s.state)) counts.pending += 1;
+    else if (s.state === "REVIEW_COMPLETE") counts.completed += 1;
+    else if (s.state === "EXPORTED" || s.state === "PURGED") counts.exported += 1;
+  }
+  return counts;
+}
+
+function filterSessions(
+  list: Session[],
+  status: StatusFilter,
+  date: DateFilter,
+  search: string,
+): Session[] {
+  const cutoff = dateCutoff(date);
+  const q = search.trim().toLowerCase();
+  return list.filter((s) => {
+    if (status === "pending" && !PENDING_STATES.has(s.state)) return false;
+    if (status === "completed" && s.state !== "REVIEW_COMPLETE") return false;
+    if (
+      status === "exported" &&
+      s.state !== "EXPORTED" &&
+      s.state !== "PURGED"
+    )
+      return false;
+    if (cutoff && new Date(s.created_at).getTime() < cutoff) return false;
+    if (q) {
+      const haystack = `${s.specialty} ${s.state} ${s.id}`.toLowerCase();
+      if (!haystack.includes(q)) return false;
+    }
+    return true;
+  });
+}
+
+function dateCutoff(d: DateFilter): number | null {
+  const now = Date.now();
+  switch (d) {
+    case "today":
+      return new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+    case "7d":
+      return now - 7 * 24 * 60 * 60 * 1000;
+    case "30d":
+      return now - 30 * 24 * 60 * 60 * 1000;
+    case "all":
+    default:
+      return null;
+  }
+}
+
+function humanSpecialty(key: string): string {
+  return key
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
+
+function formatRelative(iso: string): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  const diffMs = Date.now() - d.getTime();
+  const m = Math.round(diffMs / 60_000);
+  if (m < 1) return "just now";
+  if (m < 60) return `${m} min ago`;
+  const h = Math.round(m / 60);
+  if (h < 24) return `${h} hr ago`;
+  const days = Math.round(h / 24);
+  if (days < 7) return `${days}d ago`;
+  return d.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
 }

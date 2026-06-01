@@ -16,9 +16,13 @@ import { fetchWithAuth } from "@/lib/api";
 import type {
   AuditFilters,
   CustomTemplate,
+  Note,
+  NoteDetail,
   PaginatedResponse,
   PhysicianProfile,
   PhysicianProfileUpdate,
+  Session as SessionRow,
+  Stage2Status,
   TemplateAuthoringSession,
   TemplateDefinition,
 } from "@/types";
@@ -176,6 +180,130 @@ export async function finalizeTemplateAuthoring(
     { method: "POST" },
   );
   return r.json();
+}
+
+/* ─── Sessions (own) ─────────────────────────────────────────────────────── */
+
+/** GET /api/v1/sessions — the caller's own sessions.
+ *
+ * The base /sessions endpoint is already clinician-scoped server-
+ * side (it filters on clinician_id == user.user_id), so the portal
+ * uses the same path as iOS rather than introducing a /me/sessions
+ * duplicate. Server returns the full list — pagination + filtering
+ * happen client-side at pilot scale.
+ */
+export async function listMySessions(): Promise<SessionRow[]> {
+  const r = await fetchWithAuth("/api/v1/sessions");
+  return r.json();
+}
+
+/** GET /api/v1/sessions/{id} — own session by id.
+ *
+ * 404s when the caller isn't the owner (assert_owner in PR-A masks
+ * other clinicians' rows as not-found rather than 403).
+ */
+export async function getSession(sessionId: string): Promise<SessionRow> {
+  const r = await fetchWithAuth(`/api/v1/sessions/${sessionId}`);
+  return r.json();
+}
+
+/* ─── Notes ──────────────────────────────────────────────────────────────── */
+
+/** GET /api/v1/notes/{id}/full — latest note (may include Stage 2). */
+export async function getFullNote(sessionId: string): Promise<Note> {
+  const r = await fetchWithAuth(`/api/v1/notes/${sessionId}/full`);
+  return r.json();
+}
+
+/** GET /api/v1/notes/{id}/detail — full review-pane payload: note +
+ * per-claim citations + conflict summary + export readiness. */
+export async function getNoteDetail(sessionId: string): Promise<NoteDetail> {
+  const r = await fetchWithAuth(`/api/v1/notes/${sessionId}/detail`);
+  return r.json();
+}
+
+/** POST /api/v1/notes/{id}/approve-stage1 — transitions to PROCESSING_STAGE2. */
+export async function approveStage1(sessionId: string): Promise<void> {
+  await fetchWithAuth(`/api/v1/notes/${sessionId}/approve-stage1`, {
+    method: "POST",
+  });
+}
+
+/** POST /api/v1/notes/{id}/approve — final approval, transitions to REVIEW_COMPLETE.
+ *
+ * iOS calls approve-stage1 then approve sequentially as a single
+ * user-visible action. The web mirrors that behaviour via approveAll()
+ * below — caller almost never needs to invoke this directly.
+ */
+export async function approveFinal(sessionId: string): Promise<void> {
+  await fetchWithAuth(`/api/v1/notes/${sessionId}/approve`, {
+    method: "POST",
+  });
+}
+
+/** Single-tap approve from the web UI. Mirrors the iOS NoteReviewView
+ * pattern of firing /approve-stage1 then /approve back-to-back; the
+ * second call 409s if the first already drove the session past
+ * AWAITING_REVIEW, which we tolerate (state has already advanced). */
+export async function approveAll(sessionId: string): Promise<void> {
+  try {
+    await approveStage1(sessionId);
+  } catch (e) {
+    // If the session was already past stage1 (e.g. tab was open before
+    // the user approved on iOS) the call 409s — fine, fall through to
+    // the final approve which is what we really care about.
+    const msg = e instanceof Error ? e.message : "";
+    if (!msg.includes("409")) throw e;
+  }
+  await approveFinal(sessionId);
+}
+
+/** PATCH /api/v1/notes/{id}/edit — physician edits. Body is a dict
+ * mapping section_id to new claim text. */
+export async function editNote(
+  sessionId: string,
+  edits: Record<string, string>,
+): Promise<Note> {
+  const r = await fetchWithAuth(`/api/v1/notes/${sessionId}/edit`, {
+    method: "PATCH",
+    body: JSON.stringify({ edits }),
+  });
+  return r.json();
+}
+
+/** PATCH /api/v1/notes/{id}/conflicts/{claimId}/resolve.
+ * action: 'accept_visual' | 'reject_visual' | 'edit' (the last carries resolution_text). */
+export async function resolveConflict(
+  sessionId: string,
+  claimId: string,
+  action: "accept_visual" | "reject_visual" | "edit",
+  resolutionText?: string,
+): Promise<Note> {
+  const body: Record<string, string> = { action };
+  if (action === "edit" && resolutionText) body.resolution_text = resolutionText;
+  const r = await fetchWithAuth(
+    `/api/v1/notes/${sessionId}/conflicts/${claimId}/resolve`,
+    { method: "PATCH", body: JSON.stringify(body) },
+  );
+  return r.json();
+}
+
+/** GET /api/v1/notes/{id}/stage2-status — poll fallback for the
+ * WebSocket-based progress flow. */
+export async function getStage2Status(sessionId: string): Promise<Stage2Status> {
+  const r = await fetchWithAuth(`/api/v1/notes/${sessionId}/stage2-status`);
+  return r.json();
+}
+
+/* ─── Single-session export ──────────────────────────────────────────────── */
+
+/** POST /api/v1/notes/{id}/export — server-side DOCX render. Returns
+ * the raw blob so callers can trigger a browser download. */
+export async function exportNote(sessionId: string): Promise<Blob> {
+  const r = await fetchWithAuth(`/api/v1/notes/${sessionId}/export`, {
+    method: "POST",
+  });
+  return r.blob();
 }
 
 /* ─── Bulk export ────────────────────────────────────────────────────────── */
