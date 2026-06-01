@@ -48,6 +48,7 @@ class AuditEventType(StrEnum):
     STAGE2_STARTED = "stage2_started"
     FULL_NOTE_DELIVERED = "full_note_delivered"
     NOTE_EXPORTED = "note_exported"
+    BULK_NOTE_EXPORT = "bulk_note_export"
     SESSION_PURGED = "session_purged"
     SESSION_DISCARDED = "session_discarded"
 
@@ -140,6 +141,12 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
         # Server path emits format/version/stage; iOS audit endpoint adds
         # bytes_produced + origin. Union of both paths.
         {"format", "version", "stage", "bytes_produced", "origin"}
+    ),
+    # Bulk export from the web portal — anchors on the first session_id
+    # but carries the full included/skipped lists so the audit trail
+    # tells the whole story in one row.
+    AuditEventType.BULK_NOTE_EXPORT: frozenset(
+        {"included_session_ids", "skipped_session_ids", "actor_id"}
     ),
     AuditEventType.SESSION_PURGED: frozenset(),
     AuditEventType.SESSION_DISCARDED: frozenset({"prior_state"}),
