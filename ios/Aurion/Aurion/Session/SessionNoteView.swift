@@ -305,13 +305,29 @@ struct SessionNoteView: View {
 
     private func noteContent(_ note: NoteResponse) -> some View {
         ScrollView {
-            NoteDocumentBody(
-                note: note,
-                specialtyTitle: displaySpecialty,
-                dateString: displayDate,
-                forPDF: false
-            )
-            // iPad reading-measure clamp.
+            VStack(spacing: 16) {
+                NoteDocumentBody(
+                    note: note,
+                    specialtyTitle: displaySpecialty,
+                    dateString: displayDate,
+                    forPDF: false
+                )
+
+                // Patient summary card (#59). Approval-gated
+                // internally — renders a locked notice for unsigned
+                // notes so the physician knows what unlocks it. Lives
+                // INSIDE the iPad reading clamp so it never visually
+                // outruns the note above it.
+                PatientSummaryCard(
+                    sessionId: session.id,
+                    sessionState: session.state
+                )
+                .padding(.horizontal, 24)
+                .padding(.bottom, 28)
+            }
+            // iPad reading-measure clamp — applied to the inner
+            // VStack so both the document body and the summary card
+            // share the same column width.
             .frame(maxWidth: horizontalSizeClass == .regular ? 720 : .infinity)
             .frame(maxWidth: .infinity, alignment: .center)
         }

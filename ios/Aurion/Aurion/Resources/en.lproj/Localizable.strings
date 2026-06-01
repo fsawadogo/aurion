@@ -77,6 +77,26 @@
 "patientId.privacyHint" = "Stored encrypted. Never appears in the audit log or in the AI prompts.";
 "patientId.saveFailed" = "Couldn\U2019t save the identifier. Please try again.";
 
+/* ── Patient summary (#59) ─────────────────────────────── */
+"summary.title" = "Patient Summary";
+"summary.subtitle" = "Plain-language handout for the patient. Generated only after you approve the note.";
+"summary.generate" = "Generate";
+"summary.generating" = "Generating\U2026";
+"summary.regenerate" = "Regenerate";
+"summary.copy" = "Copy";
+"summary.copied" = "Copied";
+"summary.share" = "Share";
+"summary.edit" = "Edit";
+"summary.cancel" = "Cancel";
+"summary.save" = "Save";
+"summary.versionLabel" = "v%d";
+"summary.providerLabel" = "by %@";
+"summary.editedTag" = "Edited";
+"summary.gateMessage" = "Approve the note to generate a patient-facing summary.";
+"summary.generateFailed" = "Couldn\U2019t generate the summary. Please try again.";
+"summary.saveFailed" = "Couldn\U2019t save your edits. Please try again.";
+"summary.charLimit" = "%d / %d";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "REC";
 "capture.recording" = "Recording";
