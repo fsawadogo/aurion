@@ -770,6 +770,14 @@ class NoteOrderModel(Base):
     drug_validated: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True
     )
+    # Catalog version in effect when drug_validated was set. NULL
+    # when the row predates this column OR the kind doesn't get
+    # validated (imaging/lab/referral). Stored not re-derived — the
+    # catalog evolves; this row's validation result must remain
+    # explainable against the catalog state at extraction time.
+    catalog_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -838,6 +846,12 @@ class CodingSuggestionModel(Base):
     # audit story to reflect the catalog state at extraction time.
     code_validated: Mapped[bool | None] = mapped_column(
         Boolean, nullable=True
+    )
+    # Catalog version in effect when code_validated was set. NULL
+    # for rows from before this column existed. Same audit-story
+    # rationale as NoteOrderModel.catalog_version.
+    catalog_version: Mapped[str | None] = mapped_column(
+        String(32), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

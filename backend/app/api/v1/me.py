@@ -467,6 +467,10 @@ class NoteOrderResponse(BaseModel):
     # non-prescription kinds (imaging / lab / referral don't have a
     # drug field).
     drug_validated: Optional[bool] = None
+    # Catalog version in effect when drug_validated was set. NULL
+    # for non-prescription kinds AND for rows from before the
+    # version column existed.
+    catalog_version: Optional[str] = None
     physician_confirmed_at: Optional[str] = None
     sent_at: Optional[str] = None
     created_at: str
@@ -492,6 +496,7 @@ def _to_order_response(row) -> NoteOrderResponse:
         status=row.status,
         source_claim_ids=row.source_claim_ids or [],
         drug_validated=getattr(row, "drug_validated", None),
+        catalog_version=getattr(row, "catalog_version", None),
         physician_confirmed_at=(
             row.physician_confirmed_at.isoformat()
             if row.physician_confirmed_at
@@ -1213,6 +1218,9 @@ class CodingSuggestionResponse(BaseModel):
     # success, False = amber "verify before billing" warning, None =
     # neutral (no caution surfaced; validation hadn't run).
     code_validated: Optional[bool] = None
+    # Catalog version in effect when code_validated was set. NULL
+    # for rows that predate the version column.
+    catalog_version: Optional[str] = None
     physician_action_at: Optional[str] = None
     created_at: str
     updated_at: str
@@ -1237,6 +1245,7 @@ def _to_coding_suggestion_response(row) -> CodingSuggestionResponse:
         confidence=row.confidence,
         status=row.status,
         code_validated=getattr(row, "code_validated", None),
+        catalog_version=getattr(row, "catalog_version", None),
         physician_action_at=(
             row.physician_action_at.isoformat()
             if row.physician_action_at

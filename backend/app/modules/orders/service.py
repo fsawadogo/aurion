@@ -171,6 +171,7 @@ async def extract_from_note(
 
     rows: list[NoteOrderModel] = []
     drug_misses = 0
+    catalog_version = get_catalog_version()
     for cand in candidates:
         # Drug catalog validation runs at extraction time for
         # prescription rows only. Other kinds (imaging / lab /
@@ -178,9 +179,11 @@ async def extract_from_note(
         # column stays NULL. The False / None distinction matters in
         # the audit story and in the UI badge.
         drug_validated: bool | None = None
+        row_catalog_version: str | None = None
         if cand["kind"] == "prescription":
             raw_drug = cand["details"].get("drug", "")
             drug_validated = validate_drug(raw_drug)
+            row_catalog_version = catalog_version
             if drug_validated is False:
                 drug_misses += 1
         row = NoteOrderModel(
@@ -191,6 +194,7 @@ async def extract_from_note(
             source_claim_ids=cand["source_claim_ids"],
             status="draft",
             drug_validated=drug_validated,
+            catalog_version=row_catalog_version,
         )
         db.add(row)
         rows.append(row)
@@ -271,9 +275,12 @@ async def edit_details(
     # Re-run drug validation when the drug field may have changed
     # (only meaningful for prescription rows). A physician-typed
     # bogus drug name still gets the warning — same safety contract
-    # as the extraction path.
+    # as the extraction path. Re-stamp the catalog version too:
+    # this validation result is against the CURRENT catalog, not
+    # whatever was in effect at the original extraction.
     if row.kind == "prescription":
         row.drug_validated = validate_drug(details.get("drug", ""))
+        row.catalog_version = get_catalog_version()
     await db.flush()
     return row
 

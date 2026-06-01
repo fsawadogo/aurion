@@ -199,6 +199,7 @@ async def extract_from_note(
 
     rows: list[CodingSuggestionModel] = []
     validation_misses = 0
+    catalog_version = get_catalog_version()
     for cand in candidates:
         # Catalog validation runs at extraction time, never recomputed
         # on read. Result is stored on the row so the audit story
@@ -220,6 +221,7 @@ async def extract_from_note(
             confidence=cand["confidence"],
             status="suggested",
             code_validated=is_validated,
+            catalog_version=catalog_version,
         )
         db.add(row)
         rows.append(row)
@@ -320,8 +322,11 @@ async def edit(
     # Re-run catalog validation since the code itself may have changed.
     # The physician override flips this independently of the LLM's
     # original validation result — a physician-typed code still gets
-    # the catalog warning if it's not recognized.
+    # the catalog warning if it's not recognized. Re-stamp the
+    # catalog_version too: this validation is against the current
+    # catalog, not whatever was in effect at original extraction.
     row.code_validated = validate_code(row.code_system, row.code)
+    row.catalog_version = get_catalog_version()
     # Editing implies a physician decision — mark as `edited` so the
     # audit trail distinguishes "physician accepted as-is" from
     # "physician overrode the LLM's pick". UI treats both as eligible
