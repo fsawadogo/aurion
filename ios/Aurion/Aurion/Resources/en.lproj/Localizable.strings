@@ -195,6 +195,19 @@
 "emr.nextAttempt" = "Next attempt at %@";
 "emr.sendFailed" = "Couldn\U2019t send to EMR. Please try again.";
 
+/* ── Live preview during recording (#64) ───────────────── */
+"preview.title" = "Live Preview";
+"preview.draftBadge" = "DRAFT";
+"preview.disclaimer" = "Sneak peek of the note assembling in real time. The final note is generated at recording stop with the full transcript and visual evidence \U2014 don\U2019t treat this as chartable.";
+"preview.waiting" = "First snapshot lands after we have enough transcript to draft a section\U2026";
+"preview.refresh" = "Refresh";
+"preview.refreshing" = "Refreshing\U2026";
+"preview.versionMeta" = "v%d \U00B7 %@";
+"preview.collapse" = "Hide preview";
+"preview.expand" = "Show preview";
+"preview.failed" = "Couldn\U2019t generate preview \U2014 will retry on next tick.";
+"preview.noTranscript" = "Waiting for transcript content\U2026";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "REC";
 "capture.recording" = "Recording";

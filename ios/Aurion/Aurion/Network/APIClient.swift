@@ -345,6 +345,34 @@ final class APIClient: Sendable {
         )
     }
 
+    // MARK: - Live preview (#64)
+
+    /// Generate a fresh draft preview from the partial transcript text.
+    /// Runs on a separate code path from canonical Stage 1 — a hung
+    /// preview never blocks recording-stop. 502 on upstream LLM failure;
+    /// 409 when the session has no specialty assigned.
+    func generateLivePreview(
+        sessionId: String,
+        partialTranscript: String,
+        outputLanguage: String = "en"
+    ) async throws -> LivePreviewResponse {
+        return try await post(
+            path: "/me/sessions/\(sessionId)/preview",
+            body: [
+                "partial_transcript": partialTranscript,
+                "output_language": outputLanguage,
+            ]
+        )
+    }
+
+    /// Latest preview snapshot for the session, or nil when none yet.
+    func getLatestLivePreview(sessionId: String) async throws -> LivePreviewResponse? {
+        let value: LivePreviewResponse? = try? await get(
+            path: "/me/sessions/\(sessionId)/preview"
+        )
+        return value
+    }
+
     // MARK: - Config
 
     /// Pulls the public AppConfig subset (providers, pipeline timing, feature flags).
@@ -963,6 +991,61 @@ struct NoteOrderResponse: Codable, Sendable, Equatable, Identifiable {
         sentAt = try c.decodeIfPresent(String.self, forKey: .sentAt)
         createdAt = try c.decode(String.self, forKey: .createdAt)
         updatedAt = try c.decode(String.self, forKey: .updatedAt)
+    }
+}
+
+/// Live preview snapshot (#64) — draft note generated mid-encounter
+/// from the partial transcript. NOT the canonical Stage 1 note:
+///   * `stage` is always 0, `isDraft` always true — any consumer
+///     that treats this as a chartable note has a bug
+///   * lives in its own table server-side (live_note_previews); the
+///     canonical Stage 1 pipeline at recording-stop ignores all
+///     preview rows
+struct LivePreviewResponse: Codable, Sendable, Equatable {
+    let id: String
+    let sessionId: String
+    let version: Int
+    let stage: Int  // always 0
+    let isDraft: Bool  // always true
+    let sections: [LivePreviewSectionPayload]
+    let transcriptChars: Int
+    let completenessScore: Double
+    let providerUsed: String
+    let createdAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, version, stage, sections
+        case sessionId = "session_id"
+        case isDraft = "is_draft"
+        case transcriptChars = "transcript_chars"
+        case completenessScore = "completeness_score"
+        case providerUsed = "provider_used"
+        case createdAt = "created_at"
+    }
+}
+
+/// One section in a live preview. Shape mirrors the canonical
+/// NoteSection — but the `claims[].sourceId` values are synthetic
+/// (`preview_seg_0`) since real transcript anchors don't exist
+/// during recording yet. Downstream consumers MUST NOT treat preview
+/// `sourceId` values as canonical anchors.
+struct LivePreviewSectionPayload: Codable, Sendable, Equatable {
+    let id: String
+    let title: String?
+    let status: String  // populated / not_captured / pending_video / processing_failed
+    let claims: [LivePreviewClaimPayload]
+}
+
+struct LivePreviewClaimPayload: Codable, Sendable, Equatable {
+    let id: String
+    let text: String
+    let sourceType: String
+    let sourceId: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, text
+        case sourceType = "source_type"
+        case sourceId = "source_id"
     }
 }
 

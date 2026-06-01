@@ -135,6 +135,27 @@ struct CaptureView: View {
                                 .padding(.horizontal, 24)
                                 .transition(.opacity)
                         }
+
+                        // Live preview overlay (#64) — surfaces the
+                        // draft note as it assembles. Tick cadence
+                        // owned by the overlay; reads the partial
+                        // transcript via `live.transcript`. Only
+                        // mounts when the on-device transcriber is
+                        // available (otherwise we'd be POSTing
+                        // empty strings every 30s); the overlay
+                        // itself gates on a minimum transcript-
+                        // length threshold before firing.
+                        if live.isAvailable {
+                            LivePreviewOverlay(
+                                sessionId: session.id,
+                                partialTranscript: live.transcript,
+                                outputLanguage: sessionManager
+                                    .sessionLanguageForLivePreview
+                            )
+                            .padding(.top, 14)
+                            .padding(.horizontal, 24)
+                            .transition(.opacity)
+                        }
                     }
                 }
 
