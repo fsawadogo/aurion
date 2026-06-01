@@ -313,6 +313,17 @@ struct SessionNoteView: View {
                     forPDF: false
                 )
 
+                // Orders card (#58). Approval-gated; the extractor
+                // runs against the approved Stage 1 note. Drafts at
+                // the top with per-row Confirm + Cancel. Prescription
+                // rows with unrecognized drug names surface the drug-
+                // catalog warning inline + at the top of the card.
+                OrdersCard(
+                    sessionId: session.id,
+                    sessionState: session.state
+                )
+                .padding(.horizontal, 24)
+
                 // Patient summary card (#59). Approval-gated
                 // internally — renders a locked notice for unsigned
                 // notes so the physician knows what unlocks it. Lives

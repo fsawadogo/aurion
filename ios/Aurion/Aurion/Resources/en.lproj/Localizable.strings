@@ -97,6 +97,38 @@
 "summary.saveFailed" = "Couldn\U2019t save your edits. Please try again.";
 "summary.charLimit" = "%d / %d";
 
+/* ── Orders (#58) ──────────────────────────────────────── */
+"orders.title" = "Orders";
+"orders.subtitle" = "Pull structured orders out of the note \U2014 imaging, labs, referrals, prescriptions. You confirm each before they go out.";
+"orders.extract" = "Extract orders from note";
+"orders.extracting" = "Extracting\U2026";
+"orders.reExtract" = "Re-extract";
+"orders.empty" = "No orders extracted yet";
+"orders.gateMessage" = "Approve the note to extract orders.";
+"orders.extractFailed" = "Couldn\U2019t extract orders. Please try again.";
+"orders.extractEmpty" = "The extractor found no orderable actions in this note.";
+"orders.confirm" = "Confirm";
+"orders.confirming" = "Confirming\U2026";
+"orders.cancel" = "Cancel";
+"orders.cancelled" = "Cancelled";
+"orders.confirmed" = "Confirmed";
+"orders.sent" = "Sent";
+"orders.draft" = "Draft \U00B7 needs confirm";
+"orders.draftBadge" = "Draft";
+"orders.confirmFailed" = "Couldn\U2019t confirm. Please try again.";
+"orders.cancelFailed" = "Couldn\U2019t cancel. Please try again.";
+"orders.cancelConfirmTitle" = "Cancel this %@?";
+"orders.cancelConfirmMessage" = "The row stays in the audit log.";
+"orders.kind.imaging" = "Imaging";
+"orders.kind.lab" = "Lab";
+"orders.kind.referral" = "Referral";
+"orders.kind.prescription" = "Prescription";
+"orders.drugNotInCatalog" = "Drug not in catalog";
+"orders.drugVerifyHint" = "Cross-reference your EMR\U2019s formulary before signing off.";
+"orders.unrecognizedSummary" = "%d prescription not in catalog \U2014 verify before signing.";
+"orders.unrecognizedSummary.plural" = "%d prescriptions not in catalog \U2014 verify before signing.";
+"orders.countSummary" = "%d draft \U00B7 %d confirmed";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "REC";
 "capture.recording" = "Recording";

@@ -240,6 +240,39 @@ final class APIClient: Sendable {
         )
     }
 
+    // MARK: - Orders (#58)
+
+    /// List all order drafts for the session (newest first).
+    /// Includes drafts + confirmed + cancelled rows; the UI sorts +
+    /// filters as it sees fit.
+    func listOrders(sessionId: String) async throws -> [NoteOrderResponse] {
+        return try await get(path: "/me/notes/\(sessionId)/orders")
+    }
+
+    /// Run the LLM extractor against the latest approved note and
+    /// persist each found order as a draft. 409 when the note isn't
+    /// approved; 502 on upstream LLM failure. Returns the new drafts
+    /// only (existing rows aren't included — the UI re-fetches to merge).
+    func extractOrders(sessionId: String) async throws -> [NoteOrderResponse] {
+        return try await post(path: "/me/notes/\(sessionId)/orders/extract")
+    }
+
+    /// Draft → confirmed. Idempotent on already-confirmed rows.
+    /// Returns the updated row.
+    func confirmOrder(sessionId: String, orderId: String) async throws -> NoteOrderResponse {
+        return try await post(
+            path: "/me/notes/\(sessionId)/orders/\(orderId)/confirm"
+        )
+    }
+
+    /// Cancel an order. Soft delete — the row stays for audit; status
+    /// flips to "cancelled". Refused on sent rows (the EMR owns them).
+    func cancelOrder(sessionId: String, orderId: String) async throws -> NoteOrderResponse {
+        return try await delete(
+            path: "/me/notes/\(sessionId)/orders/\(orderId)"
+        )
+    }
+
     // MARK: - Config
 
     /// Pulls the public AppConfig subset (providers, pipeline timing, feature flags).
@@ -440,6 +473,14 @@ final class APIClient: Sendable {
 
     private func post<T: Decodable>(path: String, body: [String: Any]? = nil) async throws -> T {
         try await mutate(method: "POST", path: path, body: body)
+    }
+
+    /// HTTP DELETE that decodes a JSON response body. Backend uses DELETE
+    /// for soft-delete-with-return endpoints (e.g. /orders/{id} flipping
+    /// the row to status=cancelled and returning the updated row), so
+    /// the helper expects a typed response shape.
+    private func delete<T: Decodable>(path: String, body: [String: Any]? = nil) async throws -> T {
+        try await mutate(method: "DELETE", path: path, body: body)
     }
 
     private func performRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
@@ -781,6 +822,117 @@ struct NoteApprovalResponse: Codable, Sendable {
     enum CodingKeys: String, CodingKey {
         case stage, version, approved, message
         case sessionId = "session_id"
+    }
+}
+
+/// Structured order draft extracted from an approved note (#58).
+///
+/// Per-kind details shape (server-enforced; we trust the field):
+///   imaging      → { modality, body_part, laterality, indication }
+///   lab          → { panel, indication }
+///   referral     → { specialty, reason, urgency }
+///   prescription → { drug, dose, frequency, duration, indication }
+///
+/// The `details` JSON object is decoded as `[String: AnyCodableString]`
+/// since the values are always strings server-side; we trade a small
+/// type-erasure cost for not having to model every per-kind shape.
+///
+/// `drugValidated` (#58 follow-up via #172): three-state catalog check
+/// for prescription rows only. True = recognized; False = checked and
+/// not in catalog (UI surfaces verify-before-prescribing warning);
+/// null = non-prescription kind OR legacy row.
+struct NoteOrderResponse: Codable, Sendable, Equatable, Identifiable {
+    let id: String
+    let sessionId: String
+    let kind: String  // imaging / lab / referral / prescription
+    let details: [String: String]
+    let status: String  // draft / confirmed / sent / cancelled
+    let sourceClaimIds: [String]
+    let drugValidated: Bool?
+    let catalogVersion: String?
+    let physicianConfirmedAt: String?
+    let sentAt: String?
+    let createdAt: String
+    let updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, kind, details, status
+        case sessionId = "session_id"
+        case sourceClaimIds = "source_claim_ids"
+        case drugValidated = "drug_validated"
+        case catalogVersion = "catalog_version"
+        case physicianConfirmedAt = "physician_confirmed_at"
+        case sentAt = "sent_at"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(String.self, forKey: .id)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        kind = try c.decode(String.self, forKey: .kind)
+        status = try c.decode(String.self, forKey: .status)
+        // details values come back as JSON strings; decode each as a
+        // String for a stable iOS-side type. Server contract is
+        // string-only per the system prompt + parser in
+        // modules/orders/service.py.
+        if let raw = try? c.decode([String: String].self, forKey: .details) {
+            details = raw
+        } else if let any = try? c.decode([String: AnyCodableValue].self, forKey: .details) {
+            details = any.mapValues { $0.stringValue }
+        } else {
+            details = [:]
+        }
+        sourceClaimIds = try c.decodeIfPresent([String].self, forKey: .sourceClaimIds) ?? []
+        drugValidated = try c.decodeIfPresent(Bool.self, forKey: .drugValidated)
+        catalogVersion = try c.decodeIfPresent(String.self, forKey: .catalogVersion)
+        physicianConfirmedAt = try c.decodeIfPresent(String.self, forKey: .physicianConfirmedAt)
+        sentAt = try c.decodeIfPresent(String.self, forKey: .sentAt)
+        createdAt = try c.decode(String.self, forKey: .createdAt)
+        updatedAt = try c.decode(String.self, forKey: .updatedAt)
+    }
+}
+
+/// Permissive decoder for heterogeneous JSON values that we want to
+/// project down to String for storage. Used by NoteOrderResponse when
+/// the server emits e.g. a numeric urgency or null laterality.
+enum AnyCodableValue: Codable, Sendable, Equatable {
+    case string(String)
+    case int(Int)
+    case double(Double)
+    case bool(Bool)
+    case null
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.singleValueContainer()
+        if c.decodeNil() { self = .null; return }
+        if let v = try? c.decode(String.self) { self = .string(v); return }
+        if let v = try? c.decode(Int.self) { self = .int(v); return }
+        if let v = try? c.decode(Double.self) { self = .double(v); return }
+        if let v = try? c.decode(Bool.self) { self = .bool(v); return }
+        self = .null
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.singleValueContainer()
+        switch self {
+        case .string(let v): try c.encode(v)
+        case .int(let v): try c.encode(v)
+        case .double(let v): try c.encode(v)
+        case .bool(let v): try c.encode(v)
+        case .null: try c.encodeNil()
+        }
+    }
+
+    var stringValue: String {
+        switch self {
+        case .string(let v): return v
+        case .int(let v): return String(v)
+        case .double(let v): return String(v)
+        case .bool(let v): return v ? "true" : "false"
+        case .null: return ""
+        }
     }
 }
 
