@@ -59,6 +59,10 @@ class AuditEventType(StrEnum):
     ORDER_CONFIRMED = "order_confirmed"
     ORDER_EDITED = "order_edited"
     ORDER_CANCELLED = "order_cancelled"
+    CODING_SUGGESTIONS_EXTRACTED = "coding_suggestions_extracted"
+    CODING_SUGGESTION_CONFIRMED = "coding_suggestion_confirmed"
+    CODING_SUGGESTION_REJECTED = "coding_suggestion_rejected"
+    CODING_SUGGESTION_EDITED = "coding_suggestion_edited"
     SESSION_PURGED = "session_purged"
     SESSION_DISCARDED = "session_discarded"
 
@@ -202,6 +206,27 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.ORDER_CANCELLED: frozenset(
         {"actor_id", "order_id", "kind"}
+    ),
+    # Coding suggestions lifecycle. The `code` itself is NOT PHI (it's
+    # a billing code string) and IS allowed in the audit row — knowing
+    # which code was confirmed/rejected/edited is the whole point of
+    # the trail for a billing dispute. But `description` and
+    # `justification` ARE PHI-adjacent (they paraphrase the patient's
+    # clinical content) and are deliberately excluded.
+    AuditEventType.CODING_SUGGESTIONS_EXTRACTED: frozenset(
+        {"actor_id", "count", "provider_used"}
+    ),
+    AuditEventType.CODING_SUGGESTION_CONFIRMED: frozenset(
+        {"actor_id", "suggestion_id", "code_system", "code"}
+    ),
+    AuditEventType.CODING_SUGGESTION_REJECTED: frozenset(
+        {"actor_id", "suggestion_id", "code_system", "code"}
+    ),
+    # On edit we audit both the prior and new code so the trail
+    # reconstructs the physician's override decision without needing
+    # to join against the row history.
+    AuditEventType.CODING_SUGGESTION_EDITED: frozenset(
+        {"actor_id", "suggestion_id", "code_system", "previous_code", "new_code"}
     ),
     AuditEventType.SESSION_PURGED: frozenset(),
     AuditEventType.SESSION_DISCARDED: frozenset({"prior_state"}),

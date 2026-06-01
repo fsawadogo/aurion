@@ -15,6 +15,7 @@
 import { fetchWithAuth } from "@/lib/api";
 import type {
   AuditFilters,
+  CodingSuggestion,
   CustomTemplate,
   Note,
   NoteDetail,
@@ -480,4 +481,63 @@ export async function bulkExport(sessionIds: string[]): Promise<Blob> {
     body: JSON.stringify({ session_ids: sessionIds }),
   });
   return r.blob();
+}
+
+/* ─── Coding & billing suggestions (#69 — separate inference surface) ────── */
+
+/** GET /me/notes/{id}/coding-suggestions */
+export async function listMyCodingSuggestions(
+  sessionId: string,
+): Promise<CodingSuggestion[]> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/coding-suggestions`,
+  );
+  return r.json();
+}
+
+/** POST /me/notes/{id}/coding-suggestions/extract — runs the LLM
+ * suggestion engine against the approved note. 409 when not approved;
+ * 502 when the upstream LLM fails. */
+export async function extractMyCodingSuggestions(
+  sessionId: string,
+): Promise<CodingSuggestion[]> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/coding-suggestions/extract`,
+    { method: "POST" },
+  );
+  return r.json();
+}
+
+export async function confirmMyCodingSuggestion(
+  sessionId: string,
+  suggestionId: string,
+): Promise<CodingSuggestion> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/coding-suggestions/${suggestionId}/confirm`,
+    { method: "POST" },
+  );
+  return r.json();
+}
+
+export async function rejectMyCodingSuggestion(
+  sessionId: string,
+  suggestionId: string,
+): Promise<CodingSuggestion> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/coding-suggestions/${suggestionId}/reject`,
+    { method: "POST" },
+  );
+  return r.json();
+}
+
+export async function editMyCodingSuggestion(
+  sessionId: string,
+  suggestionId: string,
+  patch: { code: string; description: string },
+): Promise<CodingSuggestion> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/coding-suggestions/${suggestionId}`,
+    { method: "PATCH", body: JSON.stringify(patch) },
+  );
+  return r.json();
 }

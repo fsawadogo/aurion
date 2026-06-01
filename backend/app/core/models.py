@@ -774,3 +774,63 @@ class NoteOrderModel(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
+
+class CodingSuggestionModel(Base):
+    """E/M, ICD-10, CPT suggestion for an approved session — #69.
+
+    Strategic separate surface. Aurion's clinical note is descriptive
+    only by policy; this table holds the inferential side (LLM mapping
+    free-text findings to billing codes) on its OWN row, never written
+    back into note sections. The portal renders these on a dedicated,
+    clearly-labeled card; physician confirms / rejects / edits each
+    row before it's eligible for EMR write-back (#57).
+
+    Ownership flows through `sessions.clinician_id`. `description` and
+    `justification` are PHI-adjacent free text — never logged, never
+    in audit rows. The `code` itself is allowed in the audit log
+    (it's the whole point of the trail).
+    """
+
+    __tablename__ = "coding_suggestions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    code_system: Mapped[str] = mapped_column(
+        Enum("em", "icd10", "cpt", name="coding_system"),
+        nullable=False,
+    )
+    code: Mapped[str] = mapped_column(String(32), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    justification: Mapped[str] = mapped_column(Text, nullable=False)
+    source_claim_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    confidence: Mapped[str] = mapped_column(
+        Enum("low", "medium", "high", name="coding_confidence"),
+        nullable=False,
+        default="medium",
+    )
+    status: Mapped[str] = mapped_column(
+        Enum(
+            "suggested", "confirmed", "rejected", "edited",
+            name="coding_status",
+        ),
+        nullable=False,
+        default="suggested",
+    )
+    physician_action_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

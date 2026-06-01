@@ -609,3 +609,29 @@ export interface NoteOrder {
   created_at: string;
   updated_at: string;
 }
+
+/** Coding & billing suggestion — #69 strategic separate-surface
+ * inference. NEVER rendered into the clinical note; lives on its own
+ * card with "Assistive — physician confirms" framing. */
+export type CodingSystem = "em" | "icd10" | "cpt";
+export type CodingConfidence = "low" | "medium" | "high";
+export type CodingSuggestionStatus =
+  | "suggested"
+  | "confirmed"
+  | "rejected"
+  | "edited";
+
+export interface CodingSuggestion {
+  id: string;
+  session_id: string;
+  code_system: CodingSystem;
+  code: string;
+  description: string;
+  justification: string;
+  source_claim_ids: string[];
+  confidence: CodingConfidence;
+  status: CodingSuggestionStatus;
+  physician_action_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}
