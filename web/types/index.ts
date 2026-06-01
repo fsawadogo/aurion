@@ -155,6 +155,83 @@ export interface Note {
   created_at: string;
 }
 
+/** Per-claim citation expansion for the note review pane. Only the
+ * fields relevant to the claim's source_type are populated; others are
+ * left undefined. */
+export interface CitationExpansion {
+  source_type: string;
+  source_id: string;
+  /** transcript anchor */
+  transcript_text?: string | null;
+  transcript_speaker?: string | null;
+  transcript_start_ms?: number | null;
+  transcript_end_ms?: number | null;
+  /** visual / screen anchor — both reference a frame_id */
+  frame_timestamp_ms?: number | null;
+  frame_s3_key?: string | null;
+  /** physician edit */
+  original_text?: string | null;
+}
+
+export interface ConflictState {
+  has_unresolved: boolean;
+  unresolved_count: number;
+  unresolved_section_ids: string[];
+  unresolved_claim_ids: string[];
+}
+
+export interface ExportMetadata {
+  latest_version: number;
+  is_approved: boolean;
+  can_export: boolean;
+  session_state: SessionState;
+}
+
+/** Full note + citation + conflict + export state for the review UI. */
+export interface NoteDetail {
+  note: Note;
+  citations: Record<string, CitationExpansion>;
+  conflict_state: ConflictState;
+  export_metadata: ExportMetadata;
+}
+
+export type Stage2JobStatus =
+  | "no_job"
+  | "pending"
+  | "running"
+  | "completed"
+  | "failed";
+
+export interface Stage2Status {
+  session_id: string;
+  job_id?: string | null;
+  status: Stage2JobStatus;
+  started_at?: string | null;
+  completed_at?: string | null;
+  new_note_version?: number | null;
+  frames_processed: number;
+  error_message?: string | null;
+}
+
+/** Incremental progress event delivered by the /ws/notes/{id} channel.
+ * Backend emits ~every 10% of frames during Stage 2. */
+export interface Stage2ProgressEvent {
+  frames_processed: number;
+  frames_total: number;
+}
+
+/** WebSocket envelope on /ws/notes/{session_id}. The discriminator is
+ * the `event` field; additional payload depends on the event type. */
+export type NoteWebSocketMessage =
+  | { event: "stage1_delivered"; session_id: string; note: Note }
+  | { event: "stage2_delivered"; session_id: string; note: Note }
+  | {
+      event: "stage2_progress";
+      session_id: string;
+      frames_processed: number;
+      frames_total: number;
+    };
+
 /* ─── PHI Masking ────────────────────────────────────────────────────────── */
 
 export interface MaskingSessionResult {
