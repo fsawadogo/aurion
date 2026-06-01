@@ -21,6 +21,7 @@ import OrdersCard from "@/components/portal/OrdersCard";
 import PageHeader from "@/components/portal/PageHeader";
 import PatientIdentifierEditor from "@/components/portal/PatientIdentifierEditor";
 import PatientSummaryCard from "@/components/portal/PatientSummaryCard";
+import PreviewVsFinalCard from "@/components/portal/PreviewVsFinalCard";
 import StageTwoProgressBanner from "@/components/portal/StageTwoProgressBanner";
 import TranscriptPane, {
   TranscriptPaneHandle,
@@ -361,6 +362,18 @@ export default function NoteReviewPage() {
               think the note actually went to a chart system. */}
           <EmrWriteBackCard
             sessionId={sessionId}
+            noteApproved={detail.export_metadata.is_approved}
+          />
+
+          {/* Preview-vs-final diff (#64 follow-up). Approval-gated.
+              Collapsed-by-default evaluation surface: shows how the
+              last live preview compared to the canonical Stage 1
+              note. Read-only — eval team uses this to tune preview
+              cadence and compare providers. Doesn't render if no
+              previews exist for this session. */}
+          <PreviewVsFinalCard
+            sessionId={sessionId}
+            finalSections={detail.note.sections}
             noteApproved={detail.export_metadata.is_approved}
           />
 
