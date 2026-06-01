@@ -42,6 +42,7 @@ const navigation: {
   // Admin can preview each portal page for support — backend still
   // 403s admin from POST/PATCH/DELETE on /me/* routes (those are
   // CLINICIAN-only at the dependency layer).
+  { name: "Dashboard", href: "/portal/dashboard", icon: ChartBarIcon, roles: ["CLINICIAN"] },
   { name: "My Notes", href: "/portal/notes", icon: DocumentTextIcon, roles: ["CLINICIAN", "ADMIN"] },
   { name: "Templates", href: "/portal/templates", icon: Squares2X2Icon, roles: ["CLINICIAN", "ADMIN"] },
   { name: "My Profile", href: "/portal/profile", icon: UserCircleIcon, roles: ["CLINICIAN", "ADMIN"] },

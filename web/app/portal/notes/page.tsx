@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
+  ArrowDownTrayIcon,
   ArrowRightIcon,
   MagnifyingGlassIcon,
 } from "@heroicons/react/24/outline";
@@ -11,7 +12,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { listMySessions } from "@/lib/portal-api";
+import { bulkExport, listMySessions } from "@/lib/portal-api";
 import type { Session, SessionState } from "@/types";
 
 /**
@@ -44,6 +45,9 @@ export default function PortalSessionsInboxPage() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
   const [dateFilter, setDateFilter] = useState<DateFilter>("all");
   const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -71,6 +75,57 @@ export default function PortalSessionsInboxPage() {
   );
 
   const counts = useMemo(() => countByStatus(sessions), [sessions]);
+  const exportable = useMemo(
+    () =>
+      filtered.filter(
+        (s) => s.state === "REVIEW_COMPLETE" || s.state === "EXPORTED",
+      ),
+    [filtered],
+  );
+  const selectableIds = useMemo(
+    () => new Set(exportable.map((s) => s.id)),
+    [exportable],
+  );
+
+  function toggleSelected(id: string) {
+    const next = new Set(selected);
+    if (next.has(id)) next.delete(id);
+    else next.add(id);
+    setSelected(next);
+  }
+
+  function selectAllExportable() {
+    setSelected(new Set(selectableIds));
+  }
+
+  function clearSelected() {
+    setSelected(new Set());
+  }
+
+  async function onBulkExport() {
+    const ids = Array.from(selected).filter((id) => selectableIds.has(id));
+    if (ids.length === 0) return;
+    setExporting(true);
+    setExportError(null);
+    try {
+      const blob = await bulkExport(ids);
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `aurion_bulk_${ids.length}_notes.zip`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+      clearSelected();
+    } catch (e) {
+      setExportError(
+        e instanceof Error ? e.message : "Bulk export failed.",
+      );
+    } finally {
+      setExporting(false);
+    }
+  }
 
   return (
     <div className="p-6 lg:p-8 max-w-5xl mx-auto">
@@ -133,6 +188,43 @@ export default function PortalSessionsInboxPage() {
           </div>
         </div>
 
+        {exportable.length > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-gray-100 bg-gray-50/50 px-3 py-2 text-xs text-gray-600">
+            <span>{selected.size} selected</span>
+            {selected.size > 0 ? (
+              <button
+                type="button"
+                onClick={clearSelected}
+                className="underline hover:text-navy-700"
+              >
+                Clear
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={selectAllExportable}
+                className="underline hover:text-navy-700"
+              >
+                Select all approved ({exportable.length})
+              </button>
+            )}
+            {exportError && (
+              <span className="text-red-600">{exportError}</span>
+            )}
+            <Button
+              variant="primary"
+              size="sm"
+              className="ml-auto"
+              onClick={() => void onBulkExport()}
+              disabled={selected.size === 0 || exporting}
+              loading={exporting}
+            >
+              <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+              Export {selected.size > 0 ? `(${selected.size})` : "selected"}
+            </Button>
+          </div>
+        )}
+
         {loading ? (
           <LoadingSkeleton lines={6} />
         ) : error ? (
@@ -143,11 +235,24 @@ export default function PortalSessionsInboxPage() {
           </div>
         ) : (
           <ul className="divide-y divide-gray-100">
-            {filtered.map((s) => (
-              <li key={s.id}>
+            {filtered.map((s) => {
+              const isSelectable = selectableIds.has(s.id);
+              const isChecked = selected.has(s.id);
+              return (
+              <li key={s.id} className="flex items-center gap-2">
+                {isSelectable && (
+                  <input
+                    type="checkbox"
+                    className="ml-1 h-4 w-4 rounded border-gray-300 text-gold-500 focus:ring-gold-400"
+                    checked={isChecked}
+                    onChange={() => toggleSelected(s.id)}
+                    aria-label={`Select session ${s.id.slice(0, 8)} for bulk export`}
+                  />
+                )}
+                {!isSelectable && <span className="w-6 shrink-0" aria-hidden />}
                 <Link
                   href={`/portal/notes/${s.id}`}
-                  className="flex items-center gap-4 py-3 px-1 hover:bg-gray-50 transition-colors rounded-md"
+                  className="flex flex-1 items-center gap-4 py-3 px-1 hover:bg-gray-50 transition-colors rounded-md"
                 >
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-navy-800 truncate">
@@ -166,7 +271,8 @@ export default function PortalSessionsInboxPage() {
                   <ArrowRightIcon className="h-4 w-4 text-gray-300 shrink-0" />
                 </Link>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </Card>
