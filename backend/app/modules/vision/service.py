@@ -133,6 +133,26 @@ async def caption_frames(
     audit = get_audit_log_service()
     session_id = frames[0].session_id if frames else ""
 
+    # Stage 2 progress tracking — emit a WebSocket event every ~10% of
+    # frames + an initial "starting" tick at 0/N. iOS keeps polling
+    # /notes/{id}/stage2-status so the event is purely additive. Web
+    # subscribes to the same /ws/notes/{id} channel as the stage1/2
+    # delivery events.
+    #
+    # The counter is mutated from inside the per-frame coroutine; safe
+    # under asyncio because increments happen between await points on
+    # the single event loop thread.
+    total_frames = len(frames)
+    processed_counter = 0
+    progress_step = max(1, total_frames // 10) if total_frames else 1
+
+    async def _emit_initial_progress() -> None:
+        if total_frames > 0 and session_id:
+            from app.api.v1.websocket import notify_stage2_progress
+            await notify_stage2_progress(session_id, 0, total_frames)
+
+    await _emit_initial_progress()
+
     async def _caption_single(frame: MaskedFrame) -> Optional[FrameCaption]:
         """Caption a single frame, returning None on discard or failure."""
         anchor = _find_anchor_segment(frame.timestamp_ms, trigger_segments)
@@ -230,9 +250,24 @@ async def caption_frames(
                 )
                 return None
 
+    async def _caption_and_report(frame: MaskedFrame) -> Optional[FrameCaption]:
+        """Wrap _caption_single with a progress counter so the WebSocket
+        sees incremental progress instead of just the final delivery."""
+        nonlocal processed_counter
+        result = await _caption_single(frame)
+        processed_counter += 1
+        # Emit on every Nth frame OR at the very end so the final
+        # state always shows "N / N" before stage2_delivered fires.
+        if processed_counter % progress_step == 0 or processed_counter == total_frames:
+            from app.api.v1.websocket import notify_stage2_progress
+            await notify_stage2_progress(
+                session_id, processed_counter, total_frames
+            )
+        return result
+
     # Caption all frames concurrently
     results = await asyncio.gather(
-        *(_caption_single(frame) for frame in frames),
+        *(_caption_and_report(frame) for frame in frames),
         return_exceptions=True,
     )
 

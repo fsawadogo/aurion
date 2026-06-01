@@ -154,3 +154,31 @@ async def notify_stage2_delivered(session_id: str, note: Note) -> None:
     }
     await manager.broadcast_to_session(session_id, payload)
     logger.info("Stage 2 delivery notification sent: session=%s", session_id)
+
+
+async def notify_stage2_progress(
+    session_id: str, frames_processed: int, frames_total: int
+) -> None:
+    """Notify clients about incremental Stage 2 progress.
+
+    Emitted by the vision pipeline as frames are captioned. iOS keeps
+    polling /notes/{id}/stage2-status for the same data (event is
+    additive — backward compatible). Web subscribes to the WebSocket
+    and renders a live progress bar.
+
+    Best-effort: a broadcast failure does not abort the underlying
+    vision pipeline. We log + swallow.
+    """
+    payload = {
+        "event": "stage2_progress",
+        "session_id": session_id,
+        "frames_processed": frames_processed,
+        "frames_total": frames_total,
+    }
+    try:
+        await manager.broadcast_to_session(session_id, payload)
+    except Exception as exc:
+        logger.warning(
+            "stage2_progress broadcast failed (non-fatal): session=%s error=%s",
+            session_id, exc,
+        )
