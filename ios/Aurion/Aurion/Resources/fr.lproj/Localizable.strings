@@ -129,6 +129,43 @@
 "orders.unrecognizedSummary.plural" = "%d prescriptions absentes du catalogue \U2014 \U00E0 v\U00E9rifier avant de signer.";
 "orders.countSummary" = "%d brouillon \U00B7 %d confirm\U00E9";
 
+/* ── Codification & facturation (#69) ──────────────────── */
+"coding.title" = "Codification & facturation";
+"coding.subtitle" = "Sugg\U00E9rez des codes de facturation pour cette visite \U2014 niveau E/M, diagnostics CIM-10, proc\U00E9dures CPT. Conservateur : uniquement ce que les affirmations de la note supportent clairement.";
+"coding.assistive" = "Assistant \U2014 le m\U00E9decin doit confirmer.";
+"coding.assistiveDetail" = "Ces suggestions sont g\U00E9n\U00E9r\U00E9es par IA \U00E0 partir des affirmations de la note approuv\U00E9e. Elles n\U2019apparaissent pas dans la note clinique. Confirmez, modifiez ou rejetez chacune avant la facturation.";
+"coding.suggest" = "Sugg\U00E9rer des codes";
+"coding.suggesting" = "Suggestion\U2026";
+"coding.reSuggest" = "Re-sugg\U00E9rer";
+"coding.empty" = "Aucune suggestion";
+"coding.extractEmpty" = "Aucune structure facturable trouv\U00E9e dans cette note.";
+"coding.gateMessage" = "Approuvez la note pour g\U00E9n\U00E9rer des suggestions de codification.";
+"coding.confirm" = "Confirmer";
+"coding.reject" = "Rejeter";
+"coding.edit" = "Modifier";
+"coding.save" = "Enregistrer";
+"coding.cancel" = "Annuler";
+"coding.confirmed" = "Confirm\U00E9";
+"coding.rejected" = "Rejet\U00E9";
+"coding.editedConfirmed" = "Modifi\U00E9 et confirm\U00E9";
+"coding.confidence.low" = "Confiance faible";
+"coding.confidence.medium" = "Moyenne";
+"coding.confidence.high" = "\U00C9lev\U00E9e";
+"coding.notInCatalog" = "Absent du catalogue";
+"coding.notInCatalogHint" = "V\U00E9rifiez la r\U00E9f\U00E9rence de votre EMR avant de soumettre.";
+"coding.unrecognizedSummary" = "%d code absent du catalogue \U2014 v\U00E9rifiez les lignes en surbrillance.";
+"coding.unrecognizedSummary.plural" = "%d codes absents du catalogue \U2014 v\U00E9rifiez les lignes en surbrillance.";
+"coding.summaryCounts" = "%d en attente \U00B7 %d confirm\U00E9";
+"coding.rejectConfirmTitle" = "Rejeter ce code ?";
+"coding.rejectConfirmMessage" = "La ligne reste dans le journal d\U2019audit.";
+"coding.extractFailed" = "Impossible de g\U00E9n\U00E9rer les suggestions. Veuillez r\U00E9essayer.";
+"coding.confirmFailed" = "Confirmation impossible. Veuillez r\U00E9essayer.";
+"coding.rejectFailed" = "Rejet impossible. Veuillez r\U00E9essayer.";
+"coding.editFailed" = "Impossible d\U2019enregistrer les modifications. Veuillez r\U00E9essayer.";
+"coding.system.em" = "E/M";
+"coding.system.icd10" = "CIM-10";
+"coding.system.cpt" = "CPT";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "ENR";
 "capture.recording" = "Enregistrement";

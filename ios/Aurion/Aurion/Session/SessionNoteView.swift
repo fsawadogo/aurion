@@ -324,6 +324,18 @@ struct SessionNoteView: View {
                 )
                 .padding(.horizontal, 24)
 
+                // Coding & billing suggestions card (#69). Strategic
+                // SEPARATE inference surface — visually distinct from
+                // the gold-accented clinical cards above. Always
+                // shows an "Assistive — physician must confirm"
+                // disclaimer. Suggestions NEVER flow back into the
+                // clinical note's sections.
+                CodingSuggestionsCard(
+                    sessionId: session.id,
+                    sessionState: session.state
+                )
+                .padding(.horizontal, 24)
+
                 // Patient summary card (#59). Approval-gated
                 // internally — renders a locked notice for unsigned
                 // notes so the physician knows what unlocks it. Lives
