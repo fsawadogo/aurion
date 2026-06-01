@@ -369,3 +369,87 @@ export interface CurrentUser {
   full_name: string;
   role: UserRole;
 }
+
+/* ─── Clinician Portal ───────────────────────────────────────────────────── */
+
+/** Mirrors `backend.app.api.v1.profile.PhysicianProfileResponse`.
+ *
+ * `practice_type` is stored as a comma-joined string on the wire
+ * (multiple select on iOS), so the web treats it as a Set<string>
+ * locally and serialises with `.join(",")` on save.
+ */
+export interface PhysicianProfile {
+  clinician_id: string;
+  display_name: string;
+  practice_type: string | null;
+  primary_specialty: string;
+  preferred_templates: string[];
+  consultation_types: string[];
+  allied_health_team: AlliedHealthMember[];
+  output_language: "en" | "fr";
+  auto_upload: boolean;
+  retention_days: number;
+  consent_reprompt: "every_session" | "daily" | "weekly";
+}
+
+export interface AlliedHealthMember {
+  role: string;
+  display_name: string;
+}
+
+export interface PhysicianProfileUpdate {
+  display_name?: string;
+  practice_type?: string | null;
+  primary_specialty?: string;
+  preferred_templates?: string[];
+  consultation_types?: string[];
+  allied_health_team?: AlliedHealthMember[];
+  output_language?: "en" | "fr";
+  auto_upload?: boolean;
+  retention_days?: number;
+  consent_reprompt?: "every_session" | "daily" | "weekly";
+}
+
+/** A specialty template (built-in or custom). Used for the
+ * `preferred_templates` picker and the template library list. */
+export interface TemplateSection {
+  id: string;
+  title: string;
+  required: boolean;
+  visual_trigger_keywords: string[];
+  description: string;
+}
+
+export interface TemplateDefinition {
+  key: string;
+  display_name: string;
+  version: string;
+  sections: TemplateSection[];
+}
+
+/** Mirrors backend `/me/custom-templates` response. */
+export interface CustomTemplate {
+  id: string;
+  key: string;
+  display_name: string;
+  version: string;
+  owner_id: string;
+  is_shared: boolean;
+  template: TemplateDefinition;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ChatMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** Mirrors backend `/me/template-authoring` response. */
+export interface TemplateAuthoringSession {
+  id: string;
+  status: "active" | "completed" | "abandoned";
+  messages: ChatMessage[];
+  draft_template: TemplateDefinition | null;
+  assistant_message: string | null;
+}

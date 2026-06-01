@@ -14,18 +14,23 @@ import {
   RectangleStackIcon,
   BeakerIcon,
   ArrowRightOnRectangleIcon,
+  DocumentTextIcon,
+  Squares2X2Icon,
+  UserCircleIcon,
 } from "@heroicons/react/24/outline";
 import { getMe, logout } from "@/lib/api";
 import type { CurrentUser, UserRole } from "@/types";
 
 // Mirrors backend require_role() gates per admin router.
-// Keep in sync with backend/app/api/v1/admin/*.py.
+// Keep in sync with backend/app/api/v1/admin/*.py and
+// backend/app/api/v1/me.py (CLINICIAN-gated portal endpoints).
 const navigation: {
   name: string;
   href: string;
   icon: typeof ChartBarIcon;
   roles: UserRole[];
 }[] = [
+  // ── Admin / compliance / eval surface (unchanged) ──
   { name: "Dashboard", href: "/dashboard", icon: ChartBarIcon, roles: ["EVAL_TEAM", "ADMIN"] },
   { name: "Sessions", href: "/sessions", icon: RectangleStackIcon, roles: ["EVAL_TEAM", "ADMIN"] },
   { name: "Audit Log", href: "/audit", icon: ClipboardDocumentListIcon, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
@@ -33,6 +38,13 @@ const navigation: {
   { name: "Users", href: "/users", icon: UsersIcon, roles: ["ADMIN"] },
   { name: "Config", href: "/config", icon: CogIcon, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
   { name: "Eval", href: "/eval", icon: BeakerIcon, roles: ["EVAL_TEAM", "ADMIN"] },
+  // ── Clinician portal surface (PR-C onward) ──
+  // Admin can preview each portal page for support — backend still
+  // 403s admin from POST/PATCH/DELETE on /me/* routes (those are
+  // CLINICIAN-only at the dependency layer).
+  { name: "My Notes", href: "/portal/notes", icon: DocumentTextIcon, roles: ["CLINICIAN", "ADMIN"] },
+  { name: "Templates", href: "/portal/templates", icon: Squares2X2Icon, roles: ["CLINICIAN", "ADMIN"] },
+  { name: "My Profile", href: "/portal/profile", icon: UserCircleIcon, roles: ["CLINICIAN", "ADMIN"] },
 ];
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -79,7 +91,9 @@ export default function Sidebar() {
         </div>
         <div>
           <span className="text-base font-bold text-white tracking-tight">Aurion</span>
-          <span className="ml-1.5 rounded bg-navy-600 px-1.5 py-0.5 text-[10px] font-medium text-gold-400 uppercase tracking-wider">Admin</span>
+          <span className="ml-1.5 rounded bg-navy-600 px-1.5 py-0.5 text-[10px] font-medium text-gold-400 uppercase tracking-wider">
+            {user?.role === "CLINICIAN" ? "Portal" : "Admin"}
+          </span>
         </div>
       </div>
 
