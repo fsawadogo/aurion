@@ -7,6 +7,7 @@ import { Cog6ToothIcon } from "@heroicons/react/24/outline";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import PageHeader from "@/components/portal/PageHeader";
 import { getMyProfile, updateMyProfile } from "@/lib/portal-api";
 import type { PhysicianProfile } from "@/types";
 
@@ -120,17 +121,21 @@ export default function PortalProfilePage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-3xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold text-navy-800">My Profile</h1>
-        <Link
-          href="/portal/profile/account"
-          className="inline-flex items-center gap-1.5 text-sm text-navy-700 hover:text-navy-900"
-        >
-          <Cog6ToothIcon className="h-4 w-4" />
-          Account settings
-        </Link>
-      </div>
+    <div className="aurion-page-padded aurion-container-narrow">
+      <PageHeader
+        eyebrow="Clinician portal"
+        title="My Profile"
+        description="How Aurion configures recordings + note generation for you."
+        actions={
+          <Link
+            href="/portal/profile/account"
+            className="inline-flex items-center gap-1.5 rounded-aurion-md px-3 py-2 text-aurion-callout text-navy-600 hover:bg-canvas hover:text-navy-800 transition-colors duration-short"
+          >
+            <Cog6ToothIcon className="h-4 w-4" />
+            Account settings
+          </Link>
+        }
+      />
 
       {loading ? (
         <Card>

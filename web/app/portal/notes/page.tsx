@@ -12,6 +12,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import PageHeader from "@/components/portal/PageHeader";
 import { bulkExport, listMySessions } from "@/lib/portal-api";
 import type { Session, SessionState } from "@/types";
 
@@ -128,18 +129,17 @@ export default function PortalSessionsInboxPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-5xl mx-auto">
-      <div className="mb-6 flex items-end justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-navy-800">My Notes</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Sessions you&apos;ve recorded, with their generated notes.
-          </p>
-        </div>
-        <Button variant="secondary" size="sm" onClick={() => void load()}>
-          Refresh
-        </Button>
-      </div>
+    <div className="aurion-page-padded aurion-container">
+      <PageHeader
+        eyebrow="Clinician portal"
+        title="My Notes"
+        description="Sessions you've recorded, with their generated notes."
+        actions={
+          <Button variant="secondary" size="sm" onClick={() => void load()}>
+            Refresh
+          </Button>
+        }
+      />
 
       <Card>
         <div className="flex flex-wrap gap-3 items-center mb-4">
@@ -296,10 +296,10 @@ function StatusChip({
       type="button"
       onClick={onClick}
       className={
-        "rounded-full border px-3 py-1 text-sm transition-colors " +
+        "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition-all duration-short ease-aurion " +
         (active
-          ? "border-gold-500 bg-gold-50 text-navy-900 font-medium"
-          : "border-gray-200 text-gray-700 hover:border-gray-300")
+          ? "border-gold-400 bg-gold-50 text-navy-900 shadow-card"
+          : "border-hairline text-navy-600 hover:border-navy-200 hover:bg-canvas")
       }
     >
       {label}

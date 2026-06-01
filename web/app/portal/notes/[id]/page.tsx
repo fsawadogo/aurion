@@ -1,10 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 import {
-  ArrowLeftIcon,
   ArrowDownTrayIcon,
   ExclamationTriangleIcon,
   CheckBadgeIcon,
@@ -16,6 +14,7 @@ import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import CompletenessRing from "@/components/portal/CompletenessRing";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
+import PageHeader from "@/components/portal/PageHeader";
 import StageTwoProgressBanner from "@/components/portal/StageTwoProgressBanner";
 import TranscriptPane, {
   TranscriptPaneHandle,
@@ -133,36 +132,24 @@ export default function NoteReviewPage() {
   }
 
   return (
-    <div className="p-6 lg:p-8 max-w-7xl mx-auto">
-      <div className="mb-4 flex items-center justify-between">
-        <Link
-          href="/portal/notes"
-          className="inline-flex items-center gap-1.5 text-sm text-navy-700 hover:text-navy-900"
-        >
-          <ArrowLeftIcon className="h-4 w-4" />
-          Back to notes
-        </Link>
-        {detail && (
-          <div className="hidden sm:flex items-center gap-3 text-xs text-gray-500">
-            <span>
-              Stage <span className="font-semibold">{detail.note.stage}</span>
-            </span>
-            <span>·</span>
-            <span>
-              v<span className="font-semibold">{detail.note.version}</span>
-            </span>
-            <span>·</span>
-            <span>
-              Provider:{" "}
-              <span className="font-semibold">{detail.note.provider_used}</span>
-            </span>
-            <span>·</span>
-            <Badge variant="neutral">
-              {humanSpecialty(detail.note.specialty)}
-            </Badge>
-          </div>
-        )}
-      </div>
+    <div className="aurion-page-padded aurion-container">
+      <PageHeader
+        breadcrumb={[
+          { label: "My Notes", href: "/portal/notes" },
+          { label: detail ? humanSpecialty(detail.note.specialty) : "Review" },
+        ]}
+        eyebrow="Note review"
+        title={detail ? humanSpecialty(detail.note.specialty) : "Review"}
+        description={
+          detail
+            ? <>
+                Stage <span className="font-semibold text-navy-700">{detail.note.stage}</span>
+                {" · "}v<span className="font-semibold text-navy-700">{detail.note.version}</span>
+                {" · "}Provider <span className="font-semibold text-navy-700">{detail.note.provider_used}</span>
+              </>
+            : undefined
+        }
+      />
 
       {loading && !detail ? (
         <Card>

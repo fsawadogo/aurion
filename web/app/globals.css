@@ -2,162 +2,251 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ──────────────────────────────────────────────────────────────────
+ * Aurion web — global base + design tokens.
+ *
+ * Mirrors iOS `Theme.swift` 1:1 so the web portal reads as the same
+ * product as the iOS app. Tailwind extensions live in tailwind.config.ts;
+ * this file owns the things Tailwind utilities can't cleanly express
+ * (typography utility classes with composed weight + tracking, custom
+ * keyframes, focus rings, scrollbar chrome, form-input shared style).
+ * ────────────────────────────────────────────────────────────────── */
+
 @layer base {
   html {
     scroll-behavior: smooth;
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: "cv11", "ss01", "ss03";
+    text-rendering: optimizeLegibility;
   }
 
   body {
-    @apply bg-gray-50 text-gray-900 antialiased;
+    @apply bg-canvas text-navy-700 antialiased;
+    font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
   }
 
-  /* Custom selection */
+  /* Selection — premium gold tint instead of OS default. */
   ::selection {
     @apply bg-gold-200 text-navy-800;
   }
 
-  /* Focus-visible — keyboard-only focus ring */
+  /* Focus-visible — gold ring with a soft outer halo. Keyboard-only;
+   * mouse focus doesn't show the ring. */
   :focus-visible {
-    @apply outline-none ring-2 ring-gold-400 ring-offset-2;
+    outline: none;
+    box-shadow:
+      0 0 0 3px rgba(201, 168, 76, 0.35),
+      0 0 0 1px rgba(201, 168, 76, 0.75);
   }
 
-  /* Better default focus for inputs (overridden inline) */
+  /* Quiet the default input focus — components opt in to the gold ring. */
   input:focus,
   select:focus,
-  textarea:focus {
-    @apply outline-none;
+  textarea:focus,
+  button:focus {
+    outline: none;
   }
 
-  /* Custom scrollbar */
+  /* Premium thin scrollbars. */
   ::-webkit-scrollbar {
-    width: 6px;
-    height: 6px;
+    width: 8px;
+    height: 8px;
   }
-  ::-webkit-scrollbar-track {
-    @apply bg-transparent;
-  }
+  ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb {
-    @apply rounded-full bg-gray-300;
+    background: rgba(12, 27, 55, 0.16);
+    border-radius: 9999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-400;
+    background: rgba(12, 27, 55, 0.28);
+    background-clip: padding-box;
   }
-
-  /* Sidebar scrollbar — subtle on dark bg */
   .sidebar-scroll::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.12);
+    background: rgba(255, 255, 255, 0.14);
+    background-clip: padding-box;
   }
   .sidebar-scroll::-webkit-scrollbar-thumb:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.24);
+    background-clip: padding-box;
   }
 }
 
-/* ── Animations ──────────────────────────────────────────────── */
+/* ──────────────────────────────────────────────────────────────────
+ * Component layer — semantic utility classes used across pages.
+ * Prefer `@apply` over deep CSS so the design-token source of truth
+ * stays in tailwind.config.ts. Anything that can't be expressed via
+ * @apply (e.g. multi-prop tightening) lands here as raw CSS.
+ * ────────────────────────────────────────────────────────────────── */
 
-@keyframes modal-in {
-  from {
-    opacity: 0;
-    transform: scale(0.95) translateY(4px);
+@layer components {
+  /* ── Type scale — semantic combos of size + weight + tracking + color.
+   * Named `.aurion-{role}` to stay distinct from Tailwind's auto-
+   * generated `text-aurion-{role}` font-size utilities. Use these for
+   * the common case (body copy, page titles); reach for the raw
+   * font-size utility when you need to override the color. ── */
+  .aurion-micro       { @apply text-aurion-micro uppercase text-navy-400; }
+  .aurion-caption     { @apply text-aurion-caption text-navy-400; }
+  .aurion-callout     { @apply text-aurion-callout text-navy-600; }
+  .aurion-body        { @apply text-aurion-body text-navy-700; }
+  .aurion-headline    { @apply text-aurion-headline text-navy-700; }
+  .aurion-title-3     { @apply text-aurion-title-3 text-navy-700; }
+  .aurion-title       { @apply text-aurion-title text-navy-700; }
+  .aurion-display     { @apply text-aurion-display text-navy-700; }
+  .aurion-large-title { @apply text-aurion-large-title text-navy-700; }
+
+  /* ── Form fields ── */
+  .form-input,
+  .form-select,
+  .form-textarea {
+    @apply w-full rounded-aurion-md border border-hairline bg-muted px-3.5 py-2.5
+      text-aurion-body text-navy-700 transition-colors duration-short
+      placeholder:text-navy-300
+      hover:border-navy-200/60
+      focus:border-gold-400 focus:bg-white focus:ring-2 focus:ring-gold-200/70
+      disabled:cursor-not-allowed disabled:opacity-60;
   }
-  to {
-    opacity: 1;
-    transform: scale(1) translateY(0);
+  .form-input  { @apply text-[15px] py-2.5; }
+  .form-select { @apply text-[15px] py-2.5 pr-9 appearance-none bg-no-repeat; }
+  .form-textarea { @apply leading-relaxed; }
+
+  /* Form-select chevron — uses an inline SVG so it tints with the
+   * caller's text color (defaults to navy/60). */
+  .form-select {
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3Csvg width='12' height='12' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M2 4.5L6 8.5L10 4.5' stroke='%23475569' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: right 0.875rem center;
+    background-size: 0.75rem 0.75rem;
+  }
+
+  /* ── Toggle (used by Profile page) ── */
+  .aurion-toggle {
+    @apply relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent
+      transition-colors duration-short focus:outline-none focus:ring-2 focus:ring-gold-300;
+  }
+  .aurion-toggle-knob {
+    @apply inline-block h-5 w-5 transform rounded-full bg-white shadow
+      transition-transform duration-short;
+  }
+
+  /* ── Surface shells — apply to the outermost div on a page. ── */
+  .aurion-page {
+    @apply min-h-screen bg-canvas;
+  }
+  .aurion-page-padded {
+    @apply p-6 lg:p-8;
+  }
+  .aurion-container {
+    @apply mx-auto max-w-7xl;
+  }
+  .aurion-container-narrow {
+    @apply mx-auto max-w-3xl;
+  }
+  .aurion-container-form {
+    @apply mx-auto max-w-2xl;
+  }
+
+  /* ── Cards ── */
+  .aurion-card {
+    @apply rounded-aurion-lg bg-surface shadow-card border border-hairline/60;
+  }
+  .aurion-card-hoverable {
+    @apply transition-all duration-aurion ease-aurion
+      hover:shadow-card-hover hover:border-hairline/80 hover:-translate-y-px;
+  }
+
+  /* ── Premium navy chrome (login background, hero sections). ── */
+  .aurion-chrome-navy {
+    background: radial-gradient(120% 80% at 50% 0%, #16284E 0%, #0C1B37 55%, #081226 100%);
+  }
+  /* Subtle gold orbital glow used behind logo lockups. */
+  .aurion-glow-gold {
+    background: radial-gradient(circle, rgba(201, 168, 76, 0.18) 0%, transparent 70%);
+  }
+
+  /* ── Section / table chrome ── */
+  .aurion-table {
+    @apply min-w-full divide-y divide-hairline;
+  }
+  .aurion-th {
+    @apply text-aurion-micro text-navy-400 text-left px-3 py-2.5;
+  }
+  .aurion-td {
+    @apply px-3 py-3 text-aurion-callout text-navy-700;
+  }
+  .aurion-row {
+    @apply hover:bg-canvas/60 transition-colors duration-short;
   }
 }
 
-@keyframes fade-in {
+/* ──────────────────────────────────────────────────────────────────
+ * Keyframes — content swap, fade, scale, gentle pulses.
+ *
+ * All animations target the same cubic-bezier(0.32, 0.72, 0, 1)
+ * timing function declared in tailwind.config.ts under `aurion`. The
+ * curve is the iOS Theme.swift `AurionAnimation.smooth` verbatim, so
+ * web motion matches iOS feel.
+ * ────────────────────────────────────────────────────────────────── */
+
+@keyframes aurion-fade-in {
   from { opacity: 0; }
-  to { opacity: 1; }
+  to   { opacity: 1; }
 }
 
-@keyframes slide-up {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+@keyframes aurion-slide-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
 
-@keyframes shimmer {
-  0% { background-position: -200% 0; }
+@keyframes aurion-scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+@keyframes aurion-pulse {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.55; }
+}
+
+@keyframes aurion-glow {
+  0%, 100% { opacity: 0.55; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.04); }
+}
+
+@keyframes aurion-shimmer {
+  0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
 
-@keyframes pulse-dot {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.4; }
-}
+/* Stagger helper — children animate in sequence on a single class.
+ * Used on dashboard tile rows + filter chip groups. */
+.aurion-stagger > * { animation: aurion-slide-up 0.36s cubic-bezier(0.32, 0.72, 0, 1) both; }
+.aurion-stagger > *:nth-child(1) { animation-delay: 0ms; }
+.aurion-stagger > *:nth-child(2) { animation-delay: 40ms; }
+.aurion-stagger > *:nth-child(3) { animation-delay: 80ms; }
+.aurion-stagger > *:nth-child(4) { animation-delay: 120ms; }
+.aurion-stagger > *:nth-child(5) { animation-delay: 160ms; }
+.aurion-stagger > *:nth-child(6) { animation-delay: 200ms; }
+.aurion-stagger > *:nth-child(7) { animation-delay: 240ms; }
+.aurion-stagger > *:nth-child(8) { animation-delay: 280ms; }
 
-.animate-modal-in {
-  animation: modal-in 0.2s ease-out;
-}
-
-.animate-fade-in {
-  animation: fade-in 0.3s ease-out;
-}
-
-.animate-slide-up {
-  animation: slide-up 0.35s ease-out both;
-}
-
-.animate-shimmer {
-  background: linear-gradient(
-    90deg,
-    #e5e7eb 25%,
-    #f3f4f6 50%,
-    #e5e7eb 75%
-  );
-  background-size: 200% 100%;
-  animation: shimmer 1.5s ease-in-out infinite;
-}
-
-.animate-pulse-dot {
-  animation: pulse-dot 2s ease-in-out infinite;
-}
-
-/* ── Utility: stagger children animation ────────────────────── */
-
-.stagger-children > * {
-  animation: slide-up 0.35s ease-out both;
-}
-.stagger-children > *:nth-child(1) { animation-delay: 0ms; }
-.stagger-children > *:nth-child(2) { animation-delay: 50ms; }
-.stagger-children > *:nth-child(3) { animation-delay: 100ms; }
-.stagger-children > *:nth-child(4) { animation-delay: 150ms; }
-.stagger-children > *:nth-child(5) { animation-delay: 200ms; }
-.stagger-children > *:nth-child(6) { animation-delay: 250ms; }
-.stagger-children > *:nth-child(7) { animation-delay: 300ms; }
-.stagger-children > *:nth-child(8) { animation-delay: 350ms; }
-
-/* ── Utility: gradient text ─────────────────────────────────── */
-
+/* Gradient-text helper. */
 .text-gradient-gold {
-  background: linear-gradient(135deg, #C9A84C, #E2CE7D);
+  background: linear-gradient(135deg, #C9A84C 0%, #E5D082 60%, #C9A84C 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* ── Shared form input styles ───────────────────────────────────
-   Component-layer classes (.form-input, .form-select) collapse the
-   ~140-char Tailwind utility tail repeated at every input in the
-   portal pages. Matches the existing rendered look from
-   /users/page.tsx (gray-50 fill, gold-100 focus ring). */
-
-@layer components {
-  .form-input {
-    @apply w-full rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm
-      transition-colors focus:border-gold-400 focus:bg-white focus:outline-none
-      focus:ring-2 focus:ring-gold-100;
-  }
-  .form-select {
-    @apply w-full rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm
-      transition-colors focus:border-gold-400 focus:bg-white focus:outline-none
-      focus:ring-2 focus:ring-gold-100;
-  }
+/* Loading shimmer — wrapper element gets the moving gradient. */
+.aurion-shimmer {
+  background: linear-gradient(
+    90deg,
+    rgba(238, 240, 243, 1) 25%,
+    rgba(245, 246, 250, 1) 50%,
+    rgba(238, 240, 243, 1) 75%
+  );
+  background-size: 200% 100%;
+  animation: aurion-shimmer 1.6s ease-in-out infinite;
 }
