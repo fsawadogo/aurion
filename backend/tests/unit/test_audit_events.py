@@ -45,6 +45,10 @@ EXPECTED_VALUES: dict[str, str] = {
     "ORDER_CONFIRMED": "order_confirmed",
     "ORDER_EDITED": "order_edited",
     "ORDER_CANCELLED": "order_cancelled",
+    "CODING_SUGGESTIONS_EXTRACTED": "coding_suggestions_extracted",
+    "CODING_SUGGESTION_CONFIRMED": "coding_suggestion_confirmed",
+    "CODING_SUGGESTION_REJECTED": "coding_suggestion_rejected",
+    "CODING_SUGGESTION_EDITED": "coding_suggestion_edited",
     "SESSION_PURGED": "session_purged",
     "SESSION_DISCARDED": "session_discarded",
     # Notes

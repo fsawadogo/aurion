@@ -24,12 +24,12 @@ Last seeded: 2026-05-14. Last updated: 2026-05-30 (seeded 17 backend issues from
 - [x] #70 Specialty template expansion — shipped 2026-05-30 (PR #118, commit 4343c48); family_medicine + internal_medicine + pediatrics added (5 → 8)
 
 ### Cohort 3 — Scribe extensions
-- [ ] #61 iOS · Longitudinal patient context across encounters — 8d — lane: backend — no blockers (unblocks #60, #59)
-- [ ] #60 iOS · Physician style learning, macros & smart phrases — 8d — lane: backend — depends on #61
-- [ ] #59 iOS · After-visit summary & patient instructions — 5d — lane: backend — depends on #60
-- [ ] #58 iOS · Orders, referrals & prescription drafting — 8d — lane: backend — no blockers
-- [ ] #69 Coding & billing assist (E/M, ICD-10/CPT) — 8d — lane: backend — depends on #58
-- [ ] #57 iOS · EMR/EHR write-back (FHIR DocumentReference / HL7) — 15d — lane: backend — depends on #58, #59, #69
+- [x] #61 iOS · Longitudinal patient context across encounters — foundation shipped 2026-06-01 (PR #164); identifier set/clear + cross-encounter lookup + portal chip + inbox search + edit modal. Follow-ups: iOS UI for the identifier, full 'previous encounters' timeline panel on review screen, deterministic-hash column for indexed lookup at scale, identifier format validation
+- [x] #60 iOS · Physician style learning, macros & smart phrases — foundation shipped 2026-06-01 (PR #165); macros table + /me/macros CRUD + portal management page + inline expansion in note edit. ML-driven style learning = post-pilot follow-up; iOS macros UI = separate slice
+- [x] #59 iOS · After-visit summary & patient instructions — foundation shipped 2026-06-01 (PR #166); patient_summaries table + LLM gen + portal card with Copy/Print/Edit/Regenerate. Follow-ups: iOS UI, FR language, patient-portal delivery
+- [x] #58 iOS · Orders, referrals & prescription drafting — foundation shipped 2026-06-01 (PR #167); note_orders table + LLM extraction service + 5 /me endpoints + portal OrdersCard with confirm/cancel. Follow-ups: outbound delivery (→ #57), per-kind edit modal, RxNorm/SNOMED coding, order-set templates, iOS slice
+- [x] #69 Coding & billing assist (E/M, ICD-10/CPT) — foundation shipped 2026-06-01 (PR pending); coding_suggestions table + LLM extraction with conservative descriptive-anchor prompt + 5 /me endpoints + portal CodingSuggestionsCard (assistive-banner + per-row confidence + edit/confirm/reject). Strategic separate-surface — never writes into clinical note. Follow-ups: RxNorm/ICD-10 official catalog lookup, E/M MDM complexity scoring, CPT modifier support, iOS UI
+- [ ] #57 iOS · EMR/EHR write-back (FHIR DocumentReference / HL7) — 15d — lane: backend — no blockers (next up; all foundations shipped)
 
 ### Cohort 4 — iOS-backed
 - [ ] #64 iOS · Live note preview during recording — 5d — lane: backend — no blockers

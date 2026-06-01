@@ -48,6 +48,7 @@ from app.core.models import (
 from app.core.types import ProviderError, SessionState, Template, UserRole
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.coding import service as coding_service
 from app.modules.custom_templates import service as custom_templates_service
 from app.modules.export.service import export_note_docx
 from app.modules.macros import service as macros_service
@@ -1182,3 +1183,222 @@ async def _load_owned_sessions(
     )
     result = await db.execute(stmt)
     return list(result.scalars().all())
+
+
+# ── /me/notes/{id}/coding-suggestions — #69 separate inference surface ────
+
+
+class CodingSuggestionResponse(BaseModel):
+    id: str
+    session_id: str
+    code_system: str
+    code: str
+    description: str
+    justification: str
+    source_claim_ids: list[str]
+    confidence: str
+    status: str
+    physician_action_at: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class CodingSuggestionEditRequest(BaseModel):
+    """PATCH body — physician overrides code and/or description."""
+
+    code: str = Field(..., min_length=2, max_length=32)
+    description: str = Field(..., min_length=1, max_length=200)
+
+
+def _to_coding_suggestion_response(row) -> CodingSuggestionResponse:
+    return CodingSuggestionResponse(
+        id=str(row.id),
+        session_id=str(row.session_id),
+        code_system=row.code_system,
+        code=row.code,
+        description=row.description,
+        justification=row.justification,
+        source_claim_ids=row.source_claim_ids or [],
+        confidence=row.confidence,
+        status=row.status,
+        physician_action_at=(
+            row.physician_action_at.isoformat()
+            if row.physician_action_at
+            else None
+        ),
+        created_at=row.created_at.isoformat(),
+        updated_at=row.updated_at.isoformat(),
+    )
+
+
+@router.get(
+    "/notes/{session_id}/coding-suggestions",
+    response_model=list[CodingSuggestionResponse],
+)
+async def list_my_session_coding_suggestions(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> list[CodingSuggestionResponse]:
+    """All coding suggestions for the session."""
+    await get_owned_session_or_404(db, session_id, user)
+    rows = await coding_service.list_for_session(session_id, db)
+    return [_to_coding_suggestion_response(r) for r in rows]
+
+
+@router.post(
+    "/notes/{session_id}/coding-suggestions/extract",
+    response_model=list[CodingSuggestionResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def extract_my_session_coding_suggestions(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> list[CodingSuggestionResponse]:
+    """Run the LLM coding extractor on the latest approved note.
+
+    Refuses when the note isn't approved (409). Re-running creates a
+    fresh batch — older suggestions are not auto-rejected so the
+    physician sees both and can resolve manually. The dedupe inside
+    a single batch is by `(code_system, code)`; cross-batch duplicates
+    are intentional (the physician may want to see what the LLM
+    suggested before vs after a note edit).
+    """
+    await get_owned_session_or_404(db, session_id, user)
+
+    approved = await is_note_approved(str(session_id), db)
+    if not approved:
+        raise HTTPException(
+            status_code=409,
+            detail="Coding suggestions can only be extracted from an "
+                   "approved note.",
+        )
+    note = await get_latest_note(str(session_id), db)
+    if note is None:
+        raise HTTPException(
+            status_code=409, detail="No note exists for this session.",
+        )
+
+    try:
+        rows, provider_label = await coding_service.extract_from_note(
+            session_id, note, db,
+        )
+    except ProviderError as exc:
+        logger.warning(
+            "coding extract: provider failed session=%s: %s",
+            session_id, exc,
+        )
+        raise HTTPException(status_code=502, detail=f"AI provider error: {exc}")
+
+    await write_audit(
+        session_id,
+        AuditEventType.CODING_SUGGESTIONS_EXTRACTED,
+        actor_id=str(user.user_id),
+        count=len(rows),
+        provider_used=provider_label,
+    )
+    await db.commit()
+    return [_to_coding_suggestion_response(r) for r in rows]
+
+
+@router.post(
+    "/notes/{session_id}/coding-suggestions/{suggestion_id}/confirm",
+    response_model=CodingSuggestionResponse,
+)
+async def confirm_my_coding_suggestion(
+    session_id: uuid.UUID,
+    suggestion_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> CodingSuggestionResponse:
+    """Suggested / edited → confirmed."""
+    await get_owned_session_or_404(db, session_id, user)
+    row = await coding_service.get_for_session(suggestion_id, session_id, db)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    try:
+        row = await coding_service.confirm(row, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    await write_audit(
+        session_id,
+        AuditEventType.CODING_SUGGESTION_CONFIRMED,
+        actor_id=str(user.user_id),
+        suggestion_id=str(row.id),
+        code_system=row.code_system,
+        code=row.code,
+    )
+    await db.commit()
+    return _to_coding_suggestion_response(row)
+
+
+@router.post(
+    "/notes/{session_id}/coding-suggestions/{suggestion_id}/reject",
+    response_model=CodingSuggestionResponse,
+)
+async def reject_my_coding_suggestion(
+    session_id: uuid.UUID,
+    suggestion_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> CodingSuggestionResponse:
+    """Reject a suggestion. Row stays for audit."""
+    await get_owned_session_or_404(db, session_id, user)
+    row = await coding_service.get_for_session(suggestion_id, session_id, db)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    try:
+        row = await coding_service.reject(row, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    await write_audit(
+        session_id,
+        AuditEventType.CODING_SUGGESTION_REJECTED,
+        actor_id=str(user.user_id),
+        suggestion_id=str(row.id),
+        code_system=row.code_system,
+        code=row.code,
+    )
+    await db.commit()
+    return _to_coding_suggestion_response(row)
+
+
+@router.patch(
+    "/notes/{session_id}/coding-suggestions/{suggestion_id}",
+    response_model=CodingSuggestionResponse,
+)
+async def edit_my_coding_suggestion(
+    session_id: uuid.UUID,
+    suggestion_id: uuid.UUID,
+    body: CodingSuggestionEditRequest,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> CodingSuggestionResponse:
+    """Override the code and/or description. Status flips to 'edited'."""
+    await get_owned_session_or_404(db, session_id, user)
+    row = await coding_service.get_for_session(suggestion_id, session_id, db)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Suggestion not found")
+    try:
+        row, previous_code = await coding_service.edit(
+            row, body.code, body.description, db,
+        )
+    except ValueError as exc:
+        msg = str(exc)
+        status_code = 409 if "Cannot edit" in msg else 400
+        raise HTTPException(status_code=status_code, detail=msg)
+
+    await write_audit(
+        session_id,
+        AuditEventType.CODING_SUGGESTION_EDITED,
+        actor_id=str(user.user_id),
+        suggestion_id=str(row.id),
+        code_system=row.code_system,
+        previous_code=previous_code,
+        new_code=row.code,
+    )
+    await db.commit()
+    return _to_coding_suggestion_response(row)

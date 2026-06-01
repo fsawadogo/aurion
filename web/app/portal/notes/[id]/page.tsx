@@ -12,6 +12,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import CodingSuggestionsCard from "@/components/portal/CodingSuggestionsCard";
 import CompletenessRing from "@/components/portal/CompletenessRing";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
 import OrdersCard from "@/components/portal/OrdersCard";
@@ -309,6 +310,15 @@ export default function NoteReviewPage() {
               approved, since patient-facing output must come from a
               physician-signed source. */}
           <PatientSummaryCard
+            sessionId={sessionId}
+            noteApproved={detail.export_metadata.is_approved}
+          />
+
+          {/* Coding & billing suggestions — #69 strategic SEPARATE
+              inference surface. Approval-gated; never written back into
+              the clinical note's sections. The card itself carries the
+              "Assistive — physician must confirm" framing inline. */}
+          <CodingSuggestionsCard
             sessionId={sessionId}
             noteApproved={detail.export_metadata.is_approved}
           />
