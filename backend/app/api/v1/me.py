@@ -38,12 +38,13 @@ from app.api.v1.admin._shared import (
 )
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
+from app.core.kms_encryption import decrypt_str
 from app.core.models import (
     CustomTemplateModel,
     SessionModel,
     TemplateAuthoringSessionModel,
 )
-from app.core.types import SessionState, Template, UserRole
+from app.core.types import ProviderError, SessionState, Template, UserRole
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.custom_templates import service as custom_templates_service
@@ -344,6 +345,21 @@ async def continue_template_authoring(
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except ProviderError as exc:
+        # Surface upstream LLM failures (rate limits, auth errors,
+        # transient timeouts) as 502 so the frontend can render a
+        # clean retry affordance. Without this, ProviderError
+        # propagates as an unhandled 500 — and FastAPI strips CORS
+        # headers from 500s, so the browser sees only a misleading
+        # CORS error instead of the actual upstream issue.
+        logger.warning(
+            "template-authoring continue: provider failed session=%s: %s",
+            session_id, exc,
+        )
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI provider error: {exc}",
+        )
     await db.commit()
     return _to_authoring_response(row, reply.assistant_message)
 
@@ -411,11 +427,99 @@ async def upload_template_for_extraction(
     if not text:
         raise HTTPException(status_code=400, detail="Document has no extractable text")
 
-    row, reply = await template_authoring_service.upload_template_document(
-        user.user_id, text, db
-    )
+    try:
+        row, reply = await template_authoring_service.upload_template_document(
+            user.user_id, text, db
+        )
+    except ProviderError as exc:
+        # Same rationale as continue_template_authoring — surface
+        # provider failures as 502 so CORS headers survive and the
+        # frontend can show a real error.
+        logger.warning("template-authoring upload: provider failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI provider error: {exc}",
+        )
     await db.commit()
     return _to_authoring_response(row, reply.assistant_message)
+
+
+# ── /me/patients — longitudinal cross-encounter context ───────────────────
+
+
+class PatientSessionMatch(BaseModel):
+    """One match in the /me/patients/{identifier}/sessions response.
+
+    Slim shape on purpose — the caller already has the session id and
+    enough context (specialty, state, created_at) to render the
+    'Previous encounters with this patient' list without a second hop.
+    """
+
+    session_id: str
+    specialty: str
+    state: str
+    created_at: str
+
+
+@router.get(
+    "/patients/{identifier}/sessions",
+    response_model=list[PatientSessionMatch],
+)
+async def list_my_sessions_by_patient_identifier(
+    identifier: str,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> list[PatientSessionMatch]:
+    """Return prior sessions tagged with the same patient identifier.
+
+    Scoped to the calling clinician — we never reveal another clinician's
+    sessions even when the identifier matches. Decrypts the identifier
+    on each row to compare (no plaintext index column today; pilot scale
+    makes the linear scan trivial). A future PR can add a deterministic
+    hash column for indexed lookup if performance demands it.
+
+    Empty/blank identifier → 422; comparison is exact-match
+    case-sensitive (the same physician should reproduce the same
+    identifier across encounters).
+    """
+    target = identifier.strip()
+    if not target:
+        raise HTTPException(
+            status_code=422, detail="identifier must be non-empty"
+        )
+
+    stmt = select(SessionModel).where(
+        SessionModel.clinician_id == user.user_id,
+        SessionModel.external_reference_id_encrypted.is_not(None),
+    )
+    result = await db.execute(stmt)
+    rows = list(result.scalars().all())
+
+    matches: list[PatientSessionMatch] = []
+    for row in rows:
+        try:
+            plain = decrypt_str(row.external_reference_id_encrypted)
+        except Exception:
+            # Decryption failure on this row — skip + log; surfaces as
+            # a CMK incident in the dashboards rather than crashing the
+            # entire lookup.
+            logger.warning(
+                "Skip identifier match on session=%s (decrypt failed)", row.id
+            )
+            continue
+        if plain == target:
+            matches.append(
+                PatientSessionMatch(
+                    session_id=str(row.id),
+                    specialty=row.specialty,
+                    state=row.state.value if hasattr(row.state, "value") else str(row.state),
+                    created_at=row.created_at.isoformat() if row.created_at else "",
+                )
+            )
+
+    # Newest first so the consumer renders most-recent at the top.
+    matches.sort(key=lambda m: m.created_at, reverse=True)
+    return matches
 
 
 # ── /me/export-bulk ────────────────────────────────────────────────────────

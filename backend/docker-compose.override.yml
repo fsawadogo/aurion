@@ -1,0 +1,24 @@
+# Local-dev override that keeps the stack running without a paid
+# LocalStack Pro licence.
+#
+# Background: backend/docker-compose.yml uses `localstack/localstack:latest`,
+# which on 2026-06-01 resolved to a Pro-only image (exit 55 on every start
+# without a paid LOCALSTACK_AUTH_TOKEN). The override pins to the
+# community v3 image and trims the SERVICES list to community-supported
+# ones. AppConfig (Pro-only) is dropped; the backend's AppConfig client
+# already falls back to .env when AppConfig is unreachable, so nothing
+# breaks at runtime — admins just can't hot-swap providers via AppConfig
+# until a real LocalStack Pro licence is restored.
+#
+# Apply automatically: docker-compose reads override.yml by default.
+# Override-free behaviour: `docker compose -f docker-compose.yml up`.
+services:
+  localstack:
+    image: localstack/localstack:3
+    environment:
+      - SERVICES=s3,dynamodb,cognito-idp,kms,secretsmanager
+      - DEFAULT_REGION=ca-central-1
+      - DOCKER_HOST=unix:///var/run/docker.sock
+      # Explicitly empty so docker-compose's variable substitution
+      # doesn't pick up an expired token from .env / shell env.
+      - LOCALSTACK_AUTH_TOKEN=

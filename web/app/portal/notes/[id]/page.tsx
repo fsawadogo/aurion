@@ -15,6 +15,7 @@ import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import CompletenessRing from "@/components/portal/CompletenessRing";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
 import PageHeader from "@/components/portal/PageHeader";
+import PatientIdentifierEditor from "@/components/portal/PatientIdentifierEditor";
 import StageTwoProgressBanner from "@/components/portal/StageTwoProgressBanner";
 import TranscriptPane, {
   TranscriptPaneHandle,
@@ -159,6 +160,15 @@ export default function NoteReviewPage() {
                 {" · "}Provider <span className="font-semibold text-navy-700">{detail.note.provider_used}</span>
               </>
             : undefined
+        }
+        actions={
+          detail ? (
+            <PatientIdentifierEditor
+              sessionId={sessionId}
+              currentIdentifier={detail.export_metadata.external_reference_id}
+              onChange={() => void load()}
+            />
+          ) : undefined
         }
       />
 

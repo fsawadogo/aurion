@@ -5,6 +5,7 @@ No business logic here — routes call module service functions only.
 
 from __future__ import annotations
 
+import logging
 import uuid
 from typing import Literal, Optional
 
@@ -19,6 +20,7 @@ from app.api.v1._helpers import (
 )
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
+from app.core.kms_encryption import decrypt_str, encrypt_str
 from app.core.types import SessionState
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.session.service import (
@@ -31,6 +33,8 @@ from app.modules.session.service import (
     list_sessions,
     transition_session,
 )
+
+logger = logging.getLogger("aurion.api.sessions")
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -61,10 +65,30 @@ class SessionResponse(BaseModel):
     state: str
     encounter_type: str = "doctor_patient"
     capture_mode: str = "multimodal"
+    # Optional PHI identifier set by the clinician to link this session
+    # back to their own patient roster (MRN hash, EMR encounter id, free
+    # text — whatever the clinic uses). Decrypted server-side and only
+    # populated for the owner of the row. Other CLINICIAN callers get a
+    # 404 on the session entirely; admin/compliance get the row but with
+    # this field omitted (we don't surface decrypted PHI cross-clinician).
+    external_reference_id: Optional[str] = None
     created_at: str
     updated_at: str
 
     model_config = {"from_attributes": True}
+
+
+class ExternalReferenceIdRequest(BaseModel):
+    """Patch body for setting / clearing the patient identifier.
+
+    Empty string or null clears the column; any other string is encrypted
+    via KMS and stored as bytea. Format validation is intentionally
+    permissive at the API boundary — different clinics use different
+    schemes (MRN, encounter id, free text); the canonical validation
+    happens in the EMR write-back integration (#57).
+    """
+
+    external_reference_id: Optional[str] = None
 
 
 # ── Routes ────────────────────────────────────────────────────────────────
@@ -185,6 +209,45 @@ async def update_session_template(
     return _to_response(session)
 
 
+@router.patch(
+    "/{session_id}/identifier", response_model=SessionResponse
+)
+async def set_session_external_reference_id(
+    session_id: uuid.UUID,
+    body: ExternalReferenceIdRequest,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Set or clear the patient identifier (external_reference_id) on a session.
+
+    The identifier is PHI: KMS-encrypted at rest, never logged in
+    plaintext, never returned to non-owner callers. Empty string or
+    null clears the column (and emits an audit event with
+    `cleared=True` so the trail captures the deletion).
+
+    Owner-only — non-owner CLINICIAN gets 404 from get_owned_session_or_404.
+    """
+    session = await get_owned_session_or_404(db, session_id, user)
+    raw = (body.external_reference_id or "").strip()
+    cleared = not raw
+    if cleared:
+        session.external_reference_id_encrypted = None
+    else:
+        session.external_reference_id_encrypted = encrypt_str(raw)
+    await db.flush()
+
+    # Audit row carries only the bool — never the identifier value
+    # itself. The audit log is append-only; leaking PHI there would
+    # be permanent.
+    await write_audit(
+        session.id,
+        AuditEventType.EXTERNAL_REFERENCE_ID_SET,
+        actor_id=str(user.user_id),
+        cleared=cleared,
+    )
+    return _to_response(session)
+
+
 @router.get("/{session_id}", response_model=SessionResponse)
 async def get_session_route(
     session_id: uuid.UUID,
@@ -252,6 +315,26 @@ async def _do_transition(db, session, target_state: SessionState) -> SessionResp
 
 
 def _to_response(session) -> SessionResponse:
+    """Map a SessionModel row to its API response.
+
+    Every caller in this module is reached only after ownership has been
+    confirmed by `get_owned_session_or_404` (or filters to
+    `clinician_id == user.user_id` for the list path), so it's safe to
+    decrypt the identifier here unconditionally — there is no public
+    surface where _to_response runs against another clinician's row.
+    """
+    external_id: Optional[str] = None
+    if getattr(session, "external_reference_id_encrypted", None):
+        try:
+            external_id = decrypt_str(session.external_reference_id_encrypted)
+        except Exception as exc:
+            # Never crash the response on a decryption failure; log +
+            # omit. If the KMS key rotated and old ciphertexts can't be
+            # decrypted that's a CMK rotation incident, not a 500.
+            logger.warning(
+                "Failed to decrypt external_reference_id for session=%s: %s",
+                session.id, exc,
+            )
     return SessionResponse(
         id=session.id,
         clinician_id=session.clinician_id,
@@ -259,6 +342,7 @@ def _to_response(session) -> SessionResponse:
         state=session.state.value if isinstance(session.state, SessionState) else session.state,
         encounter_type=session.encounter_type or "doctor_patient",
         capture_mode=getattr(session, "capture_mode", None) or "multimodal",
+        external_reference_id=external_id,
         created_at=session.created_at.isoformat() if session.created_at else "",
         updated_at=session.updated_at.isoformat() if session.updated_at else "",
     )
