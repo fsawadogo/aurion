@@ -113,6 +113,11 @@ class ExportMetadata(BaseModel):
     is_approved: bool
     can_export: bool
     session_state: str
+    # Patient identifier — decrypted server-side, only populated for
+    # the row's owner (the NoteDetail endpoint already routes through
+    # get_owned_session_or_404, so any non-owner caller never reaches
+    # this builder). Null when not set.
+    external_reference_id: Optional[str] = None
 
 
 class NoteDetailResponse(BaseModel):
@@ -486,11 +491,22 @@ async def get_note_detail(
 
     citations = _build_citations(note, transcript, session_id=str(session_id))
     conflict_state = _summarize_conflicts(note)
+    external_id: Optional[str] = None
+    if session.external_reference_id_encrypted:
+        try:
+            from app.core.kms_encryption import decrypt_str
+
+            external_id = decrypt_str(session.external_reference_id_encrypted)
+        except Exception:
+            # Same swallow-and-omit pattern as sessions._to_response —
+            # CMK rotation failures never 500 the review page.
+            external_id = None
     export_metadata = ExportMetadata(
         latest_version=note.version,
         is_approved=approved,
         can_export=session.state in {SessionState.REVIEW_COMPLETE, SessionState.EXPORTED},
         session_state=session.state.value,
+        external_reference_id=external_id,
     )
 
     return NoteDetailResponse(

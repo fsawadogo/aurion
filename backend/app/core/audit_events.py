@@ -49,6 +49,7 @@ class AuditEventType(StrEnum):
     FULL_NOTE_DELIVERED = "full_note_delivered"
     NOTE_EXPORTED = "note_exported"
     BULK_NOTE_EXPORT = "bulk_note_export"
+    EXTERNAL_REFERENCE_ID_SET = "external_reference_id_set"
     SESSION_PURGED = "session_purged"
     SESSION_DISCARDED = "session_discarded"
 
@@ -147,6 +148,13 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     # tells the whole story in one row.
     AuditEventType.BULK_NOTE_EXPORT: frozenset(
         {"included_session_ids", "skipped_session_ids", "actor_id"}
+    ),
+    # Patient identifier (external_reference_id) set or cleared. We do
+    # NOT carry the identifier value itself — it's PHI; the row id +
+    # actor_id + cleared bool is enough for the audit story without
+    # leaking who-is-which-patient into the immutable trail.
+    AuditEventType.EXTERNAL_REFERENCE_ID_SET: frozenset(
+        {"actor_id", "cleared"}
     ),
     AuditEventType.SESSION_PURGED: frozenset(),
     AuditEventType.SESSION_DISCARDED: frozenset({"prior_state"}),

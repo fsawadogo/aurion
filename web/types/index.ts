@@ -80,8 +80,21 @@ export interface Session {
   sections_populated: number;
   sections_required: number;
   provider_used: string;
+  /** PHI patient identifier (MRN, encounter id, free text). Encrypted
+   * at rest server-side; decrypted only for the owner of the row.
+   * Absent when not set or when the caller isn't the owner. */
+  external_reference_id?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** One match from GET /api/v1/me/patients/{identifier}/sessions —
+ * a slim shape for rendering 'Previous encounters with this patient'. */
+export interface PatientSessionMatch {
+  session_id: string;
+  specialty: string;
+  state: SessionState;
+  created_at: string;
 }
 
 export type NoteSectionStatus =
@@ -185,6 +198,7 @@ export interface ExportMetadata {
   is_approved: boolean;
   can_export: boolean;
   session_state: SessionState;
+  external_reference_id?: string | null;
 }
 
 /** Full note + citation + conflict + export state for the review UI. */

@@ -255,8 +255,13 @@ export default function PortalSessionsInboxPage() {
                   className="flex flex-1 items-center gap-4 py-3 px-1 hover:bg-gray-50 transition-colors rounded-md"
                 >
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-navy-800 truncate">
+                    <p className="font-medium text-navy-800 truncate flex items-center gap-2">
                       {humanSpecialty(s.specialty)}
+                      {s.external_reference_id && (
+                        <span className="inline-flex items-center rounded-full bg-gold-50 px-2 py-0.5 text-[10px] font-mono font-semibold text-navy-700 ring-1 ring-inset ring-gold-600/20">
+                          {s.external_reference_id}
+                        </span>
+                      )}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
                       {formatRelative(s.created_at)} ·{" "}
@@ -356,7 +361,19 @@ function filterSessions(
       return false;
     if (cutoff && new Date(s.created_at).getTime() < cutoff) return false;
     if (q) {
-      const haystack = `${s.specialty} ${s.state} ${s.id}`.toLowerCase();
+      // Searches across specialty / state / session-id prefix AND the
+      // patient identifier when set. The identifier is the most useful
+      // search axis day-to-day ("find Mrs Jones's last visit") so it
+      // gets equal-billing with the other fields rather than a separate
+      // search box.
+      const haystack = [
+        s.specialty,
+        s.state,
+        s.id,
+        s.external_reference_id ?? "",
+      ]
+        .join(" ")
+        .toLowerCase();
       if (!haystack.includes(q)) return false;
     }
     return true;

@@ -19,6 +19,7 @@ import type {
   Note,
   NoteDetail,
   PaginatedResponse,
+  PatientSessionMatch,
   PhysicianProfile,
   PhysicianProfileUpdate,
   Session as SessionRow,
@@ -204,6 +205,32 @@ export async function listMySessions(): Promise<SessionRow[]> {
  */
 export async function getSession(sessionId: string): Promise<SessionRow> {
   const r = await fetchWithAuth(`/api/v1/sessions/${sessionId}`);
+  return r.json();
+}
+
+/** PATCH /api/v1/sessions/{id}/identifier — set or clear the patient
+ * identifier. Empty / whitespace-only value clears the column (audit
+ * row gets cleared=True). */
+export async function setSessionExternalReferenceId(
+  sessionId: string,
+  identifier: string | null,
+): Promise<SessionRow> {
+  const r = await fetchWithAuth(`/api/v1/sessions/${sessionId}/identifier`, {
+    method: "PATCH",
+    body: JSON.stringify({ external_reference_id: identifier }),
+  });
+  return r.json();
+}
+
+/** GET /api/v1/me/patients/{identifier}/sessions — prior encounters
+ * with the same identifier, scoped to the caller. Empty list when
+ * none match. Used by the review screen's 'previous encounters' link. */
+export async function listMySessionsByPatientIdentifier(
+  identifier: string,
+): Promise<PatientSessionMatch[]> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/patients/${encodeURIComponent(identifier)}/sessions`,
+  );
   return r.json();
 }
 
