@@ -317,6 +317,34 @@ final class APIClient: Sendable {
         )
     }
 
+    // MARK: - EMR write-back (#57)
+
+    /// Connector catalog — drives the picker. In pilot deployments
+    /// `available == ["stub"]` and the card surfaces a "Pilot mode"
+    /// banner so the physician doesn't think the note actually went
+    /// to a chart system. Real connectors (FHIR / Oscar / Epic SMART)
+    /// register through env config on the backend.
+    func listEmrConnectors() async throws -> EmrConnectorsResponse {
+        return try await get(path: "/me/emr/connectors")
+    }
+
+    /// All write-back attempts for the session, newest first.
+    func listEmrWriteBacks(sessionId: String) async throws -> [EmrWriteBackResponse] {
+        return try await get(path: "/me/notes/\(sessionId)/emr")
+    }
+
+    /// Kick off a write-back. Connector errors (network blip, EMR
+    /// auth, etc.) land as `status=failed` rows in the response,
+    /// NOT as HTTP errors — the audit trail captures every attempt.
+    /// 409 surfaces only when the note isn't approved; 400 only when
+    /// the connector key is unknown.
+    func sendEmrWriteBack(sessionId: String, connector: String?) async throws -> EmrWriteBackResponse {
+        return try await post(
+            path: "/me/notes/\(sessionId)/emr/send",
+            body: ["connector": connector ?? NSNull()]
+        )
+    }
+
     // MARK: - Config
 
     /// Pulls the public AppConfig subset (providers, pipeline timing, feature flags).
@@ -935,6 +963,50 @@ struct NoteOrderResponse: Codable, Sendable, Equatable, Identifiable {
         sentAt = try c.decodeIfPresent(String.self, forKey: .sentAt)
         createdAt = try c.decode(String.self, forKey: .createdAt)
         updatedAt = try c.decode(String.self, forKey: .updatedAt)
+    }
+}
+
+/// Connector catalog response (#57). The pilot deployment registers
+/// only the `stub` connector by default; real backends opt in via
+/// env vars (see AURION_EMR_FHIR_ENDPOINT in #173).
+struct EmrConnectorsResponse: Codable, Sendable, Equatable {
+    let available: [String]
+    let `default`: String
+}
+
+/// EMR write-back attempt (#57). Three-state semantics paired with
+/// `status`:
+///   * `scheduledAt == nil` + `status == "sent"` → succeeded
+///   * `scheduledAt == nil` + `status == "failed"` → terminal (no
+///     more retries budgeted)
+///   * `scheduledAt != nil` + `status == "failed"` → auto-retry
+///     queued (the backend's retry scheduler / worker will drain
+///     it; the UI surfaces "Will retry at HH:MM")
+struct EmrWriteBackResponse: Codable, Sendable, Equatable, Identifiable {
+    let id: String
+    let sessionId: String
+    let connector: String
+    let status: String  // queued / sending / sent / failed
+    let externalId: String?
+    let payloadFingerprint: String
+    let errorReason: String?
+    let attemptCount: Int
+    let sentAt: String?
+    let scheduledAt: String?
+    let createdAt: String
+    let updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, connector, status
+        case sessionId = "session_id"
+        case externalId = "external_id"
+        case payloadFingerprint = "payload_fingerprint"
+        case errorReason = "error_reason"
+        case attemptCount = "attempt_count"
+        case sentAt = "sent_at"
+        case scheduledAt = "scheduled_at"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 }
 

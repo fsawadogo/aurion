@@ -166,6 +166,35 @@
 "coding.system.icd10" = "ICD-10";
 "coding.system.cpt" = "CPT";
 
+/* ── EMR write-back (#57) ──────────────────────────────── */
+"emr.title" = "EMR Write-Back";
+"emr.subtitle" = "Send the approved note to the EMR. Each attempt is logged with full audit trail.";
+"emr.gateMessage" = "Approve the note to enable EMR write-back.";
+"emr.pilotMode" = "Pilot mode \U2014 stub connector";
+"emr.pilotDetail" = "Sends record the attempt locally with full audit trail but do not transmit to an external EMR. Real connectors land in follow-ups.";
+"emr.send" = "Send to EMR";
+"emr.sendAgain" = "Send again";
+"emr.sendFreshNow" = "Send fresh now (skip wait)";
+"emr.sending" = "Sending\U2026";
+"emr.lastSent" = "Sent %@";
+"emr.connectorLabel" = "Connector";
+"emr.autoRetryHeader" = "Auto-retry scheduled for %@.";
+"emr.autoRetryDetail" = "The system will re-send the same payload automatically. Use Send fresh now to create a new attempt sooner.";
+"emr.terminalHeader" = "No more auto-retries.";
+"emr.terminalDetail" = "The last attempt hit a terminal error or exhausted the retry budget. Fix the underlying issue (auth, endpoint) before sending again.";
+"emr.status.queued" = "Queued";
+"emr.status.sending" = "Sending";
+"emr.status.sent" = "Sent";
+"emr.status.failed" = "Failed";
+"emr.retryQueued" = "Auto-retry queued";
+"emr.noMoreRetries" = "No more retries";
+"emr.attemptCount" = "Attempt %d";
+"emr.viaConnector" = "via %@";
+"emr.externalIdLabel" = "EMR id: %@";
+"emr.fingerprintLabel" = "fingerprint %@\U2026";
+"emr.nextAttempt" = "Next attempt at %@";
+"emr.sendFailed" = "Couldn\U2019t send to EMR. Please try again.";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "REC";
 "capture.recording" = "Recording";

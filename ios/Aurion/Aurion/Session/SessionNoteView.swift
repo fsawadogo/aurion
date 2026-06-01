@@ -346,6 +346,18 @@ struct SessionNoteView: View {
                     sessionState: session.state
                 )
                 .padding(.horizontal, 24)
+
+                // EMR write-back card (#57) — outbound terminal step.
+                // Approval-gated; surfaces a "Pilot mode" banner when
+                // only the stub connector is registered so the
+                // physician doesn't think the note actually went to
+                // a chart system. Per-row scheduled-retry / terminal-
+                // failure indicators mirror the portal.
+                EmrWriteBackCard(
+                    sessionId: session.id,
+                    sessionState: session.state
+                )
+                .padding(.horizontal, 24)
                 .padding(.bottom, 28)
             }
             // iPad reading-measure clamp — applied to the inner
