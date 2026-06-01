@@ -14,6 +14,7 @@ import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import CompletenessRing from "@/components/portal/CompletenessRing";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
+import OrdersCard from "@/components/portal/OrdersCard";
 import PageHeader from "@/components/portal/PageHeader";
 import PatientIdentifierEditor from "@/components/portal/PatientIdentifierEditor";
 import PatientSummaryCard from "@/components/portal/PatientSummaryCard";
@@ -294,6 +295,15 @@ export default function NoteReviewPage() {
               </div>
             </div>
           </div>
+
+          {/* Orders card — extracted structured imaging/lab/referral/
+              prescription orders awaiting physician confirmation.
+              Same approval gate as the summary card (orders go to the
+              EMR; can't come from a draft note). */}
+          <OrdersCard
+            sessionId={sessionId}
+            noteApproved={detail.export_metadata.is_approved}
+          />
 
           {/* Patient summary card — only visible after the note is
               approved, since patient-facing output must come from a
