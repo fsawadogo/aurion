@@ -16,6 +16,7 @@ import CompletenessRing from "@/components/portal/CompletenessRing";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
 import PageHeader from "@/components/portal/PageHeader";
 import PatientIdentifierEditor from "@/components/portal/PatientIdentifierEditor";
+import PatientSummaryCard from "@/components/portal/PatientSummaryCard";
 import StageTwoProgressBanner from "@/components/portal/StageTwoProgressBanner";
 import TranscriptPane, {
   TranscriptPaneHandle,
@@ -293,6 +294,14 @@ export default function NoteReviewPage() {
               </div>
             </div>
           </div>
+
+          {/* Patient summary card — only visible after the note is
+              approved, since patient-facing output must come from a
+              physician-signed source. */}
+          <PatientSummaryCard
+            sessionId={sessionId}
+            noteApproved={detail.export_metadata.is_approved}
+          />
 
           <ActionBar
             detail={detail}

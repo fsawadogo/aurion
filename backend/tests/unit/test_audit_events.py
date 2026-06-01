@@ -39,6 +39,8 @@ EXPECTED_VALUES: dict[str, str] = {
     "MACRO_CREATED": "macro_created",
     "MACRO_UPDATED": "macro_updated",
     "MACRO_DELETED": "macro_deleted",
+    "PATIENT_SUMMARY_GENERATED": "patient_summary_generated",
+    "PATIENT_SUMMARY_EDITED": "patient_summary_edited",
     "SESSION_PURGED": "session_purged",
     "SESSION_DISCARDED": "session_discarded",
     # Notes

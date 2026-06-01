@@ -30,6 +30,7 @@ from pydantic import BaseModel, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._helpers import get_owned_session_or_404, write_audit
 from app.api.v1.admin._shared import (
     PaginatedAuditResponse,
     apply_audit_filters,
@@ -50,7 +51,8 @@ from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.custom_templates import service as custom_templates_service
 from app.modules.export.service import export_note_docx
 from app.modules.macros import service as macros_service
-from app.modules.note_gen.service import get_latest_note
+from app.modules.note_gen.service import get_latest_note, is_note_approved
+from app.modules.patient_summary import service as patient_summary_service
 from app.modules.template_authoring import service as template_authoring_service
 
 logger = logging.getLogger("aurion.api.me")
@@ -443,6 +445,143 @@ async def upload_template_for_extraction(
         )
     await db.commit()
     return _to_authoring_response(row, reply.assistant_message)
+
+
+# ── /me/notes/{id}/patient-summary — after-visit handout ──────────────────
+
+
+class PatientSummaryResponse(BaseModel):
+    id: str
+    session_id: str
+    version: int
+    body: str
+    generated_by_provider: str
+    physician_edited: bool
+    created_at: str
+    updated_at: str
+
+
+class PatientSummaryEditRequest(BaseModel):
+    body: str = Field(..., min_length=1, max_length=4000)
+
+
+def _to_patient_summary_response(row) -> PatientSummaryResponse:
+    return PatientSummaryResponse(
+        id=str(row.id),
+        session_id=str(row.session_id),
+        version=row.version,
+        body=row.body,
+        generated_by_provider=row.generated_by_provider,
+        physician_edited=row.physician_edited,
+        created_at=row.created_at.isoformat(),
+        updated_at=row.updated_at.isoformat(),
+    )
+
+
+@router.get(
+    "/notes/{session_id}/patient-summary",
+    response_model=Optional[PatientSummaryResponse],
+)
+async def get_my_patient_summary(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[PatientSummaryResponse]:
+    """Return the latest patient-facing summary, or null when none yet."""
+    await get_owned_session_or_404(db, session_id, user)
+    row = await patient_summary_service.get_latest(session_id, db)
+    return _to_patient_summary_response(row) if row else None
+
+
+@router.post(
+    "/notes/{session_id}/patient-summary",
+    response_model=PatientSummaryResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_my_patient_summary(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> PatientSummaryResponse:
+    """Generate a fresh patient summary from the latest approved note.
+
+    Refuses when the note isn't yet approved (409) — patient-facing
+    output should never go out from a draft that hasn't been
+    physician-signed. Refuses when no note exists (409 with a
+    different reason).
+    """
+    await get_owned_session_or_404(db, session_id, user)
+
+    approved = await is_note_approved(str(session_id), db)
+    if not approved:
+        raise HTTPException(
+            status_code=409,
+            detail="Patient summary can only be generated from an approved note.",
+        )
+    note = await get_latest_note(str(session_id), db)
+    if note is None:
+        raise HTTPException(
+            status_code=409,
+            detail="No note exists for this session.",
+        )
+
+    try:
+        row = await patient_summary_service.generate_summary(
+            session_id, note, db
+        )
+    except ProviderError as exc:
+        logger.warning(
+            "patient-summary generate: provider failed session=%s: %s",
+            session_id, exc,
+        )
+        raise HTTPException(status_code=502, detail=f"AI provider error: {exc}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    await write_audit(
+        session_id,
+        AuditEventType.PATIENT_SUMMARY_GENERATED,
+        actor_id=str(user.user_id),
+        version=row.version,
+        provider_used=row.generated_by_provider,
+    )
+    await db.commit()
+    return _to_patient_summary_response(row)
+
+
+@router.patch(
+    "/notes/{session_id}/patient-summary",
+    response_model=PatientSummaryResponse,
+)
+async def edit_my_patient_summary(
+    session_id: uuid.UUID,
+    body: PatientSummaryEditRequest,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> PatientSummaryResponse:
+    """Save a physician-edited version of the patient summary.
+
+    Each edit creates a new version row so the history is preserved.
+    The portal modal currently surfaces only the latest version, but
+    the persistence shape leaves room for a compliance-facing view of
+    the edit chain later.
+    """
+    await get_owned_session_or_404(db, session_id, user)
+    try:
+        row = await patient_summary_service.save_edit(
+            session_id, body.body, db
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    await write_audit(
+        session_id,
+        AuditEventType.PATIENT_SUMMARY_EDITED,
+        actor_id=str(user.user_id),
+        version=row.version,
+    )
+    await db.commit()
+    return _to_patient_summary_response(row)
 
 
 # ── /me/macros — physician phrase shortcuts ───────────────────────────────

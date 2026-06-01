@@ -20,6 +20,7 @@ import type {
   NoteDetail,
   PaginatedResponse,
   PatientSessionMatch,
+  PatientSummary,
   PhysicianMacro,
   PhysicianMacroCreate,
   PhysicianMacroUpdate,
@@ -334,6 +335,45 @@ export async function exportNote(sessionId: string): Promise<Blob> {
     method: "POST",
   });
   return r.blob();
+}
+
+/* ─── Patient summary (after-visit) ──────────────────────────────────────── */
+
+/** GET /me/notes/{id}/patient-summary — null when none generated yet. */
+export async function getMyPatientSummary(
+  sessionId: string,
+): Promise<PatientSummary | null> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/patient-summary`,
+  );
+  const data = await r.json();
+  // Backend returns `null` literally when no summary exists; preserve that.
+  return data && typeof data === "object" ? (data as PatientSummary) : null;
+}
+
+/** POST /me/notes/{id}/patient-summary — fresh LLM generation. 409 when
+ * the note isn't approved yet; caller surfaces the message. */
+export async function generateMyPatientSummary(
+  sessionId: string,
+): Promise<PatientSummary> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/patient-summary`,
+    { method: "POST" },
+  );
+  return r.json();
+}
+
+/** PATCH /me/notes/{id}/patient-summary — save the physician's edit
+ * as a new version. */
+export async function editMyPatientSummary(
+  sessionId: string,
+  body: string,
+): Promise<PatientSummary> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/patient-summary`,
+    { method: "PATCH", body: JSON.stringify({ body }) },
+  );
+  return r.json();
 }
 
 /* ─── Macros (physician phrase shortcuts) ────────────────────────────────── */

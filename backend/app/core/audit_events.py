@@ -53,6 +53,8 @@ class AuditEventType(StrEnum):
     MACRO_CREATED = "macro_created"
     MACRO_UPDATED = "macro_updated"
     MACRO_DELETED = "macro_deleted"
+    PATIENT_SUMMARY_GENERATED = "patient_summary_generated"
+    PATIENT_SUMMARY_EDITED = "patient_summary_edited"
     SESSION_PURGED = "session_purged"
     SESSION_DISCARDED = "session_discarded"
 
@@ -171,6 +173,15 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.MACRO_DELETED: frozenset(
         {"actor_id", "macro_id", "shortcut"}
+    ),
+    # Patient summary lifecycle — never carry the body text; the
+    # summary itself is PHI and would be permanent in the audit log.
+    # version + provider_used are the audit-trail-meaningful fields.
+    AuditEventType.PATIENT_SUMMARY_GENERATED: frozenset(
+        {"actor_id", "version", "provider_used"}
+    ),
+    AuditEventType.PATIENT_SUMMARY_EDITED: frozenset(
+        {"actor_id", "version"}
     ),
     AuditEventType.SESSION_PURGED: frozenset(),
     AuditEventType.SESSION_DISCARDED: frozenset({"prior_state"}),
