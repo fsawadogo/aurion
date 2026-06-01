@@ -715,3 +715,62 @@ class PatientSummaryModel(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
+
+class NoteOrderModel(Base):
+    """Structured order extracted from an approved note.
+
+    Each row is one orderable action (an MRI, a referral, a
+    prescription, a lab) the physician dictated during the encounter.
+    The LLM extracts these from the note's Plan / Imaging / Investigations
+    sections; physician confirms each draft before it's eligible for
+    outbound delivery (which is #57 territory).
+
+    Ownership flows through `sessions.clinician_id` — this table doesn't
+    duplicate it.
+
+    `details` is type-specific JSONB and is PHI-adjacent (drug names,
+    body parts, indications) — never logged, never in the audit row.
+    """
+
+    __tablename__ = "note_orders"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    kind: Mapped[str] = mapped_column(
+        Enum("imaging", "lab", "referral", "prescription", name="note_order_kind"),
+        nullable=False,
+    )
+    details: Mapped[dict] = mapped_column(JSONB, nullable=False)
+    status: Mapped[str] = mapped_column(
+        Enum(
+            "draft", "confirmed", "sent", "cancelled",
+            name="note_order_status",
+        ),
+        nullable=False,
+        default="draft",
+    )
+    # JSON array of claim IDs (`["c001","c003"]`) so the audit chain
+    # back to the source note is queryable without re-running the LLM.
+    source_claim_ids: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    physician_confirmed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    sent_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+

@@ -18,6 +18,7 @@ import type {
   CustomTemplate,
   Note,
   NoteDetail,
+  NoteOrder,
   PaginatedResponse,
   PatientSessionMatch,
   PatientSummary,
@@ -335,6 +336,59 @@ export async function exportNote(sessionId: string): Promise<Blob> {
     method: "POST",
   });
   return r.blob();
+}
+
+/* ─── Orders (extract from approved note) ────────────────────────────────── */
+
+export async function listMySessionOrders(
+  sessionId: string,
+): Promise<NoteOrder[]> {
+  const r = await fetchWithAuth(`/api/v1/me/notes/${sessionId}/orders`);
+  return r.json();
+}
+
+export async function extractMySessionOrders(
+  sessionId: string,
+): Promise<NoteOrder[]> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/orders/extract`,
+    { method: "POST" },
+  );
+  return r.json();
+}
+
+export async function confirmMySessionOrder(
+  sessionId: string,
+  orderId: string,
+): Promise<NoteOrder> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/orders/${orderId}/confirm`,
+    { method: "POST" },
+  );
+  return r.json();
+}
+
+export async function editMySessionOrder(
+  sessionId: string,
+  orderId: string,
+  details: Record<string, unknown>,
+): Promise<NoteOrder> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/orders/${orderId}`,
+    { method: "PATCH", body: JSON.stringify({ details }) },
+  );
+  return r.json();
+}
+
+export async function cancelMySessionOrder(
+  sessionId: string,
+  orderId: string,
+): Promise<NoteOrder> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/notes/${sessionId}/orders/${orderId}`,
+    { method: "DELETE" },
+  );
+  return r.json();
 }
 
 /* ─── Patient summary (after-visit) ──────────────────────────────────────── */

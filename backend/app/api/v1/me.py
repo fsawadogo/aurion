@@ -52,6 +52,7 @@ from app.modules.custom_templates import service as custom_templates_service
 from app.modules.export.service import export_note_docx
 from app.modules.macros import service as macros_service
 from app.modules.note_gen.service import get_latest_note, is_note_approved
+from app.modules.orders import service as orders_service
 from app.modules.patient_summary import service as patient_summary_service
 from app.modules.template_authoring import service as template_authoring_service
 
@@ -445,6 +446,223 @@ async def upload_template_for_extraction(
         )
     await db.commit()
     return _to_authoring_response(row, reply.assistant_message)
+
+
+# ── /me/notes/{id}/orders — structured order drafts ──────────────────────
+
+
+class NoteOrderResponse(BaseModel):
+    id: str
+    session_id: str
+    kind: str
+    details: dict[str, Any]
+    status: str
+    source_claim_ids: list[str]
+    physician_confirmed_at: Optional[str] = None
+    sent_at: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class OrderDetailsRequest(BaseModel):
+    """Body for PATCH /orders/{id} — replaces the details JSON.
+
+    Shape validation happens in the service against the row's `kind`
+    (re-validating the kind here would let the caller change it; we
+    keep kind immutable post-extraction)."""
+
+    details: dict[str, Any] = Field(..., min_length=1)
+
+
+def _to_order_response(row) -> NoteOrderResponse:
+    return NoteOrderResponse(
+        id=str(row.id),
+        session_id=str(row.session_id),
+        kind=row.kind,
+        details=row.details,
+        status=row.status,
+        source_claim_ids=row.source_claim_ids or [],
+        physician_confirmed_at=(
+            row.physician_confirmed_at.isoformat()
+            if row.physician_confirmed_at
+            else None
+        ),
+        sent_at=row.sent_at.isoformat() if row.sent_at else None,
+        created_at=row.created_at.isoformat(),
+        updated_at=row.updated_at.isoformat(),
+    )
+
+
+@router.get(
+    "/notes/{session_id}/orders",
+    response_model=list[NoteOrderResponse],
+)
+async def list_my_session_orders(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> list[NoteOrderResponse]:
+    """All orders for the session (drafts, confirmed, sent, cancelled)."""
+    await get_owned_session_or_404(db, session_id, user)
+    rows = await orders_service.list_for_session(session_id, db)
+    return [_to_order_response(r) for r in rows]
+
+
+@router.post(
+    "/notes/{session_id}/orders/extract",
+    response_model=list[NoteOrderResponse],
+    status_code=status.HTTP_201_CREATED,
+)
+async def extract_my_session_orders(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> list[NoteOrderResponse]:
+    """Run the LLM extractor on the latest approved note and persist
+    the discovered orders as drafts.
+
+    Refuses when the note isn't approved (409) — orders are bound for
+    EMR / e-prescribe and should never go out from a draft note.
+    Re-running the extractor is allowed and creates fresh draft rows;
+    older drafts are NOT auto-cancelled, so the physician sees both
+    sets and can resolve manually.
+    """
+    await get_owned_session_or_404(db, session_id, user)
+
+    approved = await is_note_approved(str(session_id), db)
+    if not approved:
+        raise HTTPException(
+            status_code=409,
+            detail="Orders can only be extracted from an approved note.",
+        )
+    note = await get_latest_note(str(session_id), db)
+    if note is None:
+        raise HTTPException(
+            status_code=409,
+            detail="No note exists for this session.",
+        )
+
+    try:
+        rows, provider_label = await orders_service.extract_from_note(
+            session_id, note, db
+        )
+    except ProviderError as exc:
+        logger.warning(
+            "orders extract: provider failed session=%s: %s",
+            session_id, exc,
+        )
+        raise HTTPException(status_code=502, detail=f"AI provider error: {exc}")
+
+    await write_audit(
+        session_id,
+        AuditEventType.ORDERS_EXTRACTED,
+        actor_id=str(user.user_id),
+        count=len(rows),
+        provider_used=provider_label,
+    )
+    await db.commit()
+    return [_to_order_response(r) for r in rows]
+
+
+@router.post(
+    "/notes/{session_id}/orders/{order_id}/confirm",
+    response_model=NoteOrderResponse,
+)
+async def confirm_my_session_order(
+    session_id: uuid.UUID,
+    order_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> NoteOrderResponse:
+    """Draft → confirmed. Sets `physician_confirmed_at` server-side.
+    Idempotent — confirming an already-confirmed row returns it
+    unchanged with a 200."""
+    await get_owned_session_or_404(db, session_id, user)
+    row = await orders_service.get_for_session(order_id, session_id, db)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    try:
+        row = await orders_service.confirm(row, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    await write_audit(
+        session_id,
+        AuditEventType.ORDER_CONFIRMED,
+        actor_id=str(user.user_id),
+        order_id=str(row.id),
+        kind=row.kind,
+    )
+    await db.commit()
+    return _to_order_response(row)
+
+
+@router.patch(
+    "/notes/{session_id}/orders/{order_id}",
+    response_model=NoteOrderResponse,
+)
+async def edit_my_session_order(
+    session_id: uuid.UUID,
+    order_id: uuid.UUID,
+    body: OrderDetailsRequest,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> NoteOrderResponse:
+    """Edit the details JSON. Allowed in draft + confirmed; refused
+    in sent (EMR has it) / cancelled."""
+    await get_owned_session_or_404(db, session_id, user)
+    row = await orders_service.get_for_session(order_id, session_id, db)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    try:
+        row = await orders_service.edit_details(row, body.details, db)
+    except ValueError as exc:
+        msg = str(exc)
+        status_code = 409 if "Cannot edit" in msg else 400
+        raise HTTPException(status_code=status_code, detail=msg)
+
+    await write_audit(
+        session_id,
+        AuditEventType.ORDER_EDITED,
+        actor_id=str(user.user_id),
+        order_id=str(row.id),
+        kind=row.kind,
+    )
+    await db.commit()
+    return _to_order_response(row)
+
+
+@router.delete(
+    "/notes/{session_id}/orders/{order_id}",
+    response_model=NoteOrderResponse,
+)
+async def cancel_my_session_order(
+    session_id: uuid.UUID,
+    order_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> NoteOrderResponse:
+    """Cancel an order. Soft delete — the row stays for audit; status
+    flips to 'cancelled'. Sent orders can't be cancelled in-system
+    (the EMR owns them at that point)."""
+    await get_owned_session_or_404(db, session_id, user)
+    row = await orders_service.get_for_session(order_id, session_id, db)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Order not found")
+    try:
+        row = await orders_service.cancel(row, db)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    await write_audit(
+        session_id,
+        AuditEventType.ORDER_CANCELLED,
+        actor_id=str(user.user_id),
+        order_id=str(row.id),
+        kind=row.kind,
+    )
+    await db.commit()
+    return _to_order_response(row)
 
 
 # ── /me/notes/{id}/patient-summary — after-visit handout ──────────────────

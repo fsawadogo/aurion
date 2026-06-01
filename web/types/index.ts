@@ -586,3 +586,26 @@ export interface TemplateAuthoringSession {
   draft_template: TemplateDefinition | null;
   assistant_message: string | null;
 }
+
+/** Structured order extracted from an approved note. The four kinds
+ * each have a different `details` shape — narrow via the `kind`
+ * discriminator. */
+export type NoteOrderKind = "imaging" | "lab" | "referral" | "prescription";
+export type NoteOrderStatus =
+  | "draft"
+  | "confirmed"
+  | "sent"
+  | "cancelled";
+
+export interface NoteOrder {
+  id: string;
+  session_id: string;
+  kind: NoteOrderKind;
+  details: Record<string, unknown>;
+  status: NoteOrderStatus;
+  source_claim_ids: string[];
+  physician_confirmed_at?: string | null;
+  sent_at?: string | null;
+  created_at: string;
+  updated_at: string;
+}

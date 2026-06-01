@@ -55,6 +55,10 @@ class AuditEventType(StrEnum):
     MACRO_DELETED = "macro_deleted"
     PATIENT_SUMMARY_GENERATED = "patient_summary_generated"
     PATIENT_SUMMARY_EDITED = "patient_summary_edited"
+    ORDERS_EXTRACTED = "orders_extracted"
+    ORDER_CONFIRMED = "order_confirmed"
+    ORDER_EDITED = "order_edited"
+    ORDER_CANCELLED = "order_cancelled"
     SESSION_PURGED = "session_purged"
     SESSION_DISCARDED = "session_discarded"
 
@@ -182,6 +186,22 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.PATIENT_SUMMARY_EDITED: frozenset(
         {"actor_id", "version"}
+    ),
+    # Orders extraction + lifecycle. The `details` JSON is PHI-adjacent
+    # (drug, dose, body part, indication) — never carried into the
+    # audit. kind + status + actor + order_id + count are enough for
+    # the audit trail.
+    AuditEventType.ORDERS_EXTRACTED: frozenset(
+        {"actor_id", "count", "provider_used"}
+    ),
+    AuditEventType.ORDER_CONFIRMED: frozenset(
+        {"actor_id", "order_id", "kind"}
+    ),
+    AuditEventType.ORDER_EDITED: frozenset(
+        {"actor_id", "order_id", "kind"}
+    ),
+    AuditEventType.ORDER_CANCELLED: frozenset(
+        {"actor_id", "order_id", "kind"}
     ),
     AuditEventType.SESSION_PURGED: frozenset(),
     AuditEventType.SESSION_DISCARDED: frozenset({"prior_state"}),
