@@ -90,6 +90,27 @@ final class APIClient: Sendable {
         return try await patch(path: "/sessions/\(sessionId)/template", body: ["specialty": specialty])
     }
 
+    /// Set or clear the session's patient identifier (#61).
+    ///
+    /// Pass `identifier` to set; pass `nil` to clear. The server encrypts
+    /// the value before storage; the audit row carries actor + cleared
+    /// boolean but NEVER the identifier value itself.
+    ///
+    /// The identifier is PHI — never log it; the keyboard input view
+    /// should opt out of QuickType suggestions and screen capture
+    /// previews (see PatientIdentifierEditor).
+    func setSessionIdentifier(sessionId: String, identifier: String?) async throws -> SessionResponse {
+        // Backend's ExternalReferenceIdRequest treats null OR empty
+        // string as "clear". We send empty string when the caller
+        // wants to clear so the request body always serializes the
+        // key (rather than relying on absent-key semantics, which
+        // some HTTP middleware can drop).
+        let body: [String: String] = [
+            "external_reference_id": identifier ?? ""
+        ]
+        return try await patch(path: "/sessions/\(sessionId)/identifier", body: body)
+    }
+
     func confirmConsent(sessionId: String, method: ConsentMethod) async throws -> SessionResponse {
         return try await post(
             path: "/sessions/\(sessionId)/consent",
@@ -514,6 +535,11 @@ struct SessionResponse: Codable, Sendable {
     /// `multimodal` for older sessions that pre-date the column so the iOS
     /// inbox can still render them without crashing on a missing key.
     let captureMode: String
+    /// Patient identifier (#61) — opaque string the clinic uses to tie this
+    /// session to a chart in their EMR. NULL when the physician hasn't set
+    /// one yet. Server decrypts before serialization for the owning
+    /// clinician + admins; absent in the response for other roles.
+    let externalReferenceId: String?
     let createdAt: String
     let updatedAt: String
 
@@ -522,6 +548,7 @@ struct SessionResponse: Codable, Sendable {
         case clinicianId = "clinician_id"
         case encounterType = "encounter_type"
         case captureMode = "capture_mode"
+        case externalReferenceId = "external_reference_id"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -534,6 +561,7 @@ struct SessionResponse: Codable, Sendable {
         state = try c.decode(String.self, forKey: .state)
         encounterType = try c.decodeIfPresent(String.self, forKey: .encounterType) ?? "doctor_patient"
         captureMode = try c.decodeIfPresent(String.self, forKey: .captureMode) ?? "multimodal"
+        externalReferenceId = try c.decodeIfPresent(String.self, forKey: .externalReferenceId)
         createdAt = try c.decode(String.self, forKey: .createdAt)
         updatedAt = try c.decode(String.self, forKey: .updatedAt)
     }
@@ -545,6 +573,7 @@ struct SessionResponse: Codable, Sendable {
         state: String,
         encounterType: String = "doctor_patient",
         captureMode: String = "multimodal",
+        externalReferenceId: String? = nil,
         createdAt: String,
         updatedAt: String
     ) {
@@ -554,6 +583,7 @@ struct SessionResponse: Codable, Sendable {
         self.state = state
         self.encounterType = encounterType
         self.captureMode = captureMode
+        self.externalReferenceId = externalReferenceId
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

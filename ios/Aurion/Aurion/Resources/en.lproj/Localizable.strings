@@ -63,6 +63,20 @@
 "postEncounter.generate" = "Generate Note";
 "postEncounter.generating" = "Generating\U2026";
 
+/* ── Patient identifier (#61) ──────────────────────────── */
+"patientId.section" = "Patient Identifier";
+"patientId.subtitle" = "Optional. Used to attach the note to the chart and to find prior visits.";
+"patientId.placeholder" = "MRN, encounter id, or chart number";
+"patientId.add" = "Add Patient Identifier";
+"patientId.editTitle" = "Patient Identifier";
+"patientId.save" = "Save";
+"patientId.clear" = "Clear";
+"patientId.cancel" = "Cancel";
+"patientId.set" = "Set";
+"patientId.empty" = "No identifier set";
+"patientId.privacyHint" = "Stored encrypted. Never appears in the audit log or in the AI prompts.";
+"patientId.saveFailed" = "Couldn\U2019t save the identifier. Please try again.";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "REC";
 "capture.recording" = "Recording";
