@@ -615,6 +615,11 @@ export interface NoteOrder {
    *  The null state collapses two cases that the UI doesn't need to
    *  distinguish: both render as "no badge". */
   drug_validated?: boolean | null;
+  /** Catalog version in effect when `drug_validated` was set. NULL
+   *  for non-prescription kinds AND for rows from before the column
+   *  existed. Audit-story field — the UI doesn't surface it but
+   *  consumers (admin tools, eval team) can read it from the response. */
+  catalog_version?: string | null;
   physician_confirmed_at?: string | null;
   sent_at?: string | null;
   created_at: string;
@@ -725,6 +730,10 @@ export interface CodingSuggestion {
    *  The three states are distinct in the UI; do NOT collapse to a
    *  boolean. */
   code_validated?: boolean | null;
+  /** Catalog version in effect when `code_validated` was set. NULL
+   *  for rows that predate the version column. Audit-story field —
+   *  UI doesn't currently surface it but the type round-trips it. */
+  catalog_version?: string | null;
   physician_action_at?: string | null;
   created_at: string;
   updated_at: string;
