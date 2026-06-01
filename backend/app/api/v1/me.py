@@ -53,6 +53,7 @@ from app.modules.custom_templates import service as custom_templates_service
 from app.modules.emr import service as emr_service
 from app.modules.emr.registry import list_connector_keys as list_emr_connectors
 from app.modules.export.service import export_note_docx
+from app.modules.live_preview import service as live_preview_service
 from app.modules.macros import service as macros_service
 from app.modules.note_gen.service import get_latest_note, is_note_approved
 from app.modules.orders import service as orders_service
@@ -1577,3 +1578,148 @@ async def send_my_session_to_emr(
 
     await db.commit()
     return _to_emr_write_back_response(row)
+
+
+# ── /me/sessions/{id}/preview — live note preview during recording (#64) ─
+
+
+class LivePreviewResponse(BaseModel):
+    """Live preview payload.
+
+    `stage=0` and `is_draft=true` are deliberate: any consumer that
+    confuses this with a canonical Stage 1 note has a bug we want to
+    surface loudly. The `is_draft` boolean is the redundant belt to
+    the stage-int suspenders.
+    """
+
+    id: str
+    session_id: str
+    version: int
+    stage: int = 0
+    is_draft: bool = True
+    sections: list[dict[str, Any]]
+    transcript_chars: int
+    completeness_score: float
+    provider_used: str
+    created_at: str
+
+
+class LivePreviewRequest(BaseModel):
+    """POST body — partial transcript text + specialty.
+
+    Specialty defaults to the session's existing specialty when
+    omitted; explicit override is allowed so iOS can preview against
+    a different template without mutating the session row first.
+    """
+
+    partial_transcript: str = Field(..., min_length=1, max_length=20000)
+    specialty_override: Optional[str] = Field(default=None, max_length=64)
+    output_language: str = Field(default="en", pattern=r"^(en|fr)$")
+
+
+def _to_live_preview_response(row) -> LivePreviewResponse:
+    return LivePreviewResponse(
+        id=str(row.id),
+        session_id=str(row.session_id),
+        version=row.version,
+        sections=row.sections,
+        transcript_chars=row.transcript_chars,
+        completeness_score=row.completeness_score,
+        provider_used=row.provider_used,
+        created_at=row.created_at.isoformat(),
+    )
+
+
+@router.get(
+    "/sessions/{session_id}/previews",
+    response_model=list[LivePreviewResponse],
+)
+async def list_my_session_previews(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> list[LivePreviewResponse]:
+    """All preview snapshots for the session (newest first).
+
+    Useful for pilot analysis — chart how the note evolved across
+    minute 1 / 3 / 5 of the encounter. iOS UI typically only renders
+    the latest; the portal renders the timeline.
+    """
+    await get_owned_session_or_404(db, session_id, user)
+    rows = await live_preview_service.list_for_session(session_id, db)
+    return [_to_live_preview_response(r) for r in rows]
+
+
+@router.get(
+    "/sessions/{session_id}/preview",
+    response_model=Optional[LivePreviewResponse],
+)
+async def get_my_latest_session_preview(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[LivePreviewResponse]:
+    """The latest preview, or null when no previews have been generated yet."""
+    await get_owned_session_or_404(db, session_id, user)
+    row = await live_preview_service.get_latest_for_session(session_id, db)
+    return _to_live_preview_response(row) if row else None
+
+
+@router.post(
+    "/sessions/{session_id}/preview",
+    response_model=LivePreviewResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_my_session_preview(
+    session_id: uuid.UUID,
+    body: LivePreviewRequest,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> LivePreviewResponse:
+    """Run a draft preview-stage LLM call against the partial transcript.
+
+    This endpoint does NOT touch the canonical Stage 1 pipeline. Each
+    call:
+      * builds a synthetic Transcript from the body text
+      * calls provider.generate_note(stage=0)
+      * persists a new row with the next sequential version
+      * emits LIVE_PREVIEW_GENERATED audit (no PHI in row kwargs)
+
+    Failures bubble up as 502 with CORS preserved (same pattern as
+    the other LLM endpoints).
+    """
+    session = await get_owned_session_or_404(db, session_id, user)
+    specialty = body.specialty_override or session.specialty
+    if not specialty:
+        raise HTTPException(
+            status_code=409,
+            detail="Session has no specialty assigned and no override provided.",
+        )
+
+    try:
+        row, latency_ms = await live_preview_service.generate_preview(
+            session_id,
+            specialty,
+            body.partial_transcript,
+            db,
+            output_language=body.output_language,
+        )
+    except ProviderError as exc:
+        logger.warning(
+            "live preview: provider failed session=%s: %s",
+            session_id, exc,
+        )
+        raise HTTPException(status_code=502, detail=f"AI provider error: {exc}")
+
+    await write_audit(
+        session_id,
+        AuditEventType.LIVE_PREVIEW_GENERATED,
+        actor_id=str(user.user_id),
+        preview_id=str(row.id),
+        version=row.version,
+        transcript_chars=row.transcript_chars,
+        provider_used=row.provider_used,
+        latency_ms=latency_ms,
+    )
+    await db.commit()
+    return _to_live_preview_response(row)

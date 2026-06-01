@@ -52,6 +52,7 @@ EXPECTED_VALUES: dict[str, str] = {
     "EMR_WRITE_BACK_QUEUED": "emr_write_back_queued",
     "EMR_WRITE_BACK_SENT": "emr_write_back_sent",
     "EMR_WRITE_BACK_FAILED": "emr_write_back_failed",
+    "LIVE_PREVIEW_GENERATED": "live_preview_generated",
     "SESSION_PURGED": "session_purged",
     "SESSION_DISCARDED": "session_discarded",
     # Notes

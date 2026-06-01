@@ -621,6 +621,41 @@ export type CodingSuggestionStatus =
   | "rejected"
   | "edited";
 
+/** Live note preview during recording — #64.
+ *
+ * Streaming draft snapshots generated while the encounter is still
+ * happening. `stage` is always 0, `is_draft` always true — any
+ * consumer that confuses this with a Stage 1 / Stage 2 note has a
+ * bug. The `sections` shape matches Note.sections but the rows live
+ * in their own table, never in note_versions. */
+export interface LivePreviewSection {
+  id: string;
+  title?: string;
+  status: string;
+  claims: Array<{
+    id: string;
+    text: string;
+    source_type: string;
+    source_id: string;
+    source_quote?: string;
+    physician_edited?: boolean;
+    original_text?: string | null;
+  }>;
+}
+
+export interface LivePreview {
+  id: string;
+  session_id: string;
+  version: number;
+  stage: 0;
+  is_draft: true;
+  sections: LivePreviewSection[];
+  transcript_chars: number;
+  completeness_score: number;
+  provider_used: string;
+  created_at: string;
+}
+
 /** EMR/EHR outbound write-back attempt — #57.
  *
  * One row per send attempt. Foundation supports `stub` connector
