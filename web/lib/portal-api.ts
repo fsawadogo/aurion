@@ -19,6 +19,7 @@ import type {
   CustomTemplate,
   EmrConnectorsCatalog,
   EmrWriteBack,
+  LivePreview,
   Note,
   NoteDetail,
   NoteOrder,
@@ -576,6 +577,46 @@ export async function sendMySessionToEmr(
       method: "POST",
       body: JSON.stringify({ connector: connector ?? null }),
     },
+  );
+  return r.json();
+}
+
+/* ─── Live note preview (#64) ────────────────────────────────────────────── */
+
+/** GET /me/sessions/{id}/previews — full preview history (newest first). */
+export async function listMySessionPreviews(
+  sessionId: string,
+): Promise<LivePreview[]> {
+  const r = await fetchWithAuth(`/api/v1/me/sessions/${sessionId}/previews`);
+  return r.json();
+}
+
+/** GET /me/sessions/{id}/preview — latest preview, or null. */
+export async function getMyLatestSessionPreview(
+  sessionId: string,
+): Promise<LivePreview | null> {
+  const r = await fetchWithAuth(`/api/v1/me/sessions/${sessionId}/preview`);
+  const data = await r.json();
+  return data && typeof data === "object" ? (data as LivePreview) : null;
+}
+
+/** POST /me/sessions/{id}/preview — generate a fresh draft snapshot.
+ *
+ * Pass the partial transcript text the device has captured so far.
+ * The backend caps at 8KB (TAIL-preserving) and runs a draft-stage
+ * LLM call — separate code path from canonical Stage 1, so a hung
+ * preview never blocks recording-stop. */
+export async function generateMySessionPreview(
+  sessionId: string,
+  payload: {
+    partial_transcript: string;
+    specialty_override?: string;
+    output_language?: "en" | "fr";
+  },
+): Promise<LivePreview> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/sessions/${sessionId}/preview`,
+    { method: "POST", body: JSON.stringify(payload) },
   );
   return r.json();
 }

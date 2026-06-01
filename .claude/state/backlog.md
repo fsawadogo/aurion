@@ -32,8 +32,8 @@ Last seeded: 2026-05-14. Last updated: 2026-05-30 (seeded 17 backend issues from
 - [x] #57 iOS · EMR/EHR write-back (FHIR DocumentReference / HL7) — foundation shipped 2026-06-01 (PR pending); emr_write_backs table + EmrConnector abstraction + FHIR DocumentReference serializer + stub connector + 3 /me/emr endpoints + portal EmrWriteBackCard with "Pilot mode" banner. Real connectors (Oscar / Epic SMART / generic FHIR / HL7v2-MLLP) are follow-ups; the foundation gives them the registry to plug into. Follow-ups: real connector backends, retry scheduler, per-clinic AppConfig connector selection, iOS UI
 
 ### Cohort 4 — iOS-backed
-- [ ] #64 iOS · Live note preview during recording — 5d — lane: backend — no blockers
-- [ ] #62 iOS · Procedural / Post-Op capture mode — 15d — lane: backend — no blockers
+- [x] #64 iOS · Live note preview during recording — foundation shipped 2026-06-01 (PR pending); live_note_previews table + draft-stage LLM call separate code path from Stage 1 + /me/sessions/{id}/preview endpoints + portal LivePreviewCard with DRAFT badge + amber border + polling every 4s. iOS generation cadence + WebSocket streaming = follow-ups
+- [ ] #62 iOS · Procedural / Post-Op capture mode — 15d — lane: backend — no blockers (BUT: CLAUDE.md "What NOT to Build" lists Post-Op/Procedural Mode; reconcile before picking up)
 
 ### Other
 - [ ] AUR-MP-CROSSCHECK Add MediaPipe as independent second face detector for Apple Vision (pilot follow-up; revisit only if clinical safety committee asks) — 5d — lane: ios — no blockers

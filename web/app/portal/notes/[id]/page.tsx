@@ -15,6 +15,7 @@ import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import CodingSuggestionsCard from "@/components/portal/CodingSuggestionsCard";
 import CompletenessRing from "@/components/portal/CompletenessRing";
 import EmrWriteBackCard from "@/components/portal/EmrWriteBackCard";
+import LivePreviewCard from "@/components/portal/LivePreviewCard";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
 import OrdersCard from "@/components/portal/OrdersCard";
 import PageHeader from "@/components/portal/PageHeader";
@@ -29,11 +30,12 @@ import {
   editNote,
   exportNote,
   getNoteDetail,
+  getSession,
   listMyMacros,
   resolveConflict,
 } from "@/lib/portal-api";
 import { filterForSpecialty } from "@/lib/portal-macros-expand";
-import type { Claim, NoteDetail, PhysicianMacro } from "@/types";
+import type { Claim, NoteDetail, PhysicianMacro, Session as SessionRow } from "@/types";
 
 /**
  * /portal/notes/[id] — the note review screen.
@@ -63,6 +65,11 @@ export default function NoteReviewPage() {
     null,
   );
   const [noNoteYet, setNoNoteYet] = useState(false);
+  // Session row is fetched alongside the note detail so the live
+  // preview card (#64) can gate on session state — the card is only
+  // useful while the encounter is mid-flight, and we need to know
+  // that even when the note doesn't exist yet.
+  const [session, setSession] = useState<SessionRow | null>(null);
   const [macros, setMacros] = useState<PhysicianMacro[]>([]);
   const transcriptRef = useRef<TranscriptPaneHandle>(null);
 
@@ -88,18 +95,29 @@ export default function NoteReviewPage() {
     setError(null);
     setNoNoteYet(false);
     try {
-      const d = await getNoteDetail(sessionId);
-      setDetail(d);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Failed to load note.";
-      // /detail 404s when the session exists but has no note yet —
-      // typical for CONSENT_PENDING / RECORDING / freshly-discarded
-      // sessions. Surface a friendly empty state instead of a raw
-      // error.
-      if (/\b404\b/.test(msg)) {
-        setNoNoteYet(true);
+      // Fetch both in parallel — session row gives us state (for the
+      // live preview card gating) even when the note detail 404s on
+      // an in-flight recording session.
+      const [d, s] = await Promise.allSettled([
+        getNoteDetail(sessionId),
+        getSession(sessionId),
+      ]);
+      if (d.status === "fulfilled") {
+        setDetail(d.value);
       } else {
-        setError(msg);
+        const msg = d.reason instanceof Error ? d.reason.message : "Failed to load note.";
+        // /detail 404s when the session exists but has no note yet —
+        // typical for CONSENT_PENDING / RECORDING / freshly-discarded
+        // sessions. Surface a friendly empty state instead of a raw
+        // error.
+        if (/\b404\b/.test(msg)) {
+          setNoNoteYet(true);
+        } else {
+          setError(msg);
+        }
+      }
+      if (s.status === "fulfilled") {
+        setSession(s.value);
       }
     } finally {
       setLoading(false);
@@ -201,26 +219,37 @@ export default function NoteReviewPage() {
           <LoadingSkeleton lines={12} />
         </Card>
       ) : noNoteYet ? (
-        <Card>
-          <div className="text-center py-10">
-            <p className="aurion-headline text-navy-700 mb-1.5">
-              No note yet
-            </p>
-            <p className="aurion-callout text-navy-500 max-w-md mx-auto">
-              This session is still in capture or hasn&apos;t reached
-              the review stage. Once recording stops and Stage 1
-              generation completes, the note will appear here.
-            </p>
-            <Button
-              variant="secondary"
-              size="sm"
-              className="mt-5"
-              onClick={() => void load()}
-            >
-              Check again
-            </Button>
-          </div>
-        </Card>
+        <div className="space-y-4">
+          {/* Live preview (#64) — visible only while the session is
+              RECORDING / PAUSED / PROCESSING_STAGE1. The card gates
+              internally on the session state we just fetched. */}
+          {session && (
+            <LivePreviewCard
+              sessionId={sessionId}
+              sessionState={session.state}
+            />
+          )}
+          <Card>
+            <div className="text-center py-10">
+              <p className="aurion-headline text-navy-700 mb-1.5">
+                No note yet
+              </p>
+              <p className="aurion-callout text-navy-500 max-w-md mx-auto">
+                This session is still in capture or hasn&apos;t reached
+                the review stage. Once recording stops and Stage 1
+                generation completes, the note will appear here.
+              </p>
+              <Button
+                variant="secondary"
+                size="sm"
+                className="mt-5"
+                onClick={() => void load()}
+              >
+                Check again
+              </Button>
+            </div>
+          </Card>
+        </div>
       ) : error && !detail ? (
         <Card>
           <p className="aurion-callout text-red-600">{error}</p>

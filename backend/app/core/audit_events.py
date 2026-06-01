@@ -66,6 +66,7 @@ class AuditEventType(StrEnum):
     EMR_WRITE_BACK_QUEUED = "emr_write_back_queued"
     EMR_WRITE_BACK_SENT = "emr_write_back_sent"
     EMR_WRITE_BACK_FAILED = "emr_write_back_failed"
+    LIVE_PREVIEW_GENERATED = "live_preview_generated"
     SESSION_PURGED = "session_purged"
     SESSION_DISCARDED = "session_discarded"
 
@@ -256,6 +257,20 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
             "connector",
             "error_reason",
             "attempt_count",
+        }
+    ),
+    # Live preview generated. Carries version + transcript_chars +
+    # provider for the "preview quality over time" pilot chart. Never
+    # the preview content itself (it's PHI; lives only in the row's
+    # JSONB column).
+    AuditEventType.LIVE_PREVIEW_GENERATED: frozenset(
+        {
+            "actor_id",
+            "preview_id",
+            "version",
+            "transcript_chars",
+            "provider_used",
+            "latency_ms",
         }
     ),
     AuditEventType.SESSION_PURGED: frozenset(),

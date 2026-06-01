@@ -895,3 +895,40 @@ class EmrWriteBackModel(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+
+
+class LiveNotePreviewModel(Base):
+    """Streaming draft note snapshot generated during recording — #64.
+
+    NOT the canonical Stage 1 note. These are previews — the physician
+    watches the note assemble while still in the room with the patient.
+    The canonical pipeline at recording-stop runs the full Stage 1
+    generation independently, ignoring any preview rows.
+
+    Each row is one snapshot. We keep history rather than overwriting
+    so the pilot can chart how the note evolved over the encounter.
+
+    The sections JSON is PHI-bound (same as Stage 1 notes); never in
+    logs or audit rows. Ownership flows through `sessions.clinician_id`.
+    """
+
+    __tablename__ = "live_note_previews"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    sections: Mapped[list] = mapped_column(JSONB, nullable=False)
+    transcript_chars: Mapped[int] = mapped_column(Integer, nullable=False)
+    completeness_score: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
+    provider_used: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
