@@ -21,7 +21,6 @@ test_assert_owner.py suite already; we don't re-prove it here.
 from __future__ import annotations
 
 import uuid
-from unittest.mock import patch
 
 import pytest
 
@@ -126,7 +125,7 @@ def test_external_reference_id_set_enum_value_is_stable():
 
 def test_encrypt_then_decrypt_roundtrips(stub_kms):
     """The full set→read flow at the encryption boundary."""
-    from app.core.kms_encryption import encrypt_str, decrypt_str
+    from app.core.kms_encryption import decrypt_str, encrypt_str
 
     ciphertext = encrypt_str("MRN_FOLLOWUP_42")
     # On-the-wire shape: bytes, not the original plaintext.

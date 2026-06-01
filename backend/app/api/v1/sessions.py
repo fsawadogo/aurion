@@ -22,8 +22,6 @@ from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.kms_encryption import decrypt_str, encrypt_str
 from app.core.types import SessionState
-
-logger = logging.getLogger("aurion.api.sessions")
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.session.service import (
     ConsentRequiredError,
@@ -35,6 +33,8 @@ from app.modules.session.service import (
     list_sessions,
     transition_session,
 )
+
+logger = logging.getLogger("aurion.api.sessions")
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
