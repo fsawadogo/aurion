@@ -273,6 +273,50 @@ final class APIClient: Sendable {
         )
     }
 
+    // MARK: - Coding suggestions (#69)
+
+    /// List all coding suggestions for the session (newest first).
+    /// Includes suggested + edited + confirmed + rejected rows.
+    func listCodingSuggestions(sessionId: String) async throws -> [CodingSuggestionResponse] {
+        return try await get(path: "/me/notes/\(sessionId)/coding-suggestions")
+    }
+
+    /// Run the LLM coding extractor against the latest approved note.
+    /// 409 when not approved; 502 on upstream LLM failure.
+    func extractCodingSuggestions(sessionId: String) async throws -> [CodingSuggestionResponse] {
+        return try await post(path: "/me/notes/\(sessionId)/coding-suggestions/extract")
+    }
+
+    /// Suggested / edited → confirmed.
+    func confirmCodingSuggestion(sessionId: String, suggestionId: String) async throws -> CodingSuggestionResponse {
+        return try await post(
+            path: "/me/notes/\(sessionId)/coding-suggestions/\(suggestionId)/confirm"
+        )
+    }
+
+    /// Reject a suggestion. Row stays for audit; not eligible for EMR
+    /// write-back.
+    func rejectCodingSuggestion(sessionId: String, suggestionId: String) async throws -> CodingSuggestionResponse {
+        return try await post(
+            path: "/me/notes/\(sessionId)/coding-suggestions/\(suggestionId)/reject"
+        )
+    }
+
+    /// Override code and/or description. Status flips to "edited".
+    /// Re-runs catalog validation; physician-typed bogus codes still
+    /// get flagged.
+    func editCodingSuggestion(
+        sessionId: String,
+        suggestionId: String,
+        code: String,
+        description: String
+    ) async throws -> CodingSuggestionResponse {
+        return try await patch(
+            path: "/me/notes/\(sessionId)/coding-suggestions/\(suggestionId)",
+            body: ["code": code, "description": description]
+        )
+    }
+
     // MARK: - Config
 
     /// Pulls the public AppConfig subset (providers, pipeline timing, feature flags).
@@ -891,6 +935,46 @@ struct NoteOrderResponse: Codable, Sendable, Equatable, Identifiable {
         sentAt = try c.decodeIfPresent(String.self, forKey: .sentAt)
         createdAt = try c.decode(String.self, forKey: .createdAt)
         updatedAt = try c.decode(String.self, forKey: .updatedAt)
+    }
+}
+
+/// E/M / ICD-10 / CPT coding suggestion (#69).
+///
+/// Strategic separate-surface inference. The clinical note stays
+/// descriptive-only by policy; this row carries the inferential
+/// mapping from claims to billing codes on its own surface, marked
+/// "assistive — physician must confirm."
+///
+/// `codeValidated` (#69 follow-up via #171): three-state catalog
+/// check. True = in our curated catalog; False = checked and not in
+/// catalog (UI surfaces verify-before-billing warning); null = legacy
+/// row from before validation.
+struct CodingSuggestionResponse: Codable, Sendable, Equatable, Identifiable {
+    let id: String
+    let sessionId: String
+    let codeSystem: String  // em / icd10 / cpt
+    let code: String
+    let description: String
+    let justification: String
+    let sourceClaimIds: [String]
+    let confidence: String  // low / medium / high
+    let status: String  // suggested / confirmed / rejected / edited
+    let codeValidated: Bool?
+    let catalogVersion: String?
+    let physicianActionAt: String?
+    let createdAt: String
+    let updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, code, description, justification, confidence, status
+        case sessionId = "session_id"
+        case codeSystem = "code_system"
+        case sourceClaimIds = "source_claim_ids"
+        case codeValidated = "code_validated"
+        case catalogVersion = "catalog_version"
+        case physicianActionAt = "physician_action_at"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
     }
 }
 

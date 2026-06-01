@@ -129,6 +129,43 @@
 "orders.unrecognizedSummary.plural" = "%d prescriptions not in catalog \U2014 verify before signing.";
 "orders.countSummary" = "%d draft \U00B7 %d confirmed";
 
+/* ── Coding & billing (#69) ────────────────────────────── */
+"coding.title" = "Coding & Billing";
+"coding.subtitle" = "Suggest billing codes for this visit \U2014 E/M level, ICD-10 diagnoses, CPT procedures. Conservative: only what the note\U2019s claims clearly support.";
+"coding.assistive" = "Assistive \U2014 physician must confirm.";
+"coding.assistiveDetail" = "These suggestions are LLM-generated from the approved note\U2019s claims. They do not appear in the clinical note. Confirm, edit, or reject each before billing.";
+"coding.suggest" = "Suggest codes";
+"coding.suggesting" = "Suggesting\U2026";
+"coding.reSuggest" = "Re-suggest";
+"coding.empty" = "No suggestions yet";
+"coding.extractEmpty" = "No billable structure was found in this note.";
+"coding.gateMessage" = "Approve the note to generate coding suggestions.";
+"coding.confirm" = "Confirm";
+"coding.reject" = "Reject";
+"coding.edit" = "Edit";
+"coding.save" = "Save";
+"coding.cancel" = "Cancel";
+"coding.confirmed" = "Confirmed";
+"coding.rejected" = "Rejected";
+"coding.editedConfirmed" = "Edited & confirmed";
+"coding.confidence.low" = "Low confidence";
+"coding.confidence.medium" = "Medium";
+"coding.confidence.high" = "High";
+"coding.notInCatalog" = "Not in catalog";
+"coding.notInCatalogHint" = "Cross-reference your EMR\U2019s reference before submitting.";
+"coding.unrecognizedSummary" = "%d code not in catalog \U2014 review highlighted rows.";
+"coding.unrecognizedSummary.plural" = "%d codes not in catalog \U2014 review highlighted rows.";
+"coding.summaryCounts" = "%d pending \U00B7 %d confirmed";
+"coding.rejectConfirmTitle" = "Reject this code?";
+"coding.rejectConfirmMessage" = "The row stays in the audit log.";
+"coding.extractFailed" = "Couldn\U2019t generate suggestions. Please try again.";
+"coding.confirmFailed" = "Couldn\U2019t confirm. Please try again.";
+"coding.rejectFailed" = "Couldn\U2019t reject. Please try again.";
+"coding.editFailed" = "Couldn\U2019t save your edits. Please try again.";
+"coding.system.em" = "E/M";
+"coding.system.icd10" = "ICD-10";
+"coding.system.cpt" = "CPT";
+
 /* ── Capture ──────────────────────────────────────────── */
 "capture.rec" = "REC";
 "capture.recording" = "Recording";
