@@ -31,6 +31,8 @@ from app.modules.config.provider_overrides import (
     start_override_polling,
     stop_override_polling,
 )
+from app.modules.emr.worker import start_worker as start_emr_worker
+from app.modules.emr.worker import stop_worker as stop_emr_worker
 
 
 @asynccontextmanager
@@ -42,8 +44,13 @@ async def lifespan(app: FastAPI):
     appconfig = get_appconfig_client()
     await appconfig.start_polling()
     await start_override_polling()
+    # EMR retry worker — opt-in via AURION_EMR_RETRY_WORKER_ENABLED.
+    # No-op when disabled, so safe to call unconditionally.
+    await start_emr_worker()
     yield
-    # Shutdown
+    # Shutdown — reverse order. EMR worker first so an in-flight
+    # drain pass can finish before the DB connection closes.
+    await stop_emr_worker()
     await stop_override_polling()
     await appconfig.stop_polling()
     await close_db()
