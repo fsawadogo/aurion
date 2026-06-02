@@ -124,6 +124,16 @@
     "failedBanner": "{count, plural, one {# session failed to process and needs attention.} other {# sessions failed to process and need attention.}}",
     "seeList": "See list"
   },
+  "Notifications": {
+    "ariaLabel": "Notifications ({count} unread)",
+    "dropdownLabel": "Recent notifications",
+    "title": "Notifications",
+    "markAllRead": "Mark all read",
+    "seeAll": "See all activity",
+    "empty": "Nothing new",
+    "emptyHint": "New activity will appear here as it happens.",
+    "loadFailed": "Couldn't load notifications."
+  },
   "CommandPalette": {
     "label": "Command palette",
     "placeholder": "Search or jump to…",
