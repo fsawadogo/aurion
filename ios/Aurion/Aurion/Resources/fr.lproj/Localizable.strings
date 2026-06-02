@@ -94,6 +94,8 @@
 "summary.editedTag" = "Modifi\U00E9";
 "summary.gateMessage" = "Approuvez la note pour g\U00E9n\U00E9rer un r\U00E9sum\U00E9 pour le patient.";
 "summary.generateFailed" = "Impossible de g\U00E9n\U00E9rer le r\U00E9sum\U00E9. Veuillez r\U00E9essayer.";
+"summary.loadFailed" = "Impossible de charger le r\U00E9sum\U00E9. Appuyez sur R\U00E9essayer ci-dessous.";
+"summary.retry" = "R\U00E9essayer";
 "summary.saveFailed" = "Impossible d\U2019enregistrer vos modifications. Veuillez r\U00E9essayer.";
 "summary.charLimit" = "%d / %d";
 
@@ -106,6 +108,8 @@
 "orders.empty" = "Aucune commande extraite";
 "orders.gateMessage" = "Approuvez la note pour extraire les commandes.";
 "orders.extractFailed" = "Impossible d\U2019extraire les commandes. Veuillez r\U00E9essayer.";
+"orders.loadFailed" = "Impossible de charger les commandes. Appuyez sur R\U00E9essayer ci-dessous.";
+"orders.retry" = "R\U00E9essayer";
 "orders.extractEmpty" = "L\U2019extracteur n\U2019a trouv\U00E9 aucune action commandable dans cette note.";
 "orders.confirm" = "Confirmer";
 "orders.confirming" = "Confirmation\U2026";
@@ -159,6 +163,8 @@
 "coding.rejectConfirmTitle" = "Rejeter ce code ?";
 "coding.rejectConfirmMessage" = "La ligne reste dans le journal d\U2019audit.";
 "coding.extractFailed" = "Impossible de g\U00E9n\U00E9rer les suggestions. Veuillez r\U00E9essayer.";
+"coding.loadFailed" = "Impossible de charger les suggestions de codification. Appuyez sur R\U00E9essayer ci-dessous.";
+"coding.retry" = "R\U00E9essayer";
 "coding.confirmFailed" = "Confirmation impossible. Veuillez r\U00E9essayer.";
 "coding.rejectFailed" = "Rejet impossible. Veuillez r\U00E9essayer.";
 "coding.editFailed" = "Impossible d\U2019enregistrer les modifications. Veuillez r\U00E9essayer.";
@@ -194,6 +200,8 @@
 "emr.fingerprintLabel" = "empreinte %@\U2026";
 "emr.nextAttempt" = "Prochaine tentative \U00E0 %@";
 "emr.sendFailed" = "Impossible d\U2019envoyer \U00E0 l\U2019EMR. Veuillez r\U00E9essayer.";
+"emr.loadFailed" = "Impossible de charger l\U2019\U00E9tat d\U2019envoi EMR. Appuyez sur R\U00E9essayer ci-dessous.";
+"emr.retry" = "R\U00E9essayer";
 
 /* ── Aper\U00E7u en direct (#64) ────────────────────────────── */
 "preview.title" = "Aper\U00E7u en direct";
