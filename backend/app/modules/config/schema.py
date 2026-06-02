@@ -30,12 +30,28 @@ class VisionProviderKey(str, Enum):
     GEMINI = "gemini"
 
 
+# Dual-mode visual evidence (see docs/plans/p1-1-clip-evidence-schema.md).
+# `FRAMES_ONLY` is the default — current pilot behavior is preserved. The
+# eval team flips per-session to `CLIPS_ONLY` for evaluation runs; `HYBRID`
+# routes per-trigger-kind (motion / rom / gait / procedural → clip; static
+# observations → frame).
+class VisualEvidenceMode(str, Enum):
+    FRAMES_ONLY = "frames_only"
+    CLIPS_ONLY = "clips_only"
+    HYBRID = "hybrid"
+
+
 # ── Config Sub-Models ──────────────────────────────────────────────────────
 
 class ProvidersConfig(BaseModel):
     transcription: TranscriptionProviderKey = TranscriptionProviderKey.WHISPER
     note_generation: NoteGenerationProviderKey = NoteGenerationProviderKey.ANTHROPIC
     vision: VisionProviderKey = VisionProviderKey.OPENAI
+    # Frame providers (static-image) and clip providers (native video) are
+    # routed independently. Gemini is the only frontier model with native
+    # video-clip understanding today, so it's the default clip provider;
+    # OpenAI and Anthropic fall back to midpoint-still extraction (P1-2).
+    vision_clip: VisionProviderKey = VisionProviderKey.GEMINI
 
 
 class NoteGenerationModelParams(BaseModel):
@@ -60,6 +76,27 @@ class PipelineConfig(BaseModel):
     frame_window_procedural_ms: int = Field(default=7000, ge=1000, le=60000)
     screen_capture_fps: int = Field(default=2, ge=1, le=10)
     video_capture_fps: int = Field(default=1, ge=1, le=10)
+    # ── Dual-mode visual evidence ──────────────────────────────────────
+    # Default `FRAMES_ONLY` so every existing call site is byte-identical
+    # to today's pilot build. The eval team flips per-session via the
+    # `per_session_visual_evidence_mode_override` feature flag.
+    visual_evidence_mode: VisualEvidenceMode = VisualEvidenceMode.FRAMES_ONLY
+    # Clip extraction window — 7s default matches the procedural frame
+    # window for parity with the existing static path. iOS encodes this
+    # many ms of H.264 around each motion trigger.
+    clip_window_ms: int = Field(default=7000, ge=1000, le=30000)
+    # Ring buffer holding raw `CMSampleBuffer` references in iOS. Sized
+    # comfortably above the clip window so a trigger landing late still
+    # has enough pre-roll. ~30 MB peak for 15s @ 720p on A15+.
+    clip_ring_buffer_seconds: int = Field(default=15, ge=5, le=60)
+    # In `HYBRID` mode, triggers whose `kind` is in this list route to the
+    # clip path; everything else stays on the frame path. Defaults are the
+    # motion-heavy clinical use cases — ROM, gait, surgical/procedural
+    # technique. Visual trigger classifier populates `kind` from the
+    # transcript segment; see modules/note_gen/trigger_classifier.
+    clip_trigger_kinds: list[str] = Field(
+        default_factory=lambda: ["motion", "rom", "gait", "procedural"]
+    )
 
 
 class FeatureFlagsConfig(BaseModel):
@@ -74,6 +111,10 @@ class FeatureFlagsConfig(BaseModel):
     # Meta partner approval lands; flipping this on requires the iOS bundle
     # to be signed by an approved partner team.
     meta_wearables_enabled: bool = False
+    # Eval-team can flip `visual_evidence_mode` per-session for evaluation
+    # runs even when the pilot-wide default is `FRAMES_ONLY`. Mirrors the
+    # `per_session_provider_override` pattern.
+    per_session_visual_evidence_mode_override: bool = True
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────

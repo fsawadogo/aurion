@@ -12,6 +12,7 @@ from typing import Literal
 
 from app.core.types import (
     FrameCaption,
+    MaskedClip,
     MaskedFrame,
     Note,
     Template,
@@ -94,4 +95,28 @@ class VisionProvider(ABC):
         self, frame: MaskedFrame, anchor: TranscriptSegment
     ) -> FrameCaption:
         """Generate a descriptive caption for a masked clinical frame."""
+        ...
+
+    @abstractmethod
+    async def caption_clip(
+        self, clip: MaskedClip, anchor: TranscriptSegment
+    ) -> FrameCaption:
+        """Generate a descriptive caption for a masked clinical clip.
+
+        Dual-mode visual evidence (see docs/plans/p1-1-clip-evidence-schema.md).
+        Every concrete subclass MUST implement this — even frame-only
+        providers, which fall back to extracting a representative still
+        and calling `caption_frame` under the hood (P1-2, tagged with
+        `degraded_to_frame=true` on the citation). Native-video providers
+        (Gemini today, others as they ship) send the actual MP4 bytes.
+
+        Liskov: the return type is `FrameCaption` (same as `caption_frame`)
+        so the Stage 2 dispatch and conflict-detection logic stays
+        evidence-kind-agnostic. The returned caption's `evidence_kind`
+        field is `"clip"` and `duration_ms` is the clip window.
+
+        This is the interface only; concrete implementations land in P1-2.
+        Subclasses in this PR raise `NotImplementedError` so the abstract
+        contract is enforced today and the real plumbing layers on next.
+        """
         ...
