@@ -130,6 +130,7 @@
     "group": {
       "navigation": "Navigation",
       "recentSessions": "Recent sessions",
+      "matchingSessions": "Matching sessions",
       "templates": "Templates"
     },
     "actions": {
