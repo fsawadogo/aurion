@@ -638,6 +638,19 @@
 "noteReview.sessionExpired" = "Session expir\U00E9e \U2014 veuillez vous reconnecter.";
 "noteReview.serverError" = "Erreur serveur (%d). R\U00E9essayez.";
 
+/* ── Citation et lecteur de clip (P1-6) ───────────────── */
+"citation.sourceType.transcript" = "Citation de la transcription";
+"citation.sourceType.visual" = "Citation visuelle";
+"citation.sourceType.screen" = "Citation de l\U2019\U00E9cran";
+"citation.sourceType.physicianEdit" = "Modification du m\U00E9decin";
+"citation.sourceType.unknown" = "Citation";
+"clip.indicator.accessibility" = "Clip vid\U00E9o";
+"clip.viewer.title" = "Clip";
+"clip.viewer.accessibility" = "Lecteur de clip vid\U00E9o";
+"clip.unavailable.title" = "Clip non encore disponible";
+"clip.unavailable.message" = "Le clip vid\U00E9o associ\U00E9 \U00E0 cette citation n\U2019est pas encore li\U00E9 \U00E0 la note. La lecture sera disponible d\U00E8s que le serveur l\U2019aura attach\U00E9.";
+"common.ok" = "OK";
+
 /* ── Exportation ──────────────────────────────────────── */
 "export.comingSoon" = "Bient\U00F4t disponible";
 "export.title" = "Exporter la note clinique";
