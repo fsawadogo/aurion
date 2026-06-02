@@ -8,7 +8,7 @@ export default function SessionDetailLayout({
   return (
     <div className="min-h-screen">
       <Sidebar />
-      <main className="lg:pl-64">{children}</main>
+      <main className="lg:pl-aurion-sidebar transition-[padding-left] duration-aurion ease-aurion">{children}</main>
     </div>
   );
 }
