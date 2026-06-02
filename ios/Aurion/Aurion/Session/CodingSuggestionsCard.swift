@@ -28,6 +28,10 @@ struct CodingSuggestionsCard: View {
     @State private var isExtracting = false
     @State private var busyId: String?
     @State private var errorMessage: String?
+    /// `true` when the initial GET errored out. Suppresses the
+    /// empty-state CTA in favor of a Retry — clicking Suggest would
+    /// fail the same way.
+    @State private var loadFailed = false
 
     @State private var rejectTarget: CodingSuggestionResponse?
     @State private var editing: CodingSuggestionResponse?
@@ -58,6 +62,8 @@ struct CodingSuggestionsCard: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, 8)
+                } else if loadFailed && sortedItems.isEmpty {
+                    retryState(message: L("coding.loadFailed"))
                 } else if sortedItems.isEmpty {
                     emptyState
                 } else {
@@ -190,6 +196,44 @@ struct CodingSuggestionsCard: View {
                 .aurionFont(13, relativeTo: .footnote)
                 .foregroundColor(.aurionTextSecondary)
             Spacer()
+        }
+    }
+
+    /// Same shape as the OrdersCard retry block — load GET errored
+    /// and we have no items cached, so suppress the Suggest CTA and
+    /// offer Retry instead.
+    private func retryState(message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.aurionAmber)
+                Text(message)
+                    .aurionFont(13, relativeTo: .footnote)
+                    .foregroundColor(.aurionTextPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+            }
+            Button {
+                Task { await loadIfNeeded() }
+            } label: {
+                HStack(spacing: 4) {
+                    if isLoading {
+                        ProgressView().tint(.aurionTextPrimary)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    Text(L("coding.retry"))
+                        .aurionFont(12, weight: .semibold, relativeTo: .caption)
+                }
+                .foregroundColor(.aurionTextPrimary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.aurionSurfaceAlt)
+                .clipShape(Capsule())
+            }
+            .disabled(isLoading)
         }
     }
 
@@ -565,8 +609,10 @@ struct CodingSuggestionsCard: View {
         do {
             items = try await APIClient.shared.listCodingSuggestions(sessionId: sessionId)
             errorMessage = nil
+            loadFailed = false
         } catch {
-            errorMessage = L("coding.extractFailed")
+            loadFailed = true
+            errorMessage = nil
         }
         isLoading = false
     }

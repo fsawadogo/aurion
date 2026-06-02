@@ -34,6 +34,10 @@ struct OrdersCard: View {
     @State private var isExtracting = false
     @State private var busyOrderId: String?
     @State private var errorMessage: String?
+    /// `true` when the initial GET errored out. We never reach the
+    /// empty-state CTA in that case — Extract would 403 the same way —
+    /// and instead offer a Retry that re-runs `loadIfNeeded()`.
+    @State private var loadFailed = false
 
     @State private var cancelTarget: NoteOrderResponse?
 
@@ -55,6 +59,10 @@ struct OrdersCard: View {
                 ProgressView()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
+            } else if loadFailed && visibleOrders.isEmpty {
+                // GET errored AND we have nothing cached — show a
+                // Retry instead of an Extract CTA that would 403 too.
+                retryState(message: L("orders.loadFailed"))
             } else if visibleOrders.isEmpty {
                 emptyState
             } else {
@@ -156,6 +164,45 @@ struct OrdersCard: View {
                 .aurionFont(13, relativeTo: .footnote)
                 .foregroundColor(.aurionTextSecondary)
             Spacer()
+        }
+    }
+
+    /// Sticky failure state: load GET errored and we have nothing
+    /// to show. Distinct from the empty CTA because tapping Extract
+    /// would fail with the same error — Retry re-runs loadIfNeeded
+    /// instead so an intermittent failure self-heals.
+    private func retryState(message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.aurionAmber)
+                Text(message)
+                    .aurionFont(13, relativeTo: .footnote)
+                    .foregroundColor(.aurionTextPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+            }
+            Button {
+                Task { await loadIfNeeded() }
+            } label: {
+                HStack(spacing: 4) {
+                    if isLoading {
+                        ProgressView().tint(.aurionTextPrimary)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    Text(L("orders.retry"))
+                        .aurionFont(12, weight: .semibold, relativeTo: .caption)
+                }
+                .foregroundColor(.aurionTextPrimary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.aurionSurfaceAlt)
+                .clipShape(Capsule())
+            }
+            .disabled(isLoading)
         }
     }
 
@@ -424,8 +471,14 @@ struct OrdersCard: View {
         do {
             orders = try await APIClient.shared.listOrders(sessionId: sessionId)
             errorMessage = nil
+            loadFailed = false
         } catch {
-            errorMessage = L("orders.extractFailed")
+            // Don't surface the bottom error banner alongside the
+            // retry block — the retry message already explains the
+            // state. Errors on subsequent extract/confirm calls keep
+            // using errorMessage as before.
+            loadFailed = true
+            errorMessage = nil
         }
         isLoading = false
     }

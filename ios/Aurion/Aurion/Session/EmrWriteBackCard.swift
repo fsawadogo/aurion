@@ -38,6 +38,10 @@ struct EmrWriteBackCard: View {
     @State private var isLoading = true
     @State private var isSending = false
     @State private var errorMessage: String?
+    /// `true` when the initial parallel GETs (history + connector
+    /// catalog) errored. Replaces the Send CTA with a Retry —
+    /// Send would 403 the same way.
+    @State private var loadFailed = false
 
     private static let approvedStates: Set<String> = [
         "REVIEW_COMPLETE", "EXPORTED", "PURGED",
@@ -76,6 +80,10 @@ struct EmrWriteBackCard: View {
                 ProgressView()
                     .frame(maxWidth: .infinity)
                     .padding(.vertical, 12)
+            } else if loadFailed && rows.isEmpty && connectors == nil {
+                // GET errored AND we have nothing cached — suppress
+                // the Send CTA (would 403 the same) in favor of Retry.
+                retryState(message: L("emr.loadFailed"))
             } else {
                 if isPilotMode {
                     pilotBanner
@@ -144,6 +152,41 @@ struct EmrWriteBackCard: View {
                 .aurionFont(13, relativeTo: .footnote)
                 .foregroundColor(.aurionTextSecondary)
             Spacer()
+        }
+    }
+
+    private func retryState(message: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.aurionAmber)
+                Text(message)
+                    .aurionFont(13, relativeTo: .footnote)
+                    .foregroundColor(.aurionTextPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+            }
+            Button {
+                Task { await loadIfNeeded() }
+            } label: {
+                HStack(spacing: 4) {
+                    if isLoading {
+                        ProgressView().tint(.aurionTextPrimary)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    Text(L("emr.retry"))
+                        .aurionFont(12, weight: .semibold, relativeTo: .caption)
+                }
+                .foregroundColor(.aurionTextPrimary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.aurionSurfaceAlt)
+                .clipShape(Capsule())
+            }
+            .disabled(isLoading)
         }
     }
 
@@ -476,8 +519,10 @@ struct EmrWriteBackCard: View {
                 selectedConnector = c.default
             }
             errorMessage = nil
+            loadFailed = false
         } catch {
-            errorMessage = L("emr.sendFailed")
+            loadFailed = true
+            errorMessage = nil
         }
         isLoading = false
     }

@@ -34,6 +34,9 @@ struct PatientSummaryCard: View {
     @State private var isGenerating = false
     @State private var isSaving = false
     @State private var errorMessage: String?
+    /// `true` when the initial GET errored. Suppresses the Generate
+    /// CTA in favor of a Retry — Generate would 403 the same way.
+    @State private var loadFailed = false
 
     // Edit mode is a local toggle — the textfield's draft survives a
     // cancel without writing back.
@@ -76,6 +79,8 @@ struct PatientSummaryCard: View {
                 } else {
                     populated(s)
                 }
+            } else if loadFailed {
+                retryState
             } else {
                 emptyState
             }
@@ -142,6 +147,45 @@ struct PatientSummaryCard: View {
                 .foregroundColor(.aurionTextSecondary)
                 .multilineTextAlignment(.leading)
             Spacer()
+        }
+    }
+
+    /// Sticky failure state: load GET errored. Distinct from the
+    /// empty CTA because tapping Generate would 403 the same way —
+    /// Retry re-runs loadIfNeeded so an intermittent failure
+    /// self-heals.
+    private var retryState: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13))
+                    .foregroundColor(.aurionAmber)
+                Text(L("summary.loadFailed"))
+                    .aurionFont(13, relativeTo: .footnote)
+                    .foregroundColor(.aurionTextPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
+                Spacer()
+            }
+            Button {
+                Task { await loadIfNeeded() }
+            } label: {
+                HStack(spacing: 4) {
+                    if isLoading {
+                        ProgressView().tint(.aurionTextPrimary)
+                    } else {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 11, weight: .semibold))
+                    }
+                    Text(L("summary.retry"))
+                        .aurionFont(12, weight: .semibold, relativeTo: .caption)
+                }
+                .foregroundColor(.aurionTextPrimary)
+                .padding(.horizontal, 12)
+                .padding(.vertical, 6)
+                .background(Color.aurionSurfaceAlt)
+                .clipShape(Capsule())
+            }
+            .disabled(isLoading)
         }
     }
 
@@ -307,12 +351,16 @@ struct PatientSummaryCard: View {
                 sessionId: sessionId
             )
             errorMessage = nil
+            loadFailed = false
         } catch {
-            // Polling-style 5xx — leave the existing summary alone if
-            // we had one; surface error only when the load was first.
+            // Polling-style 5xx / auth blip — leave the existing
+            // summary alone if we had one (the populated state
+            // stays valid); surface the retry block only when we
+            // have nothing to show yet.
             if summary == nil {
-                errorMessage = L("summary.generateFailed")
+                loadFailed = true
             }
+            errorMessage = nil
         }
         isLoading = false
     }

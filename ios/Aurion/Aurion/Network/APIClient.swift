@@ -215,13 +215,17 @@ final class APIClient: Sendable {
     /// Server returns null literally when none exists — we model that as
     /// optional rather than a 404 because a freshly-approved note legitimately
     /// has no summary yet.
+    ///
+    /// Important contract: this method ONLY returns nil when the backend
+    /// emits literal `null` (no summary yet). Real failures (403 from
+    /// non-CLINICIAN role, 5xx from upstream, network error, etc.) throw
+    /// so the caller can distinguish "nothing to show" from "couldn't
+    /// load." The previous `try?`-wrapped implementation conflated the
+    /// two and made auth failures look like empty state.
     func getPatientSummary(sessionId: String) async throws -> PatientSummaryResponse? {
-        // The endpoint returns a JSON object OR the literal `null`; decode
-        // optionally so the `null` branch lands as `nil` without throwing.
-        let value: PatientSummaryResponse? = try? await get(
+        return try await getOptional(
             path: "/me/notes/\(sessionId)/patient-summary"
         )
-        return value
     }
 
     /// Generate a fresh patient summary. 409 when the note isn't approved
@@ -366,11 +370,12 @@ final class APIClient: Sendable {
     }
 
     /// Latest preview snapshot for the session, or nil when none yet.
+    /// Same contract as getPatientSummary: nil ONLY for the literal-null
+    /// "no preview yet" response; real failures throw.
     func getLatestLivePreview(sessionId: String) async throws -> LivePreviewResponse? {
-        let value: LivePreviewResponse? = try? await get(
+        return try await getOptional(
             path: "/me/sessions/\(sessionId)/preview"
         )
-        return value
     }
 
     // MARK: - Config
@@ -545,6 +550,29 @@ final class APIClient: Sendable {
         addAuth(&request)
         let (data, response) = try await performRequest(request)
         try validateResponse(response, data: data)
+        return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// GET that accepts a literal JSON `null` body as `nil` instead
+    /// of as a decode error. Real HTTP failures (4xx / 5xx) still
+    /// throw via `validateResponse` — so callers can distinguish
+    /// "no resource yet" from "couldn't reach the resource."
+    ///
+    /// Used by the GET-latest paths for resources that may legitimately
+    /// not exist yet (patient summary, live preview).
+    private func getOptional<T: Decodable>(path: String) async throws -> T? {
+        let url = URL(string: "\(baseURL)\(path)")!
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 30
+        addAuth(&request)
+        let (data, response) = try await performRequest(request)
+        try validateResponse(response, data: data)
+        // Treat literal `null` (4 bytes) as nil — avoids a decode
+        // error when the backend signals "no resource yet" via the
+        // JSON null sentinel.
+        let trimmed = String(data: data, encoding: .utf8)?
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed == "null" { return nil }
         return try JSONDecoder().decode(T.self, from: data)
     }
 

@@ -94,6 +94,8 @@
 "summary.editedTag" = "Edited";
 "summary.gateMessage" = "Approve the note to generate a patient-facing summary.";
 "summary.generateFailed" = "Couldn\U2019t generate the summary. Please try again.";
+"summary.loadFailed" = "Couldn\U2019t load the summary. Tap Retry below.";
+"summary.retry" = "Retry";
 "summary.saveFailed" = "Couldn\U2019t save your edits. Please try again.";
 "summary.charLimit" = "%d / %d";
 
@@ -106,6 +108,8 @@
 "orders.empty" = "No orders extracted yet";
 "orders.gateMessage" = "Approve the note to extract orders.";
 "orders.extractFailed" = "Couldn\U2019t extract orders. Please try again.";
+"orders.loadFailed" = "Couldn\U2019t load orders. Tap Retry below.";
+"orders.retry" = "Retry";
 "orders.extractEmpty" = "The extractor found no orderable actions in this note.";
 "orders.confirm" = "Confirm";
 "orders.confirming" = "Confirming\U2026";
@@ -159,6 +163,8 @@
 "coding.rejectConfirmTitle" = "Reject this code?";
 "coding.rejectConfirmMessage" = "The row stays in the audit log.";
 "coding.extractFailed" = "Couldn\U2019t generate suggestions. Please try again.";
+"coding.loadFailed" = "Couldn\U2019t load coding suggestions. Tap Retry below.";
+"coding.retry" = "Retry";
 "coding.confirmFailed" = "Couldn\U2019t confirm. Please try again.";
 "coding.rejectFailed" = "Couldn\U2019t reject. Please try again.";
 "coding.editFailed" = "Couldn\U2019t save your edits. Please try again.";
@@ -194,6 +200,8 @@
 "emr.fingerprintLabel" = "fingerprint %@\U2026";
 "emr.nextAttempt" = "Next attempt at %@";
 "emr.sendFailed" = "Couldn\U2019t send to EMR. Please try again.";
+"emr.loadFailed" = "Couldn\U2019t load EMR write-back status. Tap Retry below.";
+"emr.retry" = "Retry";
 
 /* ── Live preview during recording (#64) ───────────────── */
 "preview.title" = "Live Preview";
