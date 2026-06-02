@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
@@ -7,7 +8,6 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { ArrowLeftIcon } from "@heroicons/react/24/outline";
 import { getSessionAudit } from "@/lib/api";
 import type { AuditEvent } from "@/types";
 
@@ -81,7 +81,7 @@ export default function AuditTimelinePage({
         actions={
           <Link href="/audit">
             <Button variant="secondary" size="sm">
-              <ArrowLeftIcon className="mr-1 h-4 w-4" />
+              <ArrowLeft className="mr-1 h-4 w-4" />
               Back to audit log
             </Button>
           </Link>

@@ -1,13 +1,8 @@
 "use client";
 
+import { AlertTriangle, BadgeCheck, Download } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams } from "next/navigation";
-import {
-  ArrowDownTrayIcon,
-  ExclamationTriangleIcon,
-  CheckBadgeIcon,
-} from "@heroicons/react/24/outline";
-
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -402,7 +397,7 @@ function ConflictsBanner({
       className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
       role="status"
     >
-      <ExclamationTriangleIcon className="h-5 w-5 shrink-0 text-amber-600" />
+      <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
       <div className="flex-1">
         <span className="font-medium">
           {count} unresolved conflict{count === 1 ? "" : "s"}.
@@ -446,7 +441,7 @@ function ActionBar({
     <div className="sticky bottom-4 z-10 flex items-center gap-3 rounded-lg border border-gray-200 bg-white/95 backdrop-blur px-4 py-3 shadow-sm">
       {isApproved ? (
         <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700">
-          <CheckBadgeIcon className="h-5 w-5" />
+          <BadgeCheck className="h-5 w-5" />
           Approved ·{" "}
           {state === "EXPORTED" ? "exported" : "ready to export"}
         </span>
@@ -467,7 +462,7 @@ function ActionBar({
         loading={exporting}
         disabled={exporting || !canExport}
       >
-        <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+        <Download className="h-4 w-4 mr-1" />
         Export DOCX
       </Button>
 

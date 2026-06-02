@@ -1,16 +1,9 @@
 "use client";
 
+import { MessagesSquare, Plus, SquarePen, Trash2, Upload } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import {
-  PlusIcon,
-  ArrowUpTrayIcon,
-  PencilSquareIcon,
-  TrashIcon,
-  ChatBubbleLeftRightIcon,
-} from "@heroicons/react/24/outline";
-
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -116,13 +109,13 @@ export default function PortalTemplatesPage() {
                 disabled={uploading}
                 onClick={(ev) => (ev.currentTarget.parentElement as HTMLLabelElement)?.click()}
               >
-                <ArrowUpTrayIcon className="h-4 w-4 mr-1" />
+                <Upload className="h-4 w-4 mr-1" />
                 Upload
               </Button>
             </label>
             <Link href="/portal/templates/new">
               <Button variant="primary" size="sm">
-                <PlusIcon className="h-4 w-4 mr-1" />
+                <Plus className="h-4 w-4 mr-1" />
                 New template
               </Button>
             </Link>
@@ -141,7 +134,7 @@ export default function PortalTemplatesPage() {
           <LoadingSkeleton lines={6} />
         ) : list.length === 0 ? (
           <div className="py-8 text-center">
-            <ChatBubbleLeftRightIcon className="mx-auto h-10 w-10 text-gray-300 mb-2" />
+            <MessagesSquare className="mx-auto h-10 w-10 text-gray-300 mb-2" />
             <p className="text-sm text-gray-500">
               No custom templates yet. Build one in a few minutes with
               the conversational builder.
@@ -172,7 +165,7 @@ export default function PortalTemplatesPage() {
                   href={`/portal/templates/${t.id}`}
                   className="inline-flex items-center gap-1 text-sm text-navy-700 hover:text-navy-900"
                 >
-                  <PencilSquareIcon className="h-4 w-4" />
+                  <SquarePen className="h-4 w-4" />
                   Open
                 </Link>
                 <button
@@ -182,7 +175,7 @@ export default function PortalTemplatesPage() {
                   disabled={deletingId === t.id}
                   aria-label={`Delete ${t.display_name}`}
                 >
-                  <TrashIcon className="h-4 w-4" />
+                  <Trash2 className="h-4 w-4" />
                 </button>
               </li>
             ))}

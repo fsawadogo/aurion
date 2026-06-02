@@ -1,13 +1,7 @@
 "use client";
 
+import { IdCard, Pencil, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import {
-  IdentificationIcon,
-  PencilIcon,
-  TrashIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
-
 import Button from "@/components/ui/Button";
 import {
   listMySessionsByPatientIdentifier,
@@ -119,14 +113,14 @@ export default function PatientIdentifierEditor({
           className="inline-flex items-center gap-1.5 rounded-full bg-gold-50 px-3 py-1 text-[12.5px] font-medium text-navy-700 ring-1 ring-inset ring-gold-600/20 hover:bg-gold-100 hover:ring-gold-600/30 transition-colors duration-short"
           aria-label="Edit patient identifier"
         >
-          <IdentificationIcon className="h-3.5 w-3.5 text-gold-600" />
+          <IdCard className="h-3.5 w-3.5 text-gold-600" />
           <span className="font-mono">{currentIdentifier}</span>
           {encounters.length > 0 && (
             <span className="ml-1 inline-flex items-center rounded-full bg-gold-200 px-1.5 py-0.5 text-[10px] font-semibold tabular-nums text-navy-800">
               +{encounters.length}
             </span>
           )}
-          <PencilIcon className="h-3 w-3 text-navy-300" />
+          <Pencil className="h-3 w-3 text-navy-300" />
         </button>
       ) : (
         <button
@@ -134,7 +128,7 @@ export default function PatientIdentifierEditor({
           onClick={() => setOpen(true)}
           className="inline-flex items-center gap-1.5 rounded-aurion-md px-2.5 py-1.5 text-[12.5px] text-navy-500 hover:bg-canvas hover:text-navy-700 transition-colors duration-short"
         >
-          <IdentificationIcon className="h-4 w-4" />
+          <IdCard className="h-4 w-4" />
           Add patient identifier
         </button>
       )}
@@ -164,7 +158,7 @@ export default function PatientIdentifierEditor({
                 aria-label="Close"
                 disabled={saving}
               >
-                <XMarkIcon className="h-4 w-4" />
+                <X className="h-4 w-4" />
               </button>
             </div>
             <div className="px-5 py-4 space-y-3">
@@ -229,7 +223,7 @@ export default function PatientIdentifierEditor({
                     void save();
                   }}
                 >
-                  <TrashIcon className="h-4 w-4 mr-1" />
+                  <Trash2 className="h-4 w-4 mr-1" />
                   Clear
                 </Button>
               )}

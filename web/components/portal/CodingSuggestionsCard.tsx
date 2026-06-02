@@ -1,15 +1,7 @@
 "use client";
 
+import { AlertTriangle, Calculator, Check, RefreshCw, SquarePen, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import {
-  CalculatorIcon,
-  CheckIcon,
-  XMarkIcon,
-  PencilSquareIcon,
-  ExclamationTriangleIcon,
-  ArrowPathIcon,
-} from "@heroicons/react/24/outline";
-
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -185,7 +177,7 @@ export default function CodingSuggestionsCard({
   return (
     <Card className="border-l-4 border-l-navy-300">
       <div className="mb-3 flex items-center gap-2 text-aurion-headline">
-        <CalculatorIcon className="h-4 w-4 text-navy-500" />
+        <Calculator className="h-4 w-4 text-navy-500" />
         Coding & billing suggestions
         {sorted.length > 0 && (
           <span className="aurion-micro ml-2">
@@ -201,7 +193,7 @@ export default function CodingSuggestionsCard({
             disabled={extracting}
             onClick={() => void extract()}
           >
-            <ArrowPathIcon className="h-4 w-4 mr-1" />
+            <RefreshCw className="h-4 w-4 mr-1" />
             Re-suggest
           </Button>
         )}
@@ -210,7 +202,7 @@ export default function CodingSuggestionsCard({
       {/* Always-visible disclaimer — the safety property of this
           surface depends on the physician knowing it's assistive. */}
       <div className="mb-3 flex items-start gap-2 rounded-aurion-md bg-amber-50 border border-amber-200 px-3 py-2 text-aurion-caption text-amber-900">
-        <ExclamationTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
+        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
         <div>
           <strong>Assistive — physician must confirm.</strong> These
           suggestions are LLM-generated from the approved note&apos;s
@@ -226,7 +218,7 @@ export default function CodingSuggestionsCard({
           row's catalog status. */}
       {unvalidatedCount > 0 && (
         <div className="mb-3 flex items-start gap-2 rounded-aurion-md bg-amber-50 border border-amber-300 px-3 py-2 text-aurion-caption text-amber-900">
-          <ExclamationTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
             <strong>
               {unvalidatedCount} code{unvalidatedCount === 1 ? "" : "s"}{" "}
@@ -262,7 +254,7 @@ export default function CodingSuggestionsCard({
             disabled={extracting}
             onClick={() => void extract()}
           >
-            <CalculatorIcon className="h-4 w-4 mr-1.5" />
+            <Calculator className="h-4 w-4 mr-1.5" />
             Suggest codes for this visit
           </Button>
         </div>
@@ -376,7 +368,7 @@ function SuggestionRow({
               className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-navy-50 hover:text-navy-700 disabled:opacity-50"
               aria-label="Edit code"
             >
-              <PencilSquareIcon className="h-4 w-4" />
+              <SquarePen className="h-4 w-4" />
             </button>
           )}
           {isPending && !editing && (
@@ -388,7 +380,7 @@ function SuggestionRow({
                 disabled={busy}
                 onClick={onConfirm}
               >
-                <CheckIcon className="h-4 w-4 mr-1" />
+                <Check className="h-4 w-4 mr-1" />
                 Confirm
               </Button>
               <button
@@ -398,7 +390,7 @@ function SuggestionRow({
                 className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
                 aria-label="Reject"
               >
-                <XMarkIcon className="h-4 w-4" />
+                <X className="h-4 w-4" />
               </button>
             </>
           )}

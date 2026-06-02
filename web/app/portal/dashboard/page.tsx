@@ -1,17 +1,8 @@
 "use client";
 
+import { AlertTriangle, ArrowRight, BadgeCheck, Clock, FileText, LayoutGrid, RefreshCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowRightIcon,
-  ClockIcon,
-  CheckBadgeIcon,
-  ArrowPathIcon,
-  ExclamationTriangleIcon,
-  Squares2X2Icon,
-  DocumentTextIcon,
-} from "@heroicons/react/24/outline";
-
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -107,28 +98,28 @@ export default function PortalDashboardPage() {
       {/* ── Headline tiles — staggered slide-up on first paint. ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 aurion-stagger">
         <StatTile
-          icon={<ClockIcon className="h-5 w-5 text-amber-600" />}
+          icon={<Clock className="h-5 w-5 text-amber-600" />}
           label="Awaiting review"
           value={stats.awaitingReview}
           href="/portal/notes"
           loading={loading}
         />
         <StatTile
-          icon={<ArrowPathIcon className="h-5 w-5 text-navy-500" />}
+          icon={<RefreshCw className="h-5 w-5 text-navy-500" />}
           label="In progress"
           value={stats.inProgress}
           href="/portal/notes"
           loading={loading}
         />
         <StatTile
-          icon={<CheckBadgeIcon className="h-5 w-5 text-emerald-600" />}
+          icon={<BadgeCheck className="h-5 w-5 text-emerald-600" />}
           label="Approved this week"
           value={stats.approvedThisWeek}
           href="/portal/notes"
           loading={loading}
         />
         <StatTile
-          icon={<Squares2X2Icon className="h-5 w-5 text-gold-600" />}
+          icon={<LayoutGrid className="h-5 w-5 text-gold-600" />}
           label="Custom templates"
           value={templates.length}
           href="/portal/templates"
@@ -139,7 +130,7 @@ export default function PortalDashboardPage() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <Card>
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-navy-700">
-            <DocumentTextIcon className="h-4 w-4 text-amber-500" />
+            <FileText className="h-4 w-4 text-amber-500" />
             Awaiting your review
           </div>
           {loading ? (
@@ -159,7 +150,7 @@ export default function PortalDashboardPage() {
 
         <Card>
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-navy-700">
-            <ArrowPathIcon className="h-4 w-4 text-navy-500" />
+            <RefreshCw className="h-4 w-4 text-navy-500" />
             Visual enrichment running
           </div>
           {loading ? (
@@ -180,7 +171,7 @@ export default function PortalDashboardPage() {
 
       {sessions.length > 0 && stats.failed > 0 && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
-          <ExclamationTriangleIcon className="h-5 w-5 shrink-0" />
+          <AlertTriangle className="h-5 w-5 shrink-0" />
           <span>
             {stats.failed} session{stats.failed === 1 ? "" : "s"} failed to
             process and need attention.
@@ -259,7 +250,7 @@ function SessionRow({
         ) : (
           <Badge variant="warning" dot>Review</Badge>
         )}
-        <ArrowRightIcon className="h-4 w-4 text-gray-300 shrink-0" />
+        <ArrowRight className="h-4 w-4 text-gray-300 shrink-0" />
       </Link>
     </li>
   );

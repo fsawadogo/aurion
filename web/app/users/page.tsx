@@ -1,12 +1,12 @@
 "use client";
 
+import { CheckCircle2, Plus, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { PlusIcon, CheckCircleIcon, XCircleIcon } from "@heroicons/react/24/outline";
 import { getUsers, createUser, updateUser } from "@/lib/api";
 import type { User, UserRole, CreateUserPayload } from "@/types";
 
@@ -113,7 +113,7 @@ export default function UsersPage() {
         subtitle="Manage clinician and admin accounts"
         actions={
           <Button variant="primary" size="sm" onClick={() => setShowCreateModal(true)}>
-            <PlusIcon className="h-4 w-4" />
+            <Plus className="h-4 w-4" />
             Create User
           </Button>
         }
@@ -189,9 +189,9 @@ export default function UsersPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
                         {user.voice_enrolled ? (
-                          <CheckCircleIcon className="h-4.5 w-4.5 text-emerald-500" />
+                          <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500" />
                         ) : (
-                          <XCircleIcon className="h-4.5 w-4.5 text-gray-300" />
+                          <XCircle className="h-4.5 w-4.5 text-gray-300" />
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-400">

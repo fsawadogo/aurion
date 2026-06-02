@@ -1,13 +1,8 @@
 "use client";
 
+import { Code2, Download, LayoutGrid } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-import {
-  ArrowDownTrayIcon,
-  CodeBracketIcon,
-  Squares2X2Icon,
-} from "@heroicons/react/24/outline";
-
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
@@ -157,19 +152,19 @@ export default function TemplateDetailPage() {
               <ModeButton
                 active={mode === "preview"}
                 onClick={() => setMode("preview")}
-                icon={<Squares2X2Icon className="h-4 w-4" />}
+                icon={<LayoutGrid className="h-4 w-4" />}
                 label="Preview"
               />
               <ModeButton
                 active={mode === "json"}
                 onClick={() => setMode("json")}
-                icon={<CodeBracketIcon className="h-4 w-4" />}
+                icon={<Code2 className="h-4 w-4" />}
                 label="JSON"
               />
             </div>
             <div className="flex items-center gap-2">
               <Button variant="secondary" size="sm" onClick={onExportJson}>
-                <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+                <Download className="h-4 w-4 mr-1" />
                 Export
               </Button>
               <Button

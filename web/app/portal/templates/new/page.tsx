@@ -1,9 +1,8 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { CheckIcon } from "@heroicons/react/24/outline";
-
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
@@ -160,7 +159,7 @@ function NewTemplateInner() {
                   disabled={finalizing}
                   fullWidth
                 >
-                  <CheckIcon className="h-4 w-4 mr-1" />
+                  <Check className="h-4 w-4 mr-1" />
                   Save this template
                 </Button>
               </>

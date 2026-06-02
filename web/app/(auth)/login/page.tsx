@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertCircle, Eye, EyeOff, Lock } from "lucide-react";
 // Native email + password login against the backend's /api/v1/auth/login
 // endpoint (backend-signed JWT, stored in the `aurion_token` cookie).
 //
@@ -11,13 +12,6 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import {
-  EyeIcon,
-  EyeSlashIcon,
-  ExclamationCircleIcon,
-  LockClosedIcon,
-} from "@heroicons/react/24/outline";
-
 import Button from "@/components/ui/Button";
 import { AurionLogoLockup } from "@/components/AurionLogo";
 import { login } from "@/lib/api";
@@ -98,7 +92,7 @@ export default function LoginPage() {
               role="alert"
               className="mb-5 flex items-start gap-2 rounded-aurion-md bg-red-50 px-3.5 py-3 text-[13px] text-red-700 ring-1 ring-inset ring-red-600/15"
             >
-              <ExclamationCircleIcon className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
+              <AlertCircle className="mt-0.5 h-4 w-4 shrink-0 text-red-500" />
               <span className="leading-snug">{error}</span>
             </div>
           )}
@@ -139,9 +133,9 @@ export default function LoginPage() {
                   aria-label={showPassword ? "Hide password" : "Show password"}
                 >
                   {showPassword ? (
-                    <EyeSlashIcon className="h-4 w-4" />
+                    <EyeOff className="h-4 w-4" />
                   ) : (
-                    <EyeIcon className="h-4 w-4" />
+                    <Eye className="h-4 w-4" />
                   )}
                 </button>
               </div>
@@ -183,7 +177,7 @@ export default function LoginPage() {
         </div>
 
         <p className="mt-8 flex items-center justify-center gap-1.5 text-center text-[11.5px] text-white/55 tracking-wide">
-          <LockClosedIcon className="h-3 w-3" />
+          <Lock className="h-3 w-3" />
           Aurion Clinical AI &middot; For authorized personnel only
         </p>
       </div>

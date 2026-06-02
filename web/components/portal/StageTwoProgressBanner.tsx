@@ -1,7 +1,6 @@
 "use client";
 
-import { ArrowPathIcon, ExclamationTriangleIcon } from "@heroicons/react/24/outline";
-
+import { AlertTriangle, RefreshCw } from "lucide-react";
 import { useStageTwoProgress } from "@/lib/portal-ws";
 
 /**
@@ -50,7 +49,7 @@ export default function StageTwoProgressBanner({
         className="mb-4 flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
         role="status"
       >
-        <ExclamationTriangleIcon className="h-5 w-5 shrink-0 mt-0.5" />
+        <AlertTriangle className="h-5 w-5 shrink-0 mt-0.5" />
         <div className="flex-1">
           <p className="font-medium">Stage 2 visual enrichment failed.</p>
           {progress.errorMessage && (
@@ -75,7 +74,7 @@ export default function StageTwoProgressBanner({
       role="status"
       aria-live="polite"
     >
-      <ArrowPathIcon className="h-5 w-5 shrink-0 animate-spin text-navy-500" />
+      <RefreshCw className="h-5 w-5 shrink-0 animate-spin text-navy-500" />
       <div className="flex-1">
         <p className="font-medium">Finishing visual enrichment…</p>
         <div className="mt-1.5 h-1.5 w-full rounded-full bg-white">

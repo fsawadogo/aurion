@@ -1,13 +1,7 @@
 "use client";
 
+import { AlertTriangle, Eye, RefreshCw, Sparkles } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import {
-  EyeIcon,
-  ExclamationTriangleIcon,
-  ArrowPathIcon,
-  SparklesIcon,
-} from "@heroicons/react/24/outline";
-
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
@@ -117,7 +111,7 @@ export default function LivePreviewCard({
   return (
     <Card className="border-l-4 border-l-amber-400">
       <div className="mb-3 flex items-center gap-2 text-aurion-headline">
-        <EyeIcon className="h-4 w-4 text-amber-600" />
+        <Eye className="h-4 w-4 text-amber-600" />
         Live preview
         <Badge variant="warning" dot>
           DRAFT — not the final note
@@ -135,14 +129,14 @@ export default function LivePreviewCard({
             onClick={() => setShowTimeline((v) => !v)}
             className="inline-flex items-center gap-1 text-aurion-caption text-navy-500 hover:text-navy-700"
           >
-            <ArrowPathIcon className="h-4 w-4" />
+            <RefreshCw className="h-4 w-4" />
             Timeline ({history.length})
           </button>
         )}
       </div>
 
       <div className="mb-3 flex items-start gap-2 rounded-aurion-md bg-amber-50 border border-amber-200 px-3 py-2 text-aurion-caption text-amber-900">
-        <ExclamationTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
+        <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
         <div>
           <strong>Preview only.</strong> This is a draft snapshot the
           model generated mid-recording. The final note runs at
@@ -155,7 +149,7 @@ export default function LivePreviewCard({
         <LoadingSkeleton lines={4} />
       ) : !preview ? (
         <div className="py-4 text-center">
-          <SparklesIcon className="h-8 w-8 text-navy-300 mx-auto mb-2" />
+          <Sparkles className="h-8 w-8 text-navy-300 mx-auto mb-2" />
           <p className="aurion-callout text-navy-500">
             No preview yet. The first snapshot lands after the recording
             captures enough content to draft a section.

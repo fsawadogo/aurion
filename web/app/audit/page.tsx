@@ -1,5 +1,6 @@
 "use client";
 
+import { Download, Filter, Search } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
@@ -7,11 +8,6 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import {
-  FunnelIcon,
-  ArrowDownTrayIcon,
-  MagnifyingGlassIcon,
-} from "@heroicons/react/24/outline";
 import { getAuditLog, exportAuditCsv } from "@/lib/api";
 import type { AuditEvent, AuditFilters, PaginatedResponse } from "@/types";
 
@@ -117,7 +113,7 @@ export default function AuditPage() {
             loading={exporting}
             onClick={handleExportCsv}
           >
-            <ArrowDownTrayIcon className="h-4 w-4" />
+            <Download className="h-4 w-4" />
             Export CSV
           </Button>
         }
@@ -137,13 +133,13 @@ export default function AuditPage() {
         <Card className="mb-6">
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400">
-              <FunnelIcon className="h-3.5 w-3.5" />
+              <Filter className="h-3.5 w-3.5" />
               <span className="uppercase tracking-wider">Filters</span>
             </div>
             <div>
               <label className="mb-1 block text-[11px] font-medium text-gray-500">Session ID</label>
               <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search session..."

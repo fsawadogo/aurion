@@ -1,7 +1,6 @@
+import { ChevronRight } from "lucide-react";
 import { ReactNode } from "react";
 import Link from "next/link";
-import { ChevronRightIcon } from "@heroicons/react/24/outline";
-
 /**
  * Aurion page header — the chrome every portal page sits under.
  *
@@ -69,7 +68,7 @@ export default function PageHeader({
                   </span>
                 )}
                 {!isLast && (
-                  <ChevronRightIcon className="h-3 w-3 text-navy-200" />
+                  <ChevronRight className="h-3 w-3 text-navy-200" />
                 )}
               </span>
             );
