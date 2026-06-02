@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
+import { AurionProviders } from "./providers";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -16,8 +17,15 @@ export default function RootLayout({
   children: React.ReactNode;
 }) {
   return (
-    <html lang="en">
-      <body className={inter.className}>{children}</body>
+    // `suppressHydrationWarning` is the standard next-themes pattern
+    // — the provider sets `<html class="dark">` on mount, which
+    // technically diverges from the server-rendered (theme-less)
+    // HTML. The warning suppression is scoped to <html> and doesn't
+    // affect any child component's hydration checks.
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <AurionProviders>{children}</AurionProviders>
+      </body>
     </html>
   );
 }

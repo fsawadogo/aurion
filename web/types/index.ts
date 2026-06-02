@@ -520,6 +520,10 @@ export interface PhysicianProfile {
   consultation_types: string[];
   allied_health_team: AlliedHealthMember[];
   output_language: "en" | "fr";
+  /** Portal/iOS chrome theme (#189). "system" follows OS. */
+  ui_theme: "system" | "light" | "dark";
+  /** Portal/iOS chrome language. Orthogonal to output_language. */
+  ui_language: "en" | "fr";
   auto_upload: boolean;
   retention_days: number;
   consent_reprompt: "every_session" | "daily" | "weekly";
@@ -538,6 +542,13 @@ export interface PhysicianProfileUpdate {
   consultation_types?: string[];
   allied_health_team?: AlliedHealthMember[];
   output_language?: "en" | "fr";
+  /** Portal/iOS chrome theme (#189). Distinct from output_language —
+   *  output_language controls the note content; ui_theme + ui_language
+   *  control the chrome. */
+  ui_theme?: "system" | "light" | "dark";
+  /** Portal/iOS chrome language. Locked to en/fr today; widen the union
+   *  when the supported locales grow (matches backend's enum). */
+  ui_language?: "en" | "fr";
   auto_upload?: boolean;
   retention_days?: number;
   consent_reprompt?: "every_session" | "daily" | "weekly";

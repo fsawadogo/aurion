@@ -12,6 +12,44 @@
  * keyframes, focus rings, scrollbar chrome, form-input shared style).
  * ────────────────────────────────────────────────────────────────── */
 
+/* ──────────────────────────────────────────────────────────────────
+ * Adaptive surface tokens. Light values are the defaults; the `.dark`
+ * class (set by next-themes on <html>) flips them. Mirrors the iOS
+ * adaptive tokens in Theme.swift (`aurionCardBackground`,
+ * `aurionTextPrimary`, etc.) so the web and iOS dark modes feel
+ * identical.
+ *
+ *   --surface-canvas  — page background
+ *   --surface-card    — elevated card / panel
+ *   --surface-muted   — input fill / alt row / subtle bg
+ *   --surface-hairline — divider / quiet border
+ *   --text-primary    — body copy + headings
+ *   --text-secondary  — captions + muted text
+ *   --text-tertiary   — micro labels + disabled state
+ *
+ * Brand colors (gold, accent.red/green/amber/blue) stay fixed across
+ * modes — they're brand-identity, not chrome. Same rule as iOS.
+ * ────────────────────────────────────────────────────────────────── */
+:root {
+  --surface-canvas:   #F5F6FA;
+  --surface-card:     #FFFFFF;
+  --surface-muted:    #EEF0F3;
+  --surface-hairline: #E6E9EE;
+  --text-primary:     #0C1B37; /* navy-700 */
+  --text-secondary:   #475569;
+  --text-tertiary:    #94A3B8;
+}
+
+html.dark {
+  --surface-canvas:   #11151B;
+  --surface-card:     #1A1F28;
+  --surface-muted:    #232834;
+  --surface-hairline: rgba(255, 255, 255, 0.08);
+  --text-primary:     #E8ECF2;
+  --text-secondary:   #9AA3B4;
+  --text-tertiary:    #6B7280;
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;
@@ -22,11 +60,18 @@
   }
 
   body {
-    @apply bg-canvas text-navy-700 antialiased;
+    /* Use the adaptive token instead of bg-canvas/text-navy-700 so
+     * dark mode flips automatically without every page needing
+     * its own dark: variant. The Tailwind utilities still work
+     * for components that legitimately want brand-fixed colors. */
+    background-color: var(--surface-canvas);
+    color: var(--text-primary);
+    @apply antialiased;
     font-family: Inter, system-ui, -apple-system, "Segoe UI", sans-serif;
   }
 
-  /* Selection — premium gold tint instead of OS default. */
+  /* Selection — premium gold tint instead of OS default. Gold reads
+   * well on both light + dark backgrounds, so we keep it brand-fixed. */
   ::selection {
     @apply bg-gold-200 text-navy-800;
   }
@@ -64,6 +109,17 @@
     background: rgba(12, 27, 55, 0.28);
     background-clip: padding-box;
   }
+  /* Inverted scrollbar colors for dark mode — light tint on dark
+   * canvas, same as the sidebar scrollbar (which is already on
+   * navy chrome and so dark-tinted regardless of mode). */
+  html.dark ::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.14);
+    background-clip: padding-box;
+  }
+  html.dark ::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.24);
+    background-clip: padding-box;
+  }
   .sidebar-scroll::-webkit-scrollbar-thumb {
     background: rgba(255, 255, 255, 0.14);
     background-clip: padding-box;
@@ -87,15 +143,20 @@
    * generated `text-aurion-{role}` font-size utilities. Use these for
    * the common case (body copy, page titles); reach for the raw
    * font-size utility when you need to override the color. ── */
-  .aurion-micro       { @apply text-aurion-micro uppercase text-navy-400; }
-  .aurion-caption     { @apply text-aurion-caption text-navy-400; }
-  .aurion-callout     { @apply text-aurion-callout text-navy-600; }
-  .aurion-body        { @apply text-aurion-body text-navy-700; }
-  .aurion-headline    { @apply text-aurion-headline text-navy-700; }
-  .aurion-title-3     { @apply text-aurion-title-3 text-navy-700; }
-  .aurion-title       { @apply text-aurion-title text-navy-700; }
-  .aurion-display     { @apply text-aurion-display text-navy-700; }
-  .aurion-large-title { @apply text-aurion-large-title text-navy-700; }
+  /* Adaptive text color via the CSS-var tokens — these utilities
+   * automatically flip in dark mode without `dark:` variants on
+   * every callsite. Components that need a brand-fixed color
+   * (e.g. text-navy-700 on a gold pill) use the raw Tailwind
+   * utility instead. */
+  .aurion-micro       { @apply text-aurion-micro uppercase text-aurion-tertiary; }
+  .aurion-caption     { @apply text-aurion-caption text-aurion-secondary; }
+  .aurion-callout     { @apply text-aurion-callout text-aurion-secondary; }
+  .aurion-body        { @apply text-aurion-body text-aurion-primary; }
+  .aurion-headline    { @apply text-aurion-headline text-aurion-primary; }
+  .aurion-title-3     { @apply text-aurion-title-3 text-aurion-primary; }
+  .aurion-title       { @apply text-aurion-title text-aurion-primary; }
+  .aurion-display     { @apply text-aurion-display text-aurion-primary; }
+  .aurion-large-title { @apply text-aurion-large-title text-aurion-primary; }
 
   /* ── Form fields ── */
   .form-input,
@@ -149,11 +210,25 @@
 
   /* ── Cards ── */
   .aurion-card {
-    @apply rounded-aurion-lg bg-surface shadow-card border border-hairline;
+    /* Adaptive surface + border — both swap in dark mode via the
+     * CSS-var tokens. Shadow stays the same (a quiet drop in light,
+     * imperceptible in dark which is fine since the lighter card on
+     * the darker canvas already provides separation). */
+    @apply rounded-aurion-lg bg-aurion-card shadow-card border border-aurion-hairline;
   }
   .aurion-card-hoverable {
     @apply transition-all duration-aurion ease-aurion
-      hover:shadow-card-hover hover:border-[#D1D6E0] hover:-translate-y-px;
+      hover:shadow-card-hover hover:-translate-y-px;
+    /* Light-mode hover border uses the pre-composited #D1D6E0
+     * (slightly darker than hairline). In dark mode the same
+     * darker-than-baseline relationship comes from upping the
+     * white opacity — handled via the hover modifier below. */
+  }
+  .aurion-card-hoverable:hover {
+    border-color: #D1D6E0;
+  }
+  html.dark .aurion-card-hoverable:hover {
+    border-color: rgba(255, 255, 255, 0.16);
   }
 
   /* ── Premium navy chrome (login background, hero sections). ── */

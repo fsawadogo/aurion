@@ -24,6 +24,9 @@ const config: Config = {
     "./app/**/*.{js,ts,jsx,tsx,mdx}",
     "./components/**/*.{js,ts,jsx,tsx,mdx}",
   ],
+  // Class-based dark mode — `<html class="dark">` toggles all
+  // `dark:` variants. Driven by next-themes (see app/providers.tsx).
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
@@ -73,6 +76,20 @@ const config: Config = {
         // value at the only callsite — wasn't worth nesting the colour
         // for one place.
         hairline: "#E6E9EE",
+        // ── Adaptive surfaces (Phase A4 dark mode) ─────────────
+        // These read the CSS custom properties defined in
+        // app/globals.css :root + html.dark, so `bg-aurion-card`,
+        // `text-aurion-primary`, etc. flip automatically when
+        // next-themes sets html.dark. Use these instead of the
+        // raw `surface` / `text-navy-700` utilities anywhere the
+        // surface should adapt to mode.
+        "aurion-canvas":    "var(--surface-canvas)",
+        "aurion-card":      "var(--surface-card)",
+        "aurion-muted":     "var(--surface-muted)",
+        "aurion-hairline":  "var(--surface-hairline)",
+        "aurion-primary":   "var(--text-primary)",
+        "aurion-secondary": "var(--text-secondary)",
+        "aurion-tertiary":  "var(--text-tertiary)",
       },
       fontFamily: {
         sans: ["Inter", "system-ui", "-apple-system", "Segoe UI", "sans-serif"],
