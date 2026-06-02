@@ -1,0 +1,78 @@
+{
+  "Sidebar": {
+    "portal": "Portail",
+    "admin": "Admin",
+    "signOut": "Se déconnecter",
+    "nav": {
+      "dashboard": "Tableau de bord",
+      "sessions": "Sessions",
+      "auditLog": "Journal d’audit",
+      "phiMasking": "Masquage RPS",
+      "users": "Utilisateurs",
+      "config": "Configuration",
+      "eval": "Évaluation",
+      "myNotes": "Mes notes",
+      "templates": "Modèles",
+      "macros": "Macros",
+      "myProfile": "Mon profil"
+    },
+    "expand": "Déployer le menu",
+    "collapse": "Réduire le menu"
+  },
+  "Theme": {
+    "label": "Thème",
+    "system": "Système",
+    "light": "Clair",
+    "dark": "Sombre"
+  },
+  "Locale": {
+    "label": "Langue",
+    "en": "English",
+    "fr": "Français"
+  },
+  "Roles": {
+    "ADMIN": "Administrateur",
+    "COMPLIANCE_OFFICER": "Agent de conformité",
+    "EVAL_TEAM": "Équipe d’évaluation",
+    "CLINICAL_ADMIN": "Admin clinique",
+    "CLINICIAN": "Clinicien"
+  },
+  "Dashboard": {
+    "eyebrow": "Portail du clinicien",
+    "title": "Tableau de bord",
+    "subtitle": "Votre aperçu en un coup d’œil.",
+    "refresh": "Actualiser",
+    "stats": {
+      "awaitingReview": "En attente de révision",
+      "inProgress": "En cours",
+      "approvedThisWeek": "Approuvés cette semaine",
+      "customTemplates": "Modèles personnalisés"
+    },
+    "panels": {
+      "awaitingYourReview": "En attente de votre révision",
+      "noSessionsWaiting": "Aucune session en attente. Bravo.",
+      "visualEnrichmentRunning": "Enrichissement visuel en cours",
+      "nothingProcessing": "Aucun traitement en cours."
+    },
+    "failedBanner": "{count, plural, one {# session a échoué et nécessite votre attention.} other {# sessions ont échoué et nécessitent votre attention.}}",
+    "seeList": "Voir la liste"
+  },
+  "Login": {
+    "title": "Connexion",
+    "subtitle": "Portail Aurion Clinical AI",
+    "emailLabel": "Courriel",
+    "passwordLabel": "Mot de passe",
+    "signIn": "Se connecter",
+    "signingIn": "Connexion…",
+    "signedIn": "Connecté",
+    "forgotPassword": "Mot de passe oublié?"
+  },
+  "Common": {
+    "loading": "Chargement…",
+    "retry": "Réessayer",
+    "cancel": "Annuler",
+    "save": "Enregistrer",
+    "delete": "Supprimer",
+    "confirm": "Confirmer"
+  }
+}

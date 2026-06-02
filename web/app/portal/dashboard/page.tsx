@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowRight, BadgeCheck, Clock, FileText, LayoutGrid, RefreshCw } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import Badge from "@/components/ui/Badge";
@@ -39,6 +40,7 @@ const ANY_PROCESSING: ReadonlySet<SessionState> = new Set<SessionState>([
 ]);
 
 export default function PortalDashboardPage() {
+  const t = useTranslations("Dashboard");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [templates, setTemplates] = useState<CustomTemplate[]>([]);
   const [loading, setLoading] = useState(true);
@@ -79,12 +81,12 @@ export default function PortalDashboardPage() {
   return (
     <div className="aurion-page-padded aurion-container">
       <PageHeader
-        eyebrow="Clinician portal"
-        title="Dashboard"
-        description="Your overview at a glance."
+        eyebrow={t("eyebrow")}
+        title={t("title")}
+        description={t("subtitle")}
         actions={
           <Button variant="secondary" size="sm" onClick={() => void load()}>
-            Refresh
+            {t("refresh")}
           </Button>
         }
       />
@@ -99,28 +101,28 @@ export default function PortalDashboardPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 aurion-stagger">
         <StatTile
           icon={<Clock className="h-5 w-5 text-amber-600" />}
-          label="Awaiting review"
+          label={t("stats.awaitingReview")}
           value={stats.awaitingReview}
           href="/portal/notes"
           loading={loading}
         />
         <StatTile
           icon={<RefreshCw className="h-5 w-5 text-navy-500" />}
-          label="In progress"
+          label={t("stats.inProgress")}
           value={stats.inProgress}
           href="/portal/notes"
           loading={loading}
         />
         <StatTile
           icon={<BadgeCheck className="h-5 w-5 text-emerald-600" />}
-          label="Approved this week"
+          label={t("stats.approvedThisWeek")}
           value={stats.approvedThisWeek}
           href="/portal/notes"
           loading={loading}
         />
         <StatTile
           icon={<LayoutGrid className="h-5 w-5 text-gold-600" />}
-          label="Custom templates"
+          label={t("stats.customTemplates")}
           value={templates.length}
           href="/portal/templates"
           loading={loading}
@@ -131,13 +133,13 @@ export default function PortalDashboardPage() {
         <Card>
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-navy-700">
             <FileText className="h-4 w-4 text-amber-500" />
-            Awaiting your review
+            {t("panels.awaitingYourReview")}
           </div>
           {loading ? (
             <LoadingSkeleton lines={4} />
           ) : awaitingReview.length === 0 ? (
             <p className="text-sm text-gray-500 italic">
-              No sessions waiting on review. Nice.
+              {t("panels.noSessionsWaiting")}
             </p>
           ) : (
             <ul className="divide-y divide-gray-100">
@@ -151,13 +153,13 @@ export default function PortalDashboardPage() {
         <Card>
           <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-navy-700">
             <RefreshCw className="h-4 w-4 text-navy-500" />
-            Visual enrichment running
+            {t("panels.visualEnrichmentRunning")}
           </div>
           {loading ? (
             <LoadingSkeleton lines={4} />
           ) : inProgress.length === 0 ? (
             <p className="text-sm text-gray-500 italic">
-              Nothing currently processing.
+              {t("panels.nothingProcessing")}
             </p>
           ) : (
             <ul className="divide-y divide-gray-100">
@@ -173,14 +175,16 @@ export default function PortalDashboardPage() {
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
           <AlertTriangle className="h-5 w-5 shrink-0" />
           <span>
-            {stats.failed} session{stats.failed === 1 ? "" : "s"} failed to
-            process and need attention.
+            {/* `failedBanner` uses ICU pluralization (one / other),
+                so the translator picks the right form automatically
+                for both EN and FR. */}
+            {t("failedBanner", { count: stats.failed })}
           </span>
           <Link
             href="/portal/notes"
             className="ml-auto inline-flex items-center text-xs font-medium underline"
           >
-            See list
+            {t("seeList")}
           </Link>
         </div>
       )}
