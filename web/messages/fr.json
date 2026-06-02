@@ -64,6 +64,26 @@
       "noneYet": "Aucune session pour l’instant",
       "noneYetHint": "Démarrez votre première consultation depuis l’app iOS pour la voir ici."
     },
+    "quickActions": {
+      "title": "Actions rapides",
+      "findByIdentifier": {
+        "title": "Rechercher par identifiant patient",
+        "subtitle": "Retrouvez toutes les consultations pour un numéro de dossier, NAM ou RAMQ.",
+        "placeholder": "NAM-12345",
+        "submit": "Rechercher",
+        "searching": "Recherche…",
+        "noResults": "Aucune session ne correspond à cet identifiant.",
+        "resultsTitle": "Sessions pour {id}"
+      },
+      "bulkExport": {
+        "title": "Exportation groupée",
+        "subtitle": "Sélectionnez plusieurs notes et téléchargez un zip de DOCX."
+      },
+      "newTemplate": {
+        "title": "Nouveau modèle IA",
+        "subtitle": "Concepteur conversationnel pour une nouvelle spécialité."
+      }
+    },
     "stateBadge": {
       "AWAITING_REVIEW": "À réviser",
       "PROCESSING_STAGE1": "Étape 1",

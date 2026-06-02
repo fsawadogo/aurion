@@ -9,6 +9,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
+import QuickActions from "@/components/portal/QuickActions";
 import { listMySessions, listMyCustomTemplates } from "@/lib/portal-api";
 import type { CustomTemplate, Session, SessionState } from "@/types";
 
@@ -106,6 +107,11 @@ export default function PortalDashboardPage() {
           {error}
         </div>
       )}
+
+      {/* ── Quick actions — task-oriented shortcuts above the KPI
+            tiles. Patient-identifier lookup is the highest-value
+            entry; bulk export + new template ride along. ── */}
+      <QuickActions />
 
       {/* ── Headline tiles — staggered slide-up on first paint. ── */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 aurion-stagger">

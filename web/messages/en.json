@@ -64,6 +64,26 @@
       "noneYet": "No sessions yet",
       "noneYetHint": "Start your first encounter from the iOS app to see it here."
     },
+    "quickActions": {
+      "title": "Quick actions",
+      "findByIdentifier": {
+        "title": "Find by patient identifier",
+        "subtitle": "Pull every encounter for a chart number, MRN, or RAMQ.",
+        "placeholder": "MRN-12345",
+        "submit": "Find",
+        "searching": "Searching…",
+        "noResults": "No sessions match that identifier.",
+        "resultsTitle": "Sessions for {id}"
+      },
+      "bulkExport": {
+        "title": "Bulk export",
+        "subtitle": "Multi-select notes and download a zip of DOCX files."
+      },
+      "newTemplate": {
+        "title": "New AI template",
+        "subtitle": "Conversational template builder for a new specialty."
+      }
+    },
     "stateBadge": {
       "AWAITING_REVIEW": "Review",
       "PROCESSING_STAGE1": "Stage 1",
