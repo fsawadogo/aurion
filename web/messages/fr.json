@@ -50,9 +50,31 @@
     },
     "panels": {
       "awaitingYourReview": "En attente de votre révision",
-      "noSessionsWaiting": "Aucune session en attente. Bravo.",
+      "noSessionsWaiting": "Tout est à jour",
+      "noSessionsWaitingHint": "Les nouvelles sessions apparaissent ici dès que l’étape 1 est générée.",
       "visualEnrichmentRunning": "Enrichissement visuel en cours",
-      "nothingProcessing": "Aucun traitement en cours."
+      "nothingProcessing": "Tranquille pour l’instant",
+      "nothingProcessingHint": "L’étape 2 traite les sessions que vous démarrez — dès qu’un enregistrement arrive, surveillez cet espace.",
+      "startSession": "Démarrer une session",
+      "openInbox": "Ouvrir la boîte de réception"
+    },
+    "recent": {
+      "title": "Sessions récentes",
+      "viewAll": "Tout voir",
+      "noneYet": "Aucune session pour l’instant",
+      "noneYetHint": "Démarrez votre première consultation depuis l’app iOS pour la voir ici."
+    },
+    "stateBadge": {
+      "AWAITING_REVIEW": "À réviser",
+      "PROCESSING_STAGE1": "Étape 1",
+      "PROCESSING_STAGE2": "Étape 2",
+      "REVIEW_COMPLETE": "Approuvée",
+      "EXPORTED": "Exportée",
+      "RECORDING": "Enregistrement",
+      "PAUSED": "Pause",
+      "CONSENT_PENDING": "Consentement",
+      "FAILED": "Échec",
+      "PURGED": "Purgée"
     },
     "failedBanner": "{count, plural, one {# session a échoué et nécessite votre attention.} other {# sessions ont échoué et nécessitent votre attention.}}",
     "seeList": "Voir la liste"
