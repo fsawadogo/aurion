@@ -13,6 +13,7 @@ import {
   LogOut,
   Menu,
   Settings,
+  Search,
   ShieldCheck,
   Users,
   X,
@@ -208,6 +209,43 @@ export default function Sidebar() {
           "border-t border-white/[0.06] " + (forCollapsed ? "mx-2" : "mx-5")
         }
       />
+
+      {/* Command palette trigger — dispatches a custom window event
+          that CommandPalette listens for. In expanded mode this is a
+          full-width "Search…" affordance with the ⌘K key hint on
+          the right; in collapsed mode it shrinks to the magnifier
+          icon, matching the nav link visual rhythm. CLINICIAN only —
+          the admin pages don't mount the palette. */}
+      {user?.role === "CLINICIAN" && (
+        <div
+          className={
+            "pt-3 " + (forCollapsed ? "px-2" : "px-3")
+          }
+        >
+          <button
+            type="button"
+            onClick={() => window.dispatchEvent(new Event("aurion:palette:open"))}
+            title={forCollapsed ? t("searchTooltip") : undefined}
+            aria-label={t("searchTooltip")}
+            className={
+              "group flex w-full items-center rounded-aurion-md text-[13px] font-medium tracking-tight transition-colors duration-short " +
+              (forCollapsed
+                ? "justify-center px-2 py-2 text-white/55 hover:bg-white/[0.06] hover:text-white/90"
+                : "gap-2.5 border border-white/[0.06] bg-white/[0.03] px-3 py-2 text-white/55 hover:border-white/[0.12] hover:bg-white/[0.06] hover:text-white/85")
+            }
+          >
+            <Search className="h-4 w-4" />
+            {!forCollapsed && (
+              <>
+                <span className="flex-1 text-left">{t("search")}</span>
+                <kbd className="inline-flex shrink-0 items-center gap-0.5 rounded-aurion-sm border border-white/[0.08] px-1.5 py-0.5 text-[10px] font-mono text-white/45">
+                  ⌘K
+                </kbd>
+              </>
+            )}
+          </button>
+        </div>
+      )}
 
       {/* Nav links */}
       <nav

@@ -1,3 +1,4 @@
+import CommandPalette from "@/components/portal/CommandPalette";
 import Sidebar from "@/components/Sidebar";
 
 /**
@@ -27,6 +28,10 @@ export default function PortalLayout({
       <main className="lg:pl-aurion-sidebar transition-[padding-left] duration-aurion ease-aurion">
         {children}
       </main>
+      {/* ⌘K command palette — mounted at layout level so it's
+          available on every portal route. Self-managed open state
+          via global keyboard listener; no provider needed. */}
+      <CommandPalette />
     </div>
   );
 }
