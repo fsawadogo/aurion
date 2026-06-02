@@ -105,6 +105,23 @@ final class CaptureManager: NSObject, ObservableObject {
     /// unbounded memory growth during long sessions.
     private let maxRetainedFrames = 300
 
+    // MARK: - Video Ring Buffer (P1-4 dual-mode foundation)
+
+    /// Default cap until AppConfig wiring lands in P1-5:
+    /// `clip_ring_buffer_seconds (15) × videoCaptureFPS (1) = 15 entries`.
+    /// The plan calls for these to come from `RemoteConfig.pipeline` once
+    /// the backend `ClientPipelineResponse` is extended (P1-1). Until
+    /// then, defaults match the dual-mode plan's documented values so the
+    /// memory footprint is the same as the eventual prod path.
+    private static let defaultClipRingBufferSeconds: Double = 15
+
+    /// Rolling window of raw sample buffers, drained on demand by the
+    /// P1-5 dispatcher to produce a `.mp4` for masking + upload. Runs
+    /// in parallel with the existing per-frame JPEG extractor; the frame
+    /// path is unchanged. NEVER uploaded raw — see `VideoRingBuffer`'s
+    /// privacy contract.
+    let clipRingBuffer: VideoRingBuffer
+
     // MARK: - Interruption Handling
 
     private var interruptionObserver: NSObjectProtocol?
@@ -113,6 +130,12 @@ final class CaptureManager: NSObject, ObservableObject {
     // MARK: - Init / Deinit
 
     override init() {
+        // Compute the ring's item cap from the default video FPS — when
+        // RemoteConfig lands the value in `videoCaptureFPS`, P1-5 will
+        // rebuild the ring with the live cap. For P1-4 we lock to the
+        // documented defaults; the ring is only filled, never extracted.
+        let maxItems = max(1, Int(Self.defaultClipRingBufferSeconds * 1.0))
+        self.clipRingBuffer = VideoRingBuffer(maxItems: maxItems, captureFPS: 1.0)
         super.init()
         checkPermissions()
         registerInterruptionObservers()
@@ -284,6 +307,11 @@ final class CaptureManager: NSObject, ObservableObject {
         audioConverter.reset()
 
         capturedFrames = []
+        // Drop any sample buffers held over from a previous session so the
+        // pixel-buffer pool can reclaim them. Without this, the ring would
+        // carry stale frames into the new session — fine functionally
+        // (they'd age out within the cap), but wasteful of memory.
+        clipRingBuffer.clear()
         lastFrameExtractionTime = 0
         sessionStartTime = Date.timeIntervalSinceReferenceDate
         error = nil
@@ -352,6 +380,13 @@ final class CaptureManager: NSObject, ObservableObject {
                 false,
                 options: .notifyOthersOnDeactivation
             )
+            // Release the retained sample buffers on stop. The dispatcher
+            // (P1-5) extracts on trigger, mid-session — at session stop
+            // there's no consumer left and the ring would otherwise hold
+            // ~15 frames until the next start. Clearing here also keeps the
+            // privacy surface narrow: raw frames don't outlive the active
+            // capture session.
+            self.clipRingBuffer.clear()
             Task { @MainActor in
                 self.isCapturing = false
                 self.isPaused = false
@@ -564,6 +599,18 @@ extension CaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptur
                 self.capturedFrames.removeFirst(self.capturedFrames.count - self.maxRetainedFrames)
             }
         }
+
+        // P1-4: ring-buffer the raw sample buffer in parallel with the JPEG
+        // extractor above. The ring is an additive sink — the frame path
+        // already published `frame` to `capturedFrames` and that's what the
+        // existing Stage 2 pipeline still consumes. The ring is only drained
+        // by P1-5's dispatcher when AppConfig opts in to clip evidence.
+        //
+        // Capture-side guards (isCapturing, isPaused) live on @MainActor
+        // state we can't read here without hopping; in practice this delegate
+        // only fires while the AVCaptureSession is running, and the ring is
+        // explicitly cleared on stopCapture above, so the contract holds.
+        clipRingBuffer.append(sampleBuffer, at: now)
     }
 }
 
