@@ -13,7 +13,13 @@ import os
 import httpx
 
 from app.core.s3 import load_frame_image_base64
-from app.core.types import FrameCaption, MaskedFrame, ProviderError, TranscriptSegment
+from app.core.types import (
+    FrameCaption,
+    MaskedClip,
+    MaskedFrame,
+    ProviderError,
+    TranscriptSegment,
+)
 from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import VisionProvider
 from app.modules.providers.vision.shared import (
@@ -85,3 +91,17 @@ class GeminiVisionProvider(VisionProvider):
         except httpx.HTTPError as e:
             logger.error("Gemini vision failed: frame=%s error=%s", frame.frame_id, str(e))
             raise ProviderError("gemini", f"Vision captioning failed: {e}", e)
+
+    async def caption_clip(
+        self, clip: MaskedClip, anchor: TranscriptSegment
+    ) -> FrameCaption:
+        """Caption a video clip — native MP4 via the Gemini Files API.
+
+        Stub for P1-1 — the real implementation lands in P1-2. Gemini
+        2.5 Pro is the only frontier model with native video-clip
+        understanding today; P1-2 uploads the masked MP4 via the
+        Gemini Files API and references it as `inlineData` in the
+        `generateContent` call. See
+        docs/plans/p1-1-clip-evidence-schema.md.
+        """
+        raise NotImplementedError("clip captioning lands in P1-2")

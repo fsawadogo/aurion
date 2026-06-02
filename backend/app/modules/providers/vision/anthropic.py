@@ -13,7 +13,13 @@ import os
 import httpx
 
 from app.core.s3 import load_frame_image_base64
-from app.core.types import FrameCaption, MaskedFrame, ProviderError, TranscriptSegment
+from app.core.types import (
+    FrameCaption,
+    MaskedClip,
+    MaskedFrame,
+    ProviderError,
+    TranscriptSegment,
+)
 from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import VisionProvider
 from app.modules.providers.note_gen.shared import strip_markdown_fences
@@ -120,3 +126,17 @@ class AnthropicVisionProvider(VisionProvider):
         except httpx.HTTPError as e:
             logger.error("Anthropic vision failed: frame=%s error=%s", frame.frame_id, str(e))
             raise ProviderError("anthropic", f"Vision captioning failed: {e}", e)
+
+    async def caption_clip(
+        self, clip: MaskedClip, anchor: TranscriptSegment
+    ) -> FrameCaption:
+        """Caption a video clip.
+
+        Stub for P1-1 — the real implementation lands in P1-2 and falls
+        back to extracting a midpoint still via ffmpeg, then calls
+        `caption_frame`. The resulting citation is tagged
+        `degraded_to_frame=true` so the physician sees they're not
+        getting full motion fidelity on that citation. See
+        docs/plans/p1-1-clip-evidence-schema.md.
+        """
+        raise NotImplementedError("clip captioning lands in P1-2")
