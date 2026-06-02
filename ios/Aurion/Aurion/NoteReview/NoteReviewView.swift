@@ -8,19 +8,9 @@ private extension NoteClaimResponse {
     /// claim no longer blocks approval.
     var isConflict: Bool { id.hasPrefix("conflict_") && !physicianEdited }
 
-    /// One-letter badge per source — surfaces provenance in the SOURCES
-    /// panel so the clinician knows at a glance whether a claim came from
-    /// transcript (T), visual frame (V), screen capture (S), or a manual
-    /// physician edit (E).
-    var sourceBadge: String {
-        switch sourceType {
-        case "transcript": return "T"
-        case "visual": return "V"
-        case "screen": return "S"
-        case "physician_edit": return "E"
-        default: return "?"
-        }
-    }
+    // P1-6: the per-source one-letter badge ("T"/"V"/"S"/"E") previously
+    // computed here has moved to `CitationChip.sourceBadge` so the chip
+    // owns its own visual contract end-to-end.
 }
 
 private extension NoteSectionResponse {
@@ -45,6 +35,18 @@ private extension NoteResponse {
 private struct ConflictEditTarget: Identifiable {
     let claimId: String
     var draft: String
+    var id: String { claimId }
+}
+
+/// Selection carrier for the clip viewer sheet (P1-6). Mirrors
+/// `ConflictEditTarget`'s "claim id + payload" shape so the viewer
+/// always renders against the exact citation the chip was tapped for,
+/// even if the underlying note refreshes mid-view.
+private struct ClipViewerTarget: Identifiable {
+    let claimId: String
+    let clipURL: URL
+    let durationMs: Int
+    let timestampSeconds: TimeInterval
     var id: String { claimId }
 }
 
@@ -76,6 +78,15 @@ struct NoteReviewView: View {
     /// Claim selected for inline edit. Driving the sheet off an Identifiable
     /// item value (vs. a bool) keeps the seed-text and target-claim atomic.
     @State private var conflictBeingEdited: ConflictEditTarget?
+    /// Clip-kind citation selected for full-screen playback. Identifiable
+    /// so SwiftUI uses claim id as the sheet selector — same pattern as
+    /// `conflictBeingEdited`, keeps the URL and claim atomic. nil = no sheet.
+    @State private var clipBeingViewed: ClipViewerTarget?
+    /// Surfaced when the physician taps a clip-kind chip whose `clipURL`
+    /// hasn't been plumbed through the note endpoint yet. Lets us ship
+    /// the chip + viewer ahead of the wire change without silently
+    /// failing on tap (see P1-6 plan "Out of scope").
+    @State private var showClipUnavailableNotice = false
     /// Captured from ``ScrollViewReader`` so the conflicts banner's
     /// "Show" button can scroll to the first conflicting section.
     @State private var conflictsBannerScrollProxy: ScrollViewProxy?
@@ -202,6 +213,25 @@ struct NoteReviewView: View {
         .animation(AurionAnimation.smooth, value: showApprovedToast)
         .sheet(item: $conflictBeingEdited) { target in
             conflictEditSheet(target: target)
+        }
+        // Clip viewer (P1-6). Item-driven so a freshly tapped chip
+        // always opens against the correct citation even if the prior
+        // sheet was being dismissed.
+        .sheet(item: $clipBeingViewed) { target in
+            FullClipView(
+                clipURL: target.clipURL,
+                durationMs: target.durationMs,
+                timestamp: target.timestampSeconds
+            )
+        }
+        // Surfaced when a clip-kind chip has no plumbed clipURL yet.
+        // Keeps the UX honest: the chip's indicator tells the user
+        // "this is video", and the tap surfaces a clear "the playback
+        // surface is coming" message instead of a silent no-op.
+        .alert(L("clip.unavailable.title"), isPresented: $showClipUnavailableNotice) {
+            Button(L("common.ok"), role: .cancel) { }
+        } message: {
+            Text(L("clip.unavailable.message"))
         }
     }
 
@@ -509,6 +539,8 @@ struct NoteReviewView: View {
     }
 
     /// Collapsed source citation list shown under a section's prose paragraph.
+    /// Each row is a `CitationChip` — extracted in P1-6 so the chip's
+    /// clip-vs-frame indicator + tap behaviour lives in one place.
     private func sourcesPanel(_ claims: [NoteClaimResponse]) -> some View {
         HStack(spacing: 0) {
             Rectangle().fill(Color.aurionGold).frame(width: 2)
@@ -518,31 +550,11 @@ struct NoteReviewView: View {
                     .tracking(0.6)
                     .foregroundColor(.aurionTextSecondary)
                 ForEach(claims, id: \.id) { claim in
-                    VStack(alignment: .leading, spacing: 2) {
-                        HStack(spacing: 6) {
-                            Text(claim.sourceBadge)
-                                .font(.system(size: 9, weight: .bold))
-                                .foregroundColor(.aurionBackground)
-                                .frame(width: 14, height: 14)
-                                .background(Color.aurionTextSecondary)
-                                .clipShape(RoundedRectangle(cornerRadius: 3))
-                            Text(claim.sourceId)
-                                .font(.system(size: 10, weight: .semibold))
-                                .tracking(0.4)
-                                .foregroundColor(.aurionTextSecondary)
-                            if claim.physicianEdited {
-                                Text(L("noteReview.editedBadge"))
-                                    .font(.system(size: 9, weight: .bold))
-                                    .tracking(0.5)
-                                    .foregroundColor(.aurionGold)
-                            }
-                        }
-                        if !claim.sourceQuote.isEmpty {
-                            Text("\u{201C}\(claim.sourceQuote)\u{201D}")
-                                .aurionFont(13, relativeTo: .footnote).italic()
-                                .foregroundColor(.aurionTextSecondary)
-                                .lineSpacing(2)
-                        }
+                    CitationChip(claim: claim) {
+                        // Tap path is clip-only by chip contract; frame
+                        // chips pass `onTap: nil` to the chip-level
+                        // gesture so this closure never fires for them.
+                        openClipViewer(for: claim)
                     }
                 }
             }
@@ -552,6 +564,39 @@ struct NoteReviewView: View {
         .padding(.horizontal, 10)
         .background(Color.aurionBackground)
         .clipShape(RoundedRectangle(cornerRadius: AurionRadius.xs))
+    }
+
+    /// Resolves the clip URL + timestamp for a citation tap and either
+    /// presents `FullClipView` or surfaces the "clip not yet available"
+    /// notice. Single tap-handler keeps the chip's surface dumb — the
+    /// chip just signals intent; the reviewer owns the policy.
+    private func openClipViewer(for claim: NoteClaimResponse) {
+        guard claim.evidenceKind == .clip else { return }
+        guard let url = claim.clipURL else {
+            // TODO(P1-6-FU): when the backend `GET /notes/full` endpoint
+            // plumbs `clip_url` per citation, this branch goes away and
+            // the chip tap presents the viewer unconditionally. Until
+            // then the notice keeps the UX honest.
+            showClipUnavailableNotice = true
+            return
+        }
+        clipBeingViewed = ClipViewerTarget(
+            claimId: claim.id,
+            clipURL: url,
+            durationMs: claim.durationMs ?? 0,
+            timestampSeconds: timestampSeconds(forFrameId: claim.sourceId)
+        )
+    }
+
+    /// Best-effort decode of a session-relative timestamp from a
+    /// `frame_<ms>` source id (the historical iOS convention — see
+    /// `AurionTests.swift` fixtures: `frame_14500` ⇒ 14.5 s). Falls
+    /// back to 0 if the id doesn't match. Same display surface as
+    /// `FullFrameView` so the viewers feel like one component family.
+    private func timestampSeconds(forFrameId frameId: String) -> TimeInterval {
+        let parts = frameId.split(separator: "_")
+        guard parts.count == 2, let ms = Int(parts[1]) else { return 0 }
+        return TimeInterval(ms) / 1000.0
     }
 
     private func inlineConflict(_ claim: NoteClaimResponse) -> some View {

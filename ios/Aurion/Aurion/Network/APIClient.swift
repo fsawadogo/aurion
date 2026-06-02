@@ -813,6 +813,23 @@ struct NoteSectionResponse: Codable, Equatable, Sendable {
     let claims: [NoteClaimResponse]
 }
 
+/// Visual evidence kind backing a `NoteClaimResponse`. Mirrors the
+/// backend `FrameCaption.evidence_kind` field (see
+/// `backend/app/core/types.py`). Frame-kind claims are the historical
+/// default — when the field is absent on the wire (older payloads,
+/// transcript-only claims) we decode as `.frame` so every existing
+/// fixture stays valid (P1-1's "additive, byte-identical" contract).
+///
+/// Only `visual` sourceType claims should ever carry `.clip`; transcript
+/// and screen claims have no clip backing by construction. The chip
+/// renderer guards on `sourceType == "visual"` before showing the
+/// play-triangle indicator so a stray `.clip` value on a non-visual
+/// claim doesn't mis-render.
+enum EvidenceKind: String, Codable, Sendable, Equatable {
+    case frame
+    case clip
+}
+
 struct NoteClaimResponse: Codable, Equatable, Sendable {
     let id: String
     let text: String
@@ -821,6 +838,19 @@ struct NoteClaimResponse: Codable, Equatable, Sendable {
     let sourceQuote: String
     let physicianEdited: Bool
     let originalText: String?
+    /// Dual-mode visual evidence (P1-1 ↔ P1-6). `.frame` for the
+    /// historical path + every transcript/screen claim. `.clip` only
+    /// when the backing artifact is a video clip the reviewer can play
+    /// inline. Defaults to `.frame` so legacy payloads decode unchanged.
+    let evidenceKind: EvidenceKind
+    /// Encoded clip window length in milliseconds; nil for frames.
+    /// Surfaced in the `FullClipView` toolbar as a duration pill.
+    let durationMs: Int?
+    /// Local file URL or backend-signed remote URL of the masked clip
+    /// for playback. nil until the note endpoint plumbs the citation
+    /// `clip_url` through to the wire — see P1-6 plan "Out of scope".
+    /// The chip indicator surfaces regardless; the viewer guards on this.
+    let clipURL: URL?
 
     init(
         id: String,
@@ -829,7 +859,10 @@ struct NoteClaimResponse: Codable, Equatable, Sendable {
         sourceId: String,
         sourceQuote: String,
         physicianEdited: Bool = false,
-        originalText: String? = nil
+        originalText: String? = nil,
+        evidenceKind: EvidenceKind = .frame,
+        durationMs: Int? = nil,
+        clipURL: URL? = nil
     ) {
         self.id = id
         self.text = text
@@ -838,6 +871,9 @@ struct NoteClaimResponse: Codable, Equatable, Sendable {
         self.sourceQuote = sourceQuote
         self.physicianEdited = physicianEdited
         self.originalText = originalText
+        self.evidenceKind = evidenceKind
+        self.durationMs = durationMs
+        self.clipURL = clipURL
     }
 
     enum CodingKeys: String, CodingKey {
@@ -847,6 +883,9 @@ struct NoteClaimResponse: Codable, Equatable, Sendable {
         case sourceQuote = "source_quote"
         case physicianEdited = "physician_edited"
         case originalText = "original_text"
+        case evidenceKind = "evidence_kind"
+        case durationMs = "duration_ms"
+        case clipURL = "clip_url"
     }
 
     init(from decoder: Decoder) throws {
@@ -859,6 +898,12 @@ struct NoteClaimResponse: Codable, Equatable, Sendable {
         // Default-false / nil so older Stage 1 payloads still decode.
         physicianEdited = try c.decodeIfPresent(Bool.self, forKey: .physicianEdited) ?? false
         originalText = try c.decodeIfPresent(String.self, forKey: .originalText)
+        // Default to `.frame` so older payloads (no `evidence_kind`
+        // field) decode unchanged — backend contract for P1-1 was
+        // additive on existing rows.
+        evidenceKind = try c.decodeIfPresent(EvidenceKind.self, forKey: .evidenceKind) ?? .frame
+        durationMs = try c.decodeIfPresent(Int.self, forKey: .durationMs)
+        clipURL = try c.decodeIfPresent(URL.self, forKey: .clipURL)
     }
 }
 

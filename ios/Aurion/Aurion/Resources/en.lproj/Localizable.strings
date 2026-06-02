@@ -638,6 +638,19 @@
 "noteReview.sessionExpired" = "Session expired \U2014 please sign in again.";
 "noteReview.serverError" = "Server error (%d). Try again.";
 
+/* ── Citation chip + clip viewer (P1-6) ──────────────── */
+"citation.sourceType.transcript" = "Transcript citation";
+"citation.sourceType.visual" = "Visual citation";
+"citation.sourceType.screen" = "Screen citation";
+"citation.sourceType.physicianEdit" = "Physician edit";
+"citation.sourceType.unknown" = "Citation";
+"clip.indicator.accessibility" = "Video clip";
+"clip.viewer.title" = "Clip";
+"clip.viewer.accessibility" = "Video clip player";
+"clip.unavailable.title" = "Clip not yet available";
+"clip.unavailable.message" = "The video clip for this citation hasn\U2019t been linked to the note yet. Playback will be available once the server finishes attaching it.";
+"common.ok" = "OK";
+
 /* ── Export ───────────────────────────────────────────── */
 "export.comingSoon" = "Coming Soon";
 "export.title" = "Export Clinical Note";
