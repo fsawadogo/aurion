@@ -22,8 +22,11 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { getMe, logout } from "@/lib/api";
+import { getMyProfile } from "@/lib/portal-api";
 import type { CurrentUser, UserRole } from "@/types";
 import { AurionLogo } from "@/components/AurionLogo";
+import ThemeToggle from "@/components/portal/ThemeToggle";
+import { useTheme } from "next-themes";
 
 // Mirrors backend require_role() gates per admin router.
 // Keep in sync with backend/app/api/v1/admin/*.py and
@@ -74,6 +77,12 @@ export default function Sidebar() {
   // hydration mismatch; we read localStorage in an effect and set it
   // once the client mounts.
   const [collapsed, setCollapsed] = useState(false);
+  // Theme handle so we can apply the user's stored ui_theme from
+  // their profile on first load. next-themes already pulls the
+  // last-used value from localStorage, but the backend column is
+  // the cross-device source of truth — if the two disagree, the
+  // backend wins.
+  const { setTheme } = useTheme();
 
   useEffect(() => {
     let cancelled = false;
@@ -100,6 +109,27 @@ export default function Sidebar() {
       // Private mode or quota — silently fall back to expanded.
     }
   }, []);
+
+  // Sync theme from the backend on mount (cross-device source of
+  // truth). Silent on failure — next-themes already loaded the
+  // last-known choice from localStorage. CLINICIAN-only since
+  // admin/eval roles use /admin/users not /profile.
+  useEffect(() => {
+    if (!user || user.role !== "CLINICIAN") return;
+    let cancelled = false;
+    getMyProfile()
+      .then((p) => {
+        if (cancelled) return;
+        if (p.ui_theme && ["system", "light", "dark"].includes(p.ui_theme)) {
+          setTheme(p.ui_theme);
+        }
+      })
+      .catch(() => {
+        // Profile fetch failed — current theme from localStorage
+        // (via next-themes) is fine.
+      });
+    return () => { cancelled = true; };
+  }, [user, setTheme]);
 
   // Publish the current sidebar width to the document root so the
   // layout's <main> can offset its left padding without prop-drilling
@@ -240,6 +270,18 @@ export default function Sidebar() {
             </div>
           )}
         </div>
+        {/* Theme toggle — appears above sign-out in expanded mode so
+            the user-related controls cluster together. Hidden in
+            collapsed mode (too cramped; theme is accessible from the
+            profile page when collapsed). Only renders for CLINICIAN
+            since the backend persists via /profile which admin/eval
+            don't have. Admin/eval roles see localStorage-only via
+            next-themes if they manually toggle from the profile page. */}
+        {!forCollapsed && user?.role === "CLINICIAN" && (
+          <div className="mt-3">
+            <ThemeToggle variant="compact" />
+          </div>
+        )}
         <button
           onClick={logout}
           title={forCollapsed ? "Sign out" : undefined}
