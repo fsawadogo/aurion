@@ -467,7 +467,14 @@ struct ProfileView: View {
                         ProgressView()
                         Text(L("profile.loadingData"))
                             .font(.caption)
-                            .foregroundColor(.white)
+                            // Adaptive — `.ultraThinMaterial` is a light
+                            // frost in light mode (white text invisible)
+                            // and a dark frost in dark mode (white text
+                            // fine). aurionTextPrimary flips with the
+                            // material so the label stays readable
+                            // either way. Sibling fix to the
+                            // CodingSuggestionsCard #187 regression.
+                            .foregroundColor(.aurionTextPrimary)
                     }
                     .padding(AurionSpacing.xl)
                     .background(.ultraThinMaterial)
