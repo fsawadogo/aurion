@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ArrowRight, BadgeCheck, Clock, FileText, LayoutGrid, RefreshCw } from "lucide-react";
+import { AlertTriangle, ArrowRight, BadgeCheck, ClipboardList, Clock, FileText, History, Inbox, LayoutGrid, RefreshCw, Sparkles } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -77,6 +77,16 @@ export default function PortalDashboardPage() {
     () => sessions.filter((s) => ANY_PROCESSING.has(s.state)).slice(0, 5),
     [sessions],
   );
+  // Recent sessions strip — most recent 6 across all states except
+  // PURGED (those rows exist for audit but the physician can't view
+  // them anymore). Provides at-a-glance "what I've been working on"
+  // without scrolling to the inbox.
+  const recentSessions = useMemo(
+    () => sessions
+      .filter((s) => s.state !== "PURGED")
+      .slice(0, 6),
+    [sessions],
+  );
 
   return (
     <div className="aurion-page-padded aurion-container">
@@ -138,9 +148,11 @@ export default function PortalDashboardPage() {
           {loading ? (
             <LoadingSkeleton lines={4} />
           ) : awaitingReview.length === 0 ? (
-            <p className="text-sm text-gray-500 italic">
-              {t("panels.noSessionsWaiting")}
-            </p>
+            <EmptyPanelState
+              icon={<Inbox className="h-7 w-7" />}
+              title={t("panels.noSessionsWaiting")}
+              hint={t("panels.noSessionsWaitingHint")}
+            />
           ) : (
             <ul className="divide-y divide-gray-100">
               {awaitingReview.map((s) => (
@@ -158,9 +170,11 @@ export default function PortalDashboardPage() {
           {loading ? (
             <LoadingSkeleton lines={4} />
           ) : inProgress.length === 0 ? (
-            <p className="text-sm text-gray-500 italic">
-              {t("panels.nothingProcessing")}
-            </p>
+            <EmptyPanelState
+              icon={<Sparkles className="h-7 w-7" />}
+              title={t("panels.nothingProcessing")}
+              hint={t("panels.nothingProcessingHint")}
+            />
           ) : (
             <ul className="divide-y divide-gray-100">
               {inProgress.map((s) => (
@@ -170,6 +184,15 @@ export default function PortalDashboardPage() {
           )}
         </Card>
       </div>
+
+      {/* Recent sessions strip — physician's working memory. Shows
+          the 6 most recent sessions across any state (except PURGED).
+          Horizontal scroll on narrow viewports keeps the row dense
+          on dashboards opened on smaller laptops. */}
+      <RecentStrip
+        sessions={recentSessions}
+        loading={loading}
+      />
 
       {sessions.length > 0 && stats.failed > 0 && (
         <div className="mt-4 flex items-center gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
@@ -258,6 +281,177 @@ function SessionRow({
       </Link>
     </li>
   );
+}
+
+/* ── Empty panel state ──────────────────────────────────────────────────── */
+
+/**
+ * Friendly empty state for the dashboard's two activity panels.
+ *
+ * Replaces the previous tiny gray italic line ("No sessions waiting
+ * on review. Nice.") with a centered icon + headline + soft hint
+ * line. The vertical rhythm matches the populated panels' row
+ * height range so the card height stays consistent whether or not
+ * there's content.
+ *
+ * Intentionally NO CTA — the action ("Start a session") happens on
+ * the iOS app, not the portal. A button here would imply something
+ * the portal can do.
+ */
+function EmptyPanelState({
+  icon,
+  title,
+  hint,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  hint: string;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center py-6 text-center">
+      <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-gold-50 text-gold-600">
+        {icon}
+      </div>
+      <p className="aurion-callout font-medium text-aurion-primary">
+        {title}
+      </p>
+      <p className="mt-1 text-xs text-aurion-secondary max-w-[28ch] leading-relaxed">
+        {hint}
+      </p>
+    </div>
+  );
+}
+
+/* ── Recent sessions strip ──────────────────────────────────────────────── */
+
+/**
+ * Horizontal row of the 6 most recent sessions across any state
+ * (except PURGED — those don't open).
+ *
+ * Each card shows: relative time + specialty + identifier (if set) +
+ * state badge. Click drops the user into the note review screen.
+ *
+ * Strip layout: snap-x on a horizontal overflow container so narrow
+ * viewports get carousel-style swipe instead of cards squeezing.
+ * Each card is min-w-[220px] which means on wide screens 5-6 sit
+ * side-by-side; on a 14" laptop the row scrolls.
+ *
+ * Loading skeleton uses 4 placeholder cards (matches the typical
+ * pilot count of recent sessions; over-budgeting the skeleton
+ * count would make the row feel too busy on a quiet day).
+ */
+function RecentStrip({
+  sessions,
+  loading,
+}: {
+  sessions: Session[];
+  loading: boolean;
+}) {
+  const t = useTranslations("Dashboard.recent");
+  const tState = useTranslations("Dashboard.stateBadge");
+
+  return (
+    <section className="mt-6">
+      <div className="mb-3 flex items-center gap-2">
+        <History className="h-4 w-4 text-aurion-secondary" />
+        <h2 className="text-sm font-semibold text-aurion-primary">
+          {t("title")}
+        </h2>
+        <Link
+          href="/portal/notes"
+          className="ml-auto text-xs font-medium text-gold-600 hover:text-gold-700 transition-colors"
+        >
+          {t("viewAll")} →
+        </Link>
+      </div>
+
+      {loading ? (
+        <div className="flex gap-3 overflow-hidden">
+          {[0, 1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="min-w-[220px] flex-1 rounded-aurion-md border border-aurion-hairline bg-aurion-card p-4"
+            >
+              <LoadingSkeleton lines={2} />
+            </div>
+          ))}
+        </div>
+      ) : sessions.length === 0 ? (
+        <Card>
+          <EmptyPanelState
+            icon={<ClipboardList className="h-7 w-7" />}
+            title={t("noneYet")}
+            hint={t("noneYetHint")}
+          />
+        </Card>
+      ) : (
+        <div className="-mx-1 flex gap-3 overflow-x-auto snap-x snap-mandatory pb-2 px-1">
+          {sessions.map((s) => (
+            <RecentCard
+              key={s.id}
+              session={s}
+              stateLabel={tState(s.state)}
+            />
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function RecentCard({
+  session,
+  stateLabel,
+}: {
+  session: Session;
+  stateLabel: string;
+}) {
+  const variant = badgeVariantFor(session.state);
+  return (
+    <Link
+      href={`/portal/notes/${session.id}`}
+      className="snap-start min-w-[220px] flex-1 rounded-aurion-md border border-aurion-hairline bg-aurion-card p-3.5 transition-all duration-aurion ease-aurion hover:shadow-card hover:-translate-y-px hover:border-gold-300"
+    >
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-xs text-aurion-tertiary">
+          {formatRelative(session.created_at)}
+        </p>
+        <Badge variant={variant} dot>
+          {stateLabel}
+        </Badge>
+      </div>
+      <p className="mt-1.5 text-sm font-medium text-aurion-primary truncate">
+        {humanSpecialty(session.specialty)}
+      </p>
+      {session.external_reference_id ? (
+        <p className="mt-0.5 font-mono text-[11px] text-gold-700 truncate">
+          {session.external_reference_id}
+        </p>
+      ) : (
+        <p className="mt-0.5 font-mono text-[11px] text-aurion-tertiary truncate">
+          {session.id.slice(0, 8)}
+        </p>
+      )}
+    </Link>
+  );
+}
+
+/** Maps a session state to the Badge variant that best telegraphs
+ *  "what kind of attention does this need?" Same logic the rest of
+ *  the portal uses (kept here local so the dashboard card isn't
+ *  coupled to that internals). */
+function badgeVariantFor(state: SessionState): "success" | "warning" | "info" | "neutral" | "error" {
+  switch (state) {
+    case "AWAITING_REVIEW":      return "warning";
+    case "PROCESSING_STAGE1":
+    case "PROCESSING_STAGE2":    return "info";
+    case "REVIEW_COMPLETE":
+    case "EXPORTED":             return "success";
+    case "RECORDING":
+    case "PAUSED":               return "info";
+    case "FAILED":               return "error";
+    default:                     return "neutral";
+  }
 }
 
 /* ── Stats derivation ───────────────────────────────────────────────────── */

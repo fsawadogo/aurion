@@ -50,9 +50,31 @@
     },
     "panels": {
       "awaitingYourReview": "Awaiting your review",
-      "noSessionsWaiting": "No sessions waiting on review. Nice.",
+      "noSessionsWaiting": "You're all caught up",
+      "noSessionsWaitingHint": "New sessions arrive here as soon as Stage 1 finishes generating.",
       "visualEnrichmentRunning": "Visual enrichment running",
-      "nothingProcessing": "Nothing currently processing."
+      "nothingProcessing": "Quiet for now",
+      "nothingProcessingHint": "Stage 2 enrichment runs on sessions you've started — once a recording lands, watch this space.",
+      "startSession": "Start a session",
+      "openInbox": "Open inbox"
+    },
+    "recent": {
+      "title": "Recent sessions",
+      "viewAll": "View all",
+      "noneYet": "No sessions yet",
+      "noneYetHint": "Start your first encounter from the iOS app to see it here."
+    },
+    "stateBadge": {
+      "AWAITING_REVIEW": "Review",
+      "PROCESSING_STAGE1": "Stage 1",
+      "PROCESSING_STAGE2": "Stage 2",
+      "REVIEW_COMPLETE": "Approved",
+      "EXPORTED": "Exported",
+      "RECORDING": "Recording",
+      "PAUSED": "Paused",
+      "CONSENT_PENDING": "Consent",
+      "FAILED": "Failed",
+      "PURGED": "Purged"
     },
     "failedBanner": "{count, plural, one {# session failed to process and needs attention.} other {# sessions failed to process and need attention.}}",
     "seeList": "See list"
