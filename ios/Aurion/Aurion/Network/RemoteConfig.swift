@@ -22,7 +22,12 @@ final class RemoteConfig: ObservableObject {
         frameWindowClinicMs: 3_000,
         frameWindowProceduralMs: 7_000,
         screenCaptureFps: 2,
-        videoCaptureFps: 1
+        videoCaptureFps: 1,
+        // Phase 1 default — byte-identical to today's behavior. The eval
+        // team flips this per-session for Phase 2 evaluation runs.
+        visualEvidenceMode: .framesOnly,
+        clipWindowMs: 7_000,
+        clipTriggerKinds: ["motion", "rom", "gait", "procedural"]
     )
     @Published private(set) var featureFlags = ClientFeatureFlagsResponse(
         // Off for the pilot — matches the backend AppConfig default. This is

@@ -432,6 +432,141 @@ final class APIClient: Sendable {
         return try JSONDecoder().decode(FrameUploadResponse.self, from: data)
     }
 
+    // MARK: - Clips (P1-5 dual-mode visual evidence)
+
+    /// Upload a single MASKED clip MP4 to the backend so the Stage 2
+    /// vision pipeline can route it to the configured clip-capable
+    /// provider (Gemini native; OpenAI/Anthropic via midpoint-still
+    /// fallback). Backend persists at `clips/{session_id}/{clip_id}.mp4`
+    /// with KMS encryption + 24h TTL post-Stage-2.
+    ///
+    /// Streams the multi-MB file via `URLSession.uploadTask(with:fromFile:)`
+    /// so the body never sits in RAM — the multipart envelope (boundary
+    /// header + form fields + file content + closing boundary) is
+    /// staged to a single temp file before the upload starts and
+    /// cleaned up after the upload completes. `Data(contentsOf:)` would
+    /// pull the full clip into memory and is explicitly NOT used.
+    ///
+    /// P0-01 fail-closed contract: callers MUST only call this after
+    /// `MaskingPipeline.maskClip` returned `.success`. `masking_confirmed`
+    /// is hardcoded `true` because the masking step has already
+    /// completed by the time we reach here.
+    ///
+    /// P0-02 masking-proof contract: same `frame_type` / counts shape as
+    /// `uploadFrame`, but with clip-specific counts (frames_total,
+    /// frames_with_faces). The backend rejects uploads missing these
+    /// fields.
+    @discardableResult
+    func uploadClip(
+        sessionId: String,
+        clipFileURL: URL,
+        timestampMs: Int,
+        durationMs: Int,
+        triggerSegmentId: String,
+        framesTotal: Int,
+        framesWithFaces: Int
+    ) async throws -> ClipUploadResponse {
+        // Build the request scaffolding (method, auth, boundary) via the
+        // shared multipart helper — same primitive `uploadFrame` uses,
+        // so frame and clip can't drift on auth or content-type.
+        let url = URL(string: "\(baseURL)/clips/\(sessionId)")!
+        var (request, builder) = makeMultipartUpload(url: url)
+
+        builder.appendField("timestamp_ms", "\(timestampMs)")
+        builder.appendField("duration_ms", "\(durationMs)")
+        builder.appendField("trigger_segment_id", triggerSegmentId)
+        builder.appendField("frames_total", "\(framesTotal)")
+        builder.appendField("frames_with_faces", "\(framesWithFaces)")
+        builder.appendField("masking_confirmed", "true")
+
+        // Stage the prefix (boundary + form fields + file part header)
+        // and suffix (closing boundary) into a single temp body file
+        // with the clip MP4 sandwiched in the middle. This is the
+        // on-disk equivalent of what `MultipartBuilder.finish()` returns
+        // in-memory — it lets the upload-from-file URLSession path
+        // stream the entire body without buffering. See
+        // `buildMultipartBodyFile(prefix:fileURL:suffix:)` below.
+        var prefix = builder.bodySoFar
+        prefix.append(builder.headerForFile(name: "clip", filename: "clip.mp4", mime: "video/mp4"))
+        let suffix = builder.closingBoundaryData()
+        let bodyFileURL = try Self.buildMultipartBodyFile(
+            prefix: prefix,
+            fileURL: clipFileURL,
+            suffix: suffix
+        )
+        // Belt and suspenders: ensure the body temp file is removed
+        // regardless of how this method exits.
+        defer { try? FileManager.default.removeItem(at: bodyFileURL) }
+
+        // The upload-from-file path needs longer than 30s for large clips
+        // — 7s @ 720p is typically ~7-15 MB. 60s gives us a comfortable
+        // margin for the LTE worst case without blowing past Stage 2's
+        // overall budget.
+        request.timeoutInterval = 60
+
+        let (data, response) = try await uploadFileWithRequest(
+            request: request,
+            bodyFileURL: bodyFileURL
+        )
+        try validateResponse(response, data: data)
+        return try JSONDecoder().decode(ClipUploadResponse.self, from: data)
+    }
+
+    /// `URLSession.upload(for:fromFile:)` wrapper that classifies errors
+    /// the same way `performRequest(_:)` does. The split exists because
+    /// `uploadTask(with:fromFile:)` doesn't go through `data(for:)` —
+    /// it's a different URLSession code path and we want one place that
+    /// turns URLError codes into APIError cases.
+    private func uploadFileWithRequest(
+        request: URLRequest,
+        bodyFileURL: URL
+    ) async throws -> (Data, URLResponse) {
+        do {
+            return try await URLSession.shared.upload(for: request, fromFile: bodyFileURL)
+        } catch let error as URLError {
+            switch error.code {
+            case .notConnectedToInternet, .networkConnectionLost,
+                 .cannotConnectToHost, .cannotFindHost, .dnsLookupFailed:
+                throw APIError.offline
+            case .timedOut:
+                throw APIError.timeout
+            default:
+                throw APIError.networkError(error.localizedDescription)
+            }
+        }
+    }
+
+    /// Stage the multipart envelope to a single temp file so the upload
+    /// can stream from disk. Layout: `prefix` (boundary + form fields +
+    /// file part header) → raw bytes of `fileURL` → `suffix` (closing
+    /// boundary). Returns the URL of the staged body file; caller owns
+    /// cleanup. `static` because it touches no instance state — easier
+    /// to unit-test in isolation.
+    static func buildMultipartBodyFile(prefix: Data, fileURL: URL, suffix: Data) throws -> URL {
+        let bodyURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("aurion-clip-upload-\(UUID().uuidString).bin")
+        try? FileManager.default.removeItem(at: bodyURL)
+        FileManager.default.createFile(atPath: bodyURL.path, contents: nil, attributes: nil)
+
+        let handle = try FileHandle(forWritingTo: bodyURL)
+        defer { try? handle.close() }
+        try handle.write(contentsOf: prefix)
+
+        // Stream the source file in 64KB chunks so even multi-MB clips
+        // never need a full in-memory copy. Matches the dual-mode plan's
+        // privacy budget — raw clip bytes (already masked at this point)
+        // pass through the iOS process without inflating the resident set.
+        let reader = try FileHandle(forReadingFrom: fileURL)
+        defer { try? reader.close() }
+        while true {
+            let chunk = reader.readData(ofLength: 64 * 1024)
+            if chunk.isEmpty { break }
+            try handle.write(contentsOf: chunk)
+        }
+        try handle.write(contentsOf: suffix)
+        return bodyURL
+    }
+
     // MARK: - Screen Capture (M-08)
 
     /// Upload a single redacted screen JPEG to the backend OCR pipeline.
@@ -678,21 +813,53 @@ struct MultipartBuilder {
     }
 
     mutating func appendFile(_ name: String, filename: String, mime: String, data: Data) {
-        body.append("--\(boundary)\r\n".data(using: .utf8)!)
-        body.append(
-            "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n"
-                .data(using: .utf8)!
-        )
-        body.append("Content-Type: \(mime)\r\n\r\n".data(using: .utf8)!)
+        body.append(headerForFile(name: name, filename: filename, mime: mime))
         body.append(data)
         body.append(Self.crlf)
     }
 
+    /// Multipart header bytes that introduce a file part — boundary,
+    /// content-disposition, content-type, blank line. Exposed publicly
+    /// so the streamed-from-file upload path (uploadClip) can write the
+    /// header to a temp body file, then stream raw file bytes, then
+    /// append the closing boundary — without buffering the file
+    /// contents in memory. The in-memory path (`appendFile`) wraps
+    /// this same helper to keep the byte layout identical.
+    func headerForFile(name: String, filename: String, mime: String) -> Data {
+        var data = Data()
+        data.append("--\(boundary)\r\n".data(using: .utf8)!)
+        data.append(
+            "Content-Disposition: form-data; name=\"\(name)\"; filename=\"\(filename)\"\r\n"
+                .data(using: .utf8)!
+        )
+        data.append("Content-Type: \(mime)\r\n\r\n".data(using: .utf8)!)
+        return data
+    }
+
+    /// Closing boundary bytes — the trailing CRLF after the file
+    /// content followed by `--boundary--\r\n`. Exposed for the same
+    /// reason as `headerForFile`.
+    func closingBoundaryData() -> Data {
+        var data = Data()
+        data.append(Self.crlf)
+        data.append("--\(boundary)--\r\n".data(using: .utf8)!)
+        return data
+    }
+
+    /// In-memory body wrapped in the closing boundary. Used by the
+    /// non-streaming upload paths (uploadFrame, uploadScreenFrame).
     func finish() -> Data {
         var final = body
         final.append("--\(boundary)--\r\n".data(using: .utf8)!)
         return final
     }
+
+    /// Read-only snapshot of the body bytes accumulated so far —
+    /// boundary + all appended fields and files BEFORE the closing
+    /// boundary is written. Used by streamed-from-file upload paths
+    /// that need the prefix (form fields) without the closing
+    /// boundary.
+    var bodySoFar: Data { body }
 }
 
 // MARK: - API Error Types
@@ -1394,6 +1561,58 @@ struct FrameUploadResponse: Codable, Sendable {
     }
 }
 
+/// Backend `POST /clips/{session_id}` shape. Mirrors `FrameUploadResponse`
+/// with clip-specific echoes. Extra fields are decoded leniently so the
+/// iOS client survives a backend that adds new metadata.
+struct ClipUploadResponse: Codable, Sendable {
+    let sessionId: String
+    let clipId: String?
+    let s3Key: String
+    let bytesUploaded: Int
+    let durationMs: Int?
+    let framesTotal: Int?
+    let framesWithFaces: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case clipId = "clip_id"
+        case s3Key = "s3_key"
+        case bytesUploaded = "bytes_uploaded"
+        case durationMs = "duration_ms"
+        case framesTotal = "frames_total"
+        case framesWithFaces = "frames_with_faces"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        clipId = try c.decodeIfPresent(String.self, forKey: .clipId)
+        s3Key = try c.decode(String.self, forKey: .s3Key)
+        bytesUploaded = try c.decode(Int.self, forKey: .bytesUploaded)
+        durationMs = try c.decodeIfPresent(Int.self, forKey: .durationMs)
+        framesTotal = try c.decodeIfPresent(Int.self, forKey: .framesTotal)
+        framesWithFaces = try c.decodeIfPresent(Int.self, forKey: .framesWithFaces)
+    }
+
+    init(
+        sessionId: String,
+        clipId: String? = nil,
+        s3Key: String,
+        bytesUploaded: Int,
+        durationMs: Int? = nil,
+        framesTotal: Int? = nil,
+        framesWithFaces: Int? = nil
+    ) {
+        self.sessionId = sessionId
+        self.clipId = clipId
+        self.s3Key = s3Key
+        self.bytesUploaded = bytesUploaded
+        self.durationMs = durationMs
+        self.framesTotal = framesTotal
+        self.framesWithFaces = framesWithFaces
+    }
+}
+
 struct LoginResponse: Codable, Sendable {
     let accessToken: String
     let tokenType: String
@@ -1444,12 +1663,40 @@ struct ClientProvidersResponse: Codable, Sendable {
     }
 }
 
+/// Visual evidence routing mode. Mirrors the backend's
+/// `VisualEvidenceMode` enum (dual-mode plan, AppConfig schema). The
+/// iOS dispatcher in `SessionManager.extractEvidence(for:)` switches
+/// on this once.
+///
+/// - `framesOnly` (default — Phase 1 zero-risk): every trigger emits a
+///   still frame, byte-identical to today's behavior.
+/// - `clipsOnly`: every trigger emits a 7s video clip via the ring
+///   buffer.
+/// - `hybrid`: per-trigger routing keyed on `clipTriggerKinds`
+///   containment.
+enum VisualEvidenceMode: String, Codable, Sendable, Equatable {
+    case framesOnly = "frames_only"
+    case clipsOnly = "clips_only"
+    case hybrid
+}
+
 struct ClientPipelineResponse: Codable, Sendable {
     let stage1SkipWindowSeconds: Int
     let frameWindowClinicMs: Int
     let frameWindowProceduralMs: Int
     let screenCaptureFps: Int
     let videoCaptureFps: Int
+    /// Dual-mode visual evidence routing. Defaults to `.framesOnly` so
+    /// a backend that hasn't been upgraded yet preserves byte-identical
+    /// behavior on the iOS side.
+    let visualEvidenceMode: VisualEvidenceMode
+    /// Clip extraction window in milliseconds (centered on the trigger
+    /// timestamp). Used by `extractEvidence` when in `.clipsOnly` /
+    /// `.hybrid` mode. Defaults to the dual-mode plan's documented 7000 ms.
+    let clipWindowMs: Int
+    /// Trigger kinds that route to a clip in `.hybrid` mode. Defaults
+    /// mirror the master plan ("motion", "rom", "gait", "procedural").
+    let clipTriggerKinds: [String]
 
     enum CodingKeys: String, CodingKey {
         case stage1SkipWindowSeconds = "stage1_skip_window_seconds"
@@ -1457,6 +1704,44 @@ struct ClientPipelineResponse: Codable, Sendable {
         case frameWindowProceduralMs = "frame_window_procedural_ms"
         case screenCaptureFps = "screen_capture_fps"
         case videoCaptureFps = "video_capture_fps"
+        case visualEvidenceMode = "visual_evidence_mode"
+        case clipWindowMs = "clip_window_ms"
+        case clipTriggerKinds = "clip_trigger_kinds"
+    }
+
+    init(
+        stage1SkipWindowSeconds: Int,
+        frameWindowClinicMs: Int,
+        frameWindowProceduralMs: Int,
+        screenCaptureFps: Int,
+        videoCaptureFps: Int,
+        visualEvidenceMode: VisualEvidenceMode = .framesOnly,
+        clipWindowMs: Int = 7_000,
+        clipTriggerKinds: [String] = ["motion", "rom", "gait", "procedural"]
+    ) {
+        self.stage1SkipWindowSeconds = stage1SkipWindowSeconds
+        self.frameWindowClinicMs = frameWindowClinicMs
+        self.frameWindowProceduralMs = frameWindowProceduralMs
+        self.screenCaptureFps = screenCaptureFps
+        self.videoCaptureFps = videoCaptureFps
+        self.visualEvidenceMode = visualEvidenceMode
+        self.clipWindowMs = clipWindowMs
+        self.clipTriggerKinds = clipTriggerKinds
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        stage1SkipWindowSeconds = try c.decode(Int.self, forKey: .stage1SkipWindowSeconds)
+        frameWindowClinicMs = try c.decode(Int.self, forKey: .frameWindowClinicMs)
+        frameWindowProceduralMs = try c.decode(Int.self, forKey: .frameWindowProceduralMs)
+        screenCaptureFps = try c.decode(Int.self, forKey: .screenCaptureFps)
+        videoCaptureFps = try c.decode(Int.self, forKey: .videoCaptureFps)
+        // Optional with safe defaults — keeps the iOS client forward-
+        // compatible with older backends that haven't yet emitted the
+        // dual-mode keys via GET /config.
+        visualEvidenceMode = try c.decodeIfPresent(VisualEvidenceMode.self, forKey: .visualEvidenceMode) ?? .framesOnly
+        clipWindowMs = try c.decodeIfPresent(Int.self, forKey: .clipWindowMs) ?? 7_000
+        clipTriggerKinds = try c.decodeIfPresent([String].self, forKey: .clipTriggerKinds) ?? ["motion", "rom", "gait", "procedural"]
     }
 }
 
