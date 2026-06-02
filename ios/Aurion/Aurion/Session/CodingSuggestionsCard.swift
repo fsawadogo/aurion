@@ -147,9 +147,18 @@ struct CodingSuggestionsCard: View {
 
     private var header: some View {
         HStack(spacing: 8) {
+            // Adaptive — `aurionNavy` was chosen originally to reinforce
+            // the "separate inference surface" treatment vs the gold-
+            // accented clinical cards, but on the adaptive card
+            // background it goes navy-on-dark-slate in dark mode and
+            // disappears. Use the same text-primary token as the
+            // title; visual separation is still carried by the navy
+            // card border + per-system color chips + the always-on
+            // assistive amber banner — those three already brand the
+            // surface as distinct.
             Image(systemName: "function")
                 .font(.system(size: 16))
-                .foregroundColor(.aurionNavy)
+                .foregroundColor(.aurionTextPrimary)
             Text(L("coding.title"))
                 .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                 .foregroundColor(.aurionTextPrimary)
