@@ -154,6 +154,14 @@ const config: Config = {
         "short": "200ms",
         "aurion": "320ms",
       },
+      padding: {
+        // Reads the CSS custom property published by `<Sidebar>` on
+        // every collapse toggle (`--aurion-sidebar-width`). 256px
+        // fallback matches the uncollapsed Tailwind class width so
+        // SSR + first paint look right before the client hydrates
+        // and reads localStorage.
+        "aurion-sidebar": "var(--aurion-sidebar-width, 256px)",
+      },
     },
   },
   plugins: [],
