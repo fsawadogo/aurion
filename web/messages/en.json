@@ -1,0 +1,78 @@
+{
+  "Sidebar": {
+    "portal": "Portal",
+    "admin": "Admin",
+    "signOut": "Sign out",
+    "nav": {
+      "dashboard": "Dashboard",
+      "sessions": "Sessions",
+      "auditLog": "Audit Log",
+      "phiMasking": "PHI Masking",
+      "users": "Users",
+      "config": "Config",
+      "eval": "Eval",
+      "myNotes": "My Notes",
+      "templates": "Templates",
+      "macros": "Macros",
+      "myProfile": "My Profile"
+    },
+    "expand": "Expand sidebar",
+    "collapse": "Collapse sidebar"
+  },
+  "Theme": {
+    "label": "Theme",
+    "system": "System",
+    "light": "Light",
+    "dark": "Dark"
+  },
+  "Locale": {
+    "label": "Language",
+    "en": "English",
+    "fr": "Français"
+  },
+  "Roles": {
+    "ADMIN": "Administrator",
+    "COMPLIANCE_OFFICER": "Compliance Officer",
+    "EVAL_TEAM": "Eval Team",
+    "CLINICAL_ADMIN": "Clinical Admin",
+    "CLINICIAN": "Clinician"
+  },
+  "Dashboard": {
+    "eyebrow": "Clinician portal",
+    "title": "Dashboard",
+    "subtitle": "Your overview at a glance.",
+    "refresh": "Refresh",
+    "stats": {
+      "awaitingReview": "Awaiting review",
+      "inProgress": "In progress",
+      "approvedThisWeek": "Approved this week",
+      "customTemplates": "Custom templates"
+    },
+    "panels": {
+      "awaitingYourReview": "Awaiting your review",
+      "noSessionsWaiting": "No sessions waiting on review. Nice.",
+      "visualEnrichmentRunning": "Visual enrichment running",
+      "nothingProcessing": "Nothing currently processing."
+    },
+    "failedBanner": "{count, plural, one {# session failed to process and needs attention.} other {# sessions failed to process and need attention.}}",
+    "seeList": "See list"
+  },
+  "Login": {
+    "title": "Sign in",
+    "subtitle": "Aurion Clinical AI portal",
+    "emailLabel": "Email",
+    "passwordLabel": "Password",
+    "signIn": "Sign in",
+    "signingIn": "Signing in…",
+    "signedIn": "Signed in",
+    "forgotPassword": "Forgot password?"
+  },
+  "Common": {
+    "loading": "Loading…",
+    "retry": "Retry",
+    "cancel": "Cancel",
+    "save": "Save",
+    "delete": "Delete",
+    "confirm": "Confirm"
+  }
+}

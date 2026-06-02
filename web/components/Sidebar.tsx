@@ -21,54 +21,54 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
+import { useTranslations } from "next-intl";
 import { getMe, logout } from "@/lib/api";
 import { getMyProfile } from "@/lib/portal-api";
 import type { CurrentUser, UserRole } from "@/types";
 import { AurionLogo } from "@/components/AurionLogo";
+import LocaleSwitcher from "@/components/portal/LocaleSwitcher";
 import ThemeToggle from "@/components/portal/ThemeToggle";
 import { useTheme } from "next-themes";
 
 // Mirrors backend require_role() gates per admin router.
 // Keep in sync with backend/app/api/v1/admin/*.py and
 // backend/app/api/v1/me.py (CLINICIAN-gated portal endpoints).
+//
+// `tKey` keys into the Sidebar.nav.* namespace in messages/{en,fr}.json
+// — adding a new nav entry requires a matching key on both catalogs.
 const navigation: {
-  name: string;
+  tKey: string;
   href: string;
   icon: typeof BarChart3;
   roles: UserRole[];
 }[] = [
   // ── Admin / compliance / eval surface (unchanged) ──
-  { name: "Dashboard", href: "/dashboard", icon: BarChart3, roles: ["EVAL_TEAM", "ADMIN"] },
-  { name: "Sessions", href: "/sessions", icon: Layers, roles: ["EVAL_TEAM", "ADMIN"] },
-  { name: "Audit Log", href: "/audit", icon: ClipboardList, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
-  { name: "PHI Masking", href: "/masking", icon: ShieldCheck, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
-  { name: "Users", href: "/users", icon: Users, roles: ["ADMIN"] },
-  { name: "Config", href: "/config", icon: Settings, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
-  { name: "Eval", href: "/eval", icon: FlaskConical, roles: ["EVAL_TEAM", "ADMIN"] },
+  { tKey: "dashboard",  href: "/dashboard", icon: BarChart3,     roles: ["EVAL_TEAM", "ADMIN"] },
+  { tKey: "sessions",   href: "/sessions",  icon: Layers,        roles: ["EVAL_TEAM", "ADMIN"] },
+  { tKey: "auditLog",   href: "/audit",     icon: ClipboardList, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
+  { tKey: "phiMasking", href: "/masking",   icon: ShieldCheck,   roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
+  { tKey: "users",      href: "/users",     icon: Users,         roles: ["ADMIN"] },
+  { tKey: "config",     href: "/config",    icon: Settings,      roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
+  { tKey: "eval",       href: "/eval",      icon: FlaskConical,  roles: ["EVAL_TEAM", "ADMIN"] },
   // ── Clinician portal surface (PR-C onward) ──
   // Admin can preview each portal page for support — backend still
   // 403s admin from POST/PATCH/DELETE on /me/* routes (those are
   // CLINICIAN-only at the dependency layer).
-  { name: "Dashboard", href: "/portal/dashboard", icon: BarChart3, roles: ["CLINICIAN"] },
-  { name: "My Notes", href: "/portal/notes", icon: FileText, roles: ["CLINICIAN", "ADMIN"] },
-  { name: "Templates", href: "/portal/templates", icon: LayoutGrid, roles: ["CLINICIAN", "ADMIN"] },
-  { name: "Macros", href: "/portal/macros", icon: Zap, roles: ["CLINICIAN", "ADMIN"] },
-  { name: "My Profile", href: "/portal/profile", icon: CircleUser, roles: ["CLINICIAN", "ADMIN"] },
+  { tKey: "dashboard",  href: "/portal/dashboard",  icon: BarChart3, roles: ["CLINICIAN"] },
+  { tKey: "myNotes",    href: "/portal/notes",      icon: FileText,  roles: ["CLINICIAN", "ADMIN"] },
+  { tKey: "templates",  href: "/portal/templates",  icon: LayoutGrid, roles: ["CLINICIAN", "ADMIN"] },
+  { tKey: "macros",     href: "/portal/macros",     icon: Zap,       roles: ["CLINICIAN", "ADMIN"] },
+  { tKey: "myProfile",  href: "/portal/profile",    icon: CircleUser, roles: ["CLINICIAN", "ADMIN"] },
 ];
-
-const ROLE_LABEL: Record<UserRole, string> = {
-  ADMIN: "Administrator",
-  COMPLIANCE_OFFICER: "Compliance Officer",
-  EVAL_TEAM: "Eval Team",
-  CLINICAL_ADMIN: "Clinical Admin",
-  CLINICIAN: "Clinician",
-};
 
 /** localStorage key for the desktop sidebar collapsed-state. */
 const COLLAPSED_KEY = "aurion-sidebar-collapsed";
 
 export default function Sidebar() {
   const pathname = usePathname();
+  const t = useTranslations("Sidebar");
+  const tRoles = useTranslations("Roles");
+  const tCommon = useTranslations("Common");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<CurrentUser | null>(null);
 
@@ -110,9 +110,10 @@ export default function Sidebar() {
     }
   }, []);
 
-  // Sync theme from the backend on mount (cross-device source of
-  // truth). Silent on failure — next-themes already loaded the
-  // last-known choice from localStorage. CLINICIAN-only since
+  // Sync theme + locale from the backend on mount (cross-device
+  // source of truth). Silent on failure — next-themes already loaded
+  // the last-known theme from localStorage; the locale cookie
+  // already drove the server-rendered HTML. CLINICIAN-only since
   // admin/eval roles use /admin/users not /profile.
   useEffect(() => {
     if (!user || user.role !== "CLINICIAN") return;
@@ -123,10 +124,27 @@ export default function Sidebar() {
         if (p.ui_theme && ["system", "light", "dark"].includes(p.ui_theme)) {
           setTheme(p.ui_theme);
         }
+        // If the backend's stored ui_language disagrees with the
+        // cookie that drove this render, fix the cookie + refresh
+        // so the chrome catches up. Skip if they agree (avoid an
+        // infinite refresh loop). The cookie check is best-effort
+        // — server-side cookies() in the layout is authoritative.
+        if (
+          p.ui_language
+          && ["en", "fr"].includes(p.ui_language)
+          && !document.cookie.includes(`aurion-locale=${p.ui_language}`)
+        ) {
+          const oneYear = 60 * 60 * 24 * 365;
+          document.cookie =
+            `aurion-locale=${p.ui_language}; path=/; max-age=${oneYear}; SameSite=Lax`;
+          // Re-render with the new locale. Same router import as
+          // LocaleSwitcher; the layout's getLocale() picks up the
+          // updated cookie.
+          window.location.reload();
+        }
       })
       .catch(() => {
-        // Profile fetch failed — current theme from localStorage
-        // (via next-themes) is fine.
+        // Profile fetch failed — current theme/locale are fine.
       });
     return () => { cancelled = true; };
   }, [user, setTheme]);
@@ -178,7 +196,7 @@ export default function Sidebar() {
               Aurion
             </span>
             <span className="rounded-md bg-white/[0.08] px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-gold-300 uppercase">
-              {user?.role === "CLINICIAN" ? "Portal" : "Admin"}
+              {user?.role === "CLINICIAN" ? t("portal") : t("admin")}
             </span>
           </div>
         )}
@@ -200,16 +218,20 @@ export default function Sidebar() {
       >
         {visibleNav.map((item) => {
           const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
+          const label = t(`nav.${item.tKey}` as const);
           return (
             <Link
-              key={item.name}
+              // Two clinician + admin nav slots share the same tKey
+              // ("dashboard"); distinguish via href so React's diff
+              // doesn't reuse the wrong element.
+              key={`${item.href}-${item.tKey}`}
               href={item.href}
               onClick={() => setMobileOpen(false)}
               // Native `title` attribute gives free system tooltips
               // in collapsed mode — VoiceOver / NVDA also announce
               // it, so accessibility comes along for the ride.
-              title={forCollapsed ? item.name : undefined}
-              aria-label={forCollapsed ? item.name : undefined}
+              title={forCollapsed ? label : undefined}
+              aria-label={forCollapsed ? label : undefined}
               className={
                 "group relative flex items-center rounded-aurion-md text-[13.5px] font-medium tracking-tight transition-all duration-short ease-aurion " +
                 (forCollapsed
@@ -233,7 +255,7 @@ export default function Sidebar() {
                     : "text-white/40 group-hover:text-white/70")
                 }
               />
-              {!forCollapsed && item.name}
+              {!forCollapsed && label}
             </Link>
           );
         })}
@@ -262,10 +284,10 @@ export default function Sidebar() {
           {!forCollapsed && (
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-medium text-white/90">
-                {user?.full_name?.trim() || user?.email || "Loading…"}
+                {user?.full_name?.trim() || user?.email || tCommon("loading")}
               </p>
               <p className="truncate text-[11px] text-white/45">
-                {user ? ROLE_LABEL[user.role] : ""}
+                {user ? tRoles(user.role) : ""}
               </p>
             </div>
           )}
@@ -278,14 +300,15 @@ export default function Sidebar() {
             don't have. Admin/eval roles see localStorage-only via
             next-themes if they manually toggle from the profile page. */}
         {!forCollapsed && user?.role === "CLINICIAN" && (
-          <div className="mt-3">
+          <div className="mt-3 flex flex-col gap-1.5">
             <ThemeToggle variant="compact" />
+            <LocaleSwitcher variant="compact" />
           </div>
         )}
         <button
           onClick={logout}
-          title={forCollapsed ? "Sign out" : undefined}
-          aria-label={forCollapsed ? "Sign out" : undefined}
+          title={forCollapsed ? t("signOut") : undefined}
+          aria-label={forCollapsed ? t("signOut") : undefined}
           className={
             "mt-3 flex items-center rounded-aurion-md text-[13px] text-white/55 transition-colors duration-short hover:bg-white/[0.04] hover:text-white/90 " +
             (forCollapsed
@@ -294,7 +317,7 @@ export default function Sidebar() {
           }
         >
           <LogOut className="h-4 w-4" />
-          {!forCollapsed && "Sign out"}
+          {!forCollapsed && t("signOut")}
         </button>
       </div>
     </div>
@@ -355,8 +378,8 @@ export default function Sidebar() {
       <button
         type="button"
         onClick={toggleCollapsed}
-        title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
-        aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+        title={collapsed ? t("expand") : t("collapse")}
+        aria-label={collapsed ? t("expand") : t("collapse")}
         className={
           "hidden lg:flex items-center justify-center fixed top-[68px] z-50 " +
           "h-6 w-6 rounded-full bg-navy-800 ring-1 ring-white/10 text-white/70 " +
