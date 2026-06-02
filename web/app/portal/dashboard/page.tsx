@@ -8,6 +8,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import ActivityFeed from "@/components/portal/ActivityFeed";
 import PageHeader from "@/components/portal/PageHeader";
 import QuickActions from "@/components/portal/QuickActions";
 import { listMySessions, listMyCustomTemplates } from "@/lib/portal-api";
@@ -190,6 +191,16 @@ export default function PortalDashboardPage() {
           )}
         </Card>
       </div>
+
+      {/* Live activity feed — polling /me/audit every 30s for
+          noteworthy events (Stage 1/2 delivery, approvals, EMR
+          write-back results, etc.). Sits between the activity
+          panels and the historical recent strip — "what just
+          changed" complements "what's pending" and "what I
+          touched lately". */}
+      <section className="mt-4">
+        <ActivityFeed />
+      </section>
 
       {/* Recent sessions strip — physician's working memory. Shows
           the 6 most recent sessions across any state (except PURGED).

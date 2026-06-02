@@ -84,6 +84,29 @@
         "subtitle": "Conversational template builder for a new specialty."
       }
     },
+    "activity": {
+      "title": "Live activity",
+      "live": "Live",
+      "retry": "Retry",
+      "allCaughtUp": "All caught up",
+      "allCaughtUpHint": "New activity will appear here as it happens.",
+      "loadFailed": "Couldn't load activity right now.",
+      "event": {
+        "stage1Delivered": "Stage 1 ready for review",
+        "stage1Failed": "Stage 1 generation failed",
+        "stage2Complete": "Visual enrichment complete",
+        "stage2Failed": "Visual enrichment failed",
+        "stage1Approved": "Approved Stage 1",
+        "noteExported": "Note exported",
+        "bulkNoteExport": "Bulk export delivered",
+        "conflictResolved": "Conflict resolved",
+        "emrSent": "EMR write-back delivered",
+        "emrFailed": "EMR write-back failed — needs retry",
+        "sessionPurged": "Session purged",
+        "sessionDiscarded": "Session discarded",
+        "generic": "Session updated"
+      }
+    },
     "stateBadge": {
       "AWAITING_REVIEW": "Review",
       "PROCESSING_STAGE1": "Stage 1",
