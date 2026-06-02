@@ -1,5 +1,6 @@
 "use client";
 
+import { CheckCircle2, Clock } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import Header from "@/components/Header";
@@ -7,10 +8,6 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import {
-  CheckCircleIcon,
-  ClockIcon,
-} from "@heroicons/react/24/outline";
 import { getEvalSessions, submitEvalScore } from "@/lib/api";
 import type { EvalSession } from "@/types";
 
@@ -172,14 +169,14 @@ export default function EvalPage() {
                             {s.scored ? (
                               <Badge variant="success">
                                 <span className="inline-flex items-center gap-1">
-                                  <CheckCircleIcon className="h-3 w-3" />
+                                  <CheckCircle2 className="h-3 w-3" />
                                   Scored
                                 </span>
                               </Badge>
                             ) : (
                               <Badge variant="warning">
                                 <span className="inline-flex items-center gap-1">
-                                  <ClockIcon className="h-3 w-3" />
+                                  <Clock className="h-3 w-3" />
                                   Pending
                                 </span>
                               </Badge>

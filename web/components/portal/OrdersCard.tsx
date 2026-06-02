@@ -1,19 +1,7 @@
 "use client";
 
+import { AlertTriangle, Camera, Check, ClipboardCheck, ClipboardList, FlaskConical, RefreshCw, Trash2, UserPlus } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import {
-  ClipboardDocumentCheckIcon,
-  CheckIcon,
-  TrashIcon,
-  PencilIcon,
-  ArrowPathIcon,
-  BeakerIcon,
-  CameraIcon,
-  UserPlusIcon,
-  ClipboardDocumentListIcon,
-  ExclamationTriangleIcon,
-} from "@heroicons/react/24/outline";
-
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -58,11 +46,11 @@ const KIND_LABEL: Record<NoteOrderKind, string> = {
   prescription: "Prescription",
 };
 
-const KIND_ICON: Record<NoteOrderKind, typeof BeakerIcon> = {
-  imaging: CameraIcon,
-  lab: BeakerIcon,
-  referral: UserPlusIcon,
-  prescription: ClipboardDocumentListIcon,
+const KIND_ICON: Record<NoteOrderKind, typeof FlaskConical> = {
+  imaging: Camera,
+  lab: FlaskConical,
+  referral: UserPlus,
+  prescription: ClipboardList,
 };
 
 export default function OrdersCard({
@@ -181,7 +169,7 @@ export default function OrdersCard({
   return (
     <Card>
       <div className="mb-3 flex items-center gap-2 text-aurion-headline">
-        <ClipboardDocumentCheckIcon className="h-4 w-4 text-gold-500" />
+        <ClipboardCheck className="h-4 w-4 text-gold-500" />
         Orders
         {visible.length > 0 && (
           <span className="aurion-micro ml-2">
@@ -198,7 +186,7 @@ export default function OrdersCard({
             disabled={extracting}
             onClick={() => void extract()}
           >
-            <ArrowPathIcon className="h-4 w-4 mr-1" />
+            <RefreshCw className="h-4 w-4 mr-1" />
             Re-extract
           </Button>
         )}
@@ -212,7 +200,7 @@ export default function OrdersCard({
 
       {unvalidatedDrugCount > 0 && (
         <div className="mb-3 flex items-start gap-2 rounded-aurion-md bg-amber-50 border border-amber-300 px-3 py-2 text-aurion-caption text-amber-900">
-          <ExclamationTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
             <strong>
               {unvalidatedDrugCount} prescription
@@ -242,7 +230,7 @@ export default function OrdersCard({
             disabled={extracting}
             onClick={() => void extract()}
           >
-            <ClipboardDocumentCheckIcon className="h-4 w-4 mr-1.5" />
+            <ClipboardCheck className="h-4 w-4 mr-1.5" />
             Extract orders from note
           </Button>
         </div>
@@ -328,7 +316,7 @@ function OrderRow({
               disabled={busy}
               onClick={onConfirm}
             >
-              <CheckIcon className="h-4 w-4 mr-1" />
+              <Check className="h-4 w-4 mr-1" />
               Confirm
             </Button>
             <button
@@ -338,7 +326,7 @@ function OrderRow({
               className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
               aria-label="Cancel order"
             >
-              <TrashIcon className="h-4 w-4" />
+              <Trash2 className="h-4 w-4" />
             </button>
           </>
         )}
@@ -350,7 +338,7 @@ function OrderRow({
             className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50"
             aria-label="Cancel order"
           >
-            <TrashIcon className="h-4 w-4" />
+            <Trash2 className="h-4 w-4" />
           </button>
         )}
       </div>

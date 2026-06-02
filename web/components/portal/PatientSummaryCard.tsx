@@ -1,16 +1,7 @@
 "use client";
 
+import { Check, ClipboardCopy, Pencil, Printer, RefreshCw, Sparkles, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import {
-  ClipboardDocumentIcon,
-  PrinterIcon,
-  ArrowPathIcon,
-  PencilIcon,
-  CheckIcon,
-  XMarkIcon,
-  SparklesIcon,
-} from "@heroicons/react/24/outline";
-
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
@@ -177,7 +168,7 @@ export default function PatientSummaryCard({
   return (
     <Card>
       <div className="mb-3 flex items-center gap-2 text-aurion-headline">
-        <SparklesIcon className="h-4 w-4 text-gold-500" />
+        <Sparkles className="h-4 w-4 text-gold-500" />
         After-visit summary
         {summary && (
           <span className="aurion-micro ml-2">
@@ -209,7 +200,7 @@ export default function PatientSummaryCard({
             disabled={generating}
             onClick={() => void generate()}
           >
-            <SparklesIcon className="h-4 w-4 mr-1.5" />
+            <Sparkles className="h-4 w-4 mr-1.5" />
             Generate summary
           </Button>
         </div>
@@ -234,7 +225,7 @@ export default function PatientSummaryCard({
               disabled={saving || !draft.trim() || draft === summary.body}
               onClick={() => void saveEdit()}
             >
-              <CheckIcon className="h-4 w-4 mr-1" />
+              <Check className="h-4 w-4 mr-1" />
               Save edit
             </Button>
             <Button
@@ -246,7 +237,7 @@ export default function PatientSummaryCard({
                 setDraft(summary.body);
               }}
             >
-              <XMarkIcon className="h-4 w-4 mr-1" />
+              <X className="h-4 w-4 mr-1" />
               Cancel
             </Button>
           </div>
@@ -258,11 +249,11 @@ export default function PatientSummaryCard({
           </p>
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <Button size="sm" variant="secondary" onClick={copy}>
-              <ClipboardDocumentIcon className="h-4 w-4 mr-1" />
+              <ClipboardCopy className="h-4 w-4 mr-1" />
               {justCopied ? "Copied!" : "Copy"}
             </Button>
             <Button size="sm" variant="secondary" onClick={print}>
-              <PrinterIcon className="h-4 w-4 mr-1" />
+              <Printer className="h-4 w-4 mr-1" />
               Print
             </Button>
             <Button
@@ -273,7 +264,7 @@ export default function PatientSummaryCard({
                 setEditing(true);
               }}
             >
-              <PencilIcon className="h-4 w-4 mr-1" />
+              <Pencil className="h-4 w-4 mr-1" />
               Edit
             </Button>
             <div className="flex-1" />
@@ -284,7 +275,7 @@ export default function PatientSummaryCard({
               disabled={generating}
               onClick={() => void regenerate()}
             >
-              <ArrowPathIcon className="h-4 w-4 mr-1" />
+              <RefreshCw className="h-4 w-4 mr-1" />
               Regenerate
             </Button>
           </div>

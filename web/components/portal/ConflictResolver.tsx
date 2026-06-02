@@ -1,12 +1,7 @@
 "use client";
 
+import { CheckCircle2, SquarePen, XCircle } from "lucide-react";
 import { useState } from "react";
-import {
-  CheckCircleIcon,
-  XCircleIcon,
-  PencilSquareIcon,
-} from "@heroicons/react/24/outline";
-
 import Button from "@/components/ui/Button";
 import type { Claim } from "@/types";
 
@@ -63,7 +58,7 @@ export default function ConflictResolver({
             onClick={() => void onResolve("accept_visual")}
             disabled={busy}
           >
-            <CheckCircleIcon className="h-4 w-4 mr-1" />
+            <CheckCircle2 className="h-4 w-4 mr-1" />
             Accept visual
           </Button>
           <Button
@@ -72,7 +67,7 @@ export default function ConflictResolver({
             onClick={() => void onResolve("reject_visual")}
             disabled={busy}
           >
-            <XCircleIcon className="h-4 w-4 mr-1" />
+            <XCircle className="h-4 w-4 mr-1" />
             Reject visual
           </Button>
           <Button
@@ -81,7 +76,7 @@ export default function ConflictResolver({
             onClick={() => setEditMode(true)}
             disabled={busy}
           >
-            <PencilSquareIcon className="h-4 w-4 mr-1" />
+            <SquarePen className="h-4 w-4 mr-1" />
             Edit
           </Button>
         </div>

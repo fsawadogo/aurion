@@ -1,14 +1,7 @@
 "use client";
 
+import { AlertTriangle, CheckCircle2, Send, Server, Upload } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import {
-  ArrowUpTrayIcon,
-  CheckCircleIcon,
-  ExclamationTriangleIcon,
-  PaperAirplaneIcon,
-  ServerStackIcon,
-} from "@heroicons/react/24/outline";
-
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -145,7 +138,7 @@ export default function EmrWriteBackCard({
   return (
     <Card>
       <div className="mb-3 flex items-center gap-2 text-aurion-headline">
-        <ServerStackIcon className="h-4 w-4 text-gold-500" />
+        <Server className="h-4 w-4 text-gold-500" />
         EMR write-back
         {isPilotMode && (
           <Badge variant="warning" dot>
@@ -161,7 +154,7 @@ export default function EmrWriteBackCard({
 
       {isPilotMode && (
         <div className="mb-3 flex items-start gap-2 rounded-aurion-md bg-amber-50 border border-amber-200 px-3 py-2 text-aurion-caption text-amber-900">
-          <ExclamationTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
+          <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
           <div>
             <strong>Pilot connector active.</strong> Sends record the
             attempt locally with full audit trail but do not transmit
@@ -218,7 +211,7 @@ export default function EmrWriteBackCard({
               disabled={sending}
               onClick={() => void send()}
             >
-              <PaperAirplaneIcon className="h-4 w-4 mr-1.5" />
+              <Send className="h-4 w-4 mr-1.5" />
               {rows.length === 0
                 ? "Send to EMR"
                 : isAutoRetryPending
@@ -229,7 +222,7 @@ export default function EmrWriteBackCard({
 
           {isAutoRetryPending && latest.scheduled_at && (
             <div className="mb-3 flex items-start gap-2 rounded-aurion-md bg-amber-50 border border-amber-200 px-3 py-2 text-aurion-caption text-amber-900">
-              <ArrowUpTrayIcon className="h-4 w-4 mt-0.5 shrink-0 animate-pulse" />
+              <Upload className="h-4 w-4 mt-0.5 shrink-0 animate-pulse" />
               <div>
                 <strong>
                   Auto-retry scheduled for{" "}
@@ -245,7 +238,7 @@ export default function EmrWriteBackCard({
 
           {isTerminalFailure && (
             <div className="mb-3 flex items-start gap-2 rounded-aurion-md bg-red-50 border border-red-200 px-3 py-2 text-aurion-caption text-red-900">
-              <ExclamationTriangleIcon className="h-4 w-4 mt-0.5 shrink-0" />
+              <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
               <div>
                 <strong>No more auto-retries.</strong> The last attempt
                 hit a terminal error or exhausted the retry budget.
@@ -325,11 +318,11 @@ function WriteBackRow({ row }: { row: EmrWriteBack }) {
 function StatusIcon({ status }: { status: EmrWriteBackStatus }) {
   switch (status) {
     case "sent":
-      return <CheckCircleIcon className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />;
+      return <CheckCircle2 className="h-5 w-5 text-emerald-600 shrink-0 mt-0.5" />;
     case "failed":
-      return <ExclamationTriangleIcon className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />;
+      return <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />;
     default:
-      return <ArrowUpTrayIcon className="h-5 w-5 text-navy-400 shrink-0 mt-0.5" />;
+      return <Upload className="h-5 w-5 text-navy-400 shrink-0 mt-0.5" />;
   }
 }
 

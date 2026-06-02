@@ -1,16 +1,7 @@
 "use client";
 
+import { ArrowLeftRight, CheckCircle2, ChevronDown, ChevronUp, MinusCircle, PlusCircle } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import {
-  ArrowsRightLeftIcon,
-  CheckCircleIcon,
-  ChevronDownIcon,
-  ChevronUpIcon,
-  ExclamationCircleIcon,
-  PlusCircleIcon,
-  MinusCircleIcon,
-} from "@heroicons/react/24/outline";
-
 import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
@@ -113,7 +104,7 @@ export default function PreviewVsFinalCard({
         onClick={() => setExpanded((v) => !v)}
         aria-expanded={expanded}
       >
-        <ArrowsRightLeftIcon className="h-4 w-4 text-blue-600" />
+        <ArrowLeftRight className="h-4 w-4 text-blue-600" />
         Preview vs final
         {recall !== null && (
           <Badge
@@ -131,9 +122,9 @@ export default function PreviewVsFinalCard({
         </span>
         <div className="flex-1" />
         {expanded ? (
-          <ChevronUpIcon className="h-4 w-4 text-navy-400" />
+          <ChevronUp className="h-4 w-4 text-navy-400" />
         ) : (
-          <ChevronDownIcon className="h-4 w-4 text-navy-400" />
+          <ChevronDown className="h-4 w-4 text-navy-400" />
         )}
       </button>
 
@@ -163,22 +154,22 @@ function TotalsRow({ totals }: { totals: PreviewToFinalDiff["totals"] }) {
       <KindCounter
         kind="matched"
         count={totals.matched}
-        icon={<CheckCircleIcon className="h-4 w-4" />}
+        icon={<CheckCircle2 className="h-4 w-4" />}
       />
       <KindCounter
         kind="fuzzy"
         count={totals.fuzzy}
-        icon={<CheckCircleIcon className="h-4 w-4 opacity-70" />}
+        icon={<CheckCircle2 className="h-4 w-4 opacity-70" />}
       />
       <KindCounter
         kind="final_only"
         count={totals.final_only}
-        icon={<PlusCircleIcon className="h-4 w-4" />}
+        icon={<PlusCircle className="h-4 w-4" />}
       />
       <KindCounter
         kind="preview_only"
         count={totals.preview_only}
-        icon={<MinusCircleIcon className="h-4 w-4" />}
+        icon={<MinusCircle className="h-4 w-4" />}
       />
     </div>
   );
@@ -247,7 +238,7 @@ function ClaimRow({
     case "fuzzy":
       return (
         <li className="flex items-start gap-2 text-aurion-caption">
-          <CheckCircleIcon
+          <CheckCircle2
             className={`h-4 w-4 mt-0.5 shrink-0 ${KIND_COLOR[entry.kind]}`}
           />
           <div className="flex-1 min-w-0">
@@ -267,7 +258,7 @@ function ClaimRow({
     case "final_only":
       return (
         <li className="flex items-start gap-2 text-aurion-caption">
-          <PlusCircleIcon
+          <PlusCircle
             className={`h-4 w-4 mt-0.5 shrink-0 ${KIND_COLOR.final_only}`}
           />
           <div className="flex-1 min-w-0">
@@ -283,7 +274,7 @@ function ClaimRow({
     case "preview_only":
       return (
         <li className="flex items-start gap-2 text-aurion-caption">
-          <MinusCircleIcon
+          <MinusCircle
             className={`h-4 w-4 mt-0.5 shrink-0 ${KIND_COLOR.preview_only}`}
           />
           <div className="flex-1 min-w-0 opacity-75">

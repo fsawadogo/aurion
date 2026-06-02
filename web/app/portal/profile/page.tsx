@@ -1,9 +1,8 @@
 "use client";
 
+import { Settings } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { Cog6ToothIcon } from "@heroicons/react/24/outline";
-
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
@@ -131,7 +130,7 @@ export default function PortalProfilePage() {
             href="/portal/profile/account"
             className="inline-flex items-center gap-1.5 rounded-aurion-md px-3 py-2 text-aurion-callout text-navy-600 hover:bg-canvas hover:text-navy-800 transition-colors duration-short"
           >
-            <Cog6ToothIcon className="h-4 w-4" />
+            <Settings className="h-4 w-4" />
             Account settings
           </Link>
         }

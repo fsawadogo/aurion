@@ -1,8 +1,7 @@
 "use client";
 
+import { Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { PaperAirplaneIcon } from "@heroicons/react/24/outline";
-
 import Button from "@/components/ui/Button";
 import type { ChatMessage } from "@/types";
 
@@ -90,7 +89,7 @@ export default function TemplateChat({
           disabled={busy || draft.trim().length === 0}
           loading={busy}
         >
-          <PaperAirplaneIcon className="h-4 w-4" />
+          <Send className="h-4 w-4" />
         </Button>
       </div>
     </div>

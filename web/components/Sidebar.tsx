@@ -1,24 +1,9 @@
 "use client";
 
+import { BarChart3, CircleUser, ClipboardList, FileText, FlaskConical, Layers, LayoutGrid, LogOut, Menu, Settings, ShieldCheck, Users, X, Zap } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
-import {
-  Bars3Icon,
-  XMarkIcon,
-  ChartBarIcon,
-  ClipboardDocumentListIcon,
-  UsersIcon,
-  ShieldCheckIcon,
-  CogIcon,
-  RectangleStackIcon,
-  BeakerIcon,
-  ArrowRightOnRectangleIcon,
-  BoltIcon,
-  DocumentTextIcon,
-  Squares2X2Icon,
-  UserCircleIcon,
-} from "@heroicons/react/24/outline";
 import { getMe, logout } from "@/lib/api";
 import type { CurrentUser, UserRole } from "@/types";
 import { AurionLogo } from "@/components/AurionLogo";
@@ -29,26 +14,26 @@ import { AurionLogo } from "@/components/AurionLogo";
 const navigation: {
   name: string;
   href: string;
-  icon: typeof ChartBarIcon;
+  icon: typeof BarChart3;
   roles: UserRole[];
 }[] = [
   // ── Admin / compliance / eval surface (unchanged) ──
-  { name: "Dashboard", href: "/dashboard", icon: ChartBarIcon, roles: ["EVAL_TEAM", "ADMIN"] },
-  { name: "Sessions", href: "/sessions", icon: RectangleStackIcon, roles: ["EVAL_TEAM", "ADMIN"] },
-  { name: "Audit Log", href: "/audit", icon: ClipboardDocumentListIcon, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
-  { name: "PHI Masking", href: "/masking", icon: ShieldCheckIcon, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
-  { name: "Users", href: "/users", icon: UsersIcon, roles: ["ADMIN"] },
-  { name: "Config", href: "/config", icon: CogIcon, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
-  { name: "Eval", href: "/eval", icon: BeakerIcon, roles: ["EVAL_TEAM", "ADMIN"] },
+  { name: "Dashboard", href: "/dashboard", icon: BarChart3, roles: ["EVAL_TEAM", "ADMIN"] },
+  { name: "Sessions", href: "/sessions", icon: Layers, roles: ["EVAL_TEAM", "ADMIN"] },
+  { name: "Audit Log", href: "/audit", icon: ClipboardList, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
+  { name: "PHI Masking", href: "/masking", icon: ShieldCheck, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
+  { name: "Users", href: "/users", icon: Users, roles: ["ADMIN"] },
+  { name: "Config", href: "/config", icon: Settings, roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
+  { name: "Eval", href: "/eval", icon: FlaskConical, roles: ["EVAL_TEAM", "ADMIN"] },
   // ── Clinician portal surface (PR-C onward) ──
   // Admin can preview each portal page for support — backend still
   // 403s admin from POST/PATCH/DELETE on /me/* routes (those are
   // CLINICIAN-only at the dependency layer).
-  { name: "Dashboard", href: "/portal/dashboard", icon: ChartBarIcon, roles: ["CLINICIAN"] },
-  { name: "My Notes", href: "/portal/notes", icon: DocumentTextIcon, roles: ["CLINICIAN", "ADMIN"] },
-  { name: "Templates", href: "/portal/templates", icon: Squares2X2Icon, roles: ["CLINICIAN", "ADMIN"] },
-  { name: "Macros", href: "/portal/macros", icon: BoltIcon, roles: ["CLINICIAN", "ADMIN"] },
-  { name: "My Profile", href: "/portal/profile", icon: UserCircleIcon, roles: ["CLINICIAN", "ADMIN"] },
+  { name: "Dashboard", href: "/portal/dashboard", icon: BarChart3, roles: ["CLINICIAN"] },
+  { name: "My Notes", href: "/portal/notes", icon: FileText, roles: ["CLINICIAN", "ADMIN"] },
+  { name: "Templates", href: "/portal/templates", icon: LayoutGrid, roles: ["CLINICIAN", "ADMIN"] },
+  { name: "Macros", href: "/portal/macros", icon: Zap, roles: ["CLINICIAN", "ADMIN"] },
+  { name: "My Profile", href: "/portal/profile", icon: CircleUser, roles: ["CLINICIAN", "ADMIN"] },
 ];
 
 const ROLE_LABEL: Record<UserRole, string> = {
@@ -157,7 +142,7 @@ export default function Sidebar() {
           onClick={logout}
           className="mt-3 flex w-full items-center gap-2 rounded-aurion-md px-3 py-2 text-[13px] text-white/55 transition-colors duration-short hover:bg-white/[0.04] hover:text-white/90"
         >
-          <ArrowRightOnRectangleIcon className="h-4 w-4" />
+          <LogOut className="h-4 w-4" />
           Sign out
         </button>
       </div>
@@ -173,9 +158,9 @@ export default function Sidebar() {
         onClick={() => setMobileOpen(!mobileOpen)}
       >
         {mobileOpen ? (
-          <XMarkIcon className="h-5 w-5" />
+          <X className="h-5 w-5" />
         ) : (
-          <Bars3Icon className="h-5 w-5" />
+          <Menu className="h-5 w-5" />
         )}
       </button>
 

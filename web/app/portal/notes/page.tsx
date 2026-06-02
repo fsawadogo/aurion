@@ -1,13 +1,8 @@
 "use client";
 
+import { ArrowRight, Download, Search } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import {
-  ArrowDownTrayIcon,
-  ArrowRightIcon,
-  MagnifyingGlassIcon,
-} from "@heroicons/react/24/outline";
-
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -176,7 +171,7 @@ export default function PortalSessionsInboxPage() {
               <option value="30d">Last 30 days</option>
             </select>
             <div className="relative">
-              <MagnifyingGlassIcon className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 className="form-input pl-8 w-56"
                 placeholder="Search…"
@@ -219,7 +214,7 @@ export default function PortalSessionsInboxPage() {
               disabled={selected.size === 0 || exporting}
               loading={exporting}
             >
-              <ArrowDownTrayIcon className="h-4 w-4 mr-1" />
+              <Download className="h-4 w-4 mr-1" />
               Export {selected.size > 0 ? `(${selected.size})` : "selected"}
             </Button>
           </div>
@@ -273,7 +268,7 @@ export default function PortalSessionsInboxPage() {
                   <div className="hidden sm:block w-32 shrink-0">
                     <StateBadge state={s.state} />
                   </div>
-                  <ArrowRightIcon className="h-4 w-4 text-gray-300 shrink-0" />
+                  <ArrowRight className="h-4 w-4 text-gray-300 shrink-0" />
                 </Link>
               </li>
               );

@@ -1,15 +1,12 @@
 "use client";
 
+import { CheckCircle2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import {
-  CheckCircleIcon,
-  XCircleIcon,
-} from "@heroicons/react/24/solid";
 import { getMaskingReport } from "@/lib/api";
 import type { MaskingReport } from "@/types";
 
@@ -254,14 +251,14 @@ export default function MaskingPage() {
                         {s.pass ? (
                           <Badge variant="success" dot>
                             <span className="inline-flex items-center gap-1">
-                              <CheckCircleIcon className="h-3 w-3" />
+                              <CheckCircle2 className="h-3 w-3" />
                               Pass
                             </span>
                           </Badge>
                         ) : (
                           <Badge variant="error" dot>
                             <span className="inline-flex items-center gap-1">
-                              <XCircleIcon className="h-3 w-3" />
+                              <XCircle className="h-3 w-3" />
                               Fail
                             </span>
                           </Badge>

@@ -1,16 +1,11 @@
 "use client";
 
+import { Clock, Cpu, Flag, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import {
-  CpuChipIcon,
-  AdjustmentsHorizontalIcon,
-  FlagIcon,
-  ClockIcon,
-} from "@heroicons/react/24/outline";
 import { getConfig, getConfigHistory } from "@/lib/api";
 import type { ProviderConfig, ConfigChangeEvent } from "@/types";
 
@@ -116,7 +111,7 @@ export default function ConfigPage() {
           <Card hoverable>
             <div className="mb-4 flex items-center gap-2.5">
               <div className="rounded-lg bg-gold-50 p-2">
-                <CpuChipIcon className="h-4 w-4 text-gold-600" />
+                <Cpu className="h-4 w-4 text-gold-600" />
               </div>
               <h2 className="text-sm font-semibold text-navy-700">
                 Active Providers
@@ -142,7 +137,7 @@ export default function ConfigPage() {
           <Card hoverable>
             <div className="mb-4 flex items-center gap-2.5">
               <div className="rounded-lg bg-gold-50 p-2">
-                <AdjustmentsHorizontalIcon className="h-4 w-4 text-gold-600" />
+                <SlidersHorizontal className="h-4 w-4 text-gold-600" />
               </div>
               <h2 className="text-sm font-semibold text-navy-700">
                 Model Parameters
@@ -183,7 +178,7 @@ export default function ConfigPage() {
           <Card hoverable>
             <div className="mb-4 flex items-center gap-2.5">
               <div className="rounded-lg bg-gold-50 p-2">
-                <ClockIcon className="h-4 w-4 text-gold-600" />
+                <Clock className="h-4 w-4 text-gold-600" />
               </div>
               <h2 className="text-sm font-semibold text-navy-700">
                 Pipeline Settings
@@ -202,7 +197,7 @@ export default function ConfigPage() {
           <Card hoverable>
             <div className="mb-4 flex items-center gap-2.5">
               <div className="rounded-lg bg-gold-50 p-2">
-                <FlagIcon className="h-4 w-4 text-gold-600" />
+                <Flag className="h-4 w-4 text-gold-600" />
               </div>
               <h2 className="text-sm font-semibold text-navy-700">
                 Feature Flags

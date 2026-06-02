@@ -1,5 +1,6 @@
 "use client";
 
+import { Filter } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
@@ -7,7 +8,6 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { FunnelIcon } from "@heroicons/react/24/outline";
 import { getSessions } from "@/lib/api";
 import type { Session, SessionFilters, PaginatedResponse } from "@/types";
 
@@ -85,7 +85,7 @@ export default function SessionsPage() {
         <Card className="mb-6">
           <div className="flex flex-wrap items-end gap-4">
             <div className="flex items-center gap-1.5 text-xs font-medium text-gray-400">
-              <FunnelIcon className="h-3.5 w-3.5" />
+              <Filter className="h-3.5 w-3.5" />
               <span className="uppercase tracking-wider">Filters</span>
             </div>
             <div>

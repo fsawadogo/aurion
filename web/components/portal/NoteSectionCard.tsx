@@ -1,13 +1,7 @@
 "use client";
 
+import { Check, Pencil, X, Zap } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import {
-  PencilIcon,
-  CheckIcon,
-  XMarkIcon,
-  BoltIcon,
-} from "@heroicons/react/24/outline";
-
 import Button from "@/components/ui/Button";
 import Badge from "@/components/ui/Badge";
 import ClaimChip from "@/components/portal/ClaimChip";
@@ -99,7 +93,7 @@ export default function NoteSectionCard({
             className="ml-auto inline-flex items-center gap-1 text-xs text-gray-500 hover:text-navy-700"
             aria-label="Edit section"
           >
-            <PencilIcon className="h-3.5 w-3.5" />
+            <Pencil className="h-3.5 w-3.5" />
             Edit
           </button>
         )}
@@ -148,7 +142,7 @@ export default function NoteSectionCard({
           />
           {expandedHint && (
             <p className="aurion-caption text-gold-700 mb-2 flex items-center gap-1.5 animate-aurion-fade-in">
-              <BoltIcon className="h-3.5 w-3.5" />
+              <Zap className="h-3.5 w-3.5" />
               Expanded <span className="font-mono">{expandedHint}</span>
             </p>
           )}
@@ -168,7 +162,7 @@ export default function NoteSectionCard({
                 }
               }}
             >
-              <CheckIcon className="h-4 w-4 mr-1" />
+              <Check className="h-4 w-4 mr-1" />
               Save
             </Button>
             <Button
@@ -180,7 +174,7 @@ export default function NoteSectionCard({
                 setDraft(joinClaims(section.claims));
               }}
             >
-              <XMarkIcon className="h-4 w-4 mr-1" />
+              <X className="h-4 w-4 mr-1" />
               Cancel
             </Button>
           </div>

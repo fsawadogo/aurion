@@ -1,14 +1,7 @@
 "use client";
 
+import { Pencil, Plus, Trash2, X, Zap } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import {
-  PlusIcon,
-  PencilIcon,
-  TrashIcon,
-  BoltIcon,
-  XMarkIcon,
-} from "@heroicons/react/24/outline";
-
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -100,7 +93,7 @@ export default function PortalMacrosPage() {
             size="sm"
             onClick={() => setEditing("new")}
           >
-            <PlusIcon className="h-4 w-4 mr-1" />
+            <Plus className="h-4 w-4 mr-1" />
             New macro
           </Button>
         }
@@ -117,7 +110,7 @@ export default function PortalMacrosPage() {
           <LoadingSkeleton lines={6} />
         ) : list.length === 0 ? (
           <div className="py-8 text-center">
-            <BoltIcon className="mx-auto h-10 w-10 text-gold-300 mb-2" />
+            <Zap className="mx-auto h-10 w-10 text-gold-300 mb-2" />
             <p className="aurion-callout text-navy-500 mb-3">
               No macros yet. Add a few of your most-typed phrases to save
               real time during note review.
@@ -157,7 +150,7 @@ export default function PortalMacrosPage() {
                     className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-canvas hover:text-navy-700"
                     aria-label="Edit"
                   >
-                    <PencilIcon className="h-4 w-4" />
+                    <Pencil className="h-4 w-4" />
                   </button>
                   <button
                     type="button"
@@ -165,7 +158,7 @@ export default function PortalMacrosPage() {
                     className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-red-50 hover:text-red-600"
                     aria-label="Delete"
                   >
-                    <TrashIcon className="h-4 w-4" />
+                    <Trash2 className="h-4 w-4" />
                   </button>
                 </div>
               </li>
@@ -259,7 +252,7 @@ function MacroEditor({
             className="rounded-aurion-xs p-1 text-navy-400 hover:bg-canvas hover:text-navy-700"
             aria-label="Close"
           >
-            <XMarkIcon className="h-4 w-4" />
+            <X className="h-4 w-4" />
           </button>
         </div>
 
