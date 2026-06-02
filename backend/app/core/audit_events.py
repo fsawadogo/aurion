@@ -69,6 +69,18 @@ class AuditEventType(StrEnum):
     LIVE_PREVIEW_GENERATED = "live_preview_generated"
     SESSION_PURGED = "session_purged"
     SESSION_DISCARDED = "session_discarded"
+    # ── Clip evidence (dual-mode visual evidence, P1-1) ───────────────────
+    # Parallel to FRAME_UPLOADED / MASKING_CONFIRMED / VISION_FRAME_FAILED:
+    # CLIP_UPLOADED  fires after a masked clip lands in S3 (server-emitted)
+    # CLIP_MASKED    is the iOS-emitted equivalent of MASKING_CONFIRMED for
+    #                clips — empty kwargs whitelist, iOS pushes only the
+    #                clip-level masking_metadata into the audit row body
+    # CLIP_DISCARDED fires when a clip's caption confidence is below
+    #                threshold and the clip drops out of Stage 2 (parallels
+    #                the FRAME_DISCARDED path inside the vision service)
+    CLIP_UPLOADED = "clip_uploaded"
+    CLIP_MASKED = "clip_masked"
+    CLIP_DISCARDED = "clip_discarded"
 
     # ── Notes / review ───────────────────────────────────────────────────
     STAGE1_APPROVED = "stage1_approved"
@@ -324,6 +336,33 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     # iOS-only — server never emits these via write_audit
     AuditEventType.MASKING_CONFIRMED: frozenset(),
+    # Clip evidence (P1-1).
+    # CLIP_UPLOADED is server-emitted and carries the same masking-proof
+    # fields as FRAME_UPLOADED plus the clip-level metadata. Duration +
+    # trigger anchor + face counts are the audit-trail-meaningful fields;
+    # the clip body itself is in S3 (with its own KMS + TTL policy).
+    AuditEventType.CLIP_UPLOADED: frozenset(
+        {
+            "timestamp_ms",
+            "bytes",
+            "duration_ms",
+            "trigger_segment_id",
+            "masking_status",
+            "frames_total",
+            "frames_with_faces",
+            "faces_blurred",
+        }
+    ),
+    # CLIP_MASKED is iOS-emitted — server never writes it via write_audit.
+    # Empty whitelist matches MASKING_CONFIRMED for the same reason.
+    AuditEventType.CLIP_MASKED: frozenset(),
+    # CLIP_DISCARDED is server-emitted from the Stage 2 vision service
+    # when a clip caption confidence is below threshold. Carries the
+    # clip's S3 key and the confidence reason so the eval team can
+    # post-hoc analyze what dropped out.
+    AuditEventType.CLIP_DISCARDED: frozenset(
+        {"s3_key", "confidence", "confidence_reason"}
+    ),
     # Transcription
     AuditEventType.TRANSCRIPTION_COMPLETE: frozenset({"provider_used", "segment_count"}),
     AuditEventType.TRANSCRIPTION_FAILED: frozenset({"error_message"}),
