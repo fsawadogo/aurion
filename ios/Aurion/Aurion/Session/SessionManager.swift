@@ -62,15 +62,44 @@ struct SessionStartRequest {
     }
 }
 
-/// A frame that failed on-device masking, tagged with its origin so the
-/// retry path knows which endpoint to re-fire (video → `/frames`, screen →
-/// `/screen`). Conflating them silently routed screen retries to the video
-/// endpoint.
+/// A frame OR clip that failed on-device masking, tagged with its
+/// origin so the retry path knows which endpoint to re-fire (video →
+/// `/frames`, screen → `/screen`, clip → `/clips`). Conflating them
+/// silently routed screen retries to the video endpoint.
+///
+/// P1-5 widened `Kind` to include `.clip`. Clip failures don't have a
+/// `CapturedFrame` payload — the source bytes lived in the
+/// VideoRingBuffer's raw MP4, which `MaskingPipeline.maskClip` consumed
+/// and then deleted. The retry path can re-extract from the ring buffer
+/// only while the session is still live; after stop, a failed clip is
+/// surfaced for skip/acknowledge rather than retry.
 struct FailedMaskingFrame: Identifiable {
-    enum Kind { case video, screen }
-    let frame: CapturedFrame
+    enum Kind { case video, screen, clip }
+    /// Populated for `.video` and `.screen` failures. Nil for `.clip` —
+    /// the clip path doesn't have a CapturedFrame; see `clipTrigger`.
+    let frame: CapturedFrame?
     let kind: Kind
-    var id: UUID { frame.id }
+    /// Populated for `.clip` failures. The trigger that drove the clip
+    /// extraction; the retry path uses `trigger.timestamp` to ask the
+    /// ring buffer for the same window again.
+    let clipTrigger: TriggerEvent?
+    let _id: UUID
+    var id: UUID { _id }
+
+    init(frame: CapturedFrame, kind: Kind) {
+        precondition(kind != .clip, "FailedMaskingFrame.init(frame:kind:) is for .video / .screen only")
+        self.frame = frame
+        self.kind = kind
+        self.clipTrigger = nil
+        self._id = frame.id
+    }
+
+    init(clipTrigger: TriggerEvent) {
+        self.frame = nil
+        self.kind = .clip
+        self.clipTrigger = clipTrigger
+        self._id = UUID()
+    }
 }
 
 /// Manages the full session lifecycle -- bridges iOS UI to backend API.
@@ -391,7 +420,7 @@ final class SessionManager: ObservableObject {
             await queueAudioOffline()
             return
         }
-        await submitFrames()
+        await submitVisualEvidence()
         await submitAudio()
         // Screen frames merge into the note AFTER Stage 1 generated it,
         // so this runs last. The screen pipeline is fully on-device for
@@ -432,69 +461,281 @@ final class SessionManager: ObservableObject {
         }
     }
 
-    // MARK: - Frame Submission
+    // MARK: - Visual Evidence Submission (P1-5 dual-mode)
 
-    /// Mask each captured video frame and upload to the backend so the Stage 2
-    /// vision pipeline can match them to transcript trigger segments. Frames
-    /// are uploaded sequentially — the API is per-frame, not batched, so this
-    /// is intentionally simple.
+    /// Resolve the captured frame list into a list of `VisualEvidence`
+    /// items per the active `VisualEvidenceMode`. Pure helper — no I/O
+    /// — so unit tests can exercise the dispatch logic with a stubbed
+    /// mode and trigger list.
     ///
-    /// Frames whose masking fails are NEVER uploaded (P0-01 fail-closed) and
-    /// are kept in `maskingFailedFrames` so the clinician can retry or skip.
-    /// Network upload failures on a successfully-masked frame are non-fatal —
-    /// we keep uploading the rest.
-    private func submitFrames() async {
+    /// - `.framesOnly`: each captured frame becomes a `.frame(...)`. No
+    ///   clip extraction, no ring-buffer work — byte-identical to the
+    ///   pre-P1-5 path.
+    /// - `.clipsOnly`: each captured frame is treated as a clip trigger;
+    ///   the ring buffer is asked for a window of `clipWindowMs` around
+    ///   the frame's timestamp. Caller awaits the extraction.
+    /// - `.hybrid`: per-frame routing keyed on whether the synthetic
+    ///   trigger kind (defaulting to `"clinic"`) is in `clipTriggerKinds`.
+    ///   Today every captured frame is treated as `"clinic"` because the
+    ///   trigger classifier ships in a later PR — see Out of scope in
+    ///   the P1-5 plan.
+    ///
+    /// The trigger kind for a frame-derived evidence item is set to the
+    /// caller-supplied default so a future classifier (which will emit
+    /// real motion/rom/gait/procedural kinds) can plug in without
+    /// reshaping the dispatcher.
+    func extractEvidence(
+        for trigger: TriggerEvent,
+        mode: VisualEvidenceMode,
+        clipWindowMs: Int,
+        clipTriggerKinds: [String],
+        capturedFrame: CapturedFrame?,
+        ringBuffer: VideoRingBuffer?
+    ) async throws -> VisualEvidence {
+        switch mode {
+        case .framesOnly:
+            guard let capturedFrame else {
+                throw NSError(
+                    domain: "AurionDispatcher",
+                    code: 1,
+                    userInfo: [NSLocalizedDescriptionKey: "framesOnly mode requires a CapturedFrame"]
+                )
+            }
+            return .frame(capturedFrame)
+        case .clipsOnly:
+            return try await buildClipEvidence(
+                trigger: trigger,
+                clipWindowMs: clipWindowMs,
+                ringBuffer: ringBuffer
+            )
+        case .hybrid:
+            if clipTriggerKinds.contains(trigger.kind) {
+                return try await buildClipEvidence(
+                    trigger: trigger,
+                    clipWindowMs: clipWindowMs,
+                    ringBuffer: ringBuffer
+                )
+            }
+            guard let capturedFrame else {
+                // Hybrid with a frame-kind trigger but no captured frame —
+                // emit a clip if the ring buffer is available, otherwise
+                // bubble up.
+                return try await buildClipEvidence(
+                    trigger: trigger,
+                    clipWindowMs: clipWindowMs,
+                    ringBuffer: ringBuffer
+                )
+            }
+            return .frame(capturedFrame)
+        }
+    }
+
+    private func buildClipEvidence(
+        trigger: TriggerEvent,
+        clipWindowMs: Int,
+        ringBuffer: VideoRingBuffer?
+    ) async throws -> VisualEvidence {
+        guard let ringBuffer else {
+            throw NSError(
+                domain: "AurionDispatcher",
+                code: 2,
+                userInfo: [NSLocalizedDescriptionKey: "clipsOnly/hybrid mode requires a VideoRingBuffer"]
+            )
+        }
+        let duration = TimeInterval(clipWindowMs) / 1000.0
+        let url = try await ringBuffer.extract(around: trigger.timestamp, duration: duration)
+        return .clip(url, duration: clipWindowMs, trigger: trigger)
+    }
+
+    /// Mask + upload every visual evidence item captured during the
+    /// session. Replaces the pre-P1-5 `submitFrames` — backward-compatible
+    /// in default mode (`.framesOnly`) because every captured frame still
+    /// flows through the same `maskVideoFrame` → `uploadFrame` path.
+    ///
+    /// Routing:
+    /// - `.frame` → existing path (`MaskingPipeline.maskVideoFrame` +
+    ///   `APIClient.uploadFrame`).
+    /// - `.clip` → new path (`MaskingPipeline.maskClip` +
+    ///   `APIClient.uploadClip`). Fail-closed on masking failure — the
+    ///   masked file is never produced in that branch so we can't
+    ///   accidentally upload it.
+    ///
+    /// Per-evidence network failures are non-fatal — we keep uploading
+    /// the rest. Per-evidence MASKING failures quarantine into
+    /// `maskingFailedFrames` so the UI can surface skip/retry.
+    private func submitVisualEvidence() async {
         guard let session, let videoSource = registry.activeVideoSource else { return }
         let frames = videoSource.capturedFrames
         guard !frames.isEmpty else { return }
 
         processingStatus = "Uploading frames…"
-        // Clear only video-kind failures from a prior attempt — screen
-        // failures (if any) belong to a separate retry path.
-        maskingFailedFrames.removeAll { $0.kind == .video }
-        var uploaded = 0
+        maskingFailedFrames.removeAll { $0.kind == .video || $0.kind == .clip }
+
+        let pipeline = RemoteConfig.shared.pipeline
+        let mode = pipeline.visualEvidenceMode
+        let clipWindowMs = pipeline.clipWindowMs
+        let clipTriggerKinds = pipeline.clipTriggerKinds
+
+        // The trigger classifier lands later; today every captured frame
+        // is treated as a `"clinic"` kind trigger so hybrid mode routes
+        // it to the frame path by default. This is the safe choice
+        // pre-classifier: nothing escapes to the clip path until the
+        // backend declares its trigger taxonomy.
+        let defaultTriggerKind = "clinic"
+
+        // Ring buffer lives on the BuiltInCaptureSource's underlying
+        // manager. Look it up once outside the per-frame loop.
+        let ringBuffer = (videoSource as? BuiltInCaptureSource)?.clipRingBuffer
+
+        var framesUploaded = 0
+        var clipsUploaded = 0
         var maskingFailed = 0
+        var total = 0
+
         for frame in frames {
-            guard let image = UIImage(data: frame.imageData) else {
-                // Cannot decode the captured bytes — treat as a masking failure
-                // so the audit trail and UI both reflect it.
-                maskingFailed += 1
-                maskingFailedFrames.append(FailedMaskingFrame(frame: frame, kind: .video))
-                continue
-            }
+            total += 1
+            let trigger = TriggerEvent(
+                kind: defaultTriggerKind,
+                timestamp: frame.timestamp,
+                segmentId: "frame_\(Int((frame.timestamp * 1000).rounded()))"
+            )
 
-            // Mask faces before any network egress. MaskingPipeline writes the
-            // masking_confirmed audit event on success and masking_failed on
-            // any failure path; a failed result MUST NOT be uploaded.
-            let result = await MaskingPipeline.shared.maskVideoFrame(image, sessionId: session.id)
-            guard result.success, let maskedData = result.imageData else {
-                maskingFailed += 1
-                maskingFailedFrames.append(FailedMaskingFrame(frame: frame, kind: .video))
-                continue
-            }
-
-            let timestampMs = Int((frame.timestamp * 1000).rounded())
+            let evidence: VisualEvidence
             do {
-                _ = try await api.uploadFrame(
-                    sessionId: session.id,
-                    jpegData: maskedData,
-                    timestampMs: timestampMs,
-                    frameType: result.frameType.rawValue,
-                    facesDetected: result.facesDetected,
-                    phiRegionsRedacted: result.phiRegionsRedacted
+                evidence = try await extractEvidence(
+                    for: trigger,
+                    mode: mode,
+                    clipWindowMs: clipWindowMs,
+                    clipTriggerKinds: clipTriggerKinds,
+                    capturedFrame: frame,
+                    ringBuffer: ringBuffer
                 )
-                uploaded += 1
             } catch {
-                // Per-frame network failure is non-fatal — keep uploading the
-                // rest. Distinct from masking failure: the frame WAS masked.
+                // Couldn't build evidence (e.g., ring buffer empty) —
+                // log and continue. Not a masking failure; nothing was
+                // produced to upload in the first place.
                 continue
             }
+
+            // Mask via the polymorphic entry — same call regardless of
+            // evidence kind. Result carries the kind-specific payload
+            // (imageData for frame, maskedFileURL for clip).
+            let result = await MaskingPipeline.shared.mask(evidence, sessionId: session.id)
+            guard result.success else {
+                maskingFailed += 1
+                switch evidence {
+                case .frame(let captured):
+                    maskingFailedFrames.append(FailedMaskingFrame(frame: captured, kind: .video))
+                case .clip(let url, _, let clipTrigger):
+                    // Best-effort cleanup of the RAW clip input — masking
+                    // failed, so we shouldn't keep raw video lingering
+                    // on disk.
+                    try? FileManager.default.removeItem(at: url)
+                    maskingFailedFrames.append(FailedMaskingFrame(clipTrigger: clipTrigger))
+                }
+                continue
+            }
+
+            switch evidence {
+            case .frame(let captured):
+                guard let maskedData = result.imageData else {
+                    maskingFailed += 1
+                    maskingFailedFrames.append(FailedMaskingFrame(frame: captured, kind: .video))
+                    continue
+                }
+                let timestampMs = Int((captured.timestamp * 1000).rounded())
+                do {
+                    _ = try await api.uploadFrame(
+                        sessionId: session.id,
+                        jpegData: maskedData,
+                        timestampMs: timestampMs,
+                        frameType: result.frameType.rawValue,
+                        facesDetected: result.facesDetected,
+                        phiRegionsRedacted: result.phiRegionsRedacted
+                    )
+                    framesUploaded += 1
+                } catch {
+                    continue
+                }
+
+            case .clip(let rawClipURL, let durationMs, let clipTrigger):
+                // The raw input MP4 served its purpose — masking produced
+                // a NEW masked MP4 at result.maskedFileURL. Delete the
+                // raw bytes before crossing any network boundary.
+                try? FileManager.default.removeItem(at: rawClipURL)
+
+                guard let maskedURL = result.maskedFileURL else {
+                    maskingFailed += 1
+                    maskingFailedFrames.append(FailedMaskingFrame(clipTrigger: clipTrigger))
+                    continue
+                }
+                let timestampMs = Int((clipTrigger.timestamp * 1000).rounded())
+                do {
+                    _ = try await api.uploadClip(
+                        sessionId: session.id,
+                        clipFileURL: maskedURL,
+                        timestampMs: timestampMs,
+                        durationMs: durationMs,
+                        triggerSegmentId: clipTrigger.segmentId,
+                        framesTotal: result.framesTotal,
+                        framesWithFaces: result.framesWithFaces
+                    )
+                    clipsUploaded += 1
+                } catch {
+                    // Network failure — keep going; clean up the masked
+                    // file so it doesn't leak across the session boundary.
+                }
+                // Always clean up the masked file after the upload
+                // attempt (success or failure) — the backend has the
+                // bytes, or the upload failed and there's no retry path
+                // post-stop.
+                try? FileManager.default.removeItem(at: maskedURL)
+            }
         }
-        if maskingFailed > 0 {
-            processingStatus = "\(uploaded)/\(frames.count) uploaded · \(maskingFailed) failed masking"
+
+        processingStatus = composeUploadStatus(
+            total: total,
+            framesUploaded: framesUploaded,
+            clipsUploaded: clipsUploaded,
+            maskingFailed: maskingFailed
+        )
+    }
+
+    /// Build the `processingStatus` user-facing string for the mixed
+    /// frame+clip upload path. Pulled out so the formatting logic isn't
+    /// inlined three times in `submitVisualEvidence`.
+    ///
+    /// Examples:
+    /// - 3 frames uploaded                 (frames-only mode, no failures)
+    /// - 2 clips uploaded                  (clips-only mode, no failures)
+    /// - 3 frames + 2 clips uploaded       (hybrid mode, both kinds)
+    /// - 1 frame uploaded · 1 failed masking
+    /// - 0 uploaded · 2 failed masking
+    private func composeUploadStatus(
+        total: Int,
+        framesUploaded: Int,
+        clipsUploaded: Int,
+        maskingFailed: Int
+    ) -> String {
+        var parts: [String] = []
+        if framesUploaded > 0 {
+            parts.append("\(framesUploaded) frame\(framesUploaded == 1 ? "" : "s")")
+        }
+        if clipsUploaded > 0 {
+            parts.append("\(clipsUploaded) clip\(clipsUploaded == 1 ? "" : "s")")
+        }
+        let uploadedDescription: String
+        if parts.isEmpty {
+            uploadedDescription = "0"
         } else {
-            processingStatus = "\(uploaded)/\(frames.count) frames uploaded"
+            uploadedDescription = parts.joined(separator: " + ")
         }
+        var status = "\(uploadedDescription) uploaded"
+        if maskingFailed > 0 {
+            status += " · \(maskingFailed) failed masking"
+        }
+        _ = total // total reserved for a future "uploaded/total" surface; intentionally unused today
+        return status
     }
 
     /// Re-run masking + upload for any frames that previously failed masking.
@@ -502,6 +743,11 @@ final class SessionManager: ObservableObject {
     /// Dispatches by `kind` so video → `/frames` and screen → `/screen` —
     /// uploading a screen frame to the wrong endpoint would let unredacted
     /// PHI through to S3.
+    ///
+    /// Clip failures are NOT retried here — the source bytes lived only in
+    /// the VideoRingBuffer at extraction time; by submit time the buffer
+    /// is already cleared and the raw MP4 deleted. Clip failures are
+    /// presented as skip-only in the UI.
     func retryFailedMaskingFrames() async {
         guard let session, !maskingFailedFrames.isEmpty else { return }
         let toRetry = maskingFailedFrames
@@ -516,18 +762,27 @@ final class SessionManager: ObservableObject {
         var uploaded = 0
         var stillFailed = 0
         for failed in toRetry {
-            guard let image = UIImage(data: failed.frame.imageData) else {
+            // Clip failures can't be retried post-session — preserve them
+            // in the quarantine list so the UI can offer skip-only.
+            guard failed.kind != .clip, let frame = failed.frame else {
                 stillFailed += 1
                 maskingFailedFrames.append(failed)
                 continue
             }
-            let timestampMs = Int((failed.frame.timestamp * 1000).rounded())
+            guard let image = UIImage(data: frame.imageData) else {
+                stillFailed += 1
+                maskingFailedFrames.append(failed)
+                continue
+            }
+            let timestampMs = Int((frame.timestamp * 1000).rounded())
             let masked: MaskingResult
             switch failed.kind {
             case .video:
                 masked = await MaskingPipeline.shared.maskVideoFrame(image, sessionId: session.id)
             case .screen:
                 masked = await MaskingPipeline.shared.redactScreenCapture(image, sessionId: session.id)
+            case .clip:
+                continue // unreachable — short-circuited above
             }
             guard masked.success, let maskedData = masked.imageData else {
                 stillFailed += 1
@@ -552,6 +807,8 @@ final class SessionManager: ObservableObject {
                         timestampMs: timestampMs,
                         phiRegionsRedacted: masked.phiRegionsRedacted
                     )
+                case .clip:
+                    continue // unreachable
                 }
                 uploaded += 1
             } catch {

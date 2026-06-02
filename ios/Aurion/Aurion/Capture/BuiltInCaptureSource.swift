@@ -120,6 +120,17 @@ final class BuiltInCaptureSource: CaptureSource {
     /// False keeps the LED dark in audio-only modes.
     var includeVideo: Bool = true
 
+    /// Rolling video sample buffer ring, pumped by the underlying
+    /// CaptureManager during active recording. Exposed so the P1-5
+    /// dual-mode dispatcher can extract clip windows on trigger without
+    /// reaching into the manager directly.
+    ///
+    /// Per the VideoRingBuffer privacy contract: this returns RAW
+    /// (unmasked) sample buffers. The caller MUST run any extracted
+    /// MP4 through `MaskingPipeline.maskClip` before any network or
+    /// persistence boundary.
+    var clipRingBuffer: VideoRingBuffer { manager.clipRingBuffer }
+
     override func start() throws {
         guard manager.permissionsGranted else {
             throw CaptureSourceError.permissionDenied("camera and microphone")

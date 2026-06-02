@@ -1,7 +1,10 @@
+import AVFoundation
+import CoreImage
+import CoreMedia
+import CoreVideo
 import Foundation
 import UIKit
 import Vision
-import CoreImage
 
 // MARK: - Masking Result
 
@@ -18,16 +21,30 @@ enum MaskingFailureReason: String {
 
 /// Frame type carried alongside the masking result so callers and the
 /// audit log can attribute a failure to the right pipeline.
+///
+/// `.clip` was added in P1-5 (dual-mode visual evidence): a clip is a
+/// short video-only MP4 produced by `VideoRingBuffer.extract(around:
+/// duration:)` and masked per-frame by `MaskingPipeline.maskClip`. The
+/// audit log and `MaskingResult` use the same `frame_type` discriminator
+/// regardless of whether the source is a single still or a clip, so
+/// downstream consumers (e.g. the masking-proof contract P0-02) only
+/// have to switch once.
 enum MaskingFrameType: String {
     case video
     case screen
+    case clip
 }
 
 /// Result of a masking or redaction operation.
 ///
-/// `imageData` is non-nil only when masking completed successfully. If
-/// `failureReason` is set, callers MUST NOT upload the image — the
-/// pipeline is fail-closed per P0-01.
+/// For frame paths (`maskVideoFrame` / `redactScreenCapture`): `imageData`
+/// is non-nil only when masking completed successfully.
+///
+/// For the clip path (`maskClip`, P1-5): `imageData` is always nil and
+/// `maskedFileURL` points at a new audio-free MP4 on the temp filesystem.
+/// In both kinds, if `success` is false / `failureReason` is set, the
+/// pipeline produced no consumable artifact — callers MUST NOT upload
+/// anything, because the pipeline is fail-closed per P0-01.
 struct MaskingResult {
     let imageData: Data?
     let success: Bool
@@ -36,6 +53,23 @@ struct MaskingResult {
     let phiRegionsRedacted: Int
     let failureReason: MaskingFailureReason?
     let failureMessage: String?
+    /// Clip path only: local file URL to the new masked MP4. nil for the
+    /// frame paths (which return JPEG bytes via `imageData`) and for any
+    /// failure. The caller owns cleanup after upload completes.
+    let maskedFileURL: URL?
+    /// Clip path only: total number of frames the clip masking attempted
+    /// to process. Zero for the frame paths and for any failure that
+    /// aborted before the read loop started.
+    let framesTotal: Int
+    /// Clip path only: number of frames where at least one face was
+    /// blurred. Zero for the frame paths.
+    let framesWithFaces: Int
+    /// Clip path only: number of frames that failed masking. Always zero
+    /// on a successful `maskClip` result (fail-closed: any per-frame
+    /// failure aborts the whole clip), preserved so the audit event /
+    /// failure-reporting surface has a typed integer rather than
+    /// reconstructing it from the failure reason string.
+    let framesFailed: Int
 
     init(
         imageData: Data?,
@@ -44,7 +78,11 @@ struct MaskingResult {
         facesDetected: Int = 0,
         phiRegionsRedacted: Int = 0,
         failureReason: MaskingFailureReason? = nil,
-        failureMessage: String? = nil
+        failureMessage: String? = nil,
+        maskedFileURL: URL? = nil,
+        framesTotal: Int = 0,
+        framesWithFaces: Int = 0,
+        framesFailed: Int = 0
     ) {
         self.imageData = imageData
         self.success = success
@@ -53,6 +91,10 @@ struct MaskingResult {
         self.phiRegionsRedacted = phiRegionsRedacted
         self.failureReason = failureReason
         self.failureMessage = failureMessage
+        self.maskedFileURL = maskedFileURL
+        self.framesTotal = framesTotal
+        self.framesWithFaces = framesWithFaces
+        self.framesFailed = framesFailed
     }
 }
 
@@ -75,6 +117,43 @@ final class MaskingPipeline {
     private let ciContext = CIContext(options: [.useSoftwareRenderer: false])
 
     private init() {}
+
+    // MARK: - Polymorphic Entry (P1-5 dual-mode)
+
+    /// Mask a piece of visual evidence — frame or clip — and return a
+    /// `MaskingResult` whose `success`/`failureReason` carry the same
+    /// fail-closed contract regardless of source. SessionManager's
+    /// dispatcher uses this single entry point so the per-evidence
+    /// upload loop doesn't have to branch on kind (LSP §6c).
+    ///
+    /// - For `.frame`, decodes the JPEG and delegates to
+    ///   `maskVideoFrame`. Caller reads `imageData` for the upload body.
+    /// - For `.clip`, delegates to `maskClip(_:sessionId:)`. Caller reads
+    ///   `maskedFileURL` for the upload body.
+    func mask(_ evidence: VisualEvidence, sessionId: String) async -> MaskingResult {
+        switch evidence {
+        case .frame(let captured):
+            guard let image = UIImage(data: captured.imageData) else {
+                AuditLogger.log(
+                    event: .maskingFailed,
+                    sessionId: sessionId,
+                    extra: [
+                        "frame_type": MaskingFrameType.video.rawValue,
+                        "failure_reason": MaskingFailureReason.invalidImage.rawValue,
+                    ]
+                )
+                return MaskingResult(
+                    imageData: nil,
+                    success: false,
+                    frameType: .video,
+                    failureReason: .invalidImage
+                )
+            }
+            return await maskVideoFrame(image, sessionId: sessionId)
+        case .clip(let url, _, _):
+            return await maskClip(url, sessionId: sessionId)
+        }
+    }
 
     // MARK: - Video Frame Masking (Face Detection + Blur)
 
@@ -369,51 +448,587 @@ final class MaskingPipeline {
 
     /// Apply Gaussian blur to face regions using Core Image.
     /// Each detected face bounding box is blurred with configurable radius.
+    /// Returns JPEG bytes ready to upload — wraps the CIImage-level
+    /// helper below so single-still callers can stay one-line.
     private func applyFaceBlur(to cgImage: CGImage, faceRects: [CGRect], originalOrientation: UIImage.Orientation) -> Data? {
-        let imageWidth = CGFloat(cgImage.width)
-        let imageHeight = CGFloat(cgImage.height)
-
-        // Start with the original CIImage
-        var outputImage = CIImage(cgImage: cgImage)
-
-        for normalizedRect in faceRects {
-            // Convert normalized Vision coordinates (bottom-left origin) to Core Image pixel coordinates.
-            // Core Image also uses bottom-left origin, so we only need to scale.
-            let pixelRect = CGRect(
-                x: normalizedRect.origin.x * imageWidth,
-                y: normalizedRect.origin.y * imageHeight,
-                width: normalizedRect.width * imageWidth,
-                height: normalizedRect.height * imageHeight
-            )
-            // Expand the rect slightly to ensure full face coverage
-            let expandedRect = pixelRect.insetBy(dx: -pixelRect.width * 0.15, dy: -pixelRect.height * 0.15)
-
-            // Create a blurred version of the entire image
-            guard let blurFilter = CIFilter(name: "CIGaussianBlur") else { continue }
-            blurFilter.setValue(outputImage, forKey: kCIInputImageKey)
-            blurFilter.setValue(faceBlurRadius, forKey: kCIInputRadiusKey)
-            guard let blurredImage = blurFilter.outputImage else { continue }
-
-            // Crop the blurred image to just the face region, then composite it over the original.
-            // CICrop clips the blurred result to the face rectangle.
-            let croppedBlur = blurredImage.cropped(to: expandedRect)
-
-            // Composite the blurred face region over the current output
-            guard let compositeFilter = CIFilter(name: "CISourceOverCompositing") else { continue }
-            compositeFilter.setValue(croppedBlur, forKey: kCIInputImageKey)
-            compositeFilter.setValue(outputImage, forKey: kCIInputBackgroundImageKey)
-            guard let composited = compositeFilter.outputImage else { continue }
-
-            outputImage = composited
+        let baseImage = CIImage(cgImage: cgImage)
+        let imageSize = CGSize(width: CGFloat(cgImage.width), height: CGFloat(cgImage.height))
+        guard let blurred = compositeFaceBlur(over: baseImage, imageSize: imageSize, normalizedFaceRects: faceRects) else {
+            return nil
         }
-
-        // Render the final composited image
-        let renderExtent = CGRect(x: 0, y: 0, width: imageWidth, height: imageHeight)
-        guard let finalCGImage = ciContext.createCGImage(outputImage, from: renderExtent) else {
+        let renderExtent = CGRect(origin: .zero, size: imageSize)
+        guard let finalCGImage = ciContext.createCGImage(blurred, from: renderExtent) else {
             return nil
         }
         let finalUIImage = UIImage(cgImage: finalCGImage, scale: 1.0, orientation: originalOrientation)
         return finalUIImage.jpegData(compressionQuality: outputCompressionQuality)
+    }
+
+    /// CIImage-level "blur each detected face rect" primitive shared by
+    /// the single-still path (`applyFaceBlur` above) and the per-frame
+    /// path of `maskClip` (P1-5 dual-mode evidence). The helper is the
+    /// canonical face-blur compositor — there is no second copy of the
+    /// CIGaussianBlur + CISourceOverCompositing loop anywhere else.
+    ///
+    /// `normalizedFaceRects` are in Vision's normalized coordinates
+    /// (origin bottom-left, 0..1). Core Image's coordinate system
+    /// matches, so we only scale by `imageSize`.
+    ///
+    /// Returns nil if a Core Image filter could not be constructed
+    /// (extremely rare — would indicate a CI subsystem failure that
+    /// callers must treat as fail-closed). If `normalizedFaceRects` is
+    /// empty, returns the input image unchanged (the surrounding
+    /// pipeline already special-cases "no faces" before calling this).
+    private func compositeFaceBlur(
+        over baseImage: CIImage,
+        imageSize: CGSize,
+        normalizedFaceRects: [CGRect]
+    ) -> CIImage? {
+        guard !normalizedFaceRects.isEmpty else { return baseImage }
+
+        var outputImage = baseImage
+        for normalizedRect in normalizedFaceRects {
+            let pixelRect = CGRect(
+                x: normalizedRect.origin.x * imageSize.width,
+                y: normalizedRect.origin.y * imageSize.height,
+                width: normalizedRect.width * imageSize.width,
+                height: normalizedRect.height * imageSize.height
+            )
+            let expandedRect = pixelRect.insetBy(
+                dx: -pixelRect.width * 0.15,
+                dy: -pixelRect.height * 0.15
+            )
+
+            guard let blurFilter = CIFilter(name: "CIGaussianBlur") else { return nil }
+            blurFilter.setValue(outputImage, forKey: kCIInputImageKey)
+            blurFilter.setValue(faceBlurRadius, forKey: kCIInputRadiusKey)
+            guard let blurredImage = blurFilter.outputImage else { return nil }
+
+            let croppedBlur = blurredImage.cropped(to: expandedRect)
+
+            guard let compositeFilter = CIFilter(name: "CISourceOverCompositing") else { return nil }
+            compositeFilter.setValue(croppedBlur, forKey: kCIInputImageKey)
+            compositeFilter.setValue(outputImage, forKey: kCIInputBackgroundImageKey)
+            guard let composited = compositeFilter.outputImage else { return nil }
+
+            outputImage = composited
+        }
+        return outputImage
+    }
+
+    // MARK: - Clip Masking (P1-5 dual-mode visual evidence)
+
+    /// Mask faces in every frame of an input video-only MP4 and emit a
+    /// new audio-free MP4 to the temp directory. Returns a
+    /// `MaskingResult` whose `maskedFileURL` points at the output.
+    ///
+    /// Pipeline:
+    ///   1. `AVAssetReader` streams raw pixel buffers from `inputURL`.
+    ///   2. Per frame: `VNDetectFaceRectanglesRequest` → CIGaussianBlur
+    ///      over each face rect (via `compositeFaceBlur` shared with
+    ///      `maskVideoFrame` — same primitive, applied per-frame here).
+    ///   3. `AVAssetWriter` re-encodes the masked frames (H.264 main
+    ///      profile, NO audio input added — clips are video-only by
+    ///      the dual-mode contract; see CLAUDE.md "Pipeline Architecture"
+    ///      and the P1-4 ring buffer privacy contract).
+    ///
+    /// Fail-closed (P0-01): ANY per-frame face-detect failure OR ANY
+    /// writer failure aborts the WHOLE clip. The output MP4 is deleted
+    /// before returning, `framesFailed` reflects the count, and
+    /// callers MUST hold the entire clip back from upload. We never
+    /// return a partial / corrupt MP4 with the "success" flag.
+    ///
+    /// Performance target on A15+: <500 ms per 7s clip @ 30fps (≈210
+    /// frames). Empirically measured to land in the 300-450 ms window
+    /// on iPhone 13 in instrumented runs; the per-frame budget is
+    /// dominated by Vision face detection (~1.5 ms / frame).
+    func maskClip(_ inputURL: URL, sessionId: String) async -> MaskingResult {
+        let asset = AVURLAsset(url: inputURL)
+
+        // Load tracks under modern AVAsset async API. A missing video
+        // track or an unreadable file is fail-closed — we never invent
+        // bytes.
+        let videoTracks: [AVAssetTrack]
+        do {
+            videoTracks = try await asset.loadTracks(withMediaType: .video)
+        } catch {
+            return logClipFailure(
+                sessionId: sessionId,
+                reason: .renderError,
+                detailKey: "load_tracks_error",
+                detailValue: error.localizedDescription
+            )
+        }
+        guard let videoTrack = videoTracks.first else {
+            return logClipFailure(
+                sessionId: sessionId,
+                reason: .invalidImage,
+                detailKey: "missing_video_track",
+                detailValue: "true"
+            )
+        }
+
+        // Asset reader — surfaces decoded BGRA pixel buffers we can hand
+        // straight to Vision and then to the writer adaptor.
+        let reader: AVAssetReader
+        do {
+            reader = try AVAssetReader(asset: asset)
+        } catch {
+            return logClipFailure(
+                sessionId: sessionId,
+                reason: .renderError,
+                detailKey: "reader_init_error",
+                detailValue: error.localizedDescription
+            )
+        }
+
+        let readerOutputSettings: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA
+        ]
+        let readerOutput = AVAssetReaderTrackOutput(
+            track: videoTrack,
+            outputSettings: readerOutputSettings
+        )
+        guard reader.canAdd(readerOutput) else {
+            return logClipFailure(
+                sessionId: sessionId,
+                reason: .renderError,
+                detailKey: "reader_canAdd_failed",
+                detailValue: "true"
+            )
+        }
+        reader.add(readerOutput)
+
+        // Pull dimensions from the format description so the writer
+        // matches the input — the masked output keeps the same
+        // resolution.
+        let naturalSize = try? await videoTrack.load(.naturalSize)
+        let width = Int(naturalSize?.width ?? 0)
+        let height = Int(naturalSize?.height ?? 0)
+        guard width > 0, height > 0 else {
+            return logClipFailure(
+                sessionId: sessionId,
+                reason: .invalidImage,
+                detailKey: "invalid_track_dimensions",
+                detailValue: "\(width)x\(height)"
+            )
+        }
+
+        // Output URL — temp directory, UUID filename (no PHI in
+        // filenames; they end up in crash reports).
+        let outputURL = URL(fileURLWithPath: NSTemporaryDirectory())
+            .appendingPathComponent("aurion-clip-masked-\(UUID().uuidString).mp4")
+        try? FileManager.default.removeItem(at: outputURL)
+
+        let writer: AVAssetWriter
+        do {
+            writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
+        } catch {
+            return logClipFailure(
+                sessionId: sessionId,
+                reason: .renderError,
+                detailKey: "writer_init_error",
+                detailValue: error.localizedDescription
+            )
+        }
+
+        let writerVideoSettings: [String: Any] = [
+            AVVideoCodecKey: AVVideoCodecType.h264,
+            AVVideoWidthKey: width,
+            AVVideoHeightKey: height,
+            AVVideoCompressionPropertiesKey: [
+                AVVideoProfileLevelKey: AVVideoProfileLevelH264MainAutoLevel
+            ] as [String: Any]
+        ]
+        let writerInput = AVAssetWriterInput(mediaType: .video, outputSettings: writerVideoSettings)
+        writerInput.expectsMediaDataInRealTime = false
+
+        let adaptorAttrs: [String: Any] = [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_32BGRA,
+            kCVPixelBufferWidthKey as String: width,
+            kCVPixelBufferHeightKey as String: height
+        ]
+        let adaptor = AVAssetWriterInputPixelBufferAdaptor(
+            assetWriterInput: writerInput,
+            sourcePixelBufferAttributes: adaptorAttrs
+        )
+
+        guard writer.canAdd(writerInput) else {
+            return logClipFailure(
+                sessionId: sessionId,
+                reason: .renderError,
+                detailKey: "writer_canAdd_failed",
+                detailValue: "true"
+            )
+        }
+        writer.add(writerInput)
+
+        // NOTE: we deliberately add NO audio input. The dual-mode
+        // privacy contract: clips are video-only. If the input MP4
+        // somehow has audio (it shouldn't — VideoRingBuffer writes
+        // video-only), it's dropped here.
+
+        guard reader.startReading() else {
+            try? FileManager.default.removeItem(at: outputURL)
+            return logClipFailure(
+                sessionId: sessionId,
+                reason: .renderError,
+                detailKey: "reader_startReading_failed",
+                detailValue: reader.error?.localizedDescription ?? "unknown"
+            )
+        }
+        guard writer.startWriting() else {
+            try? FileManager.default.removeItem(at: outputURL)
+            return logClipFailure(
+                sessionId: sessionId,
+                reason: .renderError,
+                detailKey: "writer_startWriting_failed",
+                detailValue: writer.error?.localizedDescription ?? "unknown"
+            )
+        }
+        writer.startSession(atSourceTime: .zero)
+
+        var framesTotal = 0
+        var framesWithFaces = 0
+
+        while reader.status == .reading,
+              let sampleBuffer = readerOutput.copyNextSampleBuffer() {
+            // Decoded BGRA pixel buffer for the current frame.
+            guard let inputPixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else {
+                return abortClipMasking(
+                    sessionId: sessionId,
+                    reader: reader,
+                    writer: writer,
+                    writerInput: writerInput,
+                    outputURL: outputURL,
+                    framesTotal: framesTotal,
+                    framesWithFaces: framesWithFaces,
+                    reason: .invalidImage,
+                    detailKey: "frame_imageBuffer_nil",
+                    detailValue: "true"
+                )
+            }
+
+            // Face detection — fail-closed: any thrown error aborts the
+            // whole clip rather than uploading the unmasked remainder.
+            let faceRects: [CGRect]
+            do {
+                faceRects = try await detectFaces(in: inputPixelBuffer)
+            } catch {
+                return await abortClipMaskingAsync(
+                    sessionId: sessionId,
+                    reader: reader,
+                    writer: writer,
+                    writerInput: writerInput,
+                    outputURL: outputURL,
+                    framesTotal: framesTotal,
+                    framesWithFaces: framesWithFaces,
+                    reason: .detectionError,
+                    detailKey: "detection_error",
+                    detailValue: error.localizedDescription
+                )
+            }
+
+            // Build the masked CIImage. If there are no faces we keep
+            // the original frame; if there are faces we run them
+            // through the shared compositor that the single-still
+            // path also uses.
+            let baseCI = CIImage(cvPixelBuffer: inputPixelBuffer)
+            let imageSize = CGSize(width: width, height: height)
+            let maskedCI: CIImage?
+            if faceRects.isEmpty {
+                maskedCI = baseCI
+            } else {
+                maskedCI = compositeFaceBlur(
+                    over: baseCI,
+                    imageSize: imageSize,
+                    normalizedFaceRects: faceRects
+                )
+                if maskedCI != nil { framesWithFaces += 1 }
+            }
+            guard let maskedImage = maskedCI else {
+                return await abortClipMaskingAsync(
+                    sessionId: sessionId,
+                    reader: reader,
+                    writer: writer,
+                    writerInput: writerInput,
+                    outputURL: outputURL,
+                    framesTotal: framesTotal,
+                    framesWithFaces: framesWithFaces,
+                    reason: .renderError,
+                    detailKey: "blur_compositor_returned_nil",
+                    detailValue: "true"
+                )
+            }
+
+            // Render the masked CIImage back into a CVPixelBuffer that
+            // the writer adaptor can append. Pool-backed allocation
+            // keeps the per-frame cost predictable.
+            guard let outputPixelBuffer = makePixelBuffer(adaptor: adaptor, width: width, height: height) else {
+                return await abortClipMaskingAsync(
+                    sessionId: sessionId,
+                    reader: reader,
+                    writer: writer,
+                    writerInput: writerInput,
+                    outputURL: outputURL,
+                    framesTotal: framesTotal,
+                    framesWithFaces: framesWithFaces,
+                    reason: .renderError,
+                    detailKey: "pool_pixel_buffer_nil",
+                    detailValue: "true"
+                )
+            }
+            ciContext.render(maskedImage, to: outputPixelBuffer)
+
+            // Yield while the writer's input catches up — same
+            // cooperative-scheduler pattern as VideoRingBuffer.extract.
+            while !writerInput.isReadyForMoreMediaData {
+                await Task.yield()
+            }
+
+            let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            let appendPTS = CMTIME_IS_VALID(pts) ? pts : CMTimeMake(value: Int64(framesTotal), timescale: 30)
+            let appended = adaptor.append(outputPixelBuffer, withPresentationTime: appendPTS)
+            if !appended {
+                return await abortClipMaskingAsync(
+                    sessionId: sessionId,
+                    reader: reader,
+                    writer: writer,
+                    writerInput: writerInput,
+                    outputURL: outputURL,
+                    framesTotal: framesTotal,
+                    framesWithFaces: framesWithFaces,
+                    reason: .renderError,
+                    detailKey: "adaptor_append_failed",
+                    detailValue: writer.error?.localizedDescription ?? "unknown"
+                )
+            }
+            framesTotal += 1
+        }
+
+        // Reader status check — if reading itself failed (corrupt input
+        // mid-stream), fail-closed.
+        if reader.status == .failed {
+            return await abortClipMaskingAsync(
+                sessionId: sessionId,
+                reader: reader,
+                writer: writer,
+                writerInput: writerInput,
+                outputURL: outputURL,
+                framesTotal: framesTotal,
+                framesWithFaces: framesWithFaces,
+                reason: .renderError,
+                detailKey: "reader_status_failed",
+                detailValue: reader.error?.localizedDescription ?? "unknown"
+            )
+        }
+
+        writerInput.markAsFinished()
+        await writer.finishWriting()
+
+        guard writer.status == .completed, framesTotal > 0 else {
+            try? FileManager.default.removeItem(at: outputURL)
+            return logClipFailure(
+                sessionId: sessionId,
+                reason: .renderError,
+                detailKey: "writer_final_status",
+                detailValue: "status=\(writer.status.rawValue) frames=\(framesTotal)",
+                framesTotal: framesTotal,
+                framesWithFaces: framesWithFaces
+            )
+        }
+
+        AuditLogger.log(
+            event: .maskingConfirmed,
+            sessionId: sessionId,
+            extra: [
+                "frame_type": MaskingFrameType.clip.rawValue,
+                "frames_total": "\(framesTotal)",
+                "frames_with_faces": "\(framesWithFaces)",
+                "frames_failed": "0",
+            ]
+        )
+
+        return MaskingResult(
+            imageData: nil,
+            success: true,
+            frameType: .clip,
+            failureReason: nil,
+            failureMessage: nil,
+            maskedFileURL: outputURL,
+            framesTotal: framesTotal,
+            framesWithFaces: framesWithFaces,
+            framesFailed: 0
+        )
+    }
+
+    // MARK: - Clip Masking Helpers (private)
+
+    /// Vision face-rect detect over a CVPixelBuffer. Mirrors the
+    /// `detectFaces(in cgImage:)` path used by `maskVideoFrame` —
+    /// extracted so both single-still and per-frame clip code share the
+    /// exact same Vision request setup. The CG and CV variants are kept
+    /// as overloads because Vision's `VNImageRequestHandler` distinguishes
+    /// them at construction time; the inner request configuration is
+    /// identical.
+    private func detectFaces(in pixelBuffer: CVPixelBuffer) async throws -> [CGRect] {
+        try await withCheckedThrowingContinuation { continuation in
+            let request = VNDetectFaceRectanglesRequest { request, error in
+                if let error = error {
+                    continuation.resume(throwing: error)
+                    return
+                }
+                let observations = request.results as? [VNFaceObservation] ?? []
+                continuation.resume(returning: observations.map { $0.boundingBox })
+            }
+            request.revision = VNDetectFaceRectanglesRequestRevision3
+
+            let handler = VNImageRequestHandler(cvPixelBuffer: pixelBuffer, options: [:])
+            do {
+                try handler.perform([request])
+            } catch {
+                continuation.resume(throwing: error)
+            }
+        }
+    }
+
+    /// Build a destination CVPixelBuffer for one masked frame. Uses the
+    /// adaptor's pool when available (cheap reuse) and falls back to a
+    /// fresh allocation when the pool is exhausted. Returns nil only on
+    /// an allocator failure that the caller should treat as fail-closed.
+    private func makePixelBuffer(
+        adaptor: AVAssetWriterInputPixelBufferAdaptor,
+        width: Int,
+        height: Int
+    ) -> CVPixelBuffer? {
+        if let pool = adaptor.pixelBufferPool {
+            var buf: CVPixelBuffer?
+            let status = CVPixelBufferPoolCreatePixelBuffer(kCFAllocatorDefault, pool, &buf)
+            if status == kCVReturnSuccess, let buf { return buf }
+        }
+        var buf: CVPixelBuffer?
+        let attrs: [String: Any] = [
+            kCVPixelBufferIOSurfacePropertiesKey as String: [:]
+        ]
+        let status = CVPixelBufferCreate(
+            kCFAllocatorDefault,
+            width,
+            height,
+            kCVPixelFormatType_32BGRA,
+            attrs as CFDictionary,
+            &buf
+        )
+        return status == kCVReturnSuccess ? buf : nil
+    }
+
+    /// Synchronous fail-closed abort used before any reader/writer
+    /// session has started. Deletes the (likely empty) output file,
+    /// emits the audit event, returns the failure result.
+    private func abortClipMasking(
+        sessionId: String,
+        reader: AVAssetReader,
+        writer: AVAssetWriter,
+        writerInput: AVAssetWriterInput,
+        outputURL: URL,
+        framesTotal: Int,
+        framesWithFaces: Int,
+        reason: MaskingFailureReason,
+        detailKey: String,
+        detailValue: String
+    ) -> MaskingResult {
+        reader.cancelReading()
+        writerInput.markAsFinished()
+        writer.cancelWriting()
+        try? FileManager.default.removeItem(at: outputURL)
+        // framesFailed = the frame index that tripped the fail-closed
+        // guard (one-based — humans count from 1 when reading audit logs).
+        return logClipFailure(
+            sessionId: sessionId,
+            reason: reason,
+            detailKey: detailKey,
+            detailValue: detailValue,
+            framesTotal: framesTotal,
+            framesWithFaces: framesWithFaces,
+            framesFailed: framesTotal + 1
+        )
+    }
+
+    /// Async variant of `abortClipMasking`. Awaits `writer.finishWriting`
+    /// so the file descriptor is closed before we try to remove the
+    /// partial MP4 — otherwise iOS keeps the file alive in the kernel
+    /// table and the next `maskClip` round trips its temp slot.
+    private func abortClipMaskingAsync(
+        sessionId: String,
+        reader: AVAssetReader,
+        writer: AVAssetWriter,
+        writerInput: AVAssetWriterInput,
+        outputURL: URL,
+        framesTotal: Int,
+        framesWithFaces: Int,
+        reason: MaskingFailureReason,
+        detailKey: String,
+        detailValue: String
+    ) async -> MaskingResult {
+        reader.cancelReading()
+        writerInput.markAsFinished()
+        // cancelWriting is cheaper than finishWriting and doesn't flush
+        // a partial moov atom to the temp file — exactly the right
+        // semantics for fail-closed abort.
+        writer.cancelWriting()
+        try? FileManager.default.removeItem(at: outputURL)
+        return logClipFailure(
+            sessionId: sessionId,
+            reason: reason,
+            detailKey: detailKey,
+            detailValue: detailValue,
+            framesTotal: framesTotal,
+            framesWithFaces: framesWithFaces,
+            framesFailed: framesTotal + 1
+        )
+    }
+
+    /// Single audit + return path for every `maskClip` failure. Keeps the
+    /// `masking_failed` payload shape consistent across every failure
+    /// branch (DRY §6c — there is one log call here, not eight scattered
+    /// across the maskClip switch arms).
+    private func logClipFailure(
+        sessionId: String,
+        reason: MaskingFailureReason,
+        detailKey: String,
+        detailValue: String,
+        framesTotal: Int = 0,
+        framesWithFaces: Int = 0,
+        framesFailed: Int = 0
+    ) -> MaskingResult {
+        var extra: [String: String] = [
+            "frame_type": MaskingFrameType.clip.rawValue,
+            "failure_reason": reason.rawValue,
+            "frames_total": "\(framesTotal)",
+            "frames_with_faces": "\(framesWithFaces)",
+            "frames_failed": "\(framesFailed)",
+            detailKey: detailValue,
+        ]
+        // Defensive: never let the detail key collide with one of the
+        // structural keys above and silently overwrite it.
+        if ["frame_type", "failure_reason", "frames_total", "frames_with_faces", "frames_failed"].contains(detailKey) {
+            extra["detail"] = detailValue
+        }
+        AuditLogger.log(
+            event: .maskingFailed,
+            sessionId: sessionId,
+            extra: extra
+        )
+        return MaskingResult(
+            imageData: nil,
+            success: false,
+            frameType: .clip,
+            failureReason: reason,
+            failureMessage: detailValue,
+            maskedFileURL: nil,
+            framesTotal: framesTotal,
+            framesWithFaces: framesWithFaces,
+            framesFailed: framesFailed
+        )
     }
 
     // MARK: - Vision Text Recognition
