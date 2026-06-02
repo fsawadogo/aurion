@@ -140,8 +140,14 @@ async def test_vision_fallback_used_when_primary_fails():
     fallback_provider.caption_frame = AsyncMock(return_value=fallback_caption)
 
     mock_registry = MagicMock()
-    # First call returns primary (used in the initial caption_frames setup),
-    # subsequent calls return the fallback
+    # P1-3 refactor: the Stage 2 loop now dispatches by evidence_kind via
+    # `get_vision_provider_for_kind_with_fallback("frame"|"clip")`. The
+    # existing `get_vision_provider_with_fallback` is unchanged for
+    # back-compat with non-Stage-2 call sites. Mock both for safety;
+    # the kind-aware variant is what the captioning loop reads today.
+    mock_registry.get_vision_provider_for_kind_with_fallback = MagicMock(
+        side_effect=[primary_provider, fallback_provider]
+    )
     mock_registry.get_vision_provider_with_fallback = MagicMock(
         side_effect=[primary_provider, fallback_provider]
     )
