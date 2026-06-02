@@ -20,7 +20,6 @@ from app.core.types import (
     FrameCaption,
     MaskedClip,
     MaskedFrame,
-    TranscriptSegment,
 )
 from app.modules.config.schema import (
     AppConfigSchema,
@@ -222,53 +221,35 @@ class TestVisionProviderCaptionClipAbstract:
         FullProvider()
 
 
-# ── Concrete providers stub `caption_clip` ──────────────────────────────
+# ── Concrete providers implement `caption_clip` (P1-2) ─────────────────
 
 
-class TestConcreteProvidersClipStubs:
-    """Every concrete provider lands the interface stub. P1-2 ships
-    real implementations; today the stubs raise `NotImplementedError`
-    so the Stage 2 dispatch can't accidentally call into them without
-    failing loudly.
+class TestConcreteProvidersImplementClipCaption:
+    """Every concrete provider must implement `caption_clip` (no longer
+    a stub after P1-2). The exhaustive behavioral tests live in
+    `test_clip_captioning.py`; this lock test only proves the method
+    is overridden vs the ABC and accepts the documented signature.
     """
 
-    @pytest.fixture
-    def clip(self) -> MaskedClip:
-        return MaskedClip(
-            s3_key="clips/sess-1/14500.mp4",
-            timestamp_ms=14500,
-            duration_ms=7000,
-            trigger_segment_id="seg_001",
-            masking_metadata=ClipMaskingMetadata(
-                frames_total=210,
-                frames_with_faces=210,
-                faces_blurred=210,
-            ),
+    def test_openai_overrides_caption_clip(self) -> None:
+        # After P1-2 the concrete override exists on the subclass, not
+        # the ABC. `__qualname__` proves the resolution.
+        assert (
+            OpenAIVisionProvider.caption_clip.__qualname__
+            == "OpenAIVisionProvider.caption_clip"
         )
 
-    @pytest.fixture
-    def anchor(self) -> TranscriptSegment:
-        return TranscriptSegment(
-            id="seg_001",
-            start_ms=14000,
-            end_ms=15000,
-            text="abducting the right shoulder",
+    def test_anthropic_overrides_caption_clip(self) -> None:
+        assert (
+            AnthropicVisionProvider.caption_clip.__qualname__
+            == "AnthropicVisionProvider.caption_clip"
         )
 
-    @pytest.mark.asyncio
-    async def test_openai_raises_not_implemented(self, clip, anchor) -> None:
-        with pytest.raises(NotImplementedError, match="P1-2"):
-            await OpenAIVisionProvider().caption_clip(clip, anchor)
-
-    @pytest.mark.asyncio
-    async def test_anthropic_raises_not_implemented(self, clip, anchor) -> None:
-        with pytest.raises(NotImplementedError, match="P1-2"):
-            await AnthropicVisionProvider().caption_clip(clip, anchor)
-
-    @pytest.mark.asyncio
-    async def test_gemini_raises_not_implemented(self, clip, anchor) -> None:
-        with pytest.raises(NotImplementedError, match="P1-2"):
-            await GeminiVisionProvider().caption_clip(clip, anchor)
+    def test_gemini_overrides_caption_clip(self) -> None:
+        assert (
+            GeminiVisionProvider.caption_clip.__qualname__
+            == "GeminiVisionProvider.caption_clip"
+        )
 
 
 # ── MaskedClip / ClipMaskingMetadata Pydantic ───────────────────────────
@@ -329,6 +310,8 @@ class TestMaskedClipValidation:
 class TestFrameCaptionAdditiveFields:
     """AC-7: today's call sites stay byte-identical. `evidence_kind`
     defaults to `"frame"` and `duration_ms` defaults to None.
+    `degraded_to_frame` (added in P1-2) defaults to False so the frame
+    path stays byte-identical.
     """
 
     def test_existing_call_site_unchanged(self) -> None:
@@ -345,6 +328,10 @@ class TestFrameCaptionAdditiveFields:
         # Defaults preserve frame-only behavior.
         assert caption.evidence_kind == "frame"
         assert caption.duration_ms is None
+        # P1-2: `degraded_to_frame` is meaningful only for the clip
+        # path's lossy fallback. Frame-path captions and native-video
+        # clip captions both leave it False.
+        assert caption.degraded_to_frame is False
 
     def test_clip_caption_carries_kind_and_duration(self) -> None:
         caption = FrameCaption(
