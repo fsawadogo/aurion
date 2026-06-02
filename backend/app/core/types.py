@@ -173,6 +173,17 @@ class FrameCaption(BaseModel):
     # is None for frames and set to the clip window for clips.
     evidence_kind: Literal["frame", "clip"] = "frame"
     duration_ms: Optional[int] = None
+    # ── Lossy-fallback marker (P1-2) ───────────────────────────────────
+    # Frame-only providers (OpenAI, Anthropic today) implement
+    # `caption_clip` by extracting a midpoint still and routing through
+    # `caption_frame`. The resulting citation is marked
+    # `degraded_to_frame=True` so the iOS reviewer surfaces a "still
+    # extracted from clip" badge — the physician sees they're not
+    # getting full motion fidelity on that citation. Native-video
+    # providers (Gemini) leave this False. Frame-path captions always
+    # leave this False as well; the field is meaningful only when
+    # `evidence_kind == "clip"`.
+    degraded_to_frame: bool = False
 
 
 # ── Screen Capture Types ──────────────────────────────────────────────────

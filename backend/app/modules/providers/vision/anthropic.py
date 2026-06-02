@@ -1,6 +1,9 @@
 """Anthropic vision provider -- real implementation.
 
-Calls Claude Vision to generate descriptive captions for masked clinical frames.
+Calls Claude Vision to generate descriptive captions for masked
+clinical frames. For clips, falls back to extracting a midpoint still
+via the shared `extract_midpoint_still` helper and routes through the
+existing frame path -- DRY (section 6c): zero duplicate request logic.
 Uses the shared system prompt and caption builder from shared.py.
 """
 
@@ -9,6 +12,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Final
 
 import httpx
 
@@ -23,6 +27,7 @@ from app.core.types import (
 from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import VisionProvider
 from app.modules.providers.note_gen.shared import strip_markdown_fences
+from app.modules.providers.vision._clip_to_still import extract_midpoint_still
 from app.modules.providers.vision.shared import (
     VISION_RESPONSE_SCHEMA,
     VISION_SYSTEM_PROMPT,
@@ -33,6 +38,10 @@ logger = logging.getLogger("aurion.providers.vision.anthropic")
 
 _ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 _MODEL = "claude-sonnet-4-6"
+
+# Truncated S3 key length used in log lines so we never leak a full S3
+# path (which could carry session-id segments traceable to a patient).
+_LOG_KEY_PREFIX_LEN: Final[int] = 12
 
 
 class AnthropicVisionProvider(VisionProvider):
@@ -130,13 +139,37 @@ class AnthropicVisionProvider(VisionProvider):
     async def caption_clip(
         self, clip: MaskedClip, anchor: TranscriptSegment
     ) -> FrameCaption:
-        """Caption a video clip.
+        """Caption a video clip via the lossy midpoint-still fallback.
 
-        Stub for P1-1 — the real implementation lands in P1-2 and falls
-        back to extracting a midpoint still via ffmpeg, then calls
-        `caption_frame`. The resulting citation is tagged
-        `degraded_to_frame=true` so the physician sees they're not
-        getting full motion fidelity on that citation. See
-        docs/plans/p1-1-clip-evidence-schema.md.
+        Claude Sonnet 4.6 doesn't accept MP4 bodies natively, so we:
+        1. Pull the clip MP4 from S3 + extract its midpoint frame as a
+           JPEG (delegated to the shared `extract_midpoint_still` helper
+           -- DRY: one ffmpeg invocation site for the whole codebase,
+           shared with the OpenAI fallback path).
+        2. Route the synthetic `MaskedFrame` through the existing
+           `caption_frame` path -- no duplicated Claude request logic.
+        3. Flip `evidence_kind="clip"`, `duration_ms=clip.duration_ms`,
+           and `degraded_to_frame=True` on the returned caption via
+           `model_copy(update=...)`. The reviewer surfaces the "still
+           extracted from clip" badge from that flag.
+
+        Provider errors from the inner `caption_frame` call (e.g. a 5xx
+        from Anthropic) propagate as-is so the registry's fallback chain
+        can trip to the next provider.
         """
-        raise NotImplementedError("clip captioning lands in P1-2")
+        synthetic_frame = await extract_midpoint_still(clip)
+        logger.info(
+            "anthropic degraded clip %s to midpoint still",
+            clip.s3_key[:_LOG_KEY_PREFIX_LEN],
+        )
+        # Reuse the existing Claude path. The inner call may raise
+        # ProviderError on 5xx; we let it propagate so the registry's
+        # fallback chain can trip.
+        caption = await self.caption_frame(synthetic_frame, anchor)
+        return caption.model_copy(
+            update={
+                "evidence_kind": "clip",
+                "duration_ms": clip.duration_ms,
+                "degraded_to_frame": True,
+            }
+        )
