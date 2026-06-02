@@ -17,7 +17,9 @@
       "myProfile": "Mon profil"
     },
     "expand": "Déployer le menu",
-    "collapse": "Réduire le menu"
+    "collapse": "Réduire le menu",
+    "search": "Rechercher…",
+    "searchTooltip": "Rechercher (⌘K)"
   },
   "Theme": {
     "label": "Thème",
@@ -121,6 +123,28 @@
     },
     "failedBanner": "{count, plural, one {# session a échoué et nécessite votre attention.} other {# sessions ont échoué et nécessitent votre attention.}}",
     "seeList": "Voir la liste"
+  },
+  "CommandPalette": {
+    "label": "Palette de commandes",
+    "placeholder": "Rechercher ou accéder à…",
+    "group": {
+      "navigation": "Navigation",
+      "recentSessions": "Sessions récentes",
+      "templates": "Modèles"
+    },
+    "actions": {
+      "newTemplate": "Nouveau modèle IA"
+    },
+    "hint": {
+      "navigate": "Naviguer",
+      "select": "Sélectionner",
+      "toggle": "Ouvrir / fermer"
+    },
+    "empty": {
+      "title": "Aucun résultat",
+      "hint": "Tapez pour rechercher dans la navigation, les sessions et les modèles.",
+      "hintForQuery": "Aucun résultat pour « {query} ». Essayez un autre terme."
+    }
   },
   "Login": {
     "title": "Connexion",

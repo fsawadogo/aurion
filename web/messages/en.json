@@ -17,7 +17,9 @@
       "myProfile": "My Profile"
     },
     "expand": "Expand sidebar",
-    "collapse": "Collapse sidebar"
+    "collapse": "Collapse sidebar",
+    "search": "Search…",
+    "searchTooltip": "Search (⌘K)"
   },
   "Theme": {
     "label": "Theme",
@@ -121,6 +123,28 @@
     },
     "failedBanner": "{count, plural, one {# session failed to process and needs attention.} other {# sessions failed to process and need attention.}}",
     "seeList": "See list"
+  },
+  "CommandPalette": {
+    "label": "Command palette",
+    "placeholder": "Search or jump to…",
+    "group": {
+      "navigation": "Navigation",
+      "recentSessions": "Recent sessions",
+      "templates": "Templates"
+    },
+    "actions": {
+      "newTemplate": "New AI template"
+    },
+    "hint": {
+      "navigate": "Navigate",
+      "select": "Select",
+      "toggle": "Toggle palette"
+    },
+    "empty": {
+      "title": "Nothing matches",
+      "hint": "Type to search across navigation, sessions, and templates.",
+      "hintForQuery": "No results for “{query}”. Try a different term."
+    }
   },
   "Login": {
     "title": "Sign in",
