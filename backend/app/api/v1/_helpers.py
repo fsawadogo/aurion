@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_events import AuditEventType
 from app.core.models import SessionModel
-from app.core.types import MaskingProof, SessionState, UserRole
+from app.core.types import ClipMaskingMetadata, MaskingProof, SessionState, UserRole
 from app.core.uuids import to_uuid
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser
@@ -155,4 +155,61 @@ def parse_masking_proof(
     except ValidationError as exc:
         raise HTTPException(
             status_code=400, detail=f"Invalid masking proof: {exc.errors()}"
+        ) from exc
+
+
+def assert_masking_confirmed(masking_confirmed: bool) -> None:
+    """P0-01 fail-closed gate for the clip upload path.
+
+    The clip endpoint takes a boolean `masking_confirmed` flag from iOS
+    instead of the four-field MaskingProof: every frame in the clip has
+    already been validated client-side by `MaskingPipeline.maskClip` and
+    a single boolean rides the wire (the per-clip frame counts come on
+    `ClipMaskingMetadata`). The boolean must be `True` or the upload is
+    rejected before any S3 PutObject runs — same fail-closed contract as
+    `parse_masking_proof` for the frame path, just less surface to
+    validate. Lives here instead of inline in `clips.py` so any future
+    masked-evidence endpoint can reuse it without copy-pasting the
+    rejection shape.
+    """
+    if not masking_confirmed:
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "masking_confirmed must be true — clip rejected before S3 "
+                "write (P0-01 fail-closed gate)"
+            ),
+        )
+
+
+def parse_clip_masking_metadata(
+    frames_total: int,
+    frames_with_faces: int,
+    faces_blurred: int | None = None,
+) -> ClipMaskingMetadata:
+    """Validate the per-clip masking metadata and raise 400 on bad input.
+
+    Mirrors `parse_masking_proof` for the clip path. `faces_blurred`
+    defaults to `frames_with_faces` because the clip masking pipeline
+    fail-closes when any face fails to blur — so a clip that reaches
+    this endpoint must have blurred every detected face. iOS may still
+    pass `faces_blurred` explicitly for audit-trail completeness, and
+    the validator accepts both shapes.
+
+    Raises 400 with the Pydantic error list (same shape as
+    `parse_masking_proof`) so the client-side error surface is uniform
+    across frame + clip endpoints.
+    """
+    try:
+        return ClipMaskingMetadata(
+            frames_total=frames_total,
+            frames_with_faces=frames_with_faces,
+            faces_blurred=(
+                faces_blurred if faces_blurred is not None else frames_with_faces
+            ),
+        )
+    except ValidationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid clip masking metadata: {exc.errors()}",
         ) from exc

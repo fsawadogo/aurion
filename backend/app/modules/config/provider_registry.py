@@ -194,6 +194,87 @@ class ProviderRegistry:
 
         raise ProviderError("vision", "All vision providers unavailable")
 
+    # ── Dual-mode visual evidence (P1-3) ──────────────────────────────────
+    #
+    # The Stage 2 dispatcher routes per-evidence by `evidence_kind`. Frame
+    # evidence keeps the existing `config.providers.vision` resolution;
+    # clip evidence resolves through `config.providers.vision_clip`
+    # (defaults to Gemini, the only native-video model today). Both kinds
+    # share the same fallback chain — if the clip-primary is unavailable
+    # we still fall through to OpenAI/Anthropic, which implement
+    # `caption_clip` via midpoint-still extraction (P1-2,
+    # `degraded_to_frame=True` on the citation).
+    #
+    # OCP: adding a new evidence kind in the future doesn't mean a new
+    # method on the registry — extend `_VISION_KIND_CONFIG` to map the
+    # new kind to the right config attribute. The dispatch in
+    # `vision/service.py` keeps a single switch on `evidence_kind`.
+
+    def get_vision_provider_for_kind(
+        self, kind: str, override: Optional[str] = None
+    ) -> VisionProvider:
+        """Resolve the active vision provider for an evidence kind.
+
+        `kind="frame"` reads `config.providers.vision`; `kind="clip"`
+        reads `config.providers.vision_clip`. Anything else raises
+        `ProviderError("vision_kind", ...)`.
+
+        Mirrors `get_vision_provider`'s override + DB-store precedence
+        for the frame kind (the existing override store applies to
+        frames-only — clip overrides are a follow-up if the eval team
+        ever needs them; for the pilot, AppConfig is the only knob).
+        """
+        if kind == "frame":
+            return self.get_vision_provider(override=override)
+        if kind == "clip":
+            config = get_config()
+            if override:
+                key = VisionProviderKey(override)
+            else:
+                key = config.providers.vision_clip
+            cls = _VISION_PROVIDERS.get(key)
+            if not cls:
+                raise ProviderError(
+                    key.value,
+                    f"No vision provider registered for clip key: {key}",
+                )
+            logger.info("Resolved vision_clip provider: %s", key.value)
+            return cls()
+        raise ProviderError(
+            "vision_kind", f"Unknown visual evidence kind: {kind!r}"
+        )
+
+    def get_vision_provider_for_kind_with_fallback(self, kind: str) -> VisionProvider:
+        """Try the kind-specific primary first, then fall back through
+        the ordered list.
+
+        Same fallback chain as `get_vision_provider_with_fallback` for
+        either kind — OpenAI/Anthropic implement `caption_clip` via the
+        midpoint-still extraction so the chain stays evidence-kind-
+        agnostic at the abstract-method level (LSP).
+        """
+        config = get_config()
+        if kind == "clip":
+            primary = config.providers.vision_clip
+        elif kind == "frame":
+            primary = config.providers.vision
+        else:
+            raise ProviderError(
+                "vision_kind", f"Unknown visual evidence kind: {kind!r}"
+            )
+
+        order = [primary] + [k for k in _VISION_FALLBACK_ORDER if k != primary]
+        for key in order:
+            cls = _VISION_PROVIDERS.get(key)
+            if cls:
+                if key != primary:
+                    logger.warning(
+                        "Falling back to vision provider (kind=%s): %s",
+                        kind, key.value,
+                    )
+                return cls()
+        raise ProviderError("vision", "All vision providers unavailable")
+
 
 # ── Module-level singleton ─────────────────────────────────────────────────
 

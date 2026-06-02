@@ -231,6 +231,9 @@ async def test_stage1_approve_then_export(
 
     monkeypatch.setattr(export_service, "purge_frames", AsyncMock(return_value=None))
     monkeypatch.setattr(export_service, "migrate_eval_frames", AsyncMock(return_value=None))
+    # P1-3: export pipeline now also purges + migrates the clips prefix.
+    monkeypatch.setattr(export_service, "purge_clips", AsyncMock(return_value=None))
+    monkeypatch.setattr(export_service, "migrate_eval_clips", AsyncMock(return_value=None))
 
     # ── Walk to PROCESSING_STAGE1 ─────────────────────────────────────
     sid = await _walk_to_processing_stage1(app_client, auth_headers)

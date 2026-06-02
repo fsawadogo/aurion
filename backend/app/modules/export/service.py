@@ -17,7 +17,9 @@ from app.core.audit_events import AuditEventType
 from app.core.types import Note
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.cleanup.service import (
+    migrate_eval_clips,
     migrate_eval_frames,
+    purge_clips,
     purge_frames,
 )
 
@@ -136,6 +138,10 @@ async def export_note_docx(
     )
 
     # ── Trigger cleanup pipeline ──────────────────────────────────────
+    # Dual-mode evidence (P1-3): both frame and clip prefixes must be
+    # migrated + purged. Each step is non-fatal — export still succeeds
+    # if a cleanup leg fails (the audit row will surface the partial
+    # failure to the compliance dashboard).
     try:
         await migrate_eval_frames(session_id)
     except Exception as exc:
@@ -144,7 +150,15 @@ async def export_note_docx(
             session_id,
             str(exc),
         )
-        # Non-fatal -- export still succeeds
+
+    try:
+        await migrate_eval_clips(session_id)
+    except Exception as exc:
+        logger.error(
+            "Eval clip migration failed during export cleanup: session=%s error=%s",
+            session_id,
+            str(exc),
+        )
 
     try:
         await purge_frames(session_id)
@@ -154,7 +168,15 @@ async def export_note_docx(
             session_id,
             str(exc),
         )
-        # Non-fatal -- export still succeeds
+
+    try:
+        await purge_clips(session_id)
+    except Exception as exc:
+        logger.error(
+            "Clip purge failed during export cleanup: session=%s error=%s",
+            session_id,
+            str(exc),
+        )
 
     return docx_bytes
 
