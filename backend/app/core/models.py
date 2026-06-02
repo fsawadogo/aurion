@@ -124,6 +124,19 @@ class PhysicianProfileModel(Base):
     consultation_types: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     allied_health_team: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     output_language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
+    # Portal/iOS chrome theme — distinct from output_language above
+    # (which controls note generation). "system" follows the OS
+    # setting; "light" / "dark" force one mode regardless.
+    ui_theme: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="system"
+    )
+    # Portal/iOS chrome language. Orthogonal to output_language:
+    # physicians may dictate in English and read the chrome in
+    # French (or vice versa). "en" / "fr" today; IETF tags like
+    # "fr-CA" forward-compatible.
+    ui_language: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="en"
+    )
     # Recording preferences set during onboarding's profile setup. These are
     # UX controls — `auto_upload` decides whether a finished encounter pushes
     # straight to Stage 1 or waits for an explicit confirm; `retention_days`

@@ -9,7 +9,7 @@ import json
 from typing import Optional
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.database import get_db
@@ -35,6 +35,11 @@ class ProfileResponse(BaseModel):
     consultation_types: list[str]
     allied_health_team: list[dict] = []
     output_language: str
+    # Portal/iOS chrome preferences (Phase A1). Distinct from
+    # `output_language`: a physician may dictate in English and read
+    # the chrome in French. `ui_theme` is "system" / "light" / "dark".
+    ui_theme: str = "system"
+    ui_language: str = "en"
     auto_upload: bool = True
     retention_days: int = 7
     consent_reprompt: str = "every_session"
@@ -50,9 +55,32 @@ class UpdateProfileRequest(BaseModel):
     consultation_types: Optional[list[str]] = None
     allied_health_team: Optional[list[dict]] = None
     output_language: Optional[str] = None
+    ui_theme: Optional[str] = None
+    ui_language: Optional[str] = None
     auto_upload: Optional[bool] = None
     retention_days: Optional[int] = None
     consent_reprompt: Optional[str] = None
+
+    @field_validator("ui_theme")
+    @classmethod
+    def _validate_ui_theme(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if v not in {"system", "light", "dark"}:
+            raise ValueError("ui_theme must be one of: system, light, dark")
+        return v
+
+    @field_validator("ui_language")
+    @classmethod
+    def _validate_ui_language(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        # Locked to en/fr today; widen here when iOS/portal locales grow.
+        # The column itself holds up to 16 chars so IETF tags like
+        # "fr-CA" forward-compat without a migration.
+        if v not in {"en", "fr"}:
+            raise ValueError("ui_language must be one of: en, fr")
+        return v
 
 
 # ── Routes ──────────────────────────────────────────────────────────────────
@@ -108,6 +136,8 @@ def _to_response(profile) -> ProfileResponse:
         consultation_types=json.loads(profile.consultation_types),
         allied_health_team=json.loads(profile.allied_health_team),
         output_language=profile.output_language,
+        ui_theme=getattr(profile, "ui_theme", "system"),
+        ui_language=getattr(profile, "ui_language", "en"),
         auto_upload=getattr(profile, "auto_upload", True),
         retention_days=getattr(profile, "retention_days", 7),
         consent_reprompt=getattr(profile, "consent_reprompt", "every_session"),

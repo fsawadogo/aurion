@@ -81,6 +81,12 @@ async def update_profile(
         profile.allied_health_team = json.dumps(team)
     if "output_language" in updates:
         profile.output_language = updates["output_language"]
+    if "ui_theme" in updates:
+        # Route layer validates against the enum; service trusts.
+        profile.ui_theme = updates["ui_theme"]
+    if "ui_language" in updates:
+        # Route layer validates against the supported locales; service trusts.
+        profile.ui_language = updates["ui_language"]
     if "auto_upload" in updates:
         profile.auto_upload = bool(updates["auto_upload"])
     if "retention_days" in updates:
