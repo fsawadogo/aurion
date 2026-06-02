@@ -466,12 +466,72 @@ final class APIClient: Sendable {
         framesTotal: Int,
         framesWithFaces: Int
     ) async throws -> ClipUploadResponse {
-        // Build the request scaffolding (method, auth, boundary) via the
-        // shared multipart helper — same primitive `uploadFrame` uses,
-        // so frame and clip can't drift on auth or content-type.
-        let url = URL(string: "\(baseURL)/clips/\(sessionId)")!
-        var (request, builder) = makeMultipartUpload(url: url)
+        let prepared = try Self.prepareClipUpload(
+            baseURL: baseURL,
+            sessionId: sessionId,
+            clipFileURL: clipFileURL,
+            timestampMs: timestampMs,
+            durationMs: durationMs,
+            triggerSegmentId: triggerSegmentId,
+            framesTotal: framesTotal,
+            framesWithFaces: framesWithFaces,
+            authToken: KeychainHelper.shared.bearerToken()
+        )
+        // Belt and suspenders: ensure the body temp file is removed
+        // regardless of how this method exits.
+        defer { try? FileManager.default.removeItem(at: prepared.bodyFileURL) }
 
+        let (data, response) = try await uploadFileWithRequest(
+            request: prepared.request,
+            bodyFileURL: prepared.bodyFileURL
+        )
+        try validateResponse(response, data: data)
+        return try JSONDecoder().decode(ClipUploadResponse.self, from: data)
+    }
+
+    /// Pure builder for the uploadClip request + staged body file. Pulled
+    /// out so tests can verify the multipart envelope without observing
+    /// it through URLSession (the upload-from-file path doesn't expose
+    /// the body via `URLRequest.httpBodyStream` at the URLProtocol layer
+    /// — URLSession reads it directly off disk).
+    ///
+    /// Returns the URLRequest with method/auth/timeout/content-type set
+    /// and the on-disk body file URL. The caller is responsible for
+    /// removing `bodyFileURL` after the upload completes.
+    static func prepareClipUpload(
+        baseURL: String,
+        sessionId: String,
+        clipFileURL: URL,
+        timestampMs: Int,
+        durationMs: Int,
+        triggerSegmentId: String,
+        framesTotal: Int,
+        framesWithFaces: Int,
+        authToken: String?
+    ) throws -> (request: URLRequest, bodyFileURL: URL) {
+        let url = URL(string: "\(baseURL)/clips/\(sessionId)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        // The upload-from-file path needs longer than the standard 30s
+        // for large clips — 7s @ 720p is typically ~7-15 MB. 60s gives
+        // us a comfortable margin for the LTE worst case without blowing
+        // past Stage 2's overall budget.
+        request.timeoutInterval = 60
+        if let authToken {
+            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+        }
+
+        let boundary = "Boundary-\(UUID().uuidString)"
+        request.setValue(
+            "multipart/form-data; boundary=\(boundary)",
+            forHTTPHeaderField: "Content-Type"
+        )
+
+        // Build the multipart envelope. Same primitives `uploadFrame`
+        // uses (MultipartBuilder + the headerForFile / closingBoundaryData
+        // accessors) so frame and clip can't drift on field ordering or
+        // boundary format.
+        var builder = MultipartBuilder(boundary: boundary)
         builder.appendField("timestamp_ms", "\(timestampMs)")
         builder.appendField("duration_ms", "\(durationMs)")
         builder.appendField("trigger_segment_id", triggerSegmentId)
@@ -479,37 +539,15 @@ final class APIClient: Sendable {
         builder.appendField("frames_with_faces", "\(framesWithFaces)")
         builder.appendField("masking_confirmed", "true")
 
-        // Stage the prefix (boundary + form fields + file part header)
-        // and suffix (closing boundary) into a single temp body file
-        // with the clip MP4 sandwiched in the middle. This is the
-        // on-disk equivalent of what `MultipartBuilder.finish()` returns
-        // in-memory — it lets the upload-from-file URLSession path
-        // stream the entire body without buffering. See
-        // `buildMultipartBodyFile(prefix:fileURL:suffix:)` below.
         var prefix = builder.bodySoFar
         prefix.append(builder.headerForFile(name: "clip", filename: "clip.mp4", mime: "video/mp4"))
         let suffix = builder.closingBoundaryData()
-        let bodyFileURL = try Self.buildMultipartBodyFile(
+        let bodyFileURL = try buildMultipartBodyFile(
             prefix: prefix,
             fileURL: clipFileURL,
             suffix: suffix
         )
-        // Belt and suspenders: ensure the body temp file is removed
-        // regardless of how this method exits.
-        defer { try? FileManager.default.removeItem(at: bodyFileURL) }
-
-        // The upload-from-file path needs longer than 30s for large clips
-        // — 7s @ 720p is typically ~7-15 MB. 60s gives us a comfortable
-        // margin for the LTE worst case without blowing past Stage 2's
-        // overall budget.
-        request.timeoutInterval = 60
-
-        let (data, response) = try await uploadFileWithRequest(
-            request: request,
-            bodyFileURL: bodyFileURL
-        )
-        try validateResponse(response, data: data)
-        return try JSONDecoder().decode(ClipUploadResponse.self, from: data)
+        return (request, bodyFileURL)
     }
 
     /// `URLSession.upload(for:fromFile:)` wrapper that classifies errors
