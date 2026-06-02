@@ -106,6 +106,52 @@ class MaskedFrame(BaseModel):
     masking_confirmed: bool = False
 
 
+# ── Clip Evidence ─────────────────────────────────────────────────────────
+#
+# Dual-mode visual evidence (see docs/plans/p1-1-clip-evidence-schema.md).
+# `MaskedClip` is the sibling type to `MaskedFrame`: same masking-confirmed
+# contract, additional per-clip masking metadata so the audit row can show
+# how many frames the clip carried and how many faces were blurred. Audio
+# is always stripped iOS-side (no audio track ever rides in a clip body),
+# so the masked-clip contract is video-only.
+
+class ClipMaskingMetadata(BaseModel):
+    """Per-clip masking summary attached to every `clip_uploaded` and
+    `clip_masked` audit row.
+
+    The clip path masks every frame in the encoded window; the audit
+    trail needs to show how many frames the clip carried so the
+    compliance officer can reconcile "100% on-device masking" claims
+    against the actual frame count, not just a boolean.
+
+    Counts are non-negative integers; `frames_with_faces` and
+    `faces_blurred` together prove that every detected face was blurred
+    before the clip body crossed the wire (fail-closed gate in iOS
+    `MaskingPipeline.maskClip`).
+    """
+
+    frames_total: int = Field(..., ge=0)
+    frames_with_faces: int = Field(..., ge=0)
+    faces_blurred: int = Field(..., ge=0)
+
+
+class MaskedClip(BaseModel):
+    """Server-side reference to a masked video clip uploaded by iOS.
+
+    Mirrors `MaskedFrame` for the clip path. The clip body itself lives
+    in S3 (KMS-encrypted, TTL-policy applied) at the key referenced by
+    `s3_key`; `timestamp_ms` is the trigger anchor in transcript time;
+    `duration_ms` is the encoded window length; `trigger_segment_id`
+    points back at the transcript segment that fired the trigger.
+    """
+
+    s3_key: str
+    timestamp_ms: int
+    duration_ms: int = Field(..., ge=0)
+    trigger_segment_id: str
+    masking_metadata: ClipMaskingMetadata
+
+
 class FrameCaption(BaseModel):
     frame_id: str
     session_id: str
@@ -118,6 +164,15 @@ class FrameCaption(BaseModel):
     conflict_flag: bool = False
     conflict_detail: Optional[str] = None
     integration_status: Literal["ENRICHES", "REPEATS", "CONFLICTS"]
+    # ── Dual-mode visual evidence (P1-1) ──────────────────────────────
+    # `FrameCaption` is the Liskov contract for BOTH frame and clip
+    # captions — every provider returns this type from `caption_frame`
+    # AND `caption_clip` so the merge / conflict-detection / Stage 2
+    # loop stays evidence-kind-agnostic. `evidence_kind` defaults to
+    # "frame" so today's call sites are byte-identical; `duration_ms`
+    # is None for frames and set to the clip window for clips.
+    evidence_kind: Literal["frame", "clip"] = "frame"
+    duration_ms: Optional[int] = None
 
 
 # ── Screen Capture Types ──────────────────────────────────────────────────
