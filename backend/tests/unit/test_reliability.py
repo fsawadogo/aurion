@@ -199,7 +199,9 @@ async def test_cleanup_verify_purge_empty_bucket():
         result = await verify_purge("test-session-123")
 
     assert result is True
-    assert mock_client.list_objects_v2.call_count == 2
+    # P1-3: verify_purge now checks audio + frames + clips prefixes
+    # (clip evidence has its own S3 prefix). Three list_objects_v2 calls.
+    assert mock_client.list_objects_v2.call_count == 3
 
 
 @pytest.mark.asyncio
