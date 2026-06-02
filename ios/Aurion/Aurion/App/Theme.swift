@@ -753,7 +753,13 @@ struct SectionHeader<Trailing: View>: View {
             if let count = count {
                 Text("\(count)")
                     .aurionFont(10, weight: .bold, relativeTo: .caption2)
-                    .foregroundColor(.white)
+                    // Brand pattern — navy on gold pill (~12:1 contrast,
+                    // matches every other gold-pill count badge in the
+                    // app: DashboardView, SessionsInboxView, CaptureView,
+                    // TourOverlay). The previous `.white` here was a
+                    // one-off that read at only 4.7:1 — visible but
+                    // inconsistent with the brand convention.
+                    .foregroundColor(.aurionNavy)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(Color.aurionGold)
