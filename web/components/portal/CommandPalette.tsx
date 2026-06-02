@@ -117,7 +117,12 @@ export default function CommandPalette() {
         listMyCustomTemplates(),
       ]);
       ss.sort((a, b) => b.created_at.localeCompare(a.created_at));
-      setSessions(ss.filter((s) => s.state !== "PURGED").slice(0, 8));
+      // Hold the full non-PURGED list in state. At pilot scale
+      // (~100 sessions per clinician) this is a few KB — small
+      // enough to do client-side search across, no backend index
+      // needed. We slice for display (RECENT_LIMIT when query is
+      // empty, SEARCH_LIMIT when matching) at filter time.
+      setSessions(ss.filter((s) => s.state !== "PURGED"));
       setTemplates(ts);
       setDataLoaded(true);
     } catch {
@@ -189,6 +194,12 @@ export default function CommandPalette() {
     [tNav, tPalette],
   );
 
+  // Map every session to a palette row. We attach a `searchTokens`
+  // bag — invisible matchable text — covering specialty, identifier,
+  // session id (full + short), and human-readable state. This lets
+  // queries like "approved", "mrn-12345", or just an 8-char prefix
+  // surface the right session even though the visible row only
+  // shows specialty + identifier-or-id.
   const sessionItems = useMemo<CommandItem[]>(
     () =>
       sessions.map((s) => ({
@@ -198,6 +209,17 @@ export default function CommandPalette() {
         subtitle: s.external_reference_id ?? s.id.slice(0, 8),
         href: `/portal/notes/${s.id}`,
         icon: <FileText className="h-4 w-4" />,
+        searchTokens: [
+          s.specialty,
+          s.external_reference_id ?? "",
+          s.id,
+          s.id.slice(0, 8),
+          s.state,
+          humanState(s.state),
+        ]
+          .filter(Boolean)
+          .join(" ")
+          .toLowerCase(),
       })),
     [sessions],
   );
@@ -216,21 +238,53 @@ export default function CommandPalette() {
   );
 
   /** Filter + group. Each group filters independently; empty groups
-   *  collapse so the divider doesn't appear above zero rows. */
+   *  collapse so the divider doesn't appear above zero rows.
+   *
+   *  Two display modes for the sessions group:
+   *    * Empty query → top RECENT_LIMIT (8) by created_at — the
+   *      "what I've been working on" view.
+   *    * Non-empty query → ALL matching sessions across the loaded
+   *      set, capped at SEARCH_LIMIT (20) to keep the palette
+   *      scannable. The group label flips from "Recent" to
+   *      "Matching sessions" so the physician knows they're seeing
+   *      a search result, not a recency cutoff.
+   *
+   *  Nav + template groups always filter without a cap — those lists
+   *  are small (< 10 each at pilot scale).
+   */
   const groups = useMemo<CommandGroup[]>(() => {
     const q = query.trim().toLowerCase();
-    const groupsRaw: CommandGroup[] = [
-      { id: "nav", label: tPalette("group.navigation"), items: navItems },
-      { id: "sessions", label: tPalette("group.recentSessions"), items: sessionItems },
-      { id: "templates", label: tPalette("group.templates"), items: templateItems },
-    ];
-    if (q.length === 0) return groupsRaw;
-    return groupsRaw
-      .map((g) => ({
-        ...g,
-        items: g.items.filter((it) => matches(it, q)),
-      }))
-      .filter((g) => g.items.length > 0);
+    if (q.length === 0) {
+      return [
+        { id: "nav", label: tPalette("group.navigation"), items: navItems },
+        {
+          id: "sessions",
+          label: tPalette("group.recentSessions"),
+          items: sessionItems.slice(0, RECENT_LIMIT),
+        },
+        { id: "templates", label: tPalette("group.templates"), items: templateItems },
+      ];
+    }
+    const matchedSessions = sessionItems
+      .filter((it) => matches(it, q))
+      .slice(0, SEARCH_LIMIT);
+    return [
+      {
+        id: "nav",
+        label: tPalette("group.navigation"),
+        items: navItems.filter((it) => matches(it, q)),
+      },
+      {
+        id: "sessions",
+        label: tPalette("group.matchingSessions"),
+        items: matchedSessions,
+      },
+      {
+        id: "templates",
+        label: tPalette("group.templates"),
+        items: templateItems.filter((it) => matches(it, q)),
+      },
+    ].filter((g) => g.items.length > 0);
   }, [query, navItems, sessionItems, templateItems, tPalette]);
 
   /** Flattened list of selectable items in the same render order as
@@ -456,14 +510,15 @@ function KbdKey({ children }: { children: React.ReactNode }) {
 }
 
 /** Tiny fuzzy-ish matcher — case-insensitive substring on label +
- *  subtitle. Good enough for the palette's small data set; promotes
- *  to a proper fuzzy lib (fuse.js / cmdk's matcher) only when the
- *  catalog gets big. */
+ *  subtitle + searchTokens (invisible bag of matchable text). Good
+ *  enough for the palette's small data set; promotes to a proper
+ *  fuzzy lib (fuse.js / cmdk's matcher) only when the catalog gets
+ *  big. */
 function matches(item: CommandItem, q: string): boolean {
-  return (
-    item.label.toLowerCase().includes(q) ||
-    (item.subtitle ?? "").toLowerCase().includes(q)
-  );
+  if (item.label.toLowerCase().includes(q)) return true;
+  if ((item.subtitle ?? "").toLowerCase().includes(q)) return true;
+  if ((item.searchTokens ?? "").includes(q)) return true;
+  return false;
 }
 
 function humanSpecialty(key: string): string {
@@ -471,6 +526,14 @@ function humanSpecialty(key: string): string {
     .split("_")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
     .join(" ");
+}
+
+/** Human-readable session state — used as a search token so the
+ *  physician can type "approved" or "stage 2" and surface sessions
+ *  in that state. Kept lowercase + space-separated so a substring
+ *  match works against the underlying tokens string. */
+function humanState(state: string): string {
+  return state.toLowerCase().replace(/_/g, " ");
 }
 
 /* ── Types ──────────────────────────────────────────────────────────────── */
@@ -482,6 +545,11 @@ interface CommandItem {
   subtitle?: string;
   href: string;
   icon: React.ReactNode;
+  /** Invisible bag of matchable substrings. Lets a row match against
+   *  terms that don't appear in the visible label/subtitle — e.g.
+   *  session state names, full session UUIDs, alternative spellings.
+   *  Pre-lowercased at construction time. */
+  searchTokens?: string;
 }
 
 interface CommandGroup {
@@ -489,3 +557,14 @@ interface CommandGroup {
   label: string;
   items: CommandItem[];
 }
+
+/** Recent-sessions display cap when the query is empty. Matches the
+ *  dashboard's recent strip (6) plus a couple extras so the palette
+ *  feels a bit deeper than the strip without overwhelming. */
+const RECENT_LIMIT = 8;
+
+/** Matching-sessions display cap when the query is non-empty. Tuned
+ *  to fit comfortably in the 60vh palette without forcing the user
+ *  to scroll endlessly — they can narrow the query further to find
+ *  the specific session if their first try returns the cap. */
+const SEARCH_LIMIT = 20;
