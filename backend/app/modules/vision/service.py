@@ -133,7 +133,7 @@ async def retrieve_frames_for_triggers(
         except (BotoCoreError, ClientError) as e:
             logger.error(
                 "Frame retrieval failed: session=%s segment=%s error=%s",
-                session_id, segment.id, str(e),
+                str(session_id)[:8], segment.id, str(e),
             )
 
     # Deduplicate by frame_id
@@ -146,7 +146,7 @@ async def retrieve_frames_for_triggers(
 
     logger.info(
         "Frames retrieved: session=%s triggers=%d frames=%d",
-        session_id, len(trigger_segments), len(unique),
+        str(session_id)[:8], len(trigger_segments), len(unique),
     )
     return unique
 
@@ -615,7 +615,7 @@ def merge_visual_citations(
 
     logger.info(
         "Note merge complete: session=%s stage=%d sections=%d",
-        note.session_id, note.stage, len(note.sections),
+        str(note.session_id)[:8], note.stage, len(note.sections),
     )
     return note
 
