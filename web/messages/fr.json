@@ -124,6 +124,16 @@
     "failedBanner": "{count, plural, one {# session a échoué et nécessite votre attention.} other {# sessions ont échoué et nécessitent votre attention.}}",
     "seeList": "Voir la liste"
   },
+  "Notifications": {
+    "ariaLabel": "Notifications ({count} non lues)",
+    "dropdownLabel": "Notifications récentes",
+    "title": "Notifications",
+    "markAllRead": "Tout marquer comme lu",
+    "seeAll": "Voir toute l’activité",
+    "empty": "Rien de nouveau",
+    "emptyHint": "Les nouvelles activités apparaîtront ici en temps réel.",
+    "loadFailed": "Impossible de charger les notifications."
+  },
   "CommandPalette": {
     "label": "Palette de commandes",
     "placeholder": "Rechercher ou accéder à…",
