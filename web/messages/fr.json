@@ -84,6 +84,29 @@
         "subtitle": "Concepteur conversationnel pour une nouvelle spécialité."
       }
     },
+    "activity": {
+      "title": "Activité en direct",
+      "live": "En direct",
+      "retry": "Réessayer",
+      "allCaughtUp": "Tout est à jour",
+      "allCaughtUpHint": "Les nouvelles activités apparaîtront ici en temps réel.",
+      "loadFailed": "Impossible de charger l’activité pour le moment.",
+      "event": {
+        "stage1Delivered": "Étape 1 prête à réviser",
+        "stage1Failed": "Échec de la génération à l’étape 1",
+        "stage2Complete": "Enrichissement visuel terminé",
+        "stage2Failed": "Échec de l’enrichissement visuel",
+        "stage1Approved": "Étape 1 approuvée",
+        "noteExported": "Note exportée",
+        "bulkNoteExport": "Exportation groupée livrée",
+        "conflictResolved": "Conflit résolu",
+        "emrSent": "Écriture EMR livrée",
+        "emrFailed": "Échec de l’écriture EMR — à réessayer",
+        "sessionPurged": "Session purgée",
+        "sessionDiscarded": "Session supprimée",
+        "generic": "Session mise à jour"
+      }
+    },
     "stateBadge": {
       "AWAITING_REVIEW": "À réviser",
       "PROCESSING_STAGE1": "Étape 1",
