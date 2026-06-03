@@ -39,6 +39,7 @@ from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
 from app.modules.config.schema import AppConfigSchema, VisualEvidenceMode
 from app.modules.providers.usage_service import try_record_provider_usage
+from app.modules.vision.clip_metrics import ClipTelemetry
 
 # ── Visual evidence sentinel ─────────────────────────────────────────────
 #
@@ -51,6 +52,32 @@ from app.modules.providers.usage_service import try_record_provider_usage
 # normalizes the read.
 
 VisualEvidenceItem = MaskedFrame | MaskedClip
+
+
+# Provider → default model id mapping (P1-FU-METRICS).
+#
+# Vision providers carry a module-level ``_MODEL`` constant; this map
+# mirrors them so the cost-rate lookup has a stable model id to key on
+# without importing the provider classes from this module (would create
+# an import cycle via the registry). Keep in sync with the provider
+# files; the cost_rates table is the downstream guard — unknown
+# provider/model returns 0 + an INFO log, so a stale entry here will
+# surface in logs and won't crash the pipeline.
+_PROVIDER_DEFAULT_MODELS: dict[str, str] = {
+    "gemini": "gemini-2.5-pro",
+    "openai": "gpt-4o",
+    "anthropic": "claude-sonnet-4-6",
+}
+
+
+def _provider_model_id(provider_used: str) -> str:
+    """Return the default model id for a ``provider_used`` short name.
+
+    Returns the provider name unchanged if it's not in the map — the
+    cost lookup will return 0 and log an INFO line, which is the
+    correct fail-soft for an unknown model.
+    """
+    return _PROVIDER_DEFAULT_MODELS.get(provider_used, provider_used)
 
 
 def _evidence_kind_of(item: VisualEvidenceItem) -> str:
@@ -289,6 +316,7 @@ async def caption_frames(
     frames: list[MaskedFrame],
     trigger_segments: list[TranscriptSegment],
     provider_override: Optional[str] = None,
+    clip_telemetry_sink: Optional[list[ClipTelemetry]] = None,
 ) -> list[FrameCaption]:
     """Caption each frame using the active vision provider with fallback.
 
@@ -296,11 +324,17 @@ async def caption_frames(
     so existing Stage 2 call sites keep working without change. The
     dual-mode call site in `notes/service.py` should call
     `caption_visual_evidence` directly to dispatch a mixed list.
+
+    ``clip_telemetry_sink`` is plumbed through for callers that want to
+    receive per-clip telemetry (P1-FU-METRICS); ``None`` preserves the
+    pre-PR behaviour. Frame-only call sites never see entries in the
+    list (clip-specific by contract).
     """
     return await caption_visual_evidence(
         evidence=list(frames),
         trigger_segments=trigger_segments,
         provider_override=provider_override,
+        clip_telemetry_sink=clip_telemetry_sink,
     )
 
 
@@ -308,6 +342,7 @@ async def caption_visual_evidence(
     evidence: list[VisualEvidenceItem],
     trigger_segments: list[TranscriptSegment],
     provider_override: Optional[str] = None,
+    clip_telemetry_sink: Optional[list[ClipTelemetry]] = None,
 ) -> list[FrameCaption]:
     """Caption a mixed list of frames + clips using kind-routed providers.
 
@@ -327,6 +362,15 @@ async def caption_visual_evidence(
     emit `CLIP_DISCARDED`, frames emit nothing (the existing path
     discards silently with an info log). On provider failure the
     fallback chain is tried for the same evidence kind.
+
+    P1-FU-METRICS: when ``clip_telemetry_sink`` is provided, per-clip
+    measurements (provider, model, wall-clock latency, byte size,
+    degraded-to-frame flag) are appended to the caller-owned list as
+    each clip completes. Callers (``run_stage2_vision``) then hand the
+    list to ``clip_metrics.record_clip_metrics`` for the per-session
+    upsert. ``None`` is the existing behaviour — telemetries are
+    silently dropped, byte-identical to the pre-PR call. Frame-kind
+    items never produce telemetries on this list (clip-specific).
     """
     registry = get_registry()
     audit = get_audit_log_service()
@@ -340,6 +384,29 @@ async def caption_visual_evidence(
         if evidence and isinstance(evidence[0], MaskedClip)
         else ""
     )
+
+    # P1-FU-METRICS: best-effort byte size lookup for clip telemetry.
+    # head_object is cheap (metadata only) and serially fast — for the
+    # MVP we tolerate the extra S3 calls; production can swap to a
+    # ListObjects scan if clip counts grow. Failures collapse to 0 so
+    # a metrics-only S3 hiccup never breaks the captioning path.
+    async def _clip_byte_size(clip: MaskedClip) -> int:
+        if clip_telemetry_sink is None:
+            return 0
+        try:
+            s3 = get_s3_client()
+            meta = await with_retry(
+                s3.head_object,
+                Bucket=FRAMES_BUCKET,
+                Key=clip.s3_key,
+                max_retries=2,
+                base_delay=0.5,
+                operation="s3_head_clip",
+                session_id=session_id,
+            )
+            return int(meta.get("ContentLength", 0))
+        except Exception:  # noqa: BLE001 — metrics-only, best-effort
+            return 0
 
     # Stage 2 progress tracking — emit a WebSocket event every ~10% of
     # evidence items + an initial "starting" tick at 0/N. iOS keeps
@@ -377,11 +444,12 @@ async def caption_visual_evidence(
         _started = time.monotonic()
         try:
             caption = await _dispatch_caption(provider, item, anchor)
+            _latency_ms = int((time.monotonic() - _started) * 1000)
             await try_record_provider_usage(
                 provider_type="vision",
                 provider_name=caption.provider_used,
                 operation=operation_name,
-                latency_ms=int((time.monotonic() - _started) * 1000),
+                latency_ms=_latency_ms,
                 success=True,
                 session_id=session_id,
             )
@@ -402,6 +470,21 @@ async def caption_visual_evidence(
                         confidence_reason=caption.confidence_reason,
                     )
                 return None
+            # P1-FU-METRICS: record per-clip telemetry only for clip-kind
+            # items, after we know the caption was retained. Frame-kind
+            # items never produce ClipTelemetry rows.
+            if kind == "clip" and clip_telemetry_sink is not None and isinstance(item, MaskedClip):
+                clip_telemetry_sink.append(
+                    ClipTelemetry(
+                        provider=caption.provider_used,
+                        model=_provider_model_id(caption.provider_used),
+                        latency_ms=_latency_ms,
+                        input_tokens=0,
+                        output_tokens=0,
+                        degraded_to_frame=caption.degraded_to_frame,
+                        bytes_uploaded=await _clip_byte_size(item),
+                    )
+                )
             return caption
         except ProviderError as e:
             await try_record_provider_usage(
@@ -422,11 +505,12 @@ async def caption_visual_evidence(
                     registry.get_vision_provider_for_kind_with_fallback(kind)
                 )
                 caption = await _dispatch_caption(fallback_provider, item, anchor)
+                _fb_latency_ms = int((time.monotonic() - _fb_started) * 1000)
                 await try_record_provider_usage(
                     provider_type="vision",
                     provider_name=caption.provider_used,
                     operation=operation_name,
-                    latency_ms=int((time.monotonic() - _fb_started) * 1000),
+                    latency_ms=_fb_latency_ms,
                     success=True,
                     fallback_used=True,
                     session_id=session_id,
@@ -448,6 +532,21 @@ async def caption_visual_evidence(
                             confidence_reason=caption.confidence_reason,
                         )
                     return None
+                # P1-FU-METRICS: record telemetry on the fallback-success
+                # path too. ``provider_used`` reflects the fallback
+                # provider so the cost lookup honours the actual call.
+                if kind == "clip" and clip_telemetry_sink is not None and isinstance(item, MaskedClip):
+                    clip_telemetry_sink.append(
+                        ClipTelemetry(
+                            provider=caption.provider_used,
+                            model=_provider_model_id(caption.provider_used),
+                            latency_ms=_fb_latency_ms,
+                            input_tokens=0,
+                            output_tokens=0,
+                            degraded_to_frame=caption.degraded_to_frame,
+                            bytes_uploaded=await _clip_byte_size(item),
+                        )
+                    )
                 return caption
             except ProviderError as fallback_err:
                 logger.error(
