@@ -24,7 +24,6 @@ from app.modules.prompts import (
     validate_overlay,
 )
 
-
 # ── validate_overlay: happy path ────────────────────────────────────────────
 
 

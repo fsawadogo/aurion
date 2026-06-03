@@ -107,6 +107,50 @@ async def assemble_prompt(
     return _combine(base, overlay)
 
 
+async def assemble_prompt_for_session(
+    prompt_id: str,
+    session_id: uuid.UUID | str,
+    db: AsyncSession,
+) -> str:
+    """Variant for services that have ``session_id`` instead of
+    ``owner_id`` in scope.
+
+    Looks up the session's ``clinician_id`` and routes through
+    :func:`assemble_prompt`. Returns the bare base prompt when the
+    session isn't found — a missing row never blocks the LLM call,
+    matching the resilience pattern the rest of the pipeline uses.
+
+    DRY: every consumer site that already has a ``session_id`` and a
+    db session calls this instead of re-implementing the lookup. The
+    8 wired sites split evenly between callers that have
+    ``owner_id`` (clinician routes — patient summary, orders, coding,
+    live preview) and callers that only have ``session_id`` (Stage 1
+    note generation, Stage 2 vision).
+    """
+    # Local import to avoid a circular dependency on app.core.models
+    # when prompts/__init__ is loaded during app startup. Importing at
+    # function scope keeps the module's top-level clean.
+    from sqlalchemy import select
+
+    from app.core.models import SessionModel
+
+    try:
+        sid = (
+            session_id
+            if isinstance(session_id, uuid.UUID)
+            else uuid.UUID(str(session_id))
+        )
+    except (ValueError, AttributeError):
+        return PROMPTS[prompt_id].system_prompt
+    result = await db.execute(
+        select(SessionModel.clinician_id).where(SessionModel.id == sid)
+    )
+    clinician_id = result.scalar_one_or_none()
+    if clinician_id is None:
+        return PROMPTS[prompt_id].system_prompt
+    return await assemble_prompt(prompt_id, clinician_id, db)
+
+
 def assemble_preview(
     prompt_id: str,
     overlay_text: Optional[str],

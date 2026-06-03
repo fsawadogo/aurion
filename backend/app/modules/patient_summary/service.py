@@ -28,7 +28,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.models import PatientSummaryModel
 from app.core.types import Note
 from app.modules.config.provider_registry import get_registry
-from app.modules.patient_summary.system_prompt import SYSTEM_PROMPT
+
+# NOTE: ``SYSTEM_PROMPT`` is no longer referenced directly here —
+# AI-PROMPTS-B routes through ``assemble_prompt_for_session`` which
+# pulls the base from the prompt registry. The constant remains the
+# single source of truth for the base prompt; the registry imports
+# it, and so does the safety regression test in
+# ``backend/tests/integration/test_me_prompts.py``.
+from app.modules.prompts import assemble_prompt_for_session
 from app.modules.providers.base import ChatMessage
 
 logger = logging.getLogger("aurion.patient_summary")
@@ -115,9 +122,16 @@ async def generate_summary(
         "prompt:\n\n--- NOTE ---\n" + rendered
     )
 
+    # AI-PROMPTS-B — assemble base + per-physician overlay for this
+    # caller's clinician. Falls back to the bare SYSTEM_PROMPT for
+    # sessions without a clinician_id (defensive — should not happen
+    # in production but the helper handles it).
+    system_prompt = await assemble_prompt_for_session(
+        "patient_summary", session_id, db
+    )
     provider = get_registry().get_note_provider()
     body = await provider.generate_text(
-        SYSTEM_PROMPT,
+        system_prompt,
         [ChatMessage(role="user", content=user_message)],
     )
     body = body.strip()

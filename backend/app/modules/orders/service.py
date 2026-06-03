@@ -24,7 +24,12 @@ from app.core.models import NoteOrderModel
 from app.core.types import Note
 from app.modules.config.provider_registry import get_registry
 from app.modules.orders.drug_catalog import get_catalog_version, validate_drug
-from app.modules.orders.system_prompt import SYSTEM_PROMPT
+
+# NOTE: ``SYSTEM_PROMPT`` is no longer referenced directly here —
+# AI-PROMPTS-B routes through ``assemble_prompt_for_session`` which
+# pulls the base from the prompt registry. The constant remains the
+# single source of truth for the base prompt; the registry imports it.
+from app.modules.prompts import assemble_prompt_for_session
 from app.modules.providers.base import ChatMessage
 
 logger = logging.getLogger("aurion.orders")
@@ -158,9 +163,16 @@ async def extract_from_note(
         "what the note already records.\n\n--- NOTE ---\n" + rendered
     )
 
+    # AI-PROMPTS-B — per-physician overlay assembly for the
+    # ``orders_extraction`` prompt. ``SYSTEM_PROMPT`` is still the base
+    # behind ``PROMPTS["orders_extraction"]``; the assembled string is
+    # base + overlay when present, base-only otherwise.
+    system_prompt = await assemble_prompt_for_session(
+        "orders_extraction", session_id, db
+    )
     provider = get_registry().get_note_provider()
     assistant_text = await provider.generate_text(
-        SYSTEM_PROMPT,
+        system_prompt,
         [ChatMessage(role="user", content=user)],
     )
     candidates = _parse_extraction(assistant_text)

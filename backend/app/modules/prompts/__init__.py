@@ -27,6 +27,7 @@ from app.modules.prompts.assembly import (
     OVERLAY_SEPARATOR,
     assemble_preview,
     assemble_prompt,
+    assemble_prompt_for_session,
 )
 from app.modules.prompts.registry import PROMPTS, PromptDefinition
 from app.modules.prompts.safety import (
@@ -47,5 +48,6 @@ __all__ = [
     "ValidationResult",
     "assemble_preview",
     "assemble_prompt",
+    "assemble_prompt_for_session",
     "validate_overlay",
 ]
