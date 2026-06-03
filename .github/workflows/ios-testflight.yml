@@ -24,6 +24,11 @@ on:
     branches: [main]
     paths:
       - "ios/**"
+      # Include this workflow file itself in the PR-time path filter so
+      # changes to the workflow (e.g. P1-5-FU adding the codec-isolated
+      # test step) self-validate on the PR that introduces them, instead
+      # of only running after merge to main.
+      - ".github/workflows/ios-testflight.yml"
   workflow_dispatch:
 
 permissions:
@@ -32,6 +37,10 @@ permissions:
 env:
   IOS_PROJECT_DIR: ios/Aurion
   IOS_SCHEME: Aurion
+  # Promoted to a workflow-level env var so the build job's three xcodebuild
+  # invocations (compile, main test, codec-isolated test) all reference the
+  # same simulator destination — change here, propagate everywhere (DRY §6c).
+  IOS_SIM_DESTINATION: platform=iOS Simulator,name=iPhone 17
 
 jobs:
   build:
@@ -52,9 +61,68 @@ jobs:
         working-directory: ${{ env.IOS_PROJECT_DIR }}
         run: |
           xcodebuild -scheme "$IOS_SCHEME" \
-                     -destination 'platform=iOS Simulator,name=iPhone 17' \
+                     -destination "$IOS_SIM_DESTINATION" \
                      -configuration Debug \
                      build | xcpretty || true
+
+      # Run the unit test suite (Swift Testing + XCTest in `AurionTests`).
+      # The codec-sensitive `MaskClipTests/happyPath_producesAudioFreeMP4WithFrames`
+      # is gated behind AURION_RUN_CLIP_HAPPY_PATH=1 (P1-5) — the env var
+      # is intentionally NOT set here so the simulator's H.264 codec
+      # allocator (Fig err=-12900) isn't tripped by the full-suite run.
+      # The gated test runs in its own xcodebuild invocation below so a
+      # codec-pool flake there can't take down the main test signal.
+      - name: Run AurionTests
+        working-directory: ${{ env.IOS_PROJECT_DIR }}
+        # set -o pipefail so a failing xcodebuild propagates through the
+        # xcpretty pipe and fails the step. xcpretty is preinstalled on
+        # macos-26 runners (same pattern as the Build step above).
+        run: |
+          set -o pipefail
+          xcodebuild test \
+                     -scheme "$IOS_SCHEME" \
+                     -destination "$IOS_SIM_DESTINATION" \
+                     -only-testing:AurionTests \
+                     -configuration Debug | xcpretty --test --color
+
+      # Codec-exhaustion-sensitive happy-path test for MaskingPipeline.maskClip.
+      # Gated behind TEST_RUNNER_AURION_RUN_CLIP_HAPPY_PATH=1 because running
+      # it alongside other AV-heavy tests in a single xcodebuild invocation
+      # exhausts the simulator's process-scoped H.264 codec slot pool
+      # (kCMSampleBufferError_AllocationFailed / Fig err=-12900). Each
+      # xcodebuild test invocation gets a fresh simulator boot + fresh codec
+      # pool, so running THIS test in its own invocation sidesteps the
+      # cross-test resource collision.
+      #
+      # Filter is struct-level (AurionTests/MaskClipTests) — Swift Testing
+      # does NOT support method-level -only-testing: paths; the additional
+      # smoke test (mask_polymorphicEntry_routesClipToMaskClip_andFailsClosed)
+      # is cheap (~0.1s) and DOES NOT exercise the codec, so including it
+      # in the filter is harmless.
+      #
+      # TEST_RUNNER_<VAR> is the xcodebuild-documented mechanism for
+      # propagating an env var into the simulator's test runner process
+      # (man xcodebuild → "Environment Variables"). A bare prefix would
+      # only set the variable on the xcodebuild parent and the runner
+      # subprocess would not inherit it.
+      #
+      # continue-on-error: true so an intermittent simulator codec flake
+      # CANNOT block the PR — the main test step above is the gate. If this
+      # step turns out to flake repeatedly we'll investigate, but the
+      # default posture for this single canary test is "best-effort signal".
+      - name: Run codec-exhaustion-sensitive tests (isolated)
+        if: always()
+        continue-on-error: true
+        working-directory: ${{ env.IOS_PROJECT_DIR }}
+        env:
+          TEST_RUNNER_AURION_RUN_CLIP_HAPPY_PATH: "1"
+        run: |
+          set -o pipefail
+          xcodebuild test \
+                     -scheme "$IOS_SCHEME" \
+                     -destination "$IOS_SIM_DESTINATION" \
+                     -only-testing:AurionTests/MaskClipTests \
+                     -configuration Debug | xcpretty --test --color
 
   testflight:
     # Manual-only (workflow_dispatch) so routine merges don't auto-upload
