@@ -133,6 +133,13 @@ class AuditEventType(StrEnum):
     PROVIDER_CHANGED = "provider_changed"
     PROVIDER_OVERRIDE_SET = "provider_override_set"
     PROVIDER_OVERRIDE_CLEARED = "provider_override_cleared"
+    # Per-session `visual_evidence_mode` override (dual-mode plan, P1-7).
+    # Fires when a clinician/eval-team caller creates a session whose
+    # `provider_overrides.visual_evidence_mode` is set — flips the Stage 2
+    # dispatch for THIS session only without touching AppConfig. Gated by
+    # `feature_flags.per_session_visual_evidence_mode_override`; when the
+    # flag is False the API returns 400 before this event can fire.
+    VISUAL_EVIDENCE_MODE_OVERRIDE_SET = "visual_evidence_mode_override_set"
 
 
 # ── Q-03 — kwarg whitelist ────────────────────────────────────────────────
@@ -424,6 +431,12 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.PROVIDER_OVERRIDE_CLEARED: frozenset(
         {"changed_by", "provider_type", "old_provider"}
+    ),
+    # Per-session visual_evidence_mode override (P1-7). Carries the actor
+    # (clinician or eval-team UUID) + their role + the chosen mode. The
+    # mode is one of the VisualEvidenceMode enum string values. No PHI.
+    AuditEventType.VISUAL_EVIDENCE_MODE_OVERRIDE_SET: frozenset(
+        {"actor_id", "actor_role", "mode"}
     ),
 }
 
