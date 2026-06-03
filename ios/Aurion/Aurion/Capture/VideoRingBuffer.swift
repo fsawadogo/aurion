@@ -1,6 +1,7 @@
 import AVFoundation
 import CoreMedia
 import Foundation
+import os
 
 // MARK: - VideoRingBuffer
 //
@@ -22,6 +23,14 @@ import Foundation
 // This is the same contract as `CaptureManager.capturedFrames` (which
 // holds raw JPEGs in memory) and `maskVideoFrame` — the ring buffer just
 // extends it from a single frame to a 7–15 s window.
+//
+// The privacy contract is enforced at the lock-owned state boundary
+// (`OSAllocatedUnfairLock<[Entry]>` below) — the deque cannot be accessed
+// outside the `withLock` closure, so any future code path that tries to
+// reach the raw bytes is structurally forced to go through the same
+// scoped critical section as `extract`, and from there is forced through
+// the masking pipeline before any I/O. The class facade just composes
+// those boundaries; it does not weaken them.
 // ------------------------------------------------------------------
 
 /// Thread-safe rolling buffer of raw video sample buffers, sized so it
@@ -40,8 +49,10 @@ import Foundation
 /// typical YUV path). The hard cap on item count is the safety valve;
 /// memory growth is bounded regardless of pixel format.
 ///
-/// **Concurrency model.** All mutating state (the deque, the index) is
-/// protected by a single `NSLock`. Append is called from the capture
+/// **Concurrency model.** All mutating state (the deque) is owned by an
+/// `OSAllocatedUnfairLock<[Entry]>` — the lock and its protected value
+/// are inseparable at the type level, so the deque cannot be observed
+/// outside the `withLock` closure. Append is called from the capture
 /// sample-buffer delegate's nonisolated queue (a fast dispatch queue);
 /// extract is called from an async context (most likely the
 /// SessionManager dispatcher Task). The lock holds for O(1) on append
@@ -49,12 +60,29 @@ import Foundation
 /// `AVAssetWriter` work runs outside the lock — extract takes a
 /// snapshot under the lock and then walks the snapshot.
 ///
-/// **Why a class, not an actor.** The capture sample-buffer delegate is
-/// `nonisolated` and synchronous from AVFoundation's perspective. Hopping
-/// into an actor on every sample buffer would either drop buffers (if we
-/// fire-and-forget) or stall the capture queue (if we await). NSLock is
-/// the cheaper primitive and matches the existing `audioPCMLock` pattern
-/// on `CaptureManager`.
+/// **Why `OSAllocatedUnfairLock`, not `NSLock` or an actor.**
+///   - `NSLock`'s `lock` / `unlock` are marked unavailable from async
+///     contexts under Swift 6 strict-concurrency (no priority-inheritance
+///     guarantees across cooperative yields). The async `extract` method
+///     would not compile in Swift 6 mode.
+///   - An actor would force the nonisolated, synchronous capture delegate
+///     to fire-and-forget through `Task { await ... }`, breaking the
+///     strict PTS-order guarantee AVFoundation gives us and risking
+///     extract observing a snapshot that's racing the in-flight Task
+///     queue. The actor is purer, but for this caller pattern it would
+///     silently change behavior.
+///   - `OSAllocatedUnfairLock<State>` is the Apple-recommended primitive
+///     for synchronous critical sections callable from any isolation
+///     domain. Its `withLock` API is Sendable-safe and accepted by Swift
+///     6 strict-concurrency. The state-owning generic form encodes
+///     "the only mutable state in this class is the deque" at the type
+///     level — stronger than the previous "remember to call lock()"
+///     discipline.
+///
+/// `@unchecked Sendable` is retained only because `CMSampleBuffer` is
+/// not `Sendable`. The lock-owned state guarantees no two threads observe
+/// the deque concurrently, which is the actual safety property the
+/// compiler can't infer.
 final class VideoRingBuffer: @unchecked Sendable {
 
     // MARK: - Types
@@ -81,8 +109,22 @@ final class VideoRingBuffer: @unchecked Sendable {
     /// One slot in the ring — the sample buffer plus the wall-clock time
     /// it arrived. Wall-clock matches `Date.timeIntervalSinceReferenceDate`
     /// to align with `CaptureManager`'s own `sessionStartTime` baseline.
-    private struct Entry {
-        let sampleBuffer: CMSampleBuffer
+    ///
+    /// `@unchecked Sendable` because `CMSampleBuffer` is not natively
+    /// `Sendable`. Safety comes from the surrounding
+    /// `OSAllocatedUnfairLock<[Entry]>`: entries are only ever read or
+    /// mutated inside `state.withLock { ... }`, which serialises access
+    /// across every isolation domain. The `Entry` value never escapes
+    /// the lock without first being copied into the local snapshot, and
+    /// the snapshot itself is consumed serially on the extracting Task.
+    private struct Entry: @unchecked Sendable {
+        // `nonisolated(unsafe)` on the stored properties so they don't
+        // inherit isolation from any enclosing main-actor context. The
+        // backing `CMSampleBuffer` is not natively `Sendable`; the
+        // surrounding `OSAllocatedUnfairLock<[Entry]>` provides the
+        // serialization guarantee (the entry is only read or mutated
+        // inside `withLock`).
+        nonisolated(unsafe) let sampleBuffer: CMSampleBuffer
         let timestamp: TimeInterval
     }
 
@@ -100,6 +142,7 @@ final class VideoRingBuffer: @unchecked Sendable {
         precondition(captureFPS > 0, "VideoRingBuffer captureFPS must be > 0")
         self.maxItems = maxItems
         self.captureFPS = captureFPS
+        self.state = OSAllocatedUnfairLock(initialState: [])
     }
 
     // MARK: - Configuration
@@ -107,15 +150,23 @@ final class VideoRingBuffer: @unchecked Sendable {
     let maxItems: Int
     let captureFPS: Double
 
-    // MARK: - State (lock-protected)
+    // MARK: - State (lock-owned)
 
-    private let lock = NSLock()
-    private var entries: [Entry] = []
+    /// The ring's deque, owned by an `OSAllocatedUnfairLock`. The lock
+    /// and its protected value share a lifetime; reading or mutating the
+    /// deque is only possible inside `state.withLock { entries in ... }`.
+    /// This is structurally stronger than the previous "remember to call
+    /// `lock.lock()` before touching `entries`" discipline and is the
+    /// async-safe replacement required by Swift 6 strict-concurrency.
+    private let state: OSAllocatedUnfairLock<[Entry]>
 
     /// Snapshot count for the audit/log surface. Cheap, takes the lock.
-    var count: Int {
-        lock.lock(); defer { lock.unlock() }
-        return entries.count
+    ///
+    /// `nonisolated` so the property is callable from `CaptureManager`'s
+    /// nonisolated sample-buffer delegate without an actor hop. The lock
+    /// is the safety boundary; isolation inference adds nothing.
+    nonisolated var count: Int {
+        state.withLock { $0.count }
     }
 
     // MARK: - Append
@@ -123,25 +174,43 @@ final class VideoRingBuffer: @unchecked Sendable {
     /// Pushes a sample buffer onto the ring. If the ring is full, the
     /// oldest entry is evicted. Safe to call from any thread.
     ///
+    /// `nonisolated` so AVFoundation's nonisolated sample-buffer delegate
+    /// can call this synchronously, in PTS order, without a fire-and-
+    /// forget Task hop. The lock guarantees serialised mutation; the
+    /// retained `CMSampleBuffer` (non-`Sendable` but in-process bytes
+    /// only) crosses the boundary safely because it never escapes the
+    /// `withLock` closure on the producer side.
+    ///
     /// The sample buffer is retained for the lifetime of its slot in the
     /// ring; eviction releases it. AVFoundation's pixel-buffer pool will
     /// reuse the underlying CVPixelBuffer once we release.
-    func append(_ sampleBuffer: CMSampleBuffer, at timestamp: TimeInterval) {
-        lock.lock()
-        entries.append(Entry(sampleBuffer: sampleBuffer, timestamp: timestamp))
-        if entries.count > maxItems {
-            entries.removeFirst(entries.count - maxItems)
+    nonisolated func append(_ sampleBuffer: CMSampleBuffer, at timestamp: TimeInterval) {
+        // Construct the entry OUTSIDE `withLock` so the closure captures
+        // `entry` (whose type `Entry` is explicitly `@unchecked Sendable`)
+        // rather than the bare `CMSampleBuffer` parameter — which is not
+        // `Sendable` and would trip the closure's `@Sendable` requirement
+        // under Swift 6 strict-concurrency. The retention semantics are
+        // identical: the sample buffer lives in `entry` until it's
+        // appended to the deque, at which point the deque owns it.
+        let entry = Entry(sampleBuffer: sampleBuffer, timestamp: timestamp)
+        state.withLock { entries in
+            entries.append(entry)
+            if entries.count > maxItems {
+                entries.removeFirst(entries.count - maxItems)
+            }
         }
-        lock.unlock()
     }
 
     /// Drops every retained sample buffer. Called on session stop / reset
     /// so the pool can reclaim the underlying CVPixelBuffers immediately
     /// rather than at the next gc cycle.
-    func clear() {
-        lock.lock()
-        entries.removeAll(keepingCapacity: true)
-        lock.unlock()
+    ///
+    /// `nonisolated` for the same reason as `append` — clear may be
+    /// called from any isolation domain, and the lock provides safety.
+    nonisolated func clear() {
+        state.withLock { entries in
+            entries.removeAll(keepingCapacity: true)
+        }
     }
 
     // MARK: - Extract
@@ -172,9 +241,10 @@ final class VideoRingBuffer: @unchecked Sendable {
         let windowStart = timestamp - halfWindow
         let windowEnd = timestamp + halfWindow
 
-        lock.lock()
-        let snapshot = entries
-        lock.unlock()
+        // Copy the deque under the lock so the `AVAssetWriter` walk below
+        // doesn't race with concurrent appends. `withLock` is the async-
+        // safe scoped form required by Swift 6 strict-concurrency.
+        let snapshot = state.withLock { $0 }
 
         guard !snapshot.isEmpty else {
             throw ExtractionError.ringEmpty
