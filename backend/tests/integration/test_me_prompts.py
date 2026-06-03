@@ -15,8 +15,9 @@ Covers the acceptance criteria from
 
 Plus negative gates:
   * Unsupported roles (none today, but the dependency is single-purpose).
-  * Phase B overlay fields present with their static defaults
-    (``override_text=None``, ``is_overridden=False``).
+  * Phase B fields present with their static defaults — replacement
+    semantics (``user_prompt_text=None``, ``is_overridden=False``,
+    ``active_prompt`` equal to ``system_prompt``).
 """
 
 from __future__ import annotations
@@ -50,10 +51,11 @@ EXPECTED_PROMPT_COUNT = 8
 @pytest_asyncio.fixture
 async def app_client() -> AsyncGenerator[AsyncClient, None]:
     """In-process ASGI client. Phase B adds a DB read to the GET path
-    for the per-physician overlay lookup — we still don't want a real
-    DB for these metadata-only assertions, so we stub the session so
-    ``db.execute(...)`` returns an empty result. That keeps Phase A's
-    "no overlays" expectation true."""
+    for the per-physician user-prompt lookup — we still don't want a
+    real DB for these metadata-only assertions, so we stub the session
+    so ``db.execute(...)`` returns an empty result. That keeps Phase
+    A's "no per-physician overrides" expectation true under the new
+    replacement semantics (active_prompt == system_prompt)."""
     from app.core.database import get_db
     from app.main import app
 
@@ -61,7 +63,7 @@ async def app_client() -> AsyncGenerator[AsyncClient, None]:
         db = MagicMock()
         # ``db.execute`` is awaited — return an AsyncMock whose result
         # serves an empty scalars().all() list. That keeps the GET
-        # endpoint's overlay-lookup path happy with zero overlays.
+        # endpoint's user-prompt-lookup path happy with zero rows.
         empty_result = MagicMock()
         empty_result.scalars.return_value.all.return_value = []
         empty_result.scalar_one_or_none.return_value = None
@@ -150,12 +152,15 @@ async def test_every_prompt_has_required_fields(
             "extraction",
             "preview",
         }, f"{prompt['id']} has invalid category {prompt['category']}"
-        # Phase B overlay fields. For a fresh CLINICIAN with no saved
-        # overlays the response is base-only — overlay_text is None,
-        # is_overridden is False, assembled_preview == system_prompt.
-        assert prompt["overlay_text"] is None
+        # Phase B fields (replacement semantics). For a fresh CLINICIAN
+        # with no saved user prompts the response shows the system
+        # default as the active prompt — user_prompt_text is None,
+        # is_overridden is False, active_prompt == system_prompt, and
+        # system_prompt_is_fallback is True.
+        assert prompt["user_prompt_text"] is None
         assert prompt["is_overridden"] is False
-        assert prompt["assembled_preview"] == prompt["system_prompt"]
+        assert prompt["system_prompt_is_fallback"] is True
+        assert prompt["active_prompt"] == prompt["system_prompt"]
 
 
 @pytest.mark.asyncio
@@ -174,10 +179,11 @@ async def test_response_schema_keys_stable(app_client: AsyncClient) -> None:
         "runs_when",
         "provider_field",
         "system_prompt",
+        "system_prompt_is_fallback",
         "schema_note",
-        "overlay_text",
+        "user_prompt_text",
         "is_overridden",
-        "assembled_preview",
+        "active_prompt",
     }
     for prompt in payload:
         assert set(prompt.keys()) == expected_keys, prompt["id"]

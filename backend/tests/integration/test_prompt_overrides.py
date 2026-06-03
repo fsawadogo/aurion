@@ -1,8 +1,9 @@
-"""Integration tests for AI Prompts B — per-physician overlays
-(AI-PROMPTS-B).
+"""Integration tests for AI Prompts B — per-physician REPLACEMENT
+user prompts (AI-PROMPTS-B).
 
 Covers the PATCH / DELETE surface that ``app/api/v1/me_prompts.py``
-adds, plus the assembly module's per-physician isolation invariant.
+adds, plus the selection module's per-physician isolation invariant
+under replacement semantics.
 
 DB strategy mirrors ``tests/e2e/conftest.py``:
   * A real Postgres is required — the per-physician isolation
@@ -14,18 +15,24 @@ DB strategy mirrors ``tests/e2e/conftest.py``:
   * Each test runs inside an outer transaction + SAVEPOINT and is
     rolled back at teardown — zero residual rows between tests.
 
-Test taxonomy
--------------
-  * ``test_patch_happy_path`` — overlay stored, response shows
-    ``is_overridden=True``, assembled_preview contains the separator
+Test taxonomy (refactored from PR #227 v1 to replacement semantics):
+  * ``test_patch_happy_path`` — user prompt stored, response shows
+    ``is_overridden=True``, active_prompt == user_prompt_text
+    (NOT base + user_prompt_text)
   * ``test_patch_banned_phrase_rejected`` — 400 with matched_phrase
     echoed back
-  * ``test_patch_too_long_rejected`` / ``test_patch_empty_rejected``
+  * ``test_patch_missing_anchor_*`` — NEW under replacement: the
+    saved prompt must include descriptive-mode anchor language
+  * ``test_patch_too_long_rejected`` (5000 cap, raised from 1000)
+  * ``test_patch_empty_rejected``
   * ``test_delete_round_trip`` — DELETE removes the row, audit event
-    written, follow-up GET shows base-only
-  * ``test_one_physicians_overlay_does_not_leak`` — the CTO-locked
-    per-physician scope invariant
-  * ``test_audit_set_does_not_contain_overlay_text`` — PHI gate
+    written, follow-up GET shows system default
+  * ``test_one_physicians_user_prompt_does_not_leak`` — the CTO-
+    locked per-physician scope invariant, now stronger: Marie's
+    saved prompt does not appear in Perry's active_prompt — and
+    Perry's active_prompt is the system default, not the default
+    plus Marie's text
+  * ``test_audit_set_does_not_contain_user_prompt_text`` — PHI gate
 """
 
 from __future__ import annotations
@@ -57,11 +64,22 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 from app.core.audit_events import AuditEventType  # noqa: E402
 from app.modules.prompts import (  # noqa: E402
     BANNED_PHRASES,
-    OVERLAY_MAX_LENGTH,
-    OVERLAY_SEPARATOR,
     PROMPTS,
+    USER_PROMPT_MAX_LENGTH,
     assemble_prompt,
 )
+
+# A clinical-documentation prompt that contains BOTH required anchor
+# groups + no banned phrases. Used by every "happy path" test so a
+# synonyms tweak ripples in one place.
+_WELL_FORMED_USER_PROMPT = (
+    "You are a clinical documentation assistant. "
+    "Describe only what was directly captured during the encounter. "
+    "Document the patient's complaints and any observed physical "
+    "findings. Do not interpret findings, do not diagnose, and do "
+    "not infer clinical meaning."
+)
+
 
 # ── Postgres reachability gate (mirrors e2e conftest) ───────────────────────
 
@@ -234,33 +252,38 @@ async def test_patch_happy_path(
     marie: tuple[uuid.UUID, dict[str, str]],
     mock_audit_log: MagicMock,
 ) -> None:
-    """Setting a valid overlay returns 200 + the updated PromptResponse;
-    audit event is emitted with overlay_length but NOT the text."""
+    """Setting a valid user prompt returns 200 + the updated
+    PromptResponse; audit event is emitted with user_prompt_length
+    but NOT the text. ``active_prompt`` equals the user prompt
+    verbatim — the registry default is NOT concatenated below."""
     _, headers = marie
-    overlay = "Always note bilateral comparison when applicable."
 
     r = await app_client.patch(
         "/api/v1/me/prompts/note_generation",
         headers=headers,
-        json={"overlay_text": overlay},
+        json={"user_prompt_text": _WELL_FORMED_USER_PROMPT},
     )
     assert r.status_code == 200, r.text
     payload = r.json()
     assert payload["id"] == "note_generation"
-    assert payload["overlay_text"] == overlay
+    assert payload["user_prompt_text"] == _WELL_FORMED_USER_PROMPT
     assert payload["is_overridden"] is True
-    # assembled_preview contains the base text + separator + overlay.
+    assert payload["system_prompt_is_fallback"] is True
+    # active_prompt is the user prompt VERBATIM — replacement, not
+    # concatenation. The registry default is NOT under it.
+    assert payload["active_prompt"] == _WELL_FORMED_USER_PROMPT
     base = PROMPTS["note_generation"].system_prompt
-    assert payload["assembled_preview"].startswith(base)
-    assert OVERLAY_SEPARATOR in payload["assembled_preview"]
-    assert overlay in payload["assembled_preview"]
+    assert base not in payload["active_prompt"], (
+        "Replacement semantics violated — registry default was "
+        "concatenated under the user prompt"
+    )
 
     # Audit emitted with the locked kwargs only.
     mock_audit_log.write_event.assert_called()
     call = mock_audit_log.write_event.call_args
-    assert call.kwargs["event_type"] is AuditEventType.PROMPT_OVERRIDE_SET
+    assert call.kwargs["event_type"] is AuditEventType.PROMPT_USER_PROMPT_SET
     assert call.kwargs["prompt_id"] == "note_generation"
-    assert call.kwargs["overlay_length"] == len(overlay)
+    assert call.kwargs["user_prompt_length"] == len(_WELL_FORMED_USER_PROMPT)
 
 
 @pytest.mark.asyncio
@@ -269,24 +292,32 @@ async def test_patch_idempotent_upsert(
     marie: tuple[uuid.UUID, dict[str, str]],
 ) -> None:
     """Calling PATCH twice with different text upserts — single row,
-    last write wins. UNIQUE (owner_id, prompt_id) is the invariant."""
+    last write wins. UNIQUE (owner_id, prompt_id) is the invariant.
+
+    Both payloads must satisfy the validator (anchor + no banlist) so
+    each one would independently save.
+    """
     _, headers = marie
-    first = "Use millimeters not centimeters for wound measurements."
-    second = "Prefer 'observed' over 'noted' in physical exam claims."
+    first = _WELL_FORMED_USER_PROMPT
+    second = (
+        "Describe only what is captured. Document the patient's "
+        "stated concerns. Do not interpret or diagnose."
+    )
 
     r1 = await app_client.patch(
         "/api/v1/me/prompts/note_generation",
         headers=headers,
-        json={"overlay_text": first},
+        json={"user_prompt_text": first},
     )
-    assert r1.status_code == 200
+    assert r1.status_code == 200, r1.text
     r2 = await app_client.patch(
         "/api/v1/me/prompts/note_generation",
         headers=headers,
-        json={"overlay_text": second},
+        json={"user_prompt_text": second},
     )
-    assert r2.status_code == 200
-    assert r2.json()["overlay_text"] == second
+    assert r2.status_code == 200, r2.text
+    assert r2.json()["user_prompt_text"] == second
+    assert r2.json()["active_prompt"] == second
 
 
 # ── PATCH safety failures ───────────────────────────────────────────────────
@@ -303,10 +334,11 @@ async def test_patch_banned_phrase_rejected(
     back. The echo is the banned phrase itself — never patient
     content — so it's safe to surface to the physician."""
     _, headers = marie
+    poisoned = _WELL_FORMED_USER_PROMPT + f" Also: {banned}, please."
     r = await app_client.patch(
         "/api/v1/me/prompts/note_generation",
         headers=headers,
-        json={"overlay_text": f"Hey: {banned}, please."},
+        json={"user_prompt_text": poisoned},
     )
     assert r.status_code == 400, r.text
     detail = r.json()["detail"]
@@ -315,16 +347,37 @@ async def test_patch_banned_phrase_rejected(
 
 
 @pytest.mark.asyncio
-async def test_patch_too_long_rejected(
+async def test_save_rejects_prompt_with_diagnose_the_patient_banned_phrase(
     app_client: AsyncClient,
     marie: tuple[uuid.UUID, dict[str, str]],
 ) -> None:
+    """Targeted regression for the diagnose-the-patient banlist entry
+    on the API surface (echoes the unit test against the HTTP layer)."""
     _, headers = marie
-    over = "a" * (OVERLAY_MAX_LENGTH + 1)
+    poisoned = _WELL_FORMED_USER_PROMPT + " Then diagnose the patient."
     r = await app_client.patch(
         "/api/v1/me/prompts/note_generation",
         headers=headers,
-        json={"overlay_text": over},
+        json={"user_prompt_text": poisoned},
+    )
+    assert r.status_code == 400, r.text
+    detail = r.json()["detail"]
+    assert detail["code"] == "banned_phrase"
+    assert detail["matched_phrase"] == "diagnose the patient"
+
+
+@pytest.mark.asyncio
+async def test_save_rejects_prompt_over_5000_chars(
+    app_client: AsyncClient,
+    marie: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    """The 5000-char cap is enforced at the API boundary."""
+    _, headers = marie
+    over = "a" * (USER_PROMPT_MAX_LENGTH + 1)
+    r = await app_client.patch(
+        "/api/v1/me/prompts/note_generation",
+        headers=headers,
+        json={"user_prompt_text": over},
     )
     assert r.status_code == 400, r.text
     assert r.json()["detail"]["code"] == "too_long"
@@ -339,10 +392,75 @@ async def test_patch_empty_rejected(
     r = await app_client.patch(
         "/api/v1/me/prompts/note_generation",
         headers=headers,
-        json={"overlay_text": "   "},
+        json={"user_prompt_text": "   "},
     )
     assert r.status_code == 400, r.text
     assert r.json()["detail"]["code"] == "empty"
+
+
+@pytest.mark.asyncio
+async def test_save_rejects_prompt_without_descriptive_anchor_descriptive(
+    app_client: AsyncClient,
+    marie: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    """NEW under replacement semantics: a prompt missing the
+    "describe / document / record / report what" descriptive intent
+    fails with code missing_descriptive_anchor + group index 0."""
+    _, headers = marie
+    missing_describe = (
+        "You are a clinical assistant. Do not interpret, do not "
+        "diagnose, and do not infer clinical meaning."
+    )
+    r = await app_client.patch(
+        "/api/v1/me/prompts/note_generation",
+        headers=headers,
+        json={"user_prompt_text": missing_describe},
+    )
+    assert r.status_code == 400, r.text
+    detail = r.json()["detail"]
+    assert detail["code"] == "missing_descriptive_anchor"
+    assert detail["missing_anchor_group"] == 0
+
+
+@pytest.mark.asyncio
+async def test_save_rejects_prompt_without_descriptive_anchor_no_interpret(
+    app_client: AsyncClient,
+    marie: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    """NEW under replacement semantics: a prompt missing the
+    "do not interpret / diagnose / infer" instruction fails with code
+    missing_descriptive_anchor + group index 1."""
+    _, headers = marie
+    missing_no_interpret = (
+        "You are a clinical assistant. Describe what was captured. "
+        "Document complaints. Record visible equipment positions."
+    )
+    r = await app_client.patch(
+        "/api/v1/me/prompts/note_generation",
+        headers=headers,
+        json={"user_prompt_text": missing_no_interpret},
+    )
+    assert r.status_code == 400, r.text
+    detail = r.json()["detail"]
+    assert detail["code"] == "missing_descriptive_anchor"
+    assert detail["missing_anchor_group"] == 1
+
+
+@pytest.mark.asyncio
+async def test_save_accepts_well_formed_full_prompt(
+    app_client: AsyncClient,
+    marie: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    """The canonical well-formed prompt is accepted by the API. Echo
+    of the unit test against the HTTP layer."""
+    _, headers = marie
+    r = await app_client.patch(
+        "/api/v1/me/prompts/note_generation",
+        headers=headers,
+        json={"user_prompt_text": _WELL_FORMED_USER_PROMPT},
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["is_overridden"] is True
 
 
 @pytest.mark.asyncio
@@ -354,7 +472,7 @@ async def test_patch_unknown_prompt_id_404(
     r = await app_client.patch(
         "/api/v1/me/prompts/not_a_prompt",
         headers=headers,
-        json={"overlay_text": "anything"},
+        json={"user_prompt_text": _WELL_FORMED_USER_PROMPT},
     )
     assert r.status_code == 404
 
@@ -368,74 +486,76 @@ async def test_delete_round_trip(
     marie: tuple[uuid.UUID, dict[str, str]],
     mock_audit_log: MagicMock,
 ) -> None:
-    """Set overlay → DELETE → response is base-only → audit emits
-    PROMPT_OVERRIDE_CLEARED."""
+    """Set user prompt → DELETE → response shows system default →
+    audit emits PROMPT_USER_PROMPT_CLEARED."""
     _, headers = marie
-    overlay = "Always note bilateral comparison when applicable."
     await app_client.patch(
         "/api/v1/me/prompts/note_generation",
         headers=headers,
-        json={"overlay_text": overlay},
+        json={"user_prompt_text": _WELL_FORMED_USER_PROMPT},
     )
     r = await app_client.delete(
         "/api/v1/me/prompts/note_generation", headers=headers
     )
     assert r.status_code == 200, r.text
     payload = r.json()
-    assert payload["overlay_text"] is None
+    assert payload["user_prompt_text"] is None
     assert payload["is_overridden"] is False
-    assert (
-        payload["assembled_preview"] == PROMPTS["note_generation"].system_prompt
-    )
+    assert payload["active_prompt"] == PROMPTS["note_generation"].system_prompt
 
     # Latest call is the CLEARED event.
     last = mock_audit_log.write_event.call_args
-    assert last.kwargs["event_type"] is AuditEventType.PROMPT_OVERRIDE_CLEARED
+    assert (
+        last.kwargs["event_type"] is AuditEventType.PROMPT_USER_PROMPT_CLEARED
+    )
 
 
 @pytest.mark.asyncio
-async def test_delete_no_existing_overlay_is_idempotent(
+async def test_delete_no_existing_user_prompt_is_idempotent(
     app_client: AsyncClient,
     marie: tuple[uuid.UUID, dict[str, str]],
 ) -> None:
-    """Deleting when no overlay exists still returns 200 with the base."""
+    """Deleting when no user prompt exists still returns 200 with the
+    system default."""
     _, headers = marie
     r = await app_client.delete(
         "/api/v1/me/prompts/note_generation", headers=headers
     )
     assert r.status_code == 200
-    assert r.json()["overlay_text"] is None
+    assert r.json()["user_prompt_text"] is None
 
 
-# ── PHI gate: audit detail does NOT carry overlay text ──────────────────────
+# ── PHI gate: audit detail does NOT carry user prompt text ─────────────────
 
 
 @pytest.mark.asyncio
-async def test_audit_set_does_not_contain_overlay_text(
+async def test_audit_set_does_not_contain_user_prompt_text(
     app_client: AsyncClient,
     marie: tuple[uuid.UUID, dict[str, str]],
     mock_audit_log: MagicMock,
 ) -> None:
-    """The overlay text is the physician's personal phrasing — never
-    in the audit row. Only ``overlay_length`` makes the trail."""
+    """The user prompt text is the physician's personal phrasing —
+    never in the audit row. Only ``user_prompt_length`` makes the
+    trail."""
     _, headers = marie
-    overlay = (
-        "A distinctive sentinel string the audit row must NEVER contain: "
-        "SECRET_SENTINEL_TOKEN_42"
+    sentinel = "SECRET_SENTINEL_TOKEN_42"
+    prompt_with_sentinel = (
+        _WELL_FORMED_USER_PROMPT
+        + f" Distinctive marker the audit row must NEVER contain: {sentinel}"
     )
     r = await app_client.patch(
         "/api/v1/me/prompts/note_generation",
         headers=headers,
-        json={"overlay_text": overlay},
+        json={"user_prompt_text": prompt_with_sentinel},
     )
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
 
-    # Inspect every recorded audit call. None of them should carry the
-    # overlay text in any kwarg.
+    # Inspect every recorded audit call. None should carry the user
+    # prompt text in any kwarg.
     for call in mock_audit_log.write_event.call_args_list:
         kwargs_str = repr(call.kwargs)
-        assert "SECRET_SENTINEL_TOKEN_42" not in kwargs_str, (
-            "overlay text must never appear in an audit row"
+        assert sentinel not in kwargs_str, (
+            "user prompt text must never appear in an audit row"
         )
 
 
@@ -443,76 +563,108 @@ async def test_audit_set_does_not_contain_overlay_text(
 
 
 @pytest.mark.asyncio
-async def test_one_physicians_overlay_does_not_leak(
+async def test_one_physicians_user_prompt_does_not_leak(
     app_client: AsyncClient,
     db_session: AsyncSession,
     marie: tuple[uuid.UUID, dict[str, str]],
     perry: tuple[uuid.UUID, dict[str, str]],
 ) -> None:
-    """Marie sets an overlay on ``note_generation``. The assembled
-    prompt for Perry on the same prompt_id is base-only — Marie's
-    text does not appear.
+    """Marie saves a user prompt on ``note_generation``. The assembled
+    prompt for Perry on the same prompt_id is the SYSTEM DEFAULT —
+    Marie's text does not appear, AND the system default is what Perry
+    gets (not "default + Marie's text", which would be the old append-
+    only behaviour).
 
     This is the architectural invariant locked by the CTO in the
-    Phase B brief: "Marie's overlays affect only sessions where she
-    is clinician_id. Perry's overlays affect only Perry's. No
-    clinic-wide overrides."
+    Phase B brief: "Marie's user prompts affect only sessions where
+    she is clinician_id. Perry's user prompts affect only Perry's.
+    No clinic-wide overrides."
     """
     marie_id, marie_headers = marie
     perry_id, _perry_headers = perry
-    overlay = "MARIE_PRIVATE_OVERLAY_TEXT — should never reach Perry"
+    # Marie's saved prompt embeds a distinctive sentinel so we can
+    # assert its absence from Perry's selected prompt.
+    marie_prompt = (
+        _WELL_FORMED_USER_PROMPT
+        + " MARIE_PRIVATE_PROMPT_TEXT — should never reach Perry."
+    )
 
-    # Marie saves an overlay via the API.
+    # Marie saves her user prompt via the API.
     r = await app_client.patch(
         "/api/v1/me/prompts/note_generation",
         headers=marie_headers,
-        json={"overlay_text": overlay},
+        json={"user_prompt_text": marie_prompt},
     )
-    assert r.status_code == 200
+    assert r.status_code == 200, r.text
 
-    # Marie's assembled prompt contains the overlay.
-    marie_assembled = await assemble_prompt(
+    # Marie's selected prompt is her saved text alone — replacement.
+    marie_selected = await assemble_prompt(
         "note_generation", marie_id, db_session
     )
-    assert overlay in marie_assembled, (
-        "Marie's own assembled prompt must contain her overlay"
+    assert marie_selected == marie_prompt, (
+        "Marie's selected prompt should be her saved text verbatim "
+        "(replacement semantics)"
     )
 
-    # Perry's assembled prompt is the base, unchanged. Critical: this
-    # is the invariant — Marie's text MUST NOT appear in Perry's
-    # assembled prompt.
-    perry_assembled = await assemble_prompt(
+    # Perry's selected prompt is the SYSTEM DEFAULT — Marie's text MUST
+    # NOT appear AND the base default is exactly what Perry receives.
+    perry_selected = await assemble_prompt(
         "note_generation", perry_id, db_session
     )
-    assert overlay not in perry_assembled
-    assert perry_assembled == PROMPTS["note_generation"].system_prompt
+    assert "MARIE_PRIVATE_PROMPT_TEXT" not in perry_selected
+    assert perry_selected == PROMPTS["note_generation"].system_prompt, (
+        "Perry's selected prompt must be the system default — not "
+        "Marie's text, not default + Marie's text"
+    )
 
 
-# ── Base immutability (echo of unit test against the real DB) ──────────────
+# ── Replacement invariant — through the real DB ─────────────────────────────
 
 
 @pytest.mark.asyncio
-async def test_assemble_prompt_preserves_base_through_db(
+async def test_user_prompt_replaces_system_through_db(
     app_client: AsyncClient,
     db_session: AsyncSession,
     marie: tuple[uuid.UUID, dict[str, str]],
 ) -> None:
-    """The base text appears verbatim at the start of the assembled
-    prompt — even after a round-trip through SQL. Guards against an
-    ORM mapping bug that could silently trim or transform the text."""
+    """The selected prompt is EXACTLY the user prompt text — verbatim
+    — even after a round-trip through SQL. Guards against an ORM
+    mapping bug that could silently trim or transform the text, and
+    against a regression that reintroduces concatenation.
+    """
     marie_id, marie_headers = marie
-    overlay = "Use clinical-neutral phrasing where possible."
+    user_prompt = _WELL_FORMED_USER_PROMPT
     await app_client.patch(
         "/api/v1/me/prompts/vision_frame",
         headers=marie_headers,
-        json={"overlay_text": overlay},
+        json={"user_prompt_text": user_prompt},
     )
-    assembled = await assemble_prompt(
-        "vision_frame", marie_id, db_session
+    selected = await assemble_prompt("vision_frame", marie_id, db_session)
+    assert selected == user_prompt, (
+        "Replacement semantics broken: selected prompt is not the user "
+        "prompt verbatim"
     )
     base = PROMPTS["vision_frame"].system_prompt
-    assert assembled.startswith(base)
-    assert assembled.endswith(overlay)
+    assert base not in selected, (
+        "Replacement semantics broken: the registry default was "
+        "concatenated under the user prompt"
+    )
+
+
+@pytest.mark.asyncio
+async def test_system_prompt_used_when_no_user_prompt_through_db(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    marie: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    """When the physician has not saved a user prompt for this
+    prompt_id, the selected prompt is the registry default — the
+    fallback path. Run through a real DB to catch any incorrect
+    LEFT JOIN / NULL handling in the lookup query.
+    """
+    marie_id, _ = marie
+    selected = await assemble_prompt("vision_frame", marie_id, db_session)
+    assert selected == PROMPTS["vision_frame"].system_prompt
 
 
 # ── Role gate: non-CLINICIAN can't PATCH/DELETE ────────────────────────────
@@ -524,13 +676,13 @@ async def test_patch_blocked_for_non_clinician_roles(
     app_client: AsyncClient,
     role: str,
 ) -> None:
-    """Overlays are personal physician preferences — admins must not
+    """User prompts are personal physician config — admins must not
     edit them on a physician's behalf."""
     headers = {"Authorization": f"Bearer {role}:{uuid.uuid4()}"}
     r = await app_client.patch(
         "/api/v1/me/prompts/note_generation",
         headers=headers,
-        json={"overlay_text": "anything"},
+        json={"user_prompt_text": _WELL_FORMED_USER_PROMPT},
     )
     assert r.status_code == 403
 
@@ -545,16 +697,16 @@ async def test_patch_persists_row_to_table(
     marie: tuple[uuid.UUID, dict[str, str]],
 ) -> None:
     """Belt-and-braces: PATCH writes a row visible via the ORM in the
-    same transactional session. Cheap regression catch if the route
-    ever skips the commit / flush."""
+    same transactional session, with the renamed column populated.
+    Cheap regression catch if the route ever skips the commit / flush
+    or the model field rename misses a code path."""
     from app.core.models import PromptOverrideModel
 
     marie_id, marie_headers = marie
-    overlay = "Document the patient's preferred name in the chief complaint."
     await app_client.patch(
         "/api/v1/me/prompts/note_generation",
         headers=marie_headers,
-        json={"overlay_text": overlay},
+        json={"user_prompt_text": _WELL_FORMED_USER_PROMPT},
     )
     stmt = select(PromptOverrideModel).where(
         PromptOverrideModel.owner_id == marie_id,
@@ -562,4 +714,4 @@ async def test_patch_persists_row_to_table(
     )
     result = await db_session.execute(stmt)
     row = result.scalar_one()
-    assert row.overlay_text == overlay
+    assert row.user_prompt_text == _WELL_FORMED_USER_PROMPT
