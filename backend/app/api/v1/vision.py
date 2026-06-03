@@ -21,19 +21,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1._helpers import get_owned_session_or_404, require_state, write_audit
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
-from app.core.models import TranscriptModel
+from app.core.models import SessionModel, TranscriptModel
 from app.core.types import Note, SessionState, Transcript
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.config.schema import VisualEvidenceMode
 from app.modules.note_gen.service import (
     create_note_version,
     get_latest_note,
 )
+from app.modules.vision.clip_metrics import ClipTelemetry, record_clip_metrics
 from app.modules.vision.reconcile import reconcile_captions
 from app.modules.vision.service import (
-    caption_frames,
+    caption_visual_evidence,
     classify_conflicts,  # noqa: F401 — kept for backward-compat; new code uses reconcile_captions
     has_unresolved_conflicts,
     merge_visual_citations,
+    resolve_evidence_mode,
+    retrieve_clips_for_triggers,
     retrieve_frames_for_triggers,
 )
 
@@ -125,9 +129,45 @@ async def run_stage2_vision(
             captions=[],
         )
 
-    # 3. Frames + 4. Captions
-    frames = await retrieve_frames_for_triggers(str(session_id), trigger_segments)
-    captions_raw = await caption_frames(frames, trigger_segments)
+    # 3. Resolve evidence mode + retrieve frames and/or clips.
+    #
+    # P1-7 introduced per-session `visual_evidence_mode`; P1-FU-METRICS
+    # threads the resolved mode here so the clip path participates in
+    # Stage 2 dispatch + telemetry. Frame retrieval stays unchanged so
+    # frames-only sessions (the pilot default) are byte-identical to
+    # the pre-PR path.
+    session_row = (
+        await db.execute(
+            select(SessionModel).where(SessionModel.id == session_id)
+        )
+    ).scalar_one_or_none()
+    evidence_mode = (
+        resolve_evidence_mode(session_row) if session_row is not None
+        else VisualEvidenceMode.FRAMES_ONLY
+    )
+
+    frames = (
+        await retrieve_frames_for_triggers(str(session_id), trigger_segments)
+        if evidence_mode != VisualEvidenceMode.CLIPS_ONLY
+        else []
+    )
+    clips = (
+        await retrieve_clips_for_triggers(str(session_id), trigger_segments)
+        if evidence_mode != VisualEvidenceMode.FRAMES_ONLY
+        else []
+    )
+    evidence_items = [*frames, *clips]
+
+    # 4. Captions — single dispatch site for the unified evidence list.
+    # ``clip_telemetry`` is the per-clip telemetry sink; the captioning
+    # loop appends one ``ClipTelemetry`` per clip that survives the
+    # low-confidence + provider-fallback gauntlet.
+    clip_telemetry: list[ClipTelemetry] = []
+    captions_raw = await caption_visual_evidence(
+        evidence=evidence_items,
+        trigger_segments=trigger_segments,
+        clip_telemetry_sink=clip_telemetry,
+    )
 
     # Drop low-confidence captions before conflict classification.
     captions_filtered = [c for c in captions_raw if c.confidence != "low"]
@@ -160,9 +200,15 @@ async def run_stage2_vision(
         unresolved_conflicts=has_unresolved_conflicts(captions),
     )
 
+    # P1-FU-METRICS: persist per-session clip cost/latency/byte
+    # aggregates to pilot_metrics. No-op when no clips were processed
+    # (frame-only sessions). Wrapped in record_clip_metrics' own
+    # try/except so a passive-metrics failure cannot break Stage 2.
+    await record_clip_metrics(db, str(session_id), clip_telemetry)
+
     logger.info(
-        "Stage 2 complete: session=%s frames=%d enriches=%d conflicts=%d",
-        session_id, len(frames), enriches, conflicts,
+        "Stage 2 complete: session=%s frames=%d clips=%d enriches=%d conflicts=%d",
+        session_id, len(frames), len(clips), enriches, conflicts,
     )
 
     return VisionProcessingResponse(
