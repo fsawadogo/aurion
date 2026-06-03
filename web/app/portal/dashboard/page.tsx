@@ -9,9 +9,15 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import ActivityFeed from "@/components/portal/ActivityFeed";
+import EmptyPanelState from "@/components/portal/EmptyPanelState";
 import PageHeader from "@/components/portal/PageHeader";
 import QuickActions from "@/components/portal/QuickActions";
 import { listMySessions, listMyCustomTemplates } from "@/lib/portal-api";
+import {
+  badgeVariantFor,
+  formatRelative,
+  humanSpecialty,
+} from "@/lib/session-format";
 import type { CustomTemplate, Session, SessionState } from "@/types";
 
 /**
@@ -300,45 +306,6 @@ function SessionRow({
   );
 }
 
-/* ── Empty panel state ──────────────────────────────────────────────────── */
-
-/**
- * Friendly empty state for the dashboard's two activity panels.
- *
- * Replaces the previous tiny gray italic line ("No sessions waiting
- * on review. Nice.") with a centered icon + headline + soft hint
- * line. The vertical rhythm matches the populated panels' row
- * height range so the card height stays consistent whether or not
- * there's content.
- *
- * Intentionally NO CTA — the action ("Start a session") happens on
- * the iOS app, not the portal. A button here would imply something
- * the portal can do.
- */
-function EmptyPanelState({
-  icon,
-  title,
-  hint,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  hint: string;
-}) {
-  return (
-    <div className="flex flex-col items-center justify-center py-6 text-center">
-      <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-gold-50 text-gold-600">
-        {icon}
-      </div>
-      <p className="aurion-callout font-medium text-aurion-primary">
-        {title}
-      </p>
-      <p className="mt-1 text-xs text-aurion-secondary max-w-[28ch] leading-relaxed">
-        {hint}
-      </p>
-    </div>
-  );
-}
-
 /* ── Recent sessions strip ──────────────────────────────────────────────── */
 
 /**
@@ -453,24 +420,6 @@ function RecentCard({
   );
 }
 
-/** Maps a session state to the Badge variant that best telegraphs
- *  "what kind of attention does this need?" Same logic the rest of
- *  the portal uses (kept here local so the dashboard card isn't
- *  coupled to that internals). */
-function badgeVariantFor(state: SessionState): "success" | "warning" | "info" | "neutral" | "error" {
-  switch (state) {
-    case "AWAITING_REVIEW":      return "warning";
-    case "PROCESSING_STAGE1":
-    case "PROCESSING_STAGE2":    return "info";
-    case "REVIEW_COMPLETE":
-    case "EXPORTED":             return "success";
-    case "RECORDING":
-    case "PAUSED":               return "info";
-    case "FAILED":               return "error";
-    default:                     return "neutral";
-  }
-}
-
 /* ── Stats derivation ───────────────────────────────────────────────────── */
 
 interface Stats {
@@ -500,25 +449,3 @@ function deriveStats(list: Session[]): Stats {
   return { awaitingReview, inProgress, approvedThisWeek, failed };
 }
 
-function humanSpecialty(key: string): string {
-  return key
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-function formatRelative(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const m = Math.round((Date.now() - d.getTime()) / 60_000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m} min ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h} hr ago`;
-  const days = Math.round(h / 24);
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}

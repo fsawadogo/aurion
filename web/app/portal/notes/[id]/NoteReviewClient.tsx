@@ -31,6 +31,7 @@ import {
   resolveConflict,
 } from "@/lib/portal-api";
 import { filterForSpecialty } from "@/lib/portal-macros-expand";
+import { humanSpecialty } from "@/lib/session-format";
 import type { Claim, NoteDetail, PhysicianMacro, Session as SessionRow } from "@/types";
 
 /**
@@ -473,9 +474,3 @@ function ActionBar({
   );
 }
 
-function humanSpecialty(key: string): string {
-  return key
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}

@@ -9,6 +9,7 @@ import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
 import { bulkExport, listMySessions } from "@/lib/portal-api";
+import { formatRelative, humanSpecialty } from "@/lib/session-format";
 import type { Session, SessionState } from "@/types";
 
 /**
@@ -259,7 +260,7 @@ export default function PortalSessionsInboxPage() {
                       )}
                     </p>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      {formatRelative(s.created_at)} ·{" "}
+                      {formatRelative(s.created_at, { withYear: true })} ·{" "}
                       <span className="font-mono text-[10px]">
                         {s.id.slice(0, 8)}
                       </span>
@@ -390,27 +391,3 @@ function dateCutoff(d: DateFilter): number | null {
   }
 }
 
-function humanSpecialty(key: string): string {
-  return key
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
-}
-
-function formatRelative(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const diffMs = Date.now() - d.getTime();
-  const m = Math.round(diffMs / 60_000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m} min ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h} hr ago`;
-  const days = Math.round(h / 24);
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-    year: "numeric",
-  });
-}

@@ -15,6 +15,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { listMySessions, listMyCustomTemplates } from "@/lib/portal-api";
+import { humanSpecialty } from "@/lib/session-format";
 import type { CustomTemplate, Session } from "@/types";
 
 /**
@@ -519,13 +520,6 @@ function matches(item: CommandItem, q: string): boolean {
   if ((item.subtitle ?? "").toLowerCase().includes(q)) return true;
   if ((item.searchTokens ?? "").includes(q)) return true;
   return false;
-}
-
-function humanSpecialty(key: string): string {
-  return key
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
 }
 
 /** Human-readable session state — used as a search token so the
