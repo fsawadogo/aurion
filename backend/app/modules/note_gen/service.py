@@ -19,13 +19,14 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.models import NoteVersionModel
+from app.core.models import NoteVersionModel, SessionModel
 from app.core.types import Note, NoteClaim, Template, Transcript
 from app.modules.config.provider_registry import get_registry
 from app.modules.note_gen import repository as note_repo
 from app.modules.note_gen.critique import critique_note
 from app.modules.note_gen.few_shot import get_few_shot_examples, render_examples_block
 from app.modules.note_gen.specialty_style import get_specialty_style
+from app.modules.prompts import assemble_prompt
 from app.modules.providers.usage_service import get_provider_usage_service
 
 logger = logging.getLogger("aurion.note_gen")
@@ -346,6 +347,26 @@ async def _record_provider_usage(
 
 # ── Stage 1 Note Generation ──────────────────────────────────────────────
 
+
+async def _resolve_session_clinician(
+    session_id: str, db: AsyncSession
+) -> Optional[uuid.UUID]:
+    """Look up the session's ``clinician_id``.
+
+    Threads the owner into per-physician prompt assembly (AI-PROMPTS-B).
+    Returns ``None`` when the session isn't found — the caller falls
+    back to the base prompt so a missing row never blocks Stage 1.
+    """
+    try:
+        sid = uuid.UUID(session_id)
+    except (ValueError, AttributeError):
+        return None
+    result = await db.execute(
+        select(SessionModel.clinician_id).where(SessionModel.id == sid)
+    )
+    return result.scalar_one_or_none()
+
+
 async def generate_stage1_note(
     transcript: Transcript,
     specialty: str,
@@ -358,7 +379,8 @@ async def generate_stage1_note(
 
     Pipeline:
     1. Load the specialty template
-    2. Build the prompt using the exact system prompt from CLAUDE.md
+    2. Build the prompt using the exact system prompt from CLAUDE.md +
+       the calling physician's per-physician overlay (AI-PROMPTS-B)
     3. Call the active NoteGenerationProvider via the registry
     4. Calculate completeness score
     5. Create version record in the database
@@ -380,6 +402,17 @@ async def generate_stage1_note(
         type(provider).__name__,
     )
 
+    # AI-PROMPTS-B — assemble the (base + per-physician overlay) prompt
+    # at call time. The owner is the session's clinician_id; if the
+    # lookup misses, we fall back to the base prompt so a missing
+    # session row never blocks Stage 1.
+    clinician_id = await _resolve_session_clinician(session_id, db)
+    system_prompt: Optional[str] = None
+    if clinician_id is not None:
+        system_prompt = await assemble_prompt(
+            "note_generation", clinician_id, db
+        )
+
     # Wrap the registry call to capture per-call telemetry (issue #73).
     # Both the success and failure paths record so dashboards can show
     # failure / fallback rates accurately. Telemetry is best-effort —
@@ -387,7 +420,11 @@ async def generate_stage1_note(
     _usage_started = time.monotonic()
     try:
         note = await provider.generate_note(
-            transcript, template, stage=1, output_language=output_language
+            transcript,
+            template,
+            stage=1,
+            output_language=output_language,
+            system_prompt=system_prompt,
         )
         await _record_provider_usage(
             db=db,

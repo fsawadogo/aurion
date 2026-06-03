@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+from typing import Optional
 
 import httpx
 
@@ -113,6 +114,7 @@ def _build_user_prompt(note: Note, captions: list[FrameCaption]) -> str:
 async def reconcile_captions(
     captions: list[FrameCaption],
     note: Note,
+    system_prompt: Optional[str] = None,
 ) -> list[FrameCaption]:
     """Reconcile visual captions against the Stage 1 note via a single
     LLM call. Returns the same captions with ``integration_status`` and
@@ -122,6 +124,12 @@ async def reconcile_captions(
     Best-effort: any failure (no API key, HTTP error, malformed
     response) logs a warning and returns the captions unchanged so
     Stage 2 still produces a usable note.
+
+    ``system_prompt`` (AI-PROMPTS-B) — when set, used as the system
+    instruction instead of the bare ``RECONCILE_SYSTEM_PROMPT``
+    constant. Service layer assembles base + per-physician overlay
+    via ``app.modules.prompts.assemble_prompt``. ``None`` preserves
+    pre-Phase-B behaviour.
     """
     if not captions:
         return captions
@@ -134,6 +142,8 @@ async def reconcile_captions(
         return captions
 
     user_prompt = _build_user_prompt(note, captions)
+    # AI-PROMPTS-B — assembled prompt or base constant.
+    effective_system = system_prompt or RECONCILE_SYSTEM_PROMPT
 
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
@@ -148,7 +158,7 @@ async def reconcile_captions(
                     "model": _MODEL,
                     "max_tokens": 2000,
                     "temperature": 0.1,
-                    "system": RECONCILE_SYSTEM_PROMPT,
+                    "system": effective_system,
                     "messages": [{"role": "user", "content": user_prompt}],
                     "tools": [
                         {

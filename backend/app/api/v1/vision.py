@@ -29,6 +29,7 @@ from app.modules.note_gen.service import (
     create_note_version,
     get_latest_note,
 )
+from app.modules.prompts import assemble_prompt
 from app.modules.vision.clip_metrics import ClipTelemetry, record_clip_metrics
 from app.modules.vision.reconcile import reconcile_captions
 from app.modules.vision.service import (
@@ -162,11 +163,30 @@ async def run_stage2_vision(
     # ``clip_telemetry`` is the per-clip telemetry sink; the captioning
     # loop appends one ``ClipTelemetry`` per clip that survives the
     # low-confidence + provider-fallback gauntlet.
+    #
+    # AI-PROMPTS-B: assemble the kind-specific (base + per-physician
+    # overlay) system prompts once here. Both kinds share the same
+    # underlying base today but they're separate registry entries —
+    # the physician can customise them independently. We resolve both
+    # so the dispatch loop never re-asks the DB.
+    clinician_id = session_row.clinician_id if session_row is not None else None
+    frame_system_prompt = (
+        await assemble_prompt("vision_frame", clinician_id, db)
+        if clinician_id is not None
+        else None
+    )
+    clip_system_prompt = (
+        await assemble_prompt("vision_clip", clinician_id, db)
+        if clinician_id is not None
+        else None
+    )
     clip_telemetry: list[ClipTelemetry] = []
     captions_raw = await caption_visual_evidence(
         evidence=evidence_items,
         trigger_segments=trigger_segments,
         clip_telemetry_sink=clip_telemetry,
+        frame_system_prompt=frame_system_prompt,
+        clip_system_prompt=clip_system_prompt,
     )
 
     # Drop low-confidence captions before conflict classification.
@@ -177,7 +197,18 @@ async def run_stage2_vision(
     #    note's claims against the captions sharing each audio anchor.
     #    Replaces the previous "trust the vision provider's
     #    integration_status" shortcut. See vision/reconcile.py.
-    captions = await reconcile_captions(captions_filtered, note)
+    #
+    # AI-PROMPTS-B: assemble the conflict_reconciliation overlay for
+    # the calling clinician. Same DB session, same clinician_id —
+    # cheap lookup, single SELECT.
+    reconcile_system_prompt = (
+        await assemble_prompt("conflict_reconciliation", clinician_id, db)
+        if clinician_id is not None
+        else None
+    )
+    captions = await reconcile_captions(
+        captions_filtered, note, system_prompt=reconcile_system_prompt
+    )
 
     # 6. Merge into a new Stage 2 note version
     enriched = merge_visual_citations(note, captions)
