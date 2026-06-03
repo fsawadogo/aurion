@@ -104,6 +104,8 @@ EXPECTED_VALUES: dict[str, str] = {
     "PROVIDER_OVERRIDE_SET": "provider_override_set",
     "PROVIDER_OVERRIDE_CLEARED": "provider_override_cleared",
     "VISUAL_EVIDENCE_MODE_OVERRIDE_SET": "visual_evidence_mode_override_set",
+    # Operator probes (P1-FU-GEMINI-PROBE)
+    "VISION_CLIP_PROBED": "vision_clip_probed",
 }
 
 

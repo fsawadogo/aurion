@@ -18,6 +18,7 @@ from app.api.v1.admin import (
     emr,
     eval,
     metrics,
+    probe,
     providers,
     sessions,
     templates,
@@ -36,3 +37,4 @@ router.include_router(templates.router)
 router.include_router(providers.router)
 router.include_router(compliance.router)
 router.include_router(emr.router)
+router.include_router(probe.router)

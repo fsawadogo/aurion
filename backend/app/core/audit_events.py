@@ -140,6 +140,13 @@ class AuditEventType(StrEnum):
     # `feature_flags.per_session_visual_evidence_mode_override`; when the
     # flag is False the API returns 400 before this event can fire.
     VISUAL_EVIDENCE_MODE_OVERRIDE_SET = "visual_evidence_mode_override_set"
+    # Operator probe of the configured `vision_clip` provider
+    # (P1-FU-GEMINI-PROBE). Fires once per probe call (success OR
+    # failure) so we have a durable trail of who probed which provider
+    # at what latency. No clip body, no PHI, no session linkage —
+    # the synthetic session id `00000000-0000-0000-0000-000000000000`
+    # is used to keep the row out of any real session's history.
+    VISION_CLIP_PROBED = "vision_clip_probed"
 
 
 # ── Q-03 — kwarg whitelist ────────────────────────────────────────────────
@@ -437,6 +444,14 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     # mode is one of the VisualEvidenceMode enum string values. No PHI.
     AuditEventType.VISUAL_EVIDENCE_MODE_OVERRIDE_SET: frozenset(
         {"actor_id", "actor_role", "mode"}
+    ),
+    # Operator probe of the configured `vision_clip` provider
+    # (P1-FU-GEMINI-PROBE). `provider` is the resolved provider key
+    # string (e.g. "gemini"); `success` is a boolean; `latency_ms` is
+    # the wall-clock around the provider call; `error_type` is the
+    # classified exception name when success is false (else absent).
+    AuditEventType.VISION_CLIP_PROBED: frozenset(
+        {"provider", "success", "latency_ms", "error_type"}
     ),
 }
 
