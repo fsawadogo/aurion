@@ -62,8 +62,9 @@ class NoteGenerationProvider(ABC):
 
         ``system_prompt`` (AI-PROMPTS-B) — when set, used as the system
         instruction instead of the provider's default ``NOTE_GEN_SYSTEM_PROMPT``
-        constant. The service layer assembles the (base + per-physician
-        overlay) text via :func:`app.modules.prompts.assemble_prompt` and
+        constant. The service layer selects either the calling
+        physician's saved user prompt (replacement) or the registry
+        default via :func:`app.modules.prompts.assemble_prompt` and
         passes it down so providers stay stateless and DB-free. ``None``
         preserves the pre-Phase-B behaviour for callers that don't (yet)
         need per-physician customisation. Liskov: additive optional kwarg.

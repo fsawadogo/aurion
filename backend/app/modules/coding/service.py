@@ -191,8 +191,9 @@ async def extract_from_note(
         "emit `[]`.\n\n--- NOTE ---\n" + rendered
     )
 
-    # AI-PROMPTS-B — per-physician overlay assembly for the
-    # ``coding_suggestions`` prompt.
+    # AI-PROMPTS-B — per-physician REPLACEMENT selection for the
+    # ``coding_suggestions`` prompt. User prompt when set, registry
+    # default otherwise.
     system_prompt = await assemble_prompt_for_session(
         "coding_suggestions", session_id, db
     )

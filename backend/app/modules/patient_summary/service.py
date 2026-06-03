@@ -122,10 +122,11 @@ async def generate_summary(
         "prompt:\n\n--- NOTE ---\n" + rendered
     )
 
-    # AI-PROMPTS-B — assemble base + per-physician overlay for this
-    # caller's clinician. Falls back to the bare SYSTEM_PROMPT for
-    # sessions without a clinician_id (defensive — should not happen
-    # in production but the helper handles it).
+    # AI-PROMPTS-B — select the per-physician REPLACEMENT user prompt
+    # when this clinician has saved one; otherwise fall back to the
+    # registry default. Sessions without a clinician_id always use the
+    # default (defensive — should not happen in production but the
+    # helper handles it).
     system_prompt = await assemble_prompt_for_session(
         "patient_summary", session_id, db
     )

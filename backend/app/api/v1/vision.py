@@ -164,11 +164,12 @@ async def run_stage2_vision(
     # loop appends one ``ClipTelemetry`` per clip that survives the
     # low-confidence + provider-fallback gauntlet.
     #
-    # AI-PROMPTS-B: assemble the kind-specific (base + per-physician
-    # overlay) system prompts once here. Both kinds share the same
-    # underlying base today but they're separate registry entries —
-    # the physician can customise them independently. We resolve both
-    # so the dispatch loop never re-asks the DB.
+    # AI-PROMPTS-B: select the kind-specific system prompt once here
+    # — the calling physician's saved user prompt when set, the
+    # registry default otherwise (REPLACEMENT). Both kinds share the
+    # same underlying default today but they're separate registry
+    # entries — the physician can customise them independently. We
+    # resolve both so the dispatch loop never re-asks the DB.
     clinician_id = session_row.clinician_id if session_row is not None else None
     frame_system_prompt = (
         await assemble_prompt("vision_frame", clinician_id, db)
@@ -198,9 +199,9 @@ async def run_stage2_vision(
     #    Replaces the previous "trust the vision provider's
     #    integration_status" shortcut. See vision/reconcile.py.
     #
-    # AI-PROMPTS-B: assemble the conflict_reconciliation overlay for
-    # the calling clinician. Same DB session, same clinician_id —
-    # cheap lookup, single SELECT.
+    # AI-PROMPTS-B: select the conflict_reconciliation user prompt
+    # (replacement) or registry default for the calling clinician.
+    # Same DB session, same clinician_id — cheap lookup, single SELECT.
     reconcile_system_prompt = (
         await assemble_prompt("conflict_reconciliation", clinician_id, db)
         if clinician_id is not None

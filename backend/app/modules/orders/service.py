@@ -163,10 +163,11 @@ async def extract_from_note(
         "what the note already records.\n\n--- NOTE ---\n" + rendered
     )
 
-    # AI-PROMPTS-B — per-physician overlay assembly for the
-    # ``orders_extraction`` prompt. ``SYSTEM_PROMPT`` is still the base
-    # behind ``PROMPTS["orders_extraction"]``; the assembled string is
-    # base + overlay when present, base-only otherwise.
+    # AI-PROMPTS-B — per-physician REPLACEMENT selection for the
+    # ``orders_extraction`` prompt. ``SYSTEM_PROMPT`` is still the
+    # registry entry behind ``PROMPTS["orders_extraction"]``; the
+    # selected string is the user's saved prompt when set, the
+    # registry default otherwise.
     system_prompt = await assemble_prompt_for_session(
         "orders_extraction", session_id, db
     )

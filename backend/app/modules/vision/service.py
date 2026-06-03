@@ -360,11 +360,13 @@ async def caption_visual_evidence(
     `if provider == 'gemini'` branches anywhere (OCP).
 
     AI-PROMPTS-B: ``frame_system_prompt`` / ``clip_system_prompt`` are
-    pre-assembled (base + per-physician overlay) system prompts for
-    the two kinds. Routed by kind through ``_dispatch_caption``; when
-    ``None`` (frame-only mode or no overlay configured) the provider
-    falls back to its bare ``VISION_SYSTEM_PROMPT`` constant. The two
-    are split (not one shared override) so a physician can customise
+    pre-selected system prompts for the two kinds (the calling
+    physician's saved user prompt when present, the registry default
+    otherwise — REPLACEMENT, not concatenation). Routed by kind
+    through ``_dispatch_caption``; when ``None`` (frame-only mode or
+    no per-physician customisation configured) the provider falls
+    back to its bare ``VISION_SYSTEM_PROMPT`` constant. The two are
+    split (not one shared override) so a physician can customise
     the frame and clip prompts independently — they're different
     registry entries even though the underlying constant is shared
     today.
@@ -690,9 +692,10 @@ async def _dispatch_caption(
     returns `caption_clip` which produces a `FrameCaption` with
     `evidence_kind="clip"` and `duration_ms=<clip window>` (LSP).
 
-    ``system_prompt`` (AI-PROMPTS-B) is the pre-assembled per-physician
-    overlay for whichever kind the dispatch picks. ``None`` defers to
-    the provider's bare ``VISION_SYSTEM_PROMPT``.
+    ``system_prompt`` (AI-PROMPTS-B) is the pre-selected per-physician
+    user prompt (when set) or registry default for whichever kind the
+    dispatch picks — REPLACEMENT, not concatenation. ``None`` defers
+    to the provider's bare ``VISION_SYSTEM_PROMPT``.
     """
     if isinstance(item, MaskedClip):
         return await provider.caption_clip(

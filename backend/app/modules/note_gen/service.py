@@ -360,8 +360,9 @@ async def generate_stage1_note(
 
     Pipeline:
     1. Load the specialty template
-    2. Build the prompt using the exact system prompt from CLAUDE.md +
-       the calling physician's per-physician overlay (AI-PROMPTS-B)
+    2. Select the system prompt — the calling physician's saved user
+       prompt when present, the CLAUDE.md default otherwise
+       (AI-PROMPTS-B replacement semantics)
     3. Call the active NoteGenerationProvider via the registry
     4. Calculate completeness score
     5. Create version record in the database
@@ -383,10 +384,11 @@ async def generate_stage1_note(
         type(provider).__name__,
     )
 
-    # AI-PROMPTS-B — assemble the (base + per-physician overlay) prompt
-    # at call time. Falls back to the bare base when the session has
-    # no clinician_id resolvable — defensive, shouldn't happen in
-    # production but the helper handles it.
+    # AI-PROMPTS-B — select the prompt at call time. When the calling
+    # physician has saved a user prompt it replaces the base; otherwise
+    # the registry default is used. Sessions without a resolvable
+    # clinician_id always use the default (defensive — shouldn't happen
+    # in production but the helper handles it).
     system_prompt = await assemble_prompt_for_session(
         "note_generation", session_id, db
     )

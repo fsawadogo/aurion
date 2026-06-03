@@ -39,7 +39,8 @@ _ENDPOINT = "https://api.anthropic.com/v1/messages"
 # so the AI Prompts Transparency registry (``app.modules.prompts``) can import
 # it as the single source of truth. No copy-paste between this module and the
 # registry — the registry imports this exact string. Phase A read-only;
-# Phase B will overlay per-physician text on top.
+# Phase B replaces with per-physician text when the calling clinician
+# has saved a user prompt (replacement semantics).
 RECONCILE_SYSTEM_PROMPT = """You reconcile clinical visual observations with what was said during the same encounter moment.
 
 For each frame caption, decide its relationship to the audio-derived clinical claims:
@@ -127,8 +128,9 @@ async def reconcile_captions(
 
     ``system_prompt`` (AI-PROMPTS-B) — when set, used as the system
     instruction instead of the bare ``RECONCILE_SYSTEM_PROMPT``
-    constant. Service layer assembles base + per-physician overlay
-    via ``app.modules.prompts.assemble_prompt``. ``None`` preserves
+    constant. Service layer selects either the per-physician
+    REPLACEMENT user prompt or the registry default via
+    ``app.modules.prompts.assemble_prompt``. ``None`` preserves
     pre-Phase-B behaviour.
     """
     if not captions:

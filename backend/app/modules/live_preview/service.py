@@ -116,9 +116,10 @@ async def generate_preview(
     registry = get_registry()
     provider = registry.get_note_provider()
 
-    # AI-PROMPTS-B — assemble the ``live_preview`` overlay for the
-    # session's clinician. Same registry entry the Transparency page
-    # surfaces; same per-physician scope.
+    # AI-PROMPTS-B — select the ``live_preview`` user prompt for the
+    # session's clinician (replacement) or fall back to the registry
+    # default. Same registry entry the Transparency page surfaces;
+    # same per-physician scope.
     system_prompt = await assemble_prompt_for_session(
         "live_preview", session_id, db
     )
