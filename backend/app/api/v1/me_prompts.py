@@ -1,12 +1,12 @@
 """Self-scoped AI Prompts Transparency endpoints.
 
-Phase A (read-only) and Phase B (per-physician append-only overlays).
+Phase A (read-only) + Phase B (per-physician REPLACEMENT user prompts).
 
 The GET path lists every LLM system prompt the encounter pipeline uses
-plus the calling physician's current overlay (or ``None``) and an
-``assembled_preview`` of the combined text that would be sent to the
-LLM today. PATCH lets the physician save / update an overlay; DELETE
-resets to the base prompt.
+plus the calling physician's saved user prompt (or ``None``) and
+``active_prompt`` — the actual text the LLM would receive for THIS
+physician's next call. PATCH saves / updates a user prompt; DELETE
+removes it (falling back to the registry default).
 
 Why a separate router (not folded into ``me.py``)?
   * ``me.py`` is gated CLINICIAN-only at the router level. The GET path
@@ -16,13 +16,23 @@ Why a separate router (not folded into ``me.py``)?
   * The PATCH / DELETE paths ARE CLINICIAN-only (no physician proxy on
     their behalf). Mounting them in this same file keeps the prompt
     feature contained in one place; the role gating is per-endpoint
-    via the dependency in `Depends(...)`.
+    via the dependency in ``Depends(...)``.
+
+Replacement semantics (CTO clarification, supersedes PR #227 v1)
+----------------------------------------------------------------
+When a clinician saves text it REPLACES the registry's system prompt
+for their own sessions. The registry text is the fallback used only
+when no row exists for that ``(clinician_id, prompt_id)`` pair. The
+validator (``validate_user_prompt``) requires descriptive-mode anchor
+language in the saved text — without it, replacement would silently
+strip the descriptive-mode boundary CLAUDE.md mandates. That check is
+the single thing standing between physician input and the LLM.
 
 Audit invariants
 ----------------
-- Every PATCH writes ``PROMPT_OVERRIDE_SET`` with kwargs
-  ``{actor_id, prompt_id, overlay_length}`` — never the overlay text.
-- Every DELETE writes ``PROMPT_OVERRIDE_CLEARED`` with
+- Every PATCH writes ``PROMPT_USER_PROMPT_SET`` with kwargs
+  ``{actor_id, prompt_id, user_prompt_length}`` — never the text.
+- Every DELETE writes ``PROMPT_USER_PROMPT_CLEARED`` with
   ``{actor_id, prompt_id}``.
 - Both events use the synthetic session id
   ``00000000-0000-0000-0000-000000000000`` because the row is
@@ -50,19 +60,20 @@ from app.modules.prompts import (
     PROMPTS,
     PromptDefinition,
     ValidationCode,
-    assemble_preview,
-    validate_overlay,
+    select_active_prompt,
+    validate_user_prompt,
 )
 
 logger = logging.getLogger("aurion.api.me_prompts")
 
 router = APIRouter(prefix="/me", tags=["me"])
 
-#: Sentinel session id for overlay audit events. These events aren't
-#: bound to any particular session — they describe a per-physician
-#: configuration change. The all-zeros UUID matches the convention
-#: established by ``VISION_CLIP_PROBED`` (P1-FU-GEMINI-PROBE).
-_OVERLAY_AUDIT_SESSION_ID: str = "00000000-0000-0000-0000-000000000000"
+#: Sentinel session id for prompt-config audit events. These events
+#: aren't bound to any particular session — they describe a per-
+#: physician configuration change. The all-zeros UUID matches the
+#: convention established by ``VISION_CLIP_PROBED`` (P1-FU-GEMINI-
+#: PROBE).
+_PROMPT_AUDIT_SESSION_ID: str = "00000000-0000-0000-0000-000000000000"
 
 
 # Roles permitted to read the prompt catalog. CLINICIAN is the primary
@@ -101,7 +112,7 @@ async def require_clinician(
 ) -> CurrentUser:
     """Write paths (PATCH / DELETE) are CLINICIAN-only.
 
-    Overlays are per-physician personal preferences. Admins must not
+    User prompts are per-physician personal config. Admins must not
     edit them on a physician's behalf — that would defeat the whole
     "physician sees + signs off on the prompt the LLM receives"
     transparency story.
@@ -110,8 +121,8 @@ async def require_clinician(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=(
-                f"Only clinicians can edit their own prompt overlays "
-                f"(got {user.role.value})"
+                f"Only clinicians can edit their own AI prompts (got "
+                f"{user.role.value})"
             ),
         )
     return user
@@ -120,17 +131,25 @@ async def require_clinician(
 class PromptResponse(BaseModel):
     """Wire shape for one prompt card on the portal Transparency page.
 
-    Mirrors :class:`PromptDefinition` for the read path and adds the
-    Phase B per-physician overlay fields:
+    Mirrors :class:`PromptDefinition` for the read path. Phase B fields
+    under replacement semantics:
 
-      * ``overlay_text`` — the calling physician's customised
-        instructions, or ``None`` when they haven't set one.
-      * ``is_overridden`` — convenience flag (``overlay_text is not
-        None``).
-      * ``assembled_preview`` — the combined text the LLM would
-        actually receive today (``base + separator + overlay`` when
-        overridden; just ``base`` otherwise). Pre-computed so the
-        client doesn't re-assemble on every render.
+      * ``system_prompt`` — the registry default. Used when the caller
+        has not saved a user prompt; otherwise it's the editor's
+        "what the default looks like" preview pane.
+      * ``system_prompt_is_fallback`` — always ``True``. The portal
+        renders the system prompt with muted styling to make clear
+        it's the fallback, not the default that will run.
+      * ``user_prompt_text`` — the calling physician's saved
+        REPLACEMENT prompt, or ``None``.
+      * ``is_overridden`` — convenience flag (``user_prompt_text is
+        not None``). Drives the "Custom prompt active" badge.
+      * ``active_prompt`` — the EXACT text that will be sent to the
+        LLM on this physician's next call: ``user_prompt_text`` when
+        set, ``system_prompt`` otherwise. Replaces v1's
+        ``assembled_preview`` (which implied concatenation); the
+        rename makes the selection semantics legible at the API
+        boundary.
     """
 
     id: str
@@ -140,51 +159,63 @@ class PromptResponse(BaseModel):
     runs_when: str
     provider_field: str
     system_prompt: str
+    system_prompt_is_fallback: bool = Field(
+        default=True,
+        description=(
+            "Always True under replacement semantics — the system "
+            "prompt is the fallback, used only when the caller has not "
+            "saved a user_prompt_text."
+        ),
+    )
     schema_note: str | None
-    overlay_text: str | None = Field(
+    user_prompt_text: str | None = Field(
         default=None,
         description=(
-            "Per-physician append-only customisation. None when the "
-            "physician hasn't set an overlay."
+            "Per-physician REPLACEMENT prompt. None when the physician "
+            "hasn't saved one (the system_prompt is used instead)."
         ),
     )
     is_overridden: bool = Field(
         default=False,
         description=(
-            "True when overlay_text is set. Convenience flag for the UI."
+            "True when user_prompt_text is set. Convenience flag for "
+            "the UI badge."
         ),
     )
-    assembled_preview: str = Field(
+    active_prompt: str = Field(
         description=(
-            "The combined prompt text (base + overlay) the LLM would "
-            "receive today. Equal to system_prompt when no overlay set."
+            "The exact prompt text the LLM would receive for this "
+            "physician's next call: user_prompt_text when set, "
+            "system_prompt otherwise. NOT concatenation."
         ),
     )
 
 
-class PromptOverrideUpdate(BaseModel):
-    """PATCH request body."""
+class PromptUserPromptUpdate(BaseModel):
+    """PATCH request body — the full standalone user prompt."""
 
-    overlay_text: str = Field(
+    user_prompt_text: str = Field(
         description=(
-            "The physician's overlay text to append below the base "
-            "prompt. Validated structurally at save time (length cap + "
-            "banlist) — see app.modules.prompts.safety."
+            "The physician's full standalone system prompt that will "
+            "REPLACE the registry default for their own sessions. "
+            "Validated structurally at save time (length cap + banlist "
+            "+ required descriptive-mode anchors) — see "
+            "app.modules.prompts.safety."
         ),
     )
 
 
 def _serialize(
     prompt: PromptDefinition,
-    overlay_text: Optional[str],
+    user_prompt_text: Optional[str],
 ) -> PromptResponse:
-    """Project a registry entry + the caller's overlay (or None) onto
-    the wire schema.
+    """Project a registry entry + the caller's user prompt (or None)
+    onto the wire schema.
 
-    Single point of overlay-projection logic. The list endpoint maps
-    every registry entry through this; the PATCH / DELETE endpoints
-    project the freshly-saved (or just-cleared) row through it too —
-    so all three endpoints return byte-identical shapes.
+    Single point of projection logic. The list endpoint maps every
+    registry entry through this; the PATCH / DELETE endpoints project
+    the freshly-saved (or just-cleared) row through it too — so all
+    three endpoints return byte-identical shapes.
     """
     return PromptResponse(
         id=prompt.id,
@@ -194,36 +225,25 @@ def _serialize(
         runs_when=prompt.runs_when,
         provider_field=prompt.provider_field,
         system_prompt=prompt.system_prompt,
+        system_prompt_is_fallback=True,
         schema_note=prompt.schema_note,
-        overlay_text=overlay_text,
-        is_overridden=overlay_text is not None,
-        assembled_preview=assemble_preview(prompt.id, overlay_text),
+        user_prompt_text=user_prompt_text,
+        is_overridden=user_prompt_text is not None,
+        active_prompt=select_active_prompt(prompt.id, user_prompt_text),
     )
 
 
-async def _get_owner_overlays(
+async def _get_owner_user_prompts(
     db: AsyncSession, owner_id: uuid.UUID
 ) -> dict[str, str]:
-    """Fetch every overlay this physician has saved, keyed by
-    prompt_id. One DB round-trip, then we project against the registry
+    """Fetch every user prompt this physician has saved, keyed by
+    prompt_id. One DB round-trip, then project against the registry
     in memory — cheaper than N+1 lookups in the list endpoint."""
     stmt = select(PromptOverrideModel).where(
         PromptOverrideModel.owner_id == owner_id
     )
     result = await db.execute(stmt)
-    return {row.prompt_id: row.overlay_text for row in result.scalars().all()}
-
-
-async def _get_single_overlay(
-    db: AsyncSession, owner_id: uuid.UUID, prompt_id: str
-) -> Optional[str]:
-    """Fetch a single overlay row's text (or None)."""
-    stmt = select(PromptOverrideModel.overlay_text).where(
-        PromptOverrideModel.owner_id == owner_id,
-        PromptOverrideModel.prompt_id == prompt_id,
-    )
-    result = await db.execute(stmt)
-    return result.scalar_one_or_none()
+    return {row.prompt_id: row.user_prompt_text for row in result.scalars().all()}
 
 
 # ── GET — list ──────────────────────────────────────────────────────────────
@@ -238,25 +258,26 @@ async def list_my_prompts(
     user: CurrentUser = Depends(require_prompts_reader),
     db: AsyncSession = Depends(get_db),
 ) -> list[PromptResponse]:
-    """Return the read-only catalog + per-physician overlay overlay.
+    """Return the read-only catalog + per-physician user prompt for
+    each entry.
 
-    For CLINICIAN callers, the response includes their saved overlays
-    (when present). For ADMIN / EVAL_TEAM / COMPLIANCE_OFFICER callers,
-    the per-physician overlay table doesn't apply to them (overlays
-    are per-clinician personal config) — they always see
-    ``overlay_text=None`` / base-only assembled_preview. This keeps the
-    response strictly the caller's view: support roles never inspect
-    another physician's preferences through this endpoint.
+    For CLINICIAN callers, the response includes their saved user
+    prompts (when present). For ADMIN / EVAL_TEAM / COMPLIANCE_OFFICER
+    callers, the per-physician table doesn't apply to them (user
+    prompts are per-clinician personal config) — they always see
+    ``user_prompt_text=None`` and ``active_prompt == system_prompt``.
+    This keeps the response strictly the caller's view: support roles
+    never inspect another physician's prompts through this endpoint.
     """
-    overlays_by_prompt: dict[str, str] = {}
+    user_prompts_by_id: dict[str, str] = {}
     if user.role is UserRole.CLINICIAN:
-        overlays_by_prompt = await _get_owner_overlays(db, user.user_id)
+        user_prompts_by_id = await _get_owner_user_prompts(db, user.user_id)
     return [
-        _serialize(p, overlays_by_prompt.get(p.id)) for p in PROMPTS.values()
+        _serialize(p, user_prompts_by_id.get(p.id)) for p in PROMPTS.values()
     ]
 
 
-# ── PATCH — save / update overlay ───────────────────────────────────────────
+# ── PATCH — save / update user prompt ───────────────────────────────────────
 
 
 def _prompt_or_404(prompt_id: str) -> PromptDefinition:
@@ -277,28 +298,32 @@ def _prompt_or_404(prompt_id: str) -> PromptDefinition:
 @router.patch(
     "/prompts/{prompt_id}",
     response_model=PromptResponse,
-    summary="Save or update the calling physician's overlay on a prompt",
+    summary="Save or update the calling physician's user prompt",
 )
-async def patch_my_prompt_override(
+async def patch_my_user_prompt(
     prompt_id: str,
-    body: PromptOverrideUpdate,
+    body: PromptUserPromptUpdate,
     user: CurrentUser = Depends(require_clinician),
     db: AsyncSession = Depends(get_db),
 ) -> PromptResponse:
-    """Validate + upsert the calling physician's overlay on
+    """Validate + upsert the calling physician's user prompt for
     ``prompt_id``.
 
     Returns the updated PromptResponse (same shape as the list
     endpoint) on success. On safety failure returns 400 with the
-    matched_phrase echoed back when applicable — the physician sees
-    *exactly* which phrase tripped the gate.
+    matched_phrase (for banned-phrase failures) or
+    missing_anchor_group (for the descriptive-mode anchor check)
+    echoed back — the physician sees *exactly* what tripped the gate.
     """
     prompt = _prompt_or_404(prompt_id)
 
     # Structural safety gate. The matched_phrase echo is safe to
-    # surface — it's the BANLIST entry, not patient content.
-    overlay_text = body.overlay_text.strip() if body.overlay_text else ""
-    validation = validate_overlay(overlay_text)
+    # surface — it's the BANLIST entry, not patient content. The
+    # missing_anchor_group is an index, also safe to surface.
+    user_prompt_text = (
+        body.user_prompt_text.strip() if body.user_prompt_text else ""
+    )
+    validation = validate_user_prompt(user_prompt_text)
     if validation.code is not ValidationCode.OK:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -306,6 +331,7 @@ async def patch_my_prompt_override(
                 "message": validation.message,
                 "code": validation.code.value,
                 "matched_phrase": validation.matched_phrase,
+                "missing_anchor_group": validation.missing_anchor_group,
             },
         )
 
@@ -325,49 +351,49 @@ async def patch_my_prompt_override(
             id=uuid.uuid4(),
             owner_id=user.user_id,
             prompt_id=prompt_id,
-            overlay_text=overlay_text,
+            user_prompt_text=user_prompt_text,
         )
         db.add(row)
     else:
-        row.overlay_text = overlay_text
+        row.user_prompt_text = user_prompt_text
     await db.flush()
 
-    # Audit — overlay_length only, NEVER the overlay text. Personal
+    # Audit — user_prompt_length only, NEVER the text. Personal
     # phrasing stays out of the immutable trail.
     await write_audit(
-        _OVERLAY_AUDIT_SESSION_ID,
-        AuditEventType.PROMPT_OVERRIDE_SET,
+        _PROMPT_AUDIT_SESSION_ID,
+        AuditEventType.PROMPT_USER_PROMPT_SET,
         actor_id=str(user.user_id),
         prompt_id=prompt_id,
-        overlay_length=len(overlay_text),
+        user_prompt_length=len(user_prompt_text),
     )
     await db.commit()
 
     logger.info(
-        "Prompt overlay saved: clinician=%s prompt=%s length=%d",
-        user.user_id, prompt_id, len(overlay_text),
+        "User prompt saved: clinician=%s prompt=%s length=%d",
+        user.user_id, prompt_id, len(user_prompt_text),
     )
-    return _serialize(prompt, overlay_text)
+    return _serialize(prompt, user_prompt_text)
 
 
-# ── DELETE — reset to base ──────────────────────────────────────────────────
+# ── DELETE — remove user prompt (fall back to system default) ──────────────
 
 
 @router.delete(
     "/prompts/{prompt_id}",
     response_model=PromptResponse,
-    summary="Clear the calling physician's overlay (reset to base)",
+    summary="Clear the calling physician's user prompt (use system default)",
 )
-async def delete_my_prompt_override(
+async def delete_my_user_prompt(
     prompt_id: str,
     user: CurrentUser = Depends(require_clinician),
     db: AsyncSession = Depends(get_db),
 ) -> PromptResponse:
-    """Reset to the base prompt by deleting the overlay row.
+    """Remove the saved user prompt so the registry default takes over.
 
-    Idempotent: deleting a non-existent overlay is a no-op (still
-    returns 200 with the base-only PromptResponse) so the UI doesn't
-    have to special-case "already at base".
+    Idempotent: deleting a non-existent row is a no-op (still returns
+    200 with the system-default PromptResponse) so the UI doesn't have
+    to special-case "already at default".
     """
     prompt = _prompt_or_404(prompt_id)
 
@@ -378,15 +404,15 @@ async def delete_my_prompt_override(
         )
     )
     await write_audit(
-        _OVERLAY_AUDIT_SESSION_ID,
-        AuditEventType.PROMPT_OVERRIDE_CLEARED,
+        _PROMPT_AUDIT_SESSION_ID,
+        AuditEventType.PROMPT_USER_PROMPT_CLEARED,
         actor_id=str(user.user_id),
         prompt_id=prompt_id,
     )
     await db.commit()
 
     logger.info(
-        "Prompt overlay cleared: clinician=%s prompt=%s",
+        "User prompt cleared: clinician=%s prompt=%s",
         user.user_id, prompt_id,
     )
     return _serialize(prompt, None)
