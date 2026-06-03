@@ -66,6 +66,11 @@ resource "aws_appconfig_configuration_profile" "main" {
             transcription   = { type = "string", enum = ["whisper", "assemblyai"] }
             note_generation = { type = "string", enum = ["openai", "anthropic", "gemini"] }
             vision          = { type = "string", enum = ["openai", "anthropic", "gemini"] }
+            # Phase 1 dual-mode (Cohort 5): the vision provider used for
+            # clip-kind evidence. Independent of the frame provider so
+            # clinics can route motion-heavy work to Gemini (native video)
+            # while keeping cheap still-frame work on OpenAI/Anthropic.
+            vision_clip = { type = "string", enum = ["openai", "anthropic", "gemini"] }
           }
         }
         model_params = {
@@ -110,6 +115,13 @@ resource "aws_appconfig_configuration_profile" "main" {
             frame_window_procedural_ms = { type = "integer", minimum = 1000, maximum = 60000 }
             screen_capture_fps         = { type = "integer", minimum = 1, maximum = 10 }
             video_capture_fps          = { type = "integer", minimum = 1, maximum = 10 }
+            # Phase 1 dual-mode (Cohort 5): pipeline knobs for the clip
+            # path. visual_evidence_mode is the top-level switch — the
+            # iOS dispatcher routes per-trigger only when mode == "hybrid".
+            visual_evidence_mode     = { type = "string", enum = ["frames_only", "clips_only", "hybrid"] }
+            clip_window_ms           = { type = "integer", minimum = 1000, maximum = 30000 }
+            clip_ring_buffer_seconds = { type = "integer", minimum = 5, maximum = 60 }
+            clip_trigger_kinds       = { type = "array", items = { type = "string" } }
           }
         }
         feature_flags = {
@@ -127,6 +139,10 @@ resource "aws_appconfig_configuration_profile" "main" {
             session_pause_resume_enabled  = { type = "boolean" }
             per_session_provider_override = { type = "boolean" }
             meta_wearables_enabled        = { type = "boolean" }
+            # Phase 1 dual-mode (Cohort 5): gates the per-session
+            # visual_evidence_mode override path (P1-7). False disables
+            # the override even when the global mode is hybrid/clips_only.
+            per_session_visual_evidence_mode_override = { type = "boolean" }
           }
         }
       }
@@ -146,7 +162,7 @@ resource "aws_appconfig_hosted_configuration_version" "main" {
   application_id           = aws_appconfig_application.main.id
   configuration_profile_id = aws_appconfig_configuration_profile.main.configuration_profile_id
   content_type             = "application/json"
-  description              = "Initial Aurion configuration"
+  description              = "Aurion config — Cohort 5 Phase 1 dual-mode hybrid"
 
   content = jsonencode({
     providers = {
@@ -158,6 +174,9 @@ resource "aws_appconfig_hosted_configuration_version" "main" {
       transcription   = "assemblyai"
       note_generation = "anthropic"
       vision          = "openai"
+      # Phase 1 dual-mode (Cohort 5): Gemini 2.5 Pro handles clip-kind
+      # evidence natively. Live-probe verified end-to-end on 2026-06-03.
+      vision_clip = "gemini"
     }
     model_params = {
       note_generation = {
@@ -176,6 +195,14 @@ resource "aws_appconfig_hosted_configuration_version" "main" {
       frame_window_procedural_ms = 7000
       screen_capture_fps         = 2
       video_capture_fps          = 1
+      # Phase 1 dual-mode (Cohort 5): hybrid routes motion/rom/gait/
+      # procedural triggers to 7s clip extraction → Gemini Pro; other
+      # triggers stay as frames → OpenAI (the configured vision provider).
+      # Flipped from "frames_only" → "hybrid" on 2026-06-03 by CTO call.
+      visual_evidence_mode     = "hybrid"
+      clip_window_ms           = 7000
+      clip_ring_buffer_seconds = 15
+      clip_trigger_kinds       = ["motion", "rom", "gait", "procedural"]
     }
     feature_flags = {
       # Disabled for the pilot. Aurion is a wearable scribe — clinical signal
@@ -187,6 +214,10 @@ resource "aws_appconfig_hosted_configuration_version" "main" {
       note_versioning_enabled       = true
       session_pause_resume_enabled  = true
       per_session_provider_override = true
+      # Phase 1 dual-mode (Cohort 5): allows the eval team to flip
+      # individual sessions back to clips_only / frames_only via the
+      # per-session override path (P1-7) without redeploying AppConfig.
+      per_session_visual_evidence_mode_override = true
     }
   })
 }
