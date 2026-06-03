@@ -114,6 +114,14 @@ async def get_pilot_metrics(
             stage1_latency_ms=row.stage1_latency_ms,
             stage2_latency_ms=row.stage2_latency_ms,
             session_completeness=row.session_completeness,
+            # P1-FU-METRICS — additive; old clients ignore.
+            clip_count=row.clip_count,
+            clip_bytes_uploaded=row.clip_bytes_uploaded,
+            clip_avg_latency_ms=row.clip_avg_latency_ms,
+            clip_vision_spend_estimate_usd_micros=(
+                row.clip_vision_spend_estimate_usd_micros
+            ),
+            clip_degraded_to_frame_count=row.clip_degraded_to_frame_count,
             created_at=row.created_at.isoformat() if row.created_at else "",
         ))
 

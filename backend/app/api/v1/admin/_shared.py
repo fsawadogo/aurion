@@ -118,6 +118,14 @@ class PilotMetricResponse(BaseModel):
     stage1_latency_ms: Optional[int] = None
     stage2_latency_ms: Optional[int] = None
     session_completeness: bool = False
+    # ── Clip-aware metrics (P1-FU-METRICS) ─────────────────────────────
+    # Additive — old clients ignore. EVAL_TEAM + ADMIN roles only;
+    # the route-level role gate is unchanged.
+    clip_count: Optional[int] = None
+    clip_bytes_uploaded: Optional[int] = None
+    clip_avg_latency_ms: Optional[int] = None
+    clip_vision_spend_estimate_usd_micros: Optional[int] = None
+    clip_degraded_to_frame_count: Optional[int] = None
     created_at: str = ""
 
     model_config = {"from_attributes": True}
