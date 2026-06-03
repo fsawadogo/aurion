@@ -35,7 +35,12 @@ _MODEL = "claude-sonnet-4-6"
 _ENDPOINT = "https://api.anthropic.com/v1/messages"
 
 
-_CRITIQUE_SYSTEM_PROMPT = """You audit a clinical note for traceability + correctness mistakes before a physician sees it.
+# Promoted to a module-level public constant (was ``_CRITIQUE_SYSTEM_PROMPT``)
+# so the AI Prompts Transparency registry (``app.modules.prompts``) can import
+# it as the single source of truth. The critic runs on Stage 1 notes before
+# the physician sees them; its instructions are part of the safety surface
+# physicians can audit on the portal Transparency page.
+CRITIQUE_SYSTEM_PROMPT = """You audit a clinical note for traceability + correctness mistakes before a physician sees it.
 
 For each potential issue, return a structured fix. The auditor MAY mutate the note via these actions:
 - "drop_claim": remove a claim whose source_id is missing/empty or whose source_quote doesn't support its text.
@@ -127,7 +132,7 @@ async def critique_note(note: Note, transcript: Transcript) -> Note:
                     "model": _MODEL,
                     "max_tokens": 1500,
                     "temperature": 0.1,
-                    "system": _CRITIQUE_SYSTEM_PROMPT,
+                    "system": CRITIQUE_SYSTEM_PROMPT,
                     "messages": [{"role": "user", "content": user_prompt}],
                     "tools": [
                         {

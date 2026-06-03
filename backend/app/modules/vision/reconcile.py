@@ -34,7 +34,12 @@ _MODEL = "claude-sonnet-4-6"
 _ENDPOINT = "https://api.anthropic.com/v1/messages"
 
 
-_RECONCILE_SYSTEM_PROMPT = """You reconcile clinical visual observations with what was said during the same encounter moment.
+# Promoted to a module-level public constant (was ``_RECONCILE_SYSTEM_PROMPT``)
+# so the AI Prompts Transparency registry (``app.modules.prompts``) can import
+# it as the single source of truth. No copy-paste between this module and the
+# registry — the registry imports this exact string. Phase A read-only;
+# Phase B will overlay per-physician text on top.
+RECONCILE_SYSTEM_PROMPT = """You reconcile clinical visual observations with what was said during the same encounter moment.
 
 For each frame caption, decide its relationship to the audio-derived clinical claims:
 - ENRICHES — the visual shows something the audio did not describe, or adds specificity (location, size, laterality) the audio omitted.
@@ -143,7 +148,7 @@ async def reconcile_captions(
                     "model": _MODEL,
                     "max_tokens": 2000,
                     "temperature": 0.1,
-                    "system": _RECONCILE_SYSTEM_PROMPT,
+                    "system": RECONCILE_SYSTEM_PROMPT,
                     "messages": [{"role": "user", "content": user_prompt}],
                     "tools": [
                         {
