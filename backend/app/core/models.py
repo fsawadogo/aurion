@@ -298,6 +298,32 @@ class PilotMetricsModel(Base):
         Boolean, nullable=False, default=False
     )
 
+    # ── Clip-aware metrics (P1-FU-METRICS) ─────────────────────────────────
+    #
+    # All five are nullable, additive — old rows decode as null and the
+    # admin endpoint already surfaces Optional fields. ``clip_count``,
+    # ``clip_bytes_uploaded`` and ``clip_degraded_to_frame_count`` carry a
+    # server-side default of 0 so downstream aggregations don't have to
+    # COALESCE; the two mean/sum columns stay null when no clips were
+    # processed so "no clips" never collapses to "0 ms" / "$0".
+    #
+    # Cost is stored as USD micros (1 USD = 1_000_000 micros) — integer
+    # arithmetic preserves precision across Phase 2 aggregations; the
+    # cost rate sheet lives in app/modules/vision/cost_rates.py.
+    clip_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    clip_bytes_uploaded: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    clip_avg_latency_ms: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    clip_vision_spend_estimate_usd_micros: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+    clip_degraded_to_frame_count: Mapped[int | None] = mapped_column(
+        Integer, nullable=True
+    )
+
 
 class Stage2JobModel(Base):
     """Tracks async Stage 2 visual enrichment jobs.
