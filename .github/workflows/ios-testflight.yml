@@ -24,6 +24,11 @@ on:
     branches: [main]
     paths:
       - "ios/**"
+      # Include this workflow file itself in the PR-time path filter so
+      # changes to the workflow (e.g. P1-5-FU adding the codec-isolated
+      # test step) self-validate on the PR that introduces them, instead
+      # of only running after merge to main.
+      - ".github/workflows/ios-testflight.yml"
   workflow_dispatch:
 
 permissions:
