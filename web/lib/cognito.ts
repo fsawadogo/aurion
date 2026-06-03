@@ -98,6 +98,99 @@ export async function startSignIn(): Promise<void> {
   window.location.href = `${HOSTED_UI_BASE}/oauth2/authorize?${params}`;
 }
 
+/**
+ * Native email + password sign-in against the Cognito user pool.
+ * Mirrors the iOS app's `CognitoNativeAuth` path — no hosted-UI redirect,
+ * no PKCE. Posts directly to the InitiateAuth endpoint with
+ * `USER_PASSWORD_AUTH`. Requires the user pool client to have
+ * `ALLOW_USER_PASSWORD_AUTH` in its explicit_auth_flows (verified on
+ * the dev pool).
+ *
+ * Tokens are stashed in sessionStorage on success — the rest of the
+ * app reads them via `getStoredIdToken()`.
+ *
+ * Throws on any Cognito error with the user-facing message Cognito
+ * returns (e.g. "Incorrect username or password.").
+ *
+ * NOTE: this transport works the same against any AWS Cognito user pool
+ * — only `COGNITO_REGION` + `CLIENT_ID` change per environment.
+ */
+export async function signInWithPassword(
+  email: string,
+  password: string,
+): Promise<TokenResponse> {
+  // Cognito region is fixed for the Aurion deployments (ca-central-1).
+  // Surface as a constant so the hardcoding is obvious to grep.
+  const COGNITO_REGION = "ca-central-1";
+
+  const res = await fetch(`https://cognito-idp.${COGNITO_REGION}.amazonaws.com/`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/x-amz-json-1.1",
+      "X-Amz-Target": "AWSCognitoIdentityProviderService.InitiateAuth",
+    },
+    body: JSON.stringify({
+      AuthFlow: "USER_PASSWORD_AUTH",
+      ClientId: CLIENT_ID,
+      AuthParameters: {
+        USERNAME: email,
+        PASSWORD: password,
+      },
+    }),
+  });
+
+  const payload = await res.json().catch(() => ({}));
+
+  if (!res.ok) {
+    // Cognito errors come back as `{ __type: "NotAuthorizedException",
+    // message: "Incorrect username or password." }`. Prefer the
+    // user-facing message; fall back to the type name if message is
+    // missing.
+    const msg =
+      (payload as { message?: string; Message?: string; __type?: string })
+        .message ??
+      (payload as { Message?: string }).Message ??
+      (payload as { __type?: string }).__type ??
+      `Sign-in failed (HTTP ${res.status})`;
+    throw new Error(msg);
+  }
+
+  // A successful response with no AuthenticationResult means Cognito
+  // wants us to handle a challenge (NEW_PASSWORD_REQUIRED, MFA, etc.).
+  // For the pilot, all passwords are permanent + MFA is off, so this
+  // is unexpected — surface clearly rather than silently failing.
+  const result = (payload as {
+    AuthenticationResult?: {
+      IdToken: string;
+      AccessToken: string;
+      RefreshToken?: string;
+      ExpiresIn: number;
+      TokenType: string;
+    };
+    ChallengeName?: string;
+  });
+
+  if (!result.AuthenticationResult) {
+    if (result.ChallengeName) {
+      throw new Error(
+        `Sign-in requires additional step: ${result.ChallengeName}. ` +
+          `Contact your administrator.`,
+      );
+    }
+    throw new Error("Sign-in did not return tokens");
+  }
+
+  const tokens: TokenResponse = {
+    id_token: result.AuthenticationResult.IdToken,
+    access_token: result.AuthenticationResult.AccessToken,
+    refresh_token: result.AuthenticationResult.RefreshToken,
+    expires_in: result.AuthenticationResult.ExpiresIn,
+    token_type: result.AuthenticationResult.TokenType,
+  };
+  storeTokens(tokens);
+  return tokens;
+}
+
 interface TokenResponse {
   id_token: string;
   access_token: string;

@@ -1,20 +1,22 @@
 "use client";
 
 import { AlertCircle, Eye, EyeOff, Lock } from "lucide-react";
-// Native email + password login against the backend's /api/v1/auth/login
-// endpoint (backend-signed JWT, stored in the `aurion_token` cookie).
-//
-// The Cognito hosted-UI path is paused — lib/cognito.ts is intentionally
-// left intact and `getToken()` still reads Cognito tokens first, so flipping
-// back to hosted UI is a one-component change. Backend `/auth/login` returns
-// 404 outside `APP_ENV=local`, which makes this safe to ship: nothing here
-// works against a non-local backend.
+// Dual-path login, single visual treatment (matches iOS native login):
+//   * IS_LOCAL  → backend `/api/v1/auth/login` (dev-seeded users +
+//                 password hashes). Requires the backend with
+//                 APP_ENV=local.
+//   * Cloud     → direct Cognito `InitiateAuth` with USER_PASSWORD_AUTH
+//                 — same code path the iOS `CognitoNativeAuth` uses.
+//                 No hosted-UI redirect, no PKCE.
+// In both cases the form looks identical to the user; only the
+// transport under the hood differs.
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
 import { AurionLogoLockup } from "@/components/AurionLogo";
-import { login } from "@/lib/api";
+import { fetchWithAuth, login } from "@/lib/api";
+import { signInWithPassword } from "@/lib/cognito";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const IS_LOCAL =
@@ -33,24 +35,49 @@ export default function LoginPage() {
     setError(null);
     setLoading(true);
     try {
-      const auth = await login(email.trim().toLowerCase(), password);
+      const trimmed = email.trim().toLowerCase();
+      let role: string;
+
+      if (IS_LOCAL) {
+        const auth = await login(trimmed, password);
+        role = auth.role;
+      } else {
+        // Cloud env — Cognito native sign-in. Tokens are stored in
+        // sessionStorage by signInWithPassword. Backend role resolution
+        // happens server-side; we hit /auth/me to learn the role.
+        await signInWithPassword(trimmed, password);
+        const meRes = await fetchWithAuth("/api/v1/auth/me");
+        const me = await meRes.json();
+        role = me.role ?? "CLINICIAN";
+      }
+
       // CLINICIAN lands on the portal; everyone else gets the admin
       // /dashboard which the existing admin/eval/compliance pages
       // already route off.
-      router.push(auth.role === "CLINICIAN" ? "/portal/dashboard" : "/dashboard");
+      router.push(role === "CLINICIAN" ? "/portal/dashboard" : "/dashboard");
       router.refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Sign-in failed";
       if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
         setError(
-          `Cannot reach the backend at ${API_BASE}. Is \`docker-compose up\` running?`,
+          IS_LOCAL
+            ? `Cannot reach the backend at ${API_BASE}. Is \`docker-compose up\` running?`
+            : "Couldn't reach Aurion. Check your network and try again.",
         );
-      } else if (/401|Invalid email or password/i.test(msg)) {
+      } else if (
+        /401|Invalid email or password|Incorrect username or password|NotAuthorizedException/i.test(
+          msg,
+        )
+      ) {
         setError("Invalid email or password.");
-      } else if (/404/i.test(msg)) {
-        setError(
-          "Backend /auth/login is disabled here (APP_ENV is not 'local'). Point NEXT_PUBLIC_API_URL at a local backend.",
-        );
+      } else if (/UserNotFoundException/i.test(msg)) {
+        setError("No account found for that email.");
+      } else if (/UserNotConfirmedException/i.test(msg)) {
+        setError("Account not yet confirmed. Contact your administrator.");
+      } else if (/PasswordResetRequiredException/i.test(msg)) {
+        setError("Password reset required. Contact your administrator.");
+      } else if (/TooManyRequestsException|TooManyFailedAttemptsException/i.test(msg)) {
+        setError("Too many sign-in attempts. Wait a minute and try again.");
       } else {
         setError(msg.replace(/^Login failed:\s*/, ""));
       }
