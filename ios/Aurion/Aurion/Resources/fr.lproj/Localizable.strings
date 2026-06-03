@@ -77,6 +77,17 @@
 "patientId.privacyHint" = "Chiffr\U00E9 au repos. N\U2019appara\U00EEt jamais dans le journal d\U2019audit ni dans les prompts IA.";
 "patientId.saveFailed" = "Impossible d\U2019enregistrer l\U2019identifiant. Veuillez r\U00E9essayer.";
 
+/* ── Visites pr\U00E9c\U00E9dentes (#61 tranche compl\U00E8te) ────── */
+"priorEncounters.title" = "Visites pr\U00E9c\U00E9dentes";
+"priorEncounters.titleWith" = "Visites pr\U00E9c\U00E9dentes \U00B7 %@";
+"priorEncounters.seeAll" = "Tout voir (%d)";
+"priorEncounters.empty" = "Premi\U00E8re visite avec ce patient";
+"priorEncounters.loadFailed" = "Impossible de charger les visites pr\U00E9c\U00E9dentes.";
+"priorEncounters.retry" = "R\U00E9essayer";
+"priorEncounters.fullList.title" = "Visites pour %@";
+"priorEncounters.fullList.empty" = "Aucune visite pr\U00E9c\U00E9dente pour l\U2019instant.";
+"priorEncounters.a11y.tapCard" = "Ouvrir la visite du %@";
+
 /* ── R\U00E9sum\U00E9 patient (#59) ───────────────────────────── */
 "summary.title" = "R\U00E9sum\U00E9 patient";
 "summary.subtitle" = "Document en langage simple pour le patient. G\U00E9n\U00E9r\U00E9 uniquement apr\U00E8s votre approbation de la note.";
