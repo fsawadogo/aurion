@@ -198,7 +198,8 @@ final class SessionManager: ObservableObject {
                 specialty: request.specialty,
                 captureMode: request.captureMode,
                 encounterType: request.encounterType,
-                participants: participants
+                participants: participants,
+                providerOverrides: response.providerOverrides
             )
             captureSession.state = .consentPending
             session = captureSession
@@ -463,6 +464,38 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Visual Evidence Submission (P1-5 dual-mode)
 
+    /// Resolve which `VisualEvidenceMode` to use for a session — the
+    /// session-level override (P1-7) wins when set and parseable;
+    /// everything else falls back to the AppConfig global default.
+    ///
+    /// Static + pure so unit tests can exercise it without spinning
+    /// up a SessionManager / RemoteConfig. The Stage 2 dispatcher
+    /// calls this once at the top of `submitVisualEvidence` so the
+    /// per-frame `extractEvidence` switch only sees a single
+    /// resolved mode (LSP — same enum the AppConfig path returns).
+    ///
+    /// `sessionOverride` is the RAW string from
+    /// `session.providerOverrides?.visualEvidenceMode`. An
+    /// unparseable string is treated as "no override" — fail-soft,
+    /// never crash the dispatcher on a stale row or a future server
+    /// that emits a mode this iOS build doesn't know yet. A debug
+    /// log line lets the verification gate spot the silent fallback.
+    nonisolated static func resolveEvidenceMode(
+        sessionOverride: String?,
+        globalDefault: VisualEvidenceMode
+    ) -> VisualEvidenceMode {
+        guard let raw = sessionOverride, !raw.isEmpty else {
+            return globalDefault
+        }
+        if let parsed = VisualEvidenceMode(rawValue: raw) {
+            return parsed
+        }
+        // Unparseable — log and fall back. No PHI: the raw string is
+        // an AppConfig enum value, never patient content.
+        print("[SessionManager] Unparseable session visual_evidence_mode override='\(raw)' — falling back to global default '\(globalDefault.rawValue)'")
+        return globalDefault
+    }
+
     /// Resolve the captured frame list into a list of `VisualEvidence`
     /// items per the active `VisualEvidenceMode`. Pure helper — no I/O
     /// — so unit tests can exercise the dispatch logic with a stubbed
@@ -572,7 +605,15 @@ final class SessionManager: ObservableObject {
         maskingFailedFrames.removeAll { $0.kind == .video || $0.kind == .clip }
 
         let pipeline = RemoteConfig.shared.pipeline
-        let mode = pipeline.visualEvidenceMode
+        // Session-level override (P1-7) takes precedence over the
+        // AppConfig-driven global default. The resolver returns the
+        // global mode whenever no session override is set OR the
+        // override carries an unparseable string — fail-soft, never
+        // crash the dispatcher on a corrupt override.
+        let mode = Self.resolveEvidenceMode(
+            sessionOverride: session.providerOverrides?.visualEvidenceMode,
+            globalDefault: pipeline.visualEvidenceMode
+        )
         let clipWindowMs = pipeline.clipWindowMs
         let clipTriggerKinds = pipeline.clipTriggerKinds
 
@@ -1185,7 +1226,8 @@ final class SessionManager: ObservableObject {
             captureMode: mode,
             encounterType: response.encounterType,
             participants: [],
-            externalReferenceId: response.externalReferenceId
+            externalReferenceId: response.externalReferenceId,
+            providerOverrides: response.providerOverrides
         )
         // Past consent — anything in RECORDING/PAUSED on the backend already
         // logged consent_confirmed when this session was first started. We

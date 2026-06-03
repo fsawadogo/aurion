@@ -159,6 +159,12 @@ final class CaptureSession: ObservableObject, Identifiable {
     /// PATCH route + writes back here on success. Stays nil until
     /// the physician chooses to set one. Never logged.
     @Published var externalReferenceId: String?
+    /// Per-session provider routing overrides (P1-7). When set, the
+    /// dispatcher reads `providerOverrides?.visualEvidenceMode` first
+    /// before falling back to the AppConfig pipeline default. nil for
+    /// sessions created with no overrides (the common case). Decoded
+    /// from the backend SessionResponse at creation/adoption time.
+    let providerOverrides: ProviderOverrides?
 
     /// Derived from the consent metadata so the three never desynchronize.
     /// Setting consent goes through `confirmConsent(method:)`; recovery
@@ -183,7 +189,8 @@ final class CaptureSession: ObservableObject, Identifiable {
         captureMode: CaptureMode = .multimodal,
         encounterType: String = "doctor_patient",
         participants: [SessionParticipant] = [],
-        externalReferenceId: String? = nil
+        externalReferenceId: String? = nil,
+        providerOverrides: ProviderOverrides? = nil
     ) {
         self.id = id
         self.specialty = specialty
@@ -191,6 +198,7 @@ final class CaptureSession: ObservableObject, Identifiable {
         self.encounterType = encounterType
         self.participants = participants
         self.externalReferenceId = externalReferenceId
+        self.providerOverrides = providerOverrides
     }
 
     /// `true` when there's more than just doctor + patient in the room —

@@ -930,6 +930,56 @@ enum APIError: LocalizedError {
 
 // MARK: - Response Types
 
+/// Per-session provider routing overrides (P1-7). Mirrors the backend's
+/// `ProviderOverridesSchema` — all fields optional, decode is permissive
+/// (unknown keys ignored, missing keys treated as nil) so a future
+/// override key lands without breaking deployed iOS builds.
+///
+/// `visualEvidenceMode` is the load-bearing field today: when set, the
+/// iOS dispatcher in `SessionManager.extractEvidence` uses it instead
+/// of the AppConfig pipeline default. The string survives as raw so
+/// `VisualEvidenceMode(rawValue:)` decides whether it's parseable; an
+/// unparseable string falls back to the global default with a log
+/// warning rather than crashing.
+struct ProviderOverrides: Codable, Sendable, Equatable {
+    let transcription: String?
+    let noteGeneration: String?
+    let vision: String?
+    let visionClip: String?
+    let visualEvidenceMode: String?
+
+    enum CodingKeys: String, CodingKey {
+        case transcription
+        case noteGeneration = "note_generation"
+        case vision
+        case visionClip = "vision_clip"
+        case visualEvidenceMode = "visual_evidence_mode"
+    }
+
+    init(
+        transcription: String? = nil,
+        noteGeneration: String? = nil,
+        vision: String? = nil,
+        visionClip: String? = nil,
+        visualEvidenceMode: String? = nil
+    ) {
+        self.transcription = transcription
+        self.noteGeneration = noteGeneration
+        self.vision = vision
+        self.visionClip = visionClip
+        self.visualEvidenceMode = visualEvidenceMode
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        transcription = try c.decodeIfPresent(String.self, forKey: .transcription)
+        noteGeneration = try c.decodeIfPresent(String.self, forKey: .noteGeneration)
+        vision = try c.decodeIfPresent(String.self, forKey: .vision)
+        visionClip = try c.decodeIfPresent(String.self, forKey: .visionClip)
+        visualEvidenceMode = try c.decodeIfPresent(String.self, forKey: .visualEvidenceMode)
+    }
+}
+
 struct SessionResponse: Codable, Sendable {
     let id: String
     let clinicianId: String
@@ -945,6 +995,10 @@ struct SessionResponse: Codable, Sendable {
     /// one yet. Server decrypts before serialization for the owning
     /// clinician + admins; absent in the response for other roles.
     let externalReferenceId: String?
+    /// Per-session provider routing overrides (P1-7). NULL when no
+    /// overrides were set at creation. Read by `SessionManager.extractEvidence`
+    /// to drive Stage 2 dual-mode routing without a second backend call.
+    let providerOverrides: ProviderOverrides?
     let createdAt: String
     let updatedAt: String
 
@@ -954,6 +1008,7 @@ struct SessionResponse: Codable, Sendable {
         case encounterType = "encounter_type"
         case captureMode = "capture_mode"
         case externalReferenceId = "external_reference_id"
+        case providerOverrides = "provider_overrides"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
     }
@@ -967,6 +1022,7 @@ struct SessionResponse: Codable, Sendable {
         encounterType = try c.decodeIfPresent(String.self, forKey: .encounterType) ?? "doctor_patient"
         captureMode = try c.decodeIfPresent(String.self, forKey: .captureMode) ?? "multimodal"
         externalReferenceId = try c.decodeIfPresent(String.self, forKey: .externalReferenceId)
+        providerOverrides = try c.decodeIfPresent(ProviderOverrides.self, forKey: .providerOverrides)
         createdAt = try c.decode(String.self, forKey: .createdAt)
         updatedAt = try c.decode(String.self, forKey: .updatedAt)
     }
@@ -979,6 +1035,7 @@ struct SessionResponse: Codable, Sendable {
         encounterType: String = "doctor_patient",
         captureMode: String = "multimodal",
         externalReferenceId: String? = nil,
+        providerOverrides: ProviderOverrides? = nil,
         createdAt: String,
         updatedAt: String
     ) {
@@ -989,6 +1046,7 @@ struct SessionResponse: Codable, Sendable {
         self.encounterType = encounterType
         self.captureMode = captureMode
         self.externalReferenceId = externalReferenceId
+        self.providerOverrides = providerOverrides
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
