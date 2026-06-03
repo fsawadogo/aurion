@@ -1,9 +1,9 @@
 import type { Metadata } from "next";
 import { Inter } from "next/font/google";
-import { NextIntlClientProvider } from "next-intl";
-import { getLocale, getMessages } from "next-intl/server";
 import "./globals.css";
 import { AurionProviders } from "./providers";
+import { LocaleProvider } from "@/i18n/LocaleProvider";
+import { DEFAULT_LOCALE } from "@/i18n/config";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -13,32 +13,38 @@ export const metadata: Metadata = {
     "Administration and compliance portal for Aurion Clinical AI pilot.",
 };
 
-export default async function RootLayout({
+/**
+ * Root layout (DEPLOY-WEB):
+ *
+ * Server shell only. Under `output: "export"` we can't call
+ * `getLocale()` / `getMessages()` (those need a request to read the
+ * cookie from). Locale resolution moved to the client-side
+ * `<LocaleProvider />`, which:
+ *   - hydrates DEFAULT_LOCALE on first render (matches what `next
+ *     build` baked into the static HTML)
+ *   - reads `aurion-locale` from `document.cookie` on mount
+ *   - swaps the locale + `<html lang>` if the cookie disagrees
+ *
+ * The `lang={DEFAULT_LOCALE}` here matches what the static HTML
+ * ships; LocaleProvider updates `document.documentElement.lang` on
+ * mount when the cookie carries a different locale.
+ *
+ * `suppressHydrationWarning` on <html> is the standard next-themes
+ * pattern (theme class flips on mount) + now also covers the
+ * locale-attribute flip on first paint. Scope is limited to <html>
+ * so it doesn't mask hydration mismatches in any child.
+ */
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  // Server-side locale + message load. next-intl reads the
-  // `aurion-locale` cookie via the request config in
-  // `web/i18n/request.ts` — see there for the cookie-based locale
-  // detection rationale (cookie over URL routing because the
-  // portal is internal, no SEO).
-  const locale = await getLocale();
-  const messages = await getMessages();
-
   return (
-    // `suppressHydrationWarning` is the standard next-themes pattern
-    // — the provider sets `<html class="dark">` on mount, which
-    // technically diverges from the server-rendered (theme-less)
-    // HTML. The warning suppression is scoped to <html> and doesn't
-    // affect any child component's hydration checks.
-    // `lang={locale}` is the standard a11y move — screen readers
-    // switch pronunciation when this changes.
-    <html lang={locale} suppressHydrationWarning>
+    <html lang={DEFAULT_LOCALE} suppressHydrationWarning>
       <body className={inter.className}>
-        <NextIntlClientProvider locale={locale} messages={messages}>
+        <LocaleProvider>
           <AurionProviders>{children}</AurionProviders>
-        </NextIntlClientProvider>
+        </LocaleProvider>
       </body>
     </html>
   );

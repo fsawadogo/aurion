@@ -200,21 +200,21 @@ output "cloudtrail_name" {
 # -----------------------------------------------------------------------------
 
 output "portal_url" {
-  description = "Canonical HTTPS URL for the web admin portal. Add to Cognito callback URLs once the hosted-UI flow is wired on the web side."
+  description = "Custom HTTPS URL for the web admin portal (custom-domain path). Reachable once 4 NS records are added at Cloudflare for var.web_portal_subdomain — see `portal_nameservers`. Until then, use `amplify_default_url`."
   value       = "https://${var.web_portal_subdomain}"
 }
 
 output "portal_nameservers" {
-  description = "NS records to set at Cloudflare for var.web_portal_subdomain after the first apply. Same delegation pattern as route53_nameservers — add 4 NS records at Cloudflare for the portal subdomain pointing at these AWS nameservers, then ACM + Amplify domain verification can complete."
+  description = "NS records to set at Cloudflare for var.web_portal_subdomain after the first apply. Same delegation pattern as route53_nameservers — add 4 NS records at Cloudflare for the portal subdomain pointing at these AWS nameservers, then ACM + Amplify domain verification can complete. Custom domain becomes reachable ~30-60 min after DNS propagation."
   value       = aws_route53_zone.portal.name_servers
 }
 
 output "amplify_app_id" {
-  description = "Amplify app ID for the web portal. Empty string when var.amplify_github_access_token is unset (resource is skipped)."
-  value       = length(aws_amplify_app.web_portal) > 0 ? aws_amplify_app.web_portal[0].id : ""
+  description = "Amplify app ID — needed for CLI deploys (`aws amplify create-deployment --app-id <ID>`), dashboard URLs, and the GitHub Actions `AMPLIFY_APP_ID` repo variable."
+  value       = aws_amplify_app.web_portal.id
 }
 
-output "amplify_default_domain" {
-  description = "Amplify-managed default subdomain (main.<app-id>.amplifyapp.com). Use for smoke testing before custom-domain verification finishes."
-  value       = length(aws_amplify_branch.main) > 0 ? "https://${aws_amplify_branch.main[0].branch_name}.${aws_amplify_app.web_portal[0].default_domain}" : ""
+output "amplify_default_url" {
+  description = "Amplify-managed default URL (https://main.<APP_ID>.amplifyapp.com). Works immediately after the first deploy without custom domain. Add this to the Cognito client callback list to unblock OAuth login on the default URL — see docs/dev/web-deploy.md for the CLI one-liner."
+  value       = "https://${aws_amplify_branch.main.branch_name}.${aws_amplify_app.web_portal.default_domain}"
 }

@@ -1,26 +1,46 @@
 # =============================================================================
-# Web Admin Portal — AWS Amplify Hosting
+# Web Admin Portal — AWS Amplify Hosting (manual-deploy mode)
 # =============================================================================
-# W010 — provisions the Next.js admin portal at var.web_portal_subdomain.
+# W010 / DEPLOY-WEB — provisions the Next.js admin portal at
+# var.web_portal_subdomain.
 #
-# Architecture:
-#   GitHub (fsawadogo/aurion, web/) ── Amplify webhook on push
-#                                    │
-#                                    └─→ Amplify build (Next.js SSR via Lambda@Edge)
-#                                          │
-#                                          └─→ Amplify CDN → portal-<env>.aurionclinical.com
+# Architecture (manual-deploy mode):
+#   GitHub Actions (.github/workflows/web.yml) ─┐
+#                                               ├─ next build → web/out/
+#                                               ├─ zip → out.zip
+#                                               ├─ aws amplify create-deployment
+#                                               │     → pre-signed S3 URL + job ID
+#                                               ├─ curl PUT out.zip → URL
+#                                               └─ aws amplify start-deployment
+#                                                       │
+#                                                       └─→ Amplify CDN
+#                                                           main.<APP_ID>.amplifyapp.com
+#                                                           portal-<env>.aurionclinical.com
 #                                                              ↓ /api/v1/* calls
 #                                                            api-<env>.aurionclinical.com (existing ALB)
 #
-# DNS pattern mirrors api domain: apex stays at Cloudflare, this subdomain
-# delegates 4 NS records to a per-env Route 53 zone. After
-# `terraform apply`, surface the new nameservers via `output portal_nameservers`
-# and add them to Cloudflare as NS records for var.web_portal_subdomain.
+# DEPLOY-WEB switched away from the GitHub source connector
+# (platform = WEB_COMPUTE → WEB) for two reasons:
+#   1. The source connector requires a long-lived GitHub PAT
+#      (var.amplify_github_access_token) which adds rotation toil +
+#      a leak-blast-radius surface for a 5-clinician pilot.
+#   2. WEB_COMPUTE invokes Lambda@Edge for SSR, which the portal
+#      doesn't need — every route either pre-renders or hydrates +
+#      fetches from the FastAPI backend.
 #
-# The app resources are gated on var.amplify_github_access_token so plan/apply
-# can run cleanly while the PAT is being provisioned (or rotated). When the
-# variable is null, the zone + ACM cert still exist (cheap, idempotent), but
-# the app + branch + domain wiring are skipped.
+# Trade-off documented in docs/plans/deploy-web.md: lose server
+# components touching cookies/headers at request time. i18n
+# migrated to client-side LocaleProvider; cognito callback hydrates
+# on mount; dynamic routes use SPA-fallback rewrites (see
+# custom_rules below).
+#
+# DNS pattern mirrors api domain: apex stays at Cloudflare, this
+# subdomain delegates 4 NS records to a per-env Route 53 zone.
+# After `terraform apply`, surface the new nameservers via
+# `output portal_nameservers` and add them to Cloudflare as NS
+# records for var.web_portal_subdomain. Custom domain is OPTIONAL —
+# the Amplify default URL (main.<APP_ID>.amplifyapp.com) works
+# immediately after the first deploy.
 
 # -----------------------------------------------------------------------------
 # Route 53 hosted zone for the portal subdomain
@@ -35,62 +55,40 @@ resource "aws_route53_zone" "portal" {
 }
 
 # -----------------------------------------------------------------------------
-# Amplify App
+# Amplify App (manual-deploy mode)
 # -----------------------------------------------------------------------------
+# `platform = "WEB"` is the static-hosting platform that supports
+# manual deployments via `aws amplify create-deployment`. No
+# `repository` / `access_token` / `build_spec` — Amplify doesn't
+# build anything in this mode; GitHub Actions does.
+#
+# `environment_variables` are intentionally absent. NEXT_PUBLIC_*
+# values get baked into the static bundle at `next build` time in
+# CI, where they're sourced from GitHub Actions repo variables /
+# secrets. Single source of truth = `.github/workflows/web.yml`.
+# Keeping them here would be misleading (Amplify never reads them
+# under platform = WEB) and would invite drift.
 
 resource "aws_amplify_app" "web_portal" {
-  count = var.amplify_github_access_token == null ? 0 : 1
-
   name        = "aurion-portal-${var.environment}"
-  description = "Aurion admin / compliance / eval web portal (${var.environment})"
+  description = "Aurion admin / compliance / eval web portal (${var.environment}). Manual-deploy via aws amplify create-deployment; see .github/workflows/web.yml + web/scripts/deploy.sh."
 
-  repository           = "https://github.com/${var.github_org}/${var.github_repo}"
-  access_token         = var.amplify_github_access_token
-  platform             = "WEB_COMPUTE" # Next.js SSR via Lambda@Edge
-  iam_service_role_arn = aws_iam_role.amplify_service[0].arn
+  platform             = "WEB"
+  iam_service_role_arn = aws_iam_role.amplify_service.arn
 
-  enable_branch_auto_build    = true
-  enable_branch_auto_deletion = false
-  enable_basic_auth           = false
-
-  # Build inside the web/ subdirectory only — repo root is a monorepo.
-  build_spec = <<-YAML
-    version: 1
-    applications:
-      - appRoot: web
-        frontend:
-          phases:
-            preBuild:
-              commands:
-                - npm ci
-            build:
-              commands:
-                - npm run build
-          artifacts:
-            baseDirectory: .next
-            files:
-              - '**/*'
-          cache:
-            paths:
-              - node_modules/**/*
-              - .next/cache/**/*
-  YAML
-
-  # NEXT_PUBLIC_API_URL is the one config the browser bundle reads at build
-  # time. Backend stays on api-<env>.aurionclinical.com, so the portal needs
-  # to point at the same env's API. Branch-level overrides can flip this for
-  # PR previews if/when those land.
-  environment_variables = {
-    NEXT_PUBLIC_API_URL       = "https://${var.api_domain}"
-    AMPLIFY_MONOREPO_APP_ROOT = "web"
-    # Cognito hosted-UI for the web portal (WEB-COGNITO-UI). Mirrors
-    # what iOS uses (Config.swift) so a single identity backs both
-    # platforms. Values come from cognito.tf so client_id / domain
-    # changes propagate without a separate edit here.
-    NEXT_PUBLIC_COGNITO_HOSTED_UI_BASE = "https://${aws_cognito_user_pool_domain.main.domain}.auth.${var.region}.amazoncognito.com"
-    NEXT_PUBLIC_COGNITO_CLIENT_ID      = aws_cognito_user_pool_client.main.id
-    NEXT_PUBLIC_COGNITO_REDIRECT_URI   = "https://${var.web_portal_subdomain}/api/auth/callback/cognito"
-    NEXT_PUBLIC_COGNITO_LOGOUT_URI     = "https://${var.web_portal_subdomain}/auth/signed-out"
+  # SPA-fallback rewrite. Static export bakes `index.html` files
+  # only for routes Next.js knew about at build time. Dynamic
+  # routes (`/sessions/[id]`, `/portal/notes/[id]`, etc.) get a
+  # single `/.../_/index.html` placeholder. This rewrite serves
+  # `/index.html` (with a 200) for any path that doesn't match a
+  # baked file or static asset; the React Router on the client
+  # then parses the URL via `useParams()` and fetches the right
+  # data. Pattern below is the Amplify-recommended SPA rule —
+  # matches everything *except* known static asset extensions.
+  custom_rule {
+    source = "/<*>"
+    target = "/index.html"
+    status = "404-200"
   }
 
   # Disallow indexing the portal — it's an admin tool, not public.
@@ -119,32 +117,36 @@ resource "aws_amplify_app" "web_portal" {
 # Amplify branch — main only for now. PR-preview branches deferred to a
 # follow-up once the portal stabilises.
 # -----------------------------------------------------------------------------
+# `framework = "Web"` matches platform = WEB (was "Next.js - SSR"
+# under WEB_COMPUTE). `enable_auto_build` is irrelevant in
+# manual-deploy mode (no source connector to listen to) but kept
+# default-false for clarity. Manual deploys land here regardless.
 
 resource "aws_amplify_branch" "main" {
-  count = var.amplify_github_access_token == null ? 0 : 1
-
-  app_id      = aws_amplify_app.web_portal[0].id
+  app_id      = aws_amplify_app.web_portal.id
   branch_name = "main"
 
-  framework = "Next.js - SSR"
+  framework = "Web"
   stage     = var.environment == "prod" ? "PRODUCTION" : "DEVELOPMENT"
 
-  enable_auto_build = true
+  enable_auto_build = false
 }
 
 # -----------------------------------------------------------------------------
 # Custom domain — portal-<env>.aurionclinical.com → Amplify default subdomain
 # -----------------------------------------------------------------------------
+# Domain association is independent of deploy mode. Becomes
+# reachable once the 4 NS records from `output portal_nameservers`
+# are added at Cloudflare for var.web_portal_subdomain (user-only
+# action). Until then, use the Amplify default URL (also exported).
 
 resource "aws_amplify_domain_association" "portal" {
-  count = var.amplify_github_access_token == null ? 0 : 1
-
-  app_id                = aws_amplify_app.web_portal[0].id
+  app_id                = aws_amplify_app.web_portal.id
   domain_name           = var.web_portal_subdomain
   wait_for_verification = false
 
   sub_domain {
-    branch_name = aws_amplify_branch.main[0].branch_name
+    branch_name = aws_amplify_branch.main.branch_name
     prefix      = "" # apex of the zone — i.e. portal-dev.aurionclinical.com itself
   }
 }
@@ -152,6 +154,10 @@ resource "aws_amplify_domain_association" "portal" {
 # -----------------------------------------------------------------------------
 # IAM service role for Amplify (build + log access)
 # -----------------------------------------------------------------------------
+# Amplify still needs a service role even in manual-deploy mode —
+# it owns the CloudFront distribution + writes to its own log
+# streams. AdministratorAccess-Amplify is the AWS-managed policy
+# scoped to Amplify-owned resources.
 
 data "aws_iam_policy_document" "amplify_assume" {
   statement {
@@ -164,14 +170,11 @@ data "aws_iam_policy_document" "amplify_assume" {
 }
 
 resource "aws_iam_role" "amplify_service" {
-  count = var.amplify_github_access_token == null ? 0 : 1
-
   name               = "AurionAmplifyService-${var.environment}"
   assume_role_policy = data.aws_iam_policy_document.amplify_assume.json
 }
 
 resource "aws_iam_role_policy_attachment" "amplify_backend" {
-  count      = var.amplify_github_access_token == null ? 0 : 1
-  role       = aws_iam_role.amplify_service[0].name
+  role       = aws_iam_role.amplify_service.name
   policy_arn = "arn:aws:iam::aws:policy/AdministratorAccess-Amplify"
 }

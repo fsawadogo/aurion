@@ -102,7 +102,7 @@ variable "web_portal_subdomain" {
 }
 
 variable "amplify_github_access_token" {
-  description = "Classic GitHub PAT with 'repo' scope for the AWS Amplify GitHub source connector. Set via TF_VAR_amplify_github_access_token in the deploy environment — never check into VCS. Required only for the initial Amplify app creation; rotation is via Amplify console, not Terraform. Leave null to skip the app+branch resources (lets the rest of the module plan cleanly while this is being provisioned)."
+  description = "Reserved for a future flip back to the Amplify GitHub source connector (platform = WEB_COMPUTE). Currently unused — the portal ships via the manual-deploy path (platform = WEB) driven by .github/workflows/web.yml + web/scripts/deploy.sh, which uploads a static bundle to Amplify via aws amplify create-deployment. Kept in the schema so the flip-back is a single PR (set the variable, change platform, restore build_spec) — no variable-rename churn."
   type        = string
   default     = null
   sensitive   = true

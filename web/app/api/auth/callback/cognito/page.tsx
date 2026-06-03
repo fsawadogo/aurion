@@ -5,9 +5,12 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { exchangeCodeForTokens } from "@/lib/cognito";
 
 // useSearchParams reads runtime URL state which Next.js can't
-// statically prerender. The Suspense boundary below + the explicit
-// dynamic flag keep `next build` from tripping on this page.
-export const dynamic = "force-dynamic";
+// statically prerender. The Suspense boundary below is what
+// satisfies `next build` under `output: "export"` — the page emits
+// as a static shell that hydrates and parses the URL on mount.
+// (DEPLOY-WEB removed the previous `dynamic = "force-dynamic"`
+// flag; that flag is incompatible with static export and the
+// Suspense boundary alone is enough.)
 
 export default function CognitoCallbackPage() {
   return (

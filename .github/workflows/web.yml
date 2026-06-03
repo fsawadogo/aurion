@@ -1,23 +1,152 @@
 name: Web Portal
 
+# DEPLOY-WEB — web portal CI + deploy.
+#
+# Build job runs on every push or PR touching web/** — lints, tests,
+# and produces the static export. Deploy job runs on push to main
+# only; downloads the build artifact, zips it, and ships it to AWS
+# Amplify via the manual-deploy API (aws amplify create-deployment +
+# start-deployment).
+#
+# Deploy auth is via OIDC — same role the backend uses
+# (secrets.AWS_DEPLOY_ROLE_DEV → AurionGitHubDeployerDev). The
+# Amplify app ID is read from a repo-level Actions variable
+# (vars.AMPLIFY_APP_ID) set ONCE after the first terraform apply:
+#
+#   gh variable set AMPLIFY_APP_ID \
+#     --body "$(cd infrastructure && terraform output -raw amplify_app_id)"
+#
+# All ${{ ... }} expansions are scoped to vars / secrets that only
+# repo admins can set — no untrusted github.event data flows into
+# any `run:` step. See docs/dev/web-deploy.md for the full operator
+# runbook.
+
 on:
   push:
     branches: [main]
-    paths: ["web/**"]
+    paths: ["web/**", ".github/workflows/web.yml"]
   pull_request:
     branches: [main]
-    paths: ["web/**"]
+    paths: ["web/**", ".github/workflows/web.yml"]
+
+# OIDC needs id-token: write at the workflow or job level.
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  AWS_REGION: ca-central-1
+  AMPLIFY_BRANCH: main
 
 jobs:
   build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-node@v4
         with:
           node-version: 18
           cache: npm
           cache-dependency-path: web/package-lock.json
-      - run: cd web && npm ci
-      - run: cd web && npm run lint
-      - run: cd web && npm run build
+
+      - name: Install
+        run: cd web && npm ci
+
+      - name: Lint
+        run: cd web && npm run lint
+
+      - name: Test
+        run: cd web && npx vitest run
+
+      - name: Build (static export)
+        env:
+          # NEXT_PUBLIC_* values bake into the bundle at build time.
+          # The web portal hits api-dev.aurionclinical.com. Keep in
+          # sync with infrastructure/cognito.tf when Cognito client
+          # IDs / domains change.
+          NEXT_PUBLIC_API_URL: https://api-dev.aurionclinical.com
+        run: cd web && npm run build
+
+      - name: Upload build artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-build
+          path: web/out/
+          # Short retention — the artifact only needs to live long
+          # enough for the deploy job downstream. Trims storage cost.
+          retention-days: 3
+
+  deploy:
+    # Manual-deploy on push to main only. PRs run build + tests (above)
+    # but don't ship — Amplify has no preview-deploy concept under
+    # platform = WEB, and we don't want a half-tested branch hitting
+    # the dev URL the pilot physicians see.
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: web-build
+          path: web/out/
+
+      - name: Configure AWS credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ${{ env.AWS_REGION }}
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_DEV }}
+
+      - name: Deploy to Amplify
+        env:
+          AMPLIFY_APP_ID: ${{ vars.AMPLIFY_APP_ID }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${AMPLIFY_APP_ID:-}" ]]; then
+            echo "::error::AMPLIFY_APP_ID Actions variable is empty. Run:"
+            echo "    gh variable set AMPLIFY_APP_ID --body <app-id>"
+            echo "after the first terraform apply (output: amplify_app_id)."
+            exit 1
+          fi
+
+          # Zip the static bundle. `cd out` so paths in the zip are
+          # relative to the bundle root — Amplify unpacks at the
+          # branch root, so index.html etc. end up where it expects.
+          (cd web/out && zip -r ../out.zip .)
+          ls -lh web/out.zip
+
+          # Create the deployment slot — returns a pre-signed S3 URL
+          # to upload the zip to + a job ID to start once the upload
+          # finishes.
+          RESP=$(aws amplify create-deployment \
+            --app-id "$AMPLIFY_APP_ID" \
+            --branch-name "$AMPLIFY_BRANCH" \
+            --output json)
+          JOB_ID=$(echo "$RESP" | jq -r '.jobId')
+          ZIP_URL=$(echo "$RESP" | jq -r '.zipUploadUrl')
+          echo "Created deployment $JOB_ID"
+
+          # Upload. --fail flips curl from "200-only success" to
+          # "non-2xx -> exit non-zero", which is what we want for CI
+          # — a silent 403 from a stale pre-signed URL would
+          # otherwise sail through.
+          curl --fail --silent --show-error \
+            -X PUT \
+            -H 'Content-Type: application/zip' \
+            --upload-file web/out.zip \
+            "$ZIP_URL"
+          echo "Uploaded bundle to pre-signed URL"
+
+          # Start the deployment. Returns immediately — Amplify
+          # processes the bundle asynchronously. Logs land in the
+          # Amplify console; we don't wait for completion here to
+          # keep CI runs short.
+          aws amplify start-deployment \
+            --app-id "$AMPLIFY_APP_ID" \
+            --branch-name "$AMPLIFY_BRANCH" \
+            --job-id "$JOB_ID"
+          echo "Deployment $JOB_ID started"
+          echo "Watch progress in the Amplify console:"
+          echo "  https://${AWS_REGION}.console.aws.amazon.com/amplify/apps/${AMPLIFY_APP_ID}/branches/${AMPLIFY_BRANCH}"
