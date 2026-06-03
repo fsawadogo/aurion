@@ -39,6 +39,8 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 from app.core.types import FrameCaption  # noqa: E402
 from app.modules.config.schema import VisionProviderKey  # noqa: E402
+from app.modules.providers.vision.anthropic import _MODEL as _ANTHROPIC_MODEL  # noqa: E402
+from app.modules.providers.vision.openai import _MODEL as _OPENAI_MODEL  # noqa: E402
 
 # ── Fixtures (compact local versions of the integration ones) ─────────────
 
@@ -135,13 +137,20 @@ def _multipart(
     body_bytes: bytes,
     content_type: str = "video/mp4",
     provider_override: str | None = None,
-) -> tuple[dict, dict]:
-    """Build (data, files) for an httpx multipart POST to the probe."""
+) -> tuple[dict, dict, dict]:
+    """Build (data, files, params) for an httpx multipart POST to the probe.
+
+    P1-FU-FFMPEG: `provider_override` is a QUERY-STRING parameter on the
+    endpoint (was `Form()`, silently ignored query-string values). The
+    `params` dict is forwarded as `?provider_override=…` so these tests
+    pin the actual public contract operators consume via curl/Postman.
+    """
     data: dict = {}
+    params: dict = {}
     if provider_override is not None:
-        data["provider_override"] = provider_override
+        params["provider_override"] = provider_override
     files = {"clip": ("probe_clip.mp4", body_bytes, content_type)}
-    return data, files
+    return data, files, params
 
 
 def _valid_caption(provider: str) -> FrameCaption:
@@ -186,7 +195,7 @@ async def test_probe_provider_override_forwarded_to_registry(
     _registry, caption_clip_mock, get_kind_mock = mock_registry
     caption_clip_mock.return_value = _valid_caption(provider="anthropic")
 
-    data, files = _multipart(
+    data, files, params = _multipart(
         body_bytes=fixture_clip_bytes, provider_override="anthropic"
     )
     response = await app_client.post(
@@ -194,6 +203,7 @@ async def test_probe_provider_override_forwarded_to_registry(
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200, response.text
@@ -233,7 +243,7 @@ async def test_probe_provider_override_alters_provider_used(
     _registry, caption_clip_mock, _get_kind = mock_registry
     caption_clip_mock.return_value = _valid_caption(provider="anthropic")
 
-    data, files = _multipart(
+    data, files, params = _multipart(
         body_bytes=fixture_clip_bytes, provider_override="anthropic"
     )
     response = await app_client.post(
@@ -241,6 +251,7 @@ async def test_probe_provider_override_alters_provider_used(
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200, response.text
@@ -249,9 +260,14 @@ async def test_probe_provider_override_alters_provider_used(
         f"Response should carry provider_used='anthropic' "
         f"when override='anthropic'; got {payload['provider_used']!r}"
     )
-    assert payload["model_id"] == "claude-sonnet-4-5", (
-        f"Model id should reflect the override target; got "
-        f"{payload['model_id']!r}"
+    # P1-FU-FFMPEG (bug 3): model id is read from the provider module's
+    # own `_MODEL` constant, NOT a hardcoded duplicate in probe.py. The
+    # assertion reads the same source-of-truth so a future model bump
+    # in `anthropic.py:_MODEL` doesn't require touching the probe OR
+    # this test.
+    assert payload["model_id"] == _ANTHROPIC_MODEL, (
+        f"Model id should reflect the provider's `_MODEL` constant "
+        f"({_ANTHROPIC_MODEL!r}); got {payload['model_id']!r}"
     )
 
 
@@ -268,7 +284,7 @@ async def test_probe_provider_override_openai_alters_provider_used(
     _registry, caption_clip_mock, get_kind_mock = mock_registry
     caption_clip_mock.return_value = _valid_caption(provider="openai")
 
-    data, files = _multipart(
+    data, files, params = _multipart(
         body_bytes=fixture_clip_bytes, provider_override="openai"
     )
     response = await app_client.post(
@@ -276,12 +292,13 @@ async def test_probe_provider_override_openai_alters_provider_used(
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["provider_used"] == "openai"
-    assert payload["model_id"] == "gpt-4o"
+    assert payload["model_id"] == _OPENAI_MODEL
     # Registry receives the override as a string (the enum's .value).
     _args, kwargs = get_kind_mock.call_args
     assert kwargs.get("override") == "openai"
@@ -314,12 +331,13 @@ async def test_probe_no_override_uses_default(
     _registry, caption_clip_mock, get_kind_mock = mock_registry
     caption_clip_mock.return_value = _valid_caption(provider=expected_key.value)
 
-    data, files = _multipart(body_bytes=fixture_clip_bytes)  # no override
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)  # no override
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200, response.text
@@ -358,7 +376,7 @@ async def test_probe_response_provider_used_matches_registry_call(
     _registry, caption_clip_mock, get_kind_mock = mock_registry
     caption_clip_mock.return_value = _valid_caption(provider="anthropic")
 
-    data, files = _multipart(
+    data, files, params = _multipart(
         body_bytes=fixture_clip_bytes, provider_override="anthropic"
     )
     response = await app_client.post(
@@ -366,6 +384,7 @@ async def test_probe_response_provider_used_matches_registry_call(
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
     assert response.status_code == 200
     payload = response.json()

@@ -41,7 +41,7 @@ import time
 import uuid
 from typing import Final, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from pydantic import BaseModel
 
 from app.api.v1._helpers import write_audit
@@ -59,6 +59,9 @@ from app.modules.auth.service import CurrentUser, require_role
 from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
 from app.modules.config.schema import VisionProviderKey
+from app.modules.providers.vision.anthropic import _MODEL as _ANTHROPIC_MODEL
+from app.modules.providers.vision.gemini import _MODEL as _GEMINI_MODEL
+from app.modules.providers.vision.openai import _MODEL as _OPENAI_MODEL
 
 logger = logging.getLogger("aurion.api.admin.probe")
 
@@ -193,15 +196,19 @@ class VisionClipProbeResponse(BaseModel):
     clip_metadata: dict
 
 
-# Provider → model id metadata. Kept here (not in the registry) because
-# this is purely a diagnostic surface; the registry doesn't know or care
-# which model id a provider sends on the wire. If the provider's
-# constant ever drifts we update this map; the test asserts the
-# response carries the right model id for each known provider.
+# Provider → model id metadata. Each entry is sourced from the provider
+# module's own `_MODEL` constant — single source of truth (DRY, §6c). The
+# previous incarnation hardcoded the strings here and drifted from the
+# real implementations: `_PROVIDER_MODEL_ID[ANTHROPIC]` reported
+# `"claude-sonnet-4-5"` while `anthropic.py:_MODEL` was already
+# `"claude-sonnet-4-6"`. Operators saw the wrong model id in the probe
+# diagnostic, which defeats the probe's entire purpose. Importing the
+# constants makes future bumps a one-line change in the provider module;
+# the probe inherits the new value automatically.
 _PROVIDER_MODEL_ID: Final[dict[VisionProviderKey, str]] = {
-    VisionProviderKey.GEMINI: "gemini-2.5-pro",
-    VisionProviderKey.OPENAI: "gpt-4o",
-    VisionProviderKey.ANTHROPIC: "claude-sonnet-4-5",
+    VisionProviderKey.GEMINI: _GEMINI_MODEL,
+    VisionProviderKey.OPENAI: _OPENAI_MODEL,
+    VisionProviderKey.ANTHROPIC: _ANTHROPIC_MODEL,
 }
 
 
@@ -239,10 +246,20 @@ def _resolve_provider_key(
 )
 async def probe_vision_clip(
     clip: UploadFile = File(...),
-    provider_override: Optional[VisionProviderKey] = Form(default=None),
+    provider_override: Optional[VisionProviderKey] = Query(default=None),
     _admin: CurrentUser = Depends(require_role(UserRole.ADMIN)),
 ) -> VisionClipProbeResponse:
     """Probe the configured `vision_clip` provider end-to-end.
+
+    `provider_override` is a QUERY-STRING parameter (P1-FU-FFMPEG):
+    `?provider_override=anthropic`. The previous incarnation declared
+    it as `Form(default=None)`, which silently ignored query-string
+    values — operators using `curl ... ?provider_override=…` got the
+    AppConfig default (Gemini) with no error, defeating the override
+    contract documented in `docs/dev/gemini-probe.md`. Query string is
+    the natural diagnostic-endpoint shape and matches how Postman /
+    curl operators expect to call admin endpoints. Invalid values
+    surface as 422 via FastAPI's enum validator.
 
     Order of operations:
 

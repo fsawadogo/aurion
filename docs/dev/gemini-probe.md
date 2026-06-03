@@ -56,6 +56,19 @@ running a full clinical session.
 
 ## Invocation
 
+### Parameter shape
+
+* `clip` — multipart form file. **REQUIRED.** MP4, ≤ 5 MB.
+* `provider_override` — **QUERY STRING** parameter (P1-FU-FFMPEG).
+  Optional. Valid values: `gemini`, `openai`, `anthropic`.
+
+Previously `provider_override` was bound as a multipart form field;
+passing it as a query string was silently ignored — operators got
+the AppConfig default with no error. The endpoint now reads it
+from the query string, which matches the existing Postman collection
+and is the natural shape for diagnostic curl invocations. An invalid
+value surfaces as 422.
+
 ### Local (LocalStack)
 
 LocalStack S3 works for the put/delete; the provider call itself
@@ -91,18 +104,61 @@ via the Cognito hosted UI.
 ### Probing a fallback provider
 
 To exercise the OpenAI midpoint-still path (P1-2) without flipping
-the live AppConfig:
+the live AppConfig — pass `provider_override` as a **query string**:
 
 ```bash
-curl -X POST http://localhost:8080/api/v1/admin/probe/vision-clip \
+curl -X POST \
+  "http://localhost:8080/api/v1/admin/probe/vision-clip?provider_override=openai" \
   -H "Authorization: Bearer ADMIN:$(uuidgen)" \
-  -F provider_override=openai \
+  -F clip=@backend/tests/fixtures/probe_clip.mp4 \
+  | jq '.'
+```
+
+Or against the dev cluster:
+
+```bash
+curl -X POST \
+  "https://api.dev.aurionclinical.com/api/v1/admin/probe/vision-clip?provider_override=anthropic" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
   -F clip=@backend/tests/fixtures/probe_clip.mp4 \
   | jq '.'
 ```
 
 Valid `provider_override` values are the `VisionProviderKey` enum
 values: `gemini`, `openai`, `anthropic`.
+
+### Verifying the fallback chain (post-ffmpeg fix)
+
+After P1-FU-FFMPEG installs `ffmpeg` in the runtime image, the
+non-native vision providers (OpenAI + Anthropic) can run the
+midpoint-still fallback in production. Verify with:
+
+```bash
+curl -X POST \
+  "https://api.dev.aurionclinical.com/api/v1/admin/probe/vision-clip?provider_override=anthropic" \
+  -H "Authorization: Bearer $ADMIN_JWT" \
+  -F clip=@backend/tests/fixtures/probe_clip.mp4 \
+  | jq '{provider_used, model_id, success, degraded: .caption.degraded_to_frame, evidence_kind: .caption.evidence_kind, error: .error_message}'
+```
+
+Expected output on a healthy production stack:
+
+```json
+{
+  "provider_used": "anthropic",
+  "model_id": "claude-sonnet-4-6",
+  "success": true,
+  "degraded": true,
+  "evidence_kind": "clip",
+  "error": null
+}
+```
+
+If `error` contains `"ffmpeg binary not found on PATH"`, the
+container image was built without ffmpeg — re-deploy from a
+build of `backend/Dockerfile` that has the `RUN ffmpeg -version`
+line. Both Anthropic and OpenAI must report `degraded: true` (they
+don't accept MP4 natively); Gemini reports `degraded: false`.
 
 ---
 

@@ -48,6 +48,7 @@ from app.core.types import (  # noqa: E402
     FrameCaption,
     ProviderError,
 )
+from app.modules.providers.vision.openai import _MODEL as _OPENAI_MODEL  # noqa: E402
 
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
@@ -160,13 +161,20 @@ def _multipart(
     body_bytes: bytes,
     content_type: str = "video/mp4",
     provider_override: str | None = None,
-) -> tuple[dict, dict]:
-    """Build (data, files) for an httpx multipart POST to the probe."""
+) -> tuple[dict, dict, dict]:
+    """Build (data, files, params) for an httpx multipart POST to the probe.
+
+    P1-FU-FFMPEG: `provider_override` is now a QUERY-STRING parameter
+    on the endpoint. Was `Form()` and silently ignored query-string
+    values, which is the natural shape for diagnostic curl/Postman
+    invocations. The `params` dict surfaces as `?provider_override=…`.
+    """
     data: dict = {}
+    params: dict = {}
     if provider_override is not None:
-        data["provider_override"] = provider_override
+        params["provider_override"] = provider_override
     files = {"clip": ("probe_clip.mp4", body_bytes, content_type)}
-    return data, files
+    return data, files, params
 
 
 def _valid_frame_caption(provider: str = "gemini") -> FrameCaption:
@@ -211,12 +219,13 @@ async def test_probe_happy_path_returns_caption(
     populated."""
     mock_provider_call.return_value = _valid_frame_caption()
 
-    data, files = _multipart(body_bytes=fixture_clip_bytes)
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200, response.text
@@ -258,12 +267,13 @@ async def test_probe_latency_is_recorded(
 
     mock_provider_call.side_effect = _slow_caption
 
-    data, files = _multipart(body_bytes=fixture_clip_bytes)
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200, response.text
@@ -284,12 +294,13 @@ async def test_probe_writes_audit_event_on_success(
     `{provider, success=true, latency_ms}` on a successful probe."""
     mock_provider_call.return_value = _valid_frame_caption()
 
-    data, files = _multipart(body_bytes=fixture_clip_bytes)
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200
@@ -318,12 +329,13 @@ async def test_probe_provider_error_returns_diagnostic(
     `success=false`, `error_type='ProviderError'`, sanitized message."""
     mock_provider_call.side_effect = ProviderError("gemini", "auth failed")
 
-    data, files = _multipart(body_bytes=fixture_clip_bytes)
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200, response.text
@@ -346,12 +358,13 @@ async def test_probe_writes_audit_event_on_failure(
     `{provider, success=false, latency_ms, error_type}`."""
     mock_provider_call.side_effect = ProviderError("gemini", "auth failed")
 
-    data, files = _multipart(body_bytes=fixture_clip_bytes)
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200
@@ -378,12 +391,13 @@ async def test_probe_timeout_returns_diagnostic(
     `success=false`, `error_type='TimeoutError'`."""
     mock_provider_call.side_effect = asyncio.TimeoutError()
 
-    data, files = _multipart(body_bytes=fixture_clip_bytes)
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200, response.text
@@ -406,12 +420,13 @@ async def test_probe_blocked_for_clinician_role(
 ) -> None:
     """AC-5: CLINICIAN token → 403, no S3 write, no provider call,
     no audit row."""
-    data, files = _multipart(body_bytes=fixture_clip_bytes)
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=clinician_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 403, response.text
@@ -429,12 +444,13 @@ async def test_probe_blocked_for_eval_team_role(
     mock_provider_call: AsyncMock,
 ) -> None:
     """AC-5 (extended): EVAL_TEAM token → 403 (probe is ADMIN-only)."""
-    data, files = _multipart(body_bytes=fixture_clip_bytes)
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=eval_team_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 403, response.text
@@ -465,7 +481,7 @@ async def test_probe_rejects_non_mp4_content_type(
     mock_provider_call: AsyncMock,
 ) -> None:
     """AC-7: image/jpeg content-type → 400, no provider call."""
-    data, files = _multipart(
+    data, files, params = _multipart(
         body_bytes=fixture_clip_bytes, content_type="image/jpeg"
     )
     response = await app_client.post(
@@ -473,6 +489,7 @@ async def test_probe_rejects_non_mp4_content_type(
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
     assert response.status_code == 400, response.text
     assert "content type" in response.json()["detail"].lower()
@@ -492,13 +509,14 @@ async def test_probe_rejects_oversized_clip(
     # 5 MB + 1 byte of zeros, still video/mp4 content-type to verify
     # the size check runs AFTER the content-type check.
     oversized = b"\x00" * (5 * 1024 * 1024 + 1)
-    data, files = _multipart(body_bytes=oversized)
+    data, files, params = _multipart(body_bytes=oversized)
 
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 400, response.text
@@ -516,12 +534,13 @@ async def test_probe_rejects_empty_body(
     mock_provider_call: AsyncMock,
 ) -> None:
     """Empty body → 400 (no S3 write of an empty probe)."""
-    data, files = _multipart(body_bytes=b"")
+    data, files, params = _multipart(body_bytes=b"")
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
     assert response.status_code == 400, response.text
     mock_provider_call.assert_not_called()
@@ -623,12 +642,13 @@ async def test_probe_does_not_create_session_row(
     ) as session_create_mock, patch(
         "app.modules.session.service.get_session", new_callable=AsyncMock
     ) as session_get_mock:
-        data, files = _multipart(body_bytes=fixture_clip_bytes)
+        data, files, params = _multipart(body_bytes=fixture_clip_bytes)
         response = await app_client.post(
             "/api/v1/admin/probe/vision-clip",
             headers=admin_headers,
             data=data,
             files=files,
+            params=params,
         )
 
     assert response.status_code == 200
@@ -655,12 +675,13 @@ async def test_probe_deletes_temp_s3_object_on_success(
     """
     mock_provider_call.return_value = _valid_frame_caption()
 
-    data, files = _multipart(body_bytes=fixture_clip_bytes)
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200
@@ -685,12 +706,13 @@ async def test_probe_deletes_temp_s3_object_on_failure(
     when the provider raises."""
     mock_provider_call.side_effect = ProviderError("gemini", "boom")
 
-    data, files = _multipart(body_bytes=fixture_clip_bytes)
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200
@@ -741,7 +763,7 @@ async def test_probe_provider_override_resolves_alternate(
     """
     mock_provider_call.return_value = _valid_frame_caption(provider="openai")
 
-    data, files = _multipart(
+    data, files, params = _multipart(
         body_bytes=fixture_clip_bytes, provider_override="openai"
     )
     response = await app_client.post(
@@ -749,12 +771,15 @@ async def test_probe_provider_override_resolves_alternate(
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["provider_used"] == "openai"
-    assert payload["model_id"] == "gpt-4o"
+    # P1-FU-FFMPEG: read the model id from the provider's `_MODEL`
+    # constant so a future bump there propagates without a test edit.
+    assert payload["model_id"] == _OPENAI_MODEL
 
 
 async def test_probe_provider_override_rejects_invalid_value(
@@ -767,7 +792,7 @@ async def test_probe_provider_override_rejects_invalid_value(
 ) -> None:
     """Invalid provider_override (not in VisionProviderKey) → 422
     from Pydantic Enum validation, no provider call."""
-    data, files = _multipart(
+    data, files, params = _multipart(
         body_bytes=fixture_clip_bytes, provider_override="not-a-real-provider"
     )
     response = await app_client.post(
@@ -775,6 +800,7 @@ async def test_probe_provider_override_rejects_invalid_value(
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     # FastAPI surfaces invalid Enum form fields as 422.
@@ -805,12 +831,13 @@ async def test_probe_scrubs_api_key_from_error_message(
         f"auth failed: {leaked_key}",
     )
 
-    data, files = _multipart(body_bytes=fixture_clip_bytes)
+    data, files, params = _multipart(body_bytes=fixture_clip_bytes)
     response = await app_client.post(
         "/api/v1/admin/probe/vision-clip",
         headers=admin_headers,
         data=data,
         files=files,
+        params=params,
     )
 
     assert response.status_code == 200, response.text
