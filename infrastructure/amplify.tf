@@ -85,6 +85,48 @@ resource "aws_amplify_app" "web_portal" {
   # then parses the URL via `useParams()` and fetches the right
   # data. Pattern below is the Amplify-recommended SPA rule —
   # matches everything *except* known static asset extensions.
+  #
+  # Per-route rewrites for Next.js dynamic segments — Amplify's
+  # default `<*>` SPA fallback only matches single-segment unknowns,
+  # so multi-segment URLs like `/portal/notes/{uuid}` hit a hard 404
+  # without these. Each route is exported by Next.js to a sentinel
+  # `[id]` directory (`out/portal/notes/_/index.html`), and the
+  # rewrite below routes any nested path to that placeholder. The
+  # client-side router reads the URL and renders the right content.
+  # Order matters: more specific rules MUST come before the catch-all.
+  custom_rule {
+    source = "/portal/notes/<*>"
+    target = "/portal/notes/_/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/portal/patients/<*>"
+    target = "/portal/patients/_/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/portal/templates/<*>"
+    target = "/portal/templates/_/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/audit/<*>"
+    target = "/audit/_/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/eval/<*>"
+    target = "/eval/_/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/sessions/<*>"
+    target = "/sessions/_/index.html"
+    status = "200"
+  }
+
+  # Catch-all SPA fallback for single-segment routes (`/login`,
+  # `/dashboard`, etc.) — kept last so the explicit rules above win.
   custom_rule {
     source = "/<*>"
     target = "/index.html"
