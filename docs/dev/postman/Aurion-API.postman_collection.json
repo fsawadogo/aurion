@@ -1,0 +1,4202 @@
+{
+  "auth": {
+    "bearer": [
+      {
+        "key": "token",
+        "type": "string",
+        "value": "{{jwt}}"
+      }
+    ],
+    "type": "bearer"
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "exec": [
+          "if (!pm.environment.get('jwt')) {",
+          "  console.warn('[Aurion] No JWT set. See docs/dev/postman/README.md \u2192 \"Mint a JWT\".');",
+          "}"
+        ],
+        "type": "text/javascript"
+      }
+    }
+  ],
+  "info": {
+    "_postman_id": "74ed5d88f2db89f2a27239fb",
+    "description": "Aurion Clinical AI v0.1.0 \u2014 generated from the deployed dev OpenAPI v3 spec. See `docs/dev/postman/README.md` for import and JWT instructions. Regenerate via `python3 scripts/build_postman_collection.py` after pulling a fresh `openapi.json`.",
+    "name": "Aurion API (Dev)",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "description": "Endpoints tagged `admin` in the OpenAPI spec.",
+      "id": "0801c0ec1f8059e7d10f4d65",
+      "item": [
+        {
+          "id": "d57d07728fefa96a08a9e6d5",
+          "name": "Assign Eval Session",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"assignee_email\": \"\"\n}"
+            },
+            "description": "ADMIN-only: assign this session to a specific eval-team user.\n\nIdempotent \u2014 re-assigning the same session to a different user\noverwrites the existing assignment row. The new assignee sees the\nsession in their queue immediately; the previous assignee no longer\ndoes.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "eval",
+                "sessions",
+                ":session_id",
+                "assign"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/eval/sessions/:session_id/assign",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "8f871efa94e1680e8866a7dc",
+          "name": "Clear Provider Override",
+          "request": {
+            "description": "Remove any runtime override for ``provider_type`` \u2014 resolution\nfalls back to AppConfig. ADMIN or COMPLIANCE_OFFICER.",
+            "header": [],
+            "method": "DELETE",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "providers",
+                ":provider_type"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/providers/:provider_type",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "provider_type",
+                  "value": "{{provider_type}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "43041efe55a3f80790743b55",
+          "name": "Compare Providers",
+          "request": {
+            "description": "Side-by-side comparison of two providers over a window.\n\nA provider with zero calls returns ``null`` for its rollup; the delta\nblock is still present (deltas use 0.0 for absent sides).",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "providers",
+                "compare"
+              ],
+              "query": [
+                {
+                  "description": "Provider A name.",
+                  "key": "a",
+                  "value": ""
+                },
+                {
+                  "description": "Provider B name.",
+                  "key": "b",
+                  "value": ""
+                },
+                {
+                  "description": "Provider type to compare within.",
+                  "key": "provider_type",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "since",
+                  "value": "2026-01-01T00:00:00Z"
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "until",
+                  "value": "2026-01-01T00:00:00Z"
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/admin/providers/compare"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "ea3a2696e85df82949f4fa57",
+          "name": "Create User",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"email\": \"\",\n  \"full_name\": \"\",\n  \"password\": \"\",\n  \"role\": \"CLINICIAN\"\n}"
+            },
+            "description": "Create a new user. ADMIN only.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/users"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "c1ec49e62d1067053d8a8743",
+          "name": "Download Report",
+          "request": {
+            "description": "Stream the persisted CSV bytes. ``X-Aurion-Sha256`` echoes the hash\nso the recipient can verify the file on disk matches the metadata.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "compliance",
+                "reports",
+                ":report_id",
+                "download"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/compliance/reports/:report_id/download",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "report_id",
+                  "value": "{{report_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "e32dca6fb68e09cc46b5a3e3",
+          "name": "Drain Emr Retry Queue",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"limit\": 10\n}"
+            },
+            "description": "Process the rows currently due for retry, up to `limit`.\n\nFor each due row:\n  1. Look up the source session + the latest note + decrypt the\n     patient identifier (so the FHIR serializer has what it\n     originally had)\n  2. Re-run the connector via `retry_row`\n  3. Audit the outcome (SENT or FAILED) tied to the SAME\n     write_back_id as the original attempt\n\nRows whose session / note can't be located get skipped (counted\nin `candidates` but not in `attempted`); the row stays in failed\nstate with scheduled_at still set, so the next drain pass will\nretry the lookup as well.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "emr",
+                "retry-due"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/emr/retry-due"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "f78c0acf2924d6d20ee58548",
+          "name": "Export Audit Csv",
+          "request": {
+            "description": "Export audit events as CSV download. COMPLIANCE_OFFICER or ADMIN.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "audit",
+                "export"
+              ],
+              "query": [
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "clinician_id",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "date_from",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "date_to",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "event_type",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "session_id",
+                  "value": ""
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/admin/audit/export"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "fda6414417ce711cc1337780",
+          "name": "Generate Report",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"report_type\": \"audit\"\n}"
+            },
+            "description": "Trigger a new compliance report snapshot.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "compliance",
+                "reports"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/compliance/reports"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "9a36f3aa408d15bcf30eca78",
+          "name": "Get Admin Session Detail",
+          "request": {
+            "description": "One session's completeness with per-section breakdown. EVAL_TEAM or ADMIN.\n\nReturns the same shape as the list row plus a `sections` array that\ncross-references the specialty template against the latest note\nversion. Sections required by the template but missing from the note\nare returned with status=\"not_captured\" so the UI can highlight\nthem as gaps.\n\nNo claim text \u2014 only counts by source_type. Reviewers who need\nthe full claim text use the eval interface, which surfaces masked\ncontent by design.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "sessions",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/sessions/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "f86057aa0f425c5ad8a49e6b",
+          "name": "Get Admin Sessions",
+          "request": {
+            "description": "Sessions with completeness scores. EVAL_TEAM or ADMIN.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "sessions"
+              ],
+              "query": [
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "clinician_id",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "specialty",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "state",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "date_from",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "date_to",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/admin/sessions"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "0f45b23f3023bb08b003844e",
+          "name": "Get Audit Log",
+          "request": {
+            "description": "Paginated audit log with filters. COMPLIANCE_OFFICER or ADMIN.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "audit"
+              ],
+              "query": [
+                {
+                  "description": "Filter by clinician ID",
+                  "disabled": true,
+                  "key": "clinician_id",
+                  "value": ""
+                },
+                {
+                  "description": "Filter from date (ISO format)",
+                  "disabled": true,
+                  "key": "date_from",
+                  "value": ""
+                },
+                {
+                  "description": "Filter to date (ISO format)",
+                  "disabled": true,
+                  "key": "date_to",
+                  "value": ""
+                },
+                {
+                  "description": "Filter by event type",
+                  "disabled": true,
+                  "key": "event_type",
+                  "value": ""
+                },
+                {
+                  "description": "Filter by session ID",
+                  "disabled": true,
+                  "key": "session_id",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/admin/audit"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "4abe9e3d388995bcda80a8ab",
+          "name": "Get Config History",
+          "request": {
+            "description": "Config change log from audit trail. COMPLIANCE_OFFICER or ADMIN.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "config",
+                "history"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/config/history"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "488b254dfb6d13e0dc3689cd",
+          "name": "Get Current Config",
+          "request": {
+            "description": "Current AppConfig state \u2014 read-only. COMPLIANCE_OFFICER or ADMIN.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "config",
+                "current"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/config/current"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "5d72fe3783c340fa1ca55d90",
+          "name": "Get Eval Session Detail",
+          "request": {
+            "description": "Triad view for one session \u2014 masked transcript + note (with claims\nthat anchor to transcript segments + frame ids) + score state.\n\nEVAL_TEAM or ADMIN. The shape is additive over EvalSessionResponse \u2014\nthe frontend list page can keep using the smaller list response,\nonly the detail route needs this fatter payload.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "eval",
+                "sessions",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/eval/sessions/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "bb5f0c5c6177391290ca462f",
+          "name": "Get Eval Sessions",
+          "request": {
+            "description": "Eval assignments \u2014 sessions available for quality scoring. EVAL_TEAM or ADMIN.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "eval",
+                "sessions"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/eval/sessions"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "ac4c05a090fa4c243091e480",
+          "name": "Get Masking Report",
+          "request": {
+            "description": "Per-session masking report. COMPLIANCE_OFFICER or ADMIN.\n\nPer P0-02 acceptance: distinguishes masked / failed / skipped / uploaded\ncounts per session. The report consumes four audit event types:\n\n- ``masking_confirmed`` \u2014 on-device masking succeeded for a frame.\n- ``masking_failed`` \u2014 on-device masking failed; the frame was\n  quarantined (never uploaded). Counts toward `failed_frames`.\n- ``masking_failure_skipped`` \u2014 clinician explicitly skipped one or\n  more quarantined frames. The event's `frame_count` is summed into\n  `skipped_frames`.\n- ``frame_uploaded`` \u2014 backend received a frame with a valid masking\n  proof; counts toward `uploaded_frames`.\n\nA session passes when no `masking_failed` events exist.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "masking",
+                "report"
+              ],
+              "query": [
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "date_from",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "date_to",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "clinician_id",
+                  "value": ""
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/admin/masking/report"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "e7e2046b4c9117d14551c1bf",
+          "name": "Get Metrics Timeseries",
+          "request": {
+            "description": "Per-day aggregates over the pilot_metrics window. EVAL_TEAM or ADMIN.\n\nEmpty days are returned with session_count=0 + all metrics null so\nthe frontend doesn't have to backfill gaps when drawing the chart.\n\nDefault window is the last 14 days. `from`/`to` are ISO dates\n(YYYY-MM-DD); `to` is inclusive.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "metrics",
+                "timeseries"
+              ],
+              "query": [
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "from",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "to",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "specialty",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "clinician_id",
+                  "value": ""
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/admin/metrics/timeseries"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "553e6237daaa14ac67318a0f",
+          "name": "Get Pilot Metrics",
+          "request": {
+            "description": "Pilot metrics aggregate. EVAL_TEAM or ADMIN.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "metrics"
+              ],
+              "query": [
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "clinician_id",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "specialty",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "date_from",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "date_to",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/admin/metrics"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "04074f1ff2de27c7bf8a75d0",
+          "name": "Get Providers",
+          "request": {
+            "description": "Show, per provider type, the AppConfig value, any active override,\nand the resolved effective value. ADMIN or COMPLIANCE_OFFICER.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "providers"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/providers"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "74215c58c45a7fb2ff707446",
+          "name": "Get Report",
+          "request": {
+            "description": "Get Report",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "compliance",
+                "reports",
+                ":report_id"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/compliance/reports/:report_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "report_id",
+                  "value": "{{report_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "719e54c966fa2a8d089d4b74",
+          "name": "Get Session Audit",
+          "request": {
+            "description": "All audit events for a specific session. COMPLIANCE_OFFICER or ADMIN.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "audit",
+                "session",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/audit/session/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "be700ceaf852fd7549175c9f",
+          "name": "Get Template Detail",
+          "request": {
+            "description": "Return the effective template for ``template_key``.\n\nOverride wins over disk default; 404 if neither exists.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "templates",
+                ":template_key"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/templates/:template_key",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "template_key",
+                  "value": "{{template_key}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "4df7533a76cfc551de7643e9",
+          "name": "List Alerts",
+          "request": {
+            "description": "Paginated list of alerts, newest first.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "alerts"
+              ],
+              "query": [
+                {
+                  "description": "Filter by ack state.",
+                  "disabled": true,
+                  "key": "status",
+                  "value": ""
+                },
+                {
+                  "description": "Filter by severity.",
+                  "disabled": true,
+                  "key": "severity",
+                  "value": "info"
+                },
+                {
+                  "description": "Filter by alert_type exact match.",
+                  "disabled": true,
+                  "key": "alert_type",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "offset",
+                  "value": "0"
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/admin/alerts"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "630c7ea0c747a0ab1b1c2397",
+          "name": "List Emr Retry Queue",
+          "request": {
+            "description": "Read-only view of the rows currently due for retry.\n\nUseful for the admin UI to surface \"N retries pending\" without\ntriggering a drain pass.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "emr",
+                "retry-queue"
+              ],
+              "query": [
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "limit",
+                  "value": "50"
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/admin/emr/retry-queue"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "854a8df6c13048cc3c715234",
+          "name": "List Eval Assignees",
+          "request": {
+            "description": "ADMIN-only: list users eligible to receive eval assignments\n(role EVAL_TEAM or ADMIN). Surfaces the assignee picker on the\ndetail page.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "eval",
+                "assignees"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/eval/assignees"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "da9735704948ffaac1104738",
+          "name": "List Reports",
+          "request": {
+            "description": "List Reports",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "compliance",
+                "reports"
+              ],
+              "query": [
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "report_type",
+                  "value": "audit"
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "offset",
+                  "value": "0"
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/admin/compliance/reports"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "1fff040165732ecf7b85c4d9",
+          "name": "List Templates",
+          "request": {
+            "description": "List every known template \u2014 bundled + any admin override.\n\nDisk-bundled templates always appear; ``is_override`` reflects whether\nan admin has saved a custom version.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "templates"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/templates"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "18d2f0f4653bdc03677931c0",
+          "name": "List Users",
+          "request": {
+            "description": "List all users. ADMIN only.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/users"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "4381bedb9be839448ca8b66e",
+          "name": "Probe Vision Clip",
+          "request": {
+            "body": {
+              "formdata": [
+                {
+                  "description": "Attach a local file. For the vision-clip probe use backend/tests/fixtures/probe_clip.mp4.",
+                  "key": "clip",
+                  "src": [],
+                  "type": "file"
+                },
+                {
+                  "disabled": true,
+                  "key": "provider_override",
+                  "type": "text",
+                  "value": "openai"
+                }
+              ],
+              "mode": "formdata"
+            },
+            "description": "Probe the configured `vision_clip` provider end-to-end.\n\nOrder of operations:\n\n1. Validate content-type and size cap. Reject early on bad input.\n2. Stream the bytes into S3 under `probe/<probe_id>.mp4` with KMS\n   server-side encryption. The provider's `caption_clip`\n   implementation reads from S3 (`get_object`), so we exercise the\n   full bytes-on-wire path \u2014 not just the synthetic-in-memory\n   happy path.\n3. Resolve the provider through the registry's\n   `get_vision_provider_for_kind(\"clip\", override=\u2026)`. This is the\n   SAME entry point used by the real Stage 2 dispatcher (P1-3);\n   probing through it gives us identical resolution semantics.\n4. Time the provider call, catch every exception class, classify.\n5. ALWAYS delete the temp S3 object in a finally-block.\n6. Emit `VISION_CLIP_PROBED` audit row regardless of outcome.\n7. Return the structured diagnostic. Never re-raise.\n\nOperators should upload ONLY synthetic clips (see\n`backend/tests/fixtures/probe_clip.mp4`). The probe does not\nlog or persist the bytes, but defense-in-depth: synthetic content\nmeans no PHI exposure even if the deletion ever leaks.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "probe",
+                "vision-clip"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/probe/vision-clip"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "00220316e1d371dd09fb3974",
+          "name": "Provider Usage",
+          "request": {
+            "description": "Aggregated provider call telemetry over the given window.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "providers",
+                "usage"
+              ],
+              "query": [
+                {
+                  "description": "ISO timestamp lower bound (inclusive).",
+                  "disabled": true,
+                  "key": "since",
+                  "value": "2026-01-01T00:00:00Z"
+                },
+                {
+                  "description": "ISO timestamp upper bound (inclusive).",
+                  "disabled": true,
+                  "key": "until",
+                  "value": "2026-01-01T00:00:00Z"
+                },
+                {
+                  "description": "Filter to a single provider type.",
+                  "disabled": true,
+                  "key": "provider_type",
+                  "value": ""
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/admin/providers/usage"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "8368c3c21f738786ae76373b",
+          "name": "Revert Template",
+          "request": {
+            "description": "Delete the override and revert ``template_key`` to its disk default.\n\nIf no override exists, returns 204 anyway (idempotent).",
+            "header": [],
+            "method": "DELETE",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "templates",
+                ":template_key"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/templates/:template_key",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "template_key",
+                  "value": "{{template_key}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "c67cccadea59f2ea0fc47083",
+          "name": "Set Provider Override",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"value\": \"\"\n}"
+            },
+            "description": "Pin the active provider for ``provider_type`` at runtime.\n\nValidates the path against the known provider types and the body\n``value`` against that provider's enum, upserts the override row,\nupdates the in-memory cache immediately, and audits the change.\nADMIN or COMPLIANCE_OFFICER.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PUT",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "providers",
+                ":provider_type"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/providers/:provider_type",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "provider_type",
+                  "value": "{{provider_type}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "a26722deb6ddb1087fe59b2f",
+          "name": "Submit Eval Score",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"citation_correctness\": 0.0,\n  \"descriptive_mode_compliance\": 0.0,\n  \"transcript_accuracy\": 0.0\n}"
+            },
+            "description": "Submit (or re-submit) quality scores for a session. EVAL_TEAM or ADMIN.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "eval",
+                "sessions",
+                ":session_id",
+                "score"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/eval/sessions/:session_id/score",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "c71697b7879ab6809fca3eaf",
+          "name": "Unassign Eval Session",
+          "request": {
+            "description": "ADMIN-only: remove any assignment for this session.",
+            "header": [],
+            "method": "DELETE",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "eval",
+                "sessions",
+                ":session_id",
+                "assign"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/eval/sessions/:session_id/assign",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "7c6305148f3d1c93fedf4138",
+          "name": "Update User",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"full_name\": \"\",\n  \"is_active\": false,\n  \"role\": \"CLINICIAN\"\n}"
+            },
+            "description": "Update user role or status. ADMIN only.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "users",
+                ":user_id"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/users/:user_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "user_id",
+                  "value": "{{user_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "7e798687ce58545a6d2cc5bd",
+          "name": "Upsert Template",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"display_name\": \"\",\n  \"key\": \"\"\n}"
+            },
+            "description": "Insert or update the override for ``template_key``.\n\nPydantic validates the body against the ``Template`` schema before\npersistence \u2014 a malformed payload cannot corrupt the override store.\nA ``TEMPLATE_CHANGED`` audit event is written on success.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PUT",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "admin",
+                "templates",
+                ":template_key"
+              ],
+              "raw": "{{base_url}}/api/v1/admin/templates/:template_key",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "template_key",
+                  "value": "{{template_key}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Admin"
+    },
+    {
+      "description": "Endpoints tagged `auth` in the OpenAPI spec.",
+      "id": "3f3432ec9cb47be331753fe8",
+      "item": [
+        {
+          "id": "b80f594dacb03a56649c624e",
+          "name": "Login",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"email\": \"\",\n  \"password\": \"\"\n}"
+            },
+            "description": "Authenticate against the users table. Dev-only outside production Cognito.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "login"
+              ],
+              "raw": "{{base_url}}/api/v1/auth/login"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "9b0d7141e084478cf36f7904",
+          "name": "Me",
+          "request": {
+            "description": "Canonical identity endpoint. Validates the Bearer JWT via JWKS\n(Cognito path) or the dev token (local path), looks up the matching\nUserModel row, and auto-provisions on first sign-in.\n\nFirst-sign-in flow: a Cognito-authenticated user who isn't yet in the\n`users` table is created with a placeholder full_name (will be populated\nonce the user fills out PhysicianProfileSetupView) and the role from\ntheir Cognito group claim \u2014 so admin / compliance / eval users land\nwith the right role even if they never hit the iOS onboarding.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "me"
+              ],
+              "raw": "{{base_url}}/api/v1/auth/me"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "92379be8cd107b1838127b09",
+          "name": "Register",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"email\": \"\",\n  \"full_name\": \"\",\n  \"password\": \"\"\n}"
+            },
+            "description": "Create a CLINICIAN account and return a session token.\n\nHigher-privilege roles (ADMIN, COMPLIANCE_OFFICER, EVAL_TEAM) are not\nself-serve \u2014 operators provision them by updating the role column.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "auth",
+                "register"
+              ],
+              "raw": "{{base_url}}/api/v1/auth/register"
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Auth"
+    },
+    {
+      "description": "Endpoints tagged `clips` in the OpenAPI spec.",
+      "id": "4a3d0b19139c36f3ea778b6b",
+      "item": [
+        {
+          "id": "ee35267a597f0cc4460574a7",
+          "name": "Upload Clip",
+          "request": {
+            "body": {
+              "formdata": [
+                {
+                  "description": "Attach a local file. For the vision-clip probe use backend/tests/fixtures/probe_clip.mp4.",
+                  "key": "clip",
+                  "src": [],
+                  "type": "file"
+                },
+                {
+                  "key": "duration_ms",
+                  "type": "text",
+                  "value": "0"
+                },
+                {
+                  "key": "frames_total",
+                  "type": "text",
+                  "value": "0"
+                },
+                {
+                  "key": "frames_with_faces",
+                  "type": "text",
+                  "value": "0"
+                },
+                {
+                  "key": "masking_confirmed",
+                  "type": "text",
+                  "value": "False"
+                },
+                {
+                  "key": "timestamp_ms",
+                  "type": "text",
+                  "value": "0"
+                },
+                {
+                  "key": "trigger_segment_id",
+                  "type": "text",
+                  "value": ""
+                }
+              ],
+              "mode": "formdata"
+            },
+            "description": "Persist a single masked H.264 clip to S3 for Stage 2 enrichment.\n\nOrder of operations matches `upload_frame`:\n\n1. Auth (handled by `get_current_user` dependency).\n2. Owner assertion: a CLINICIAN can only post to their own sessions.\n3. **Fail-closed masking gate (P0-01)**: reject before any S3 write\n   if `masking_confirmed` is False.\n4. Content-type validation: only `video/mp4` is accepted.\n5. KMS-encrypted S3 PutObject under `clips/{session_id}/{clip_id}.mp4`.\n   The bucket-level default encryption already enforces KMS; we\n   pass `ServerSideEncryption=\"aws:kms\"` for defense-in-depth and\n   to match frames.py.\n6. Emit `CLIP_UPLOADED` audit event carrying the masking metadata.\n7. Return `ClipUploadResponse`.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "clips",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/clips/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Clips"
+    },
+    {
+      "description": "Endpoints tagged `config` in the OpenAPI spec.",
+      "id": "423d10639ed0e71c0e7fe4e1",
+      "item": [
+        {
+          "id": "95f646f2d4a7d33c0201a60c",
+          "name": "Get Client Config",
+          "request": {
+            "description": "Return the subset of AppConfig that iOS clients need.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "config"
+              ],
+              "raw": "{{base_url}}/api/v1/config"
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Config"
+    },
+    {
+      "description": "Endpoints tagged `export` in the OpenAPI spec.",
+      "id": "e7912bbe495b5b10ee90a0b9",
+      "item": [
+        {
+          "id": "b4aee2dfaf44273966b9e62e",
+          "name": "Export Note",
+          "request": {
+            "description": "Export the approved note as a DOCX file.\n\nThe session must be in REVIEW_COMPLETE state (note approved).\nAfter export, the session transitions to EXPORTED and the\ncleanup pipeline is triggered (frame purge + eval migration).\n\nReturns the DOCX file as a downloadable attachment.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notes",
+                ":session_id",
+                "export"
+              ],
+              "raw": "{{base_url}}/api/v1/notes/:session_id/export",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "85ccc021420185275beb1689",
+          "name": "Record On Device Export",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"bytes_produced\": 0,\n  \"format\": \"docx\"\n}"
+            },
+            "description": "Record an on-device export. iOS calls this AFTER successfully\ngenerating the file locally \u2014 no bytes cross the wire here.\n\nSame state preconditions as `/export`: session must be in\nREVIEW_COMPLETE with an approved note. On success the session\ntransitions to EXPORTED so the cleanup pipeline can fire.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notes",
+                ":session_id",
+                "export-audit"
+              ],
+              "raw": "{{base_url}}/api/v1/notes/:session_id/export-audit",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Export"
+    },
+    {
+      "description": "Endpoints tagged `frames` in the OpenAPI spec.",
+      "id": "c3cb4dd9fdf54d5f3cd0b88b",
+      "item": [
+        {
+          "id": "c9739d71780a7cd0c3efc1fd",
+          "name": "Upload Frame",
+          "request": {
+            "body": {
+              "formdata": [
+                {
+                  "key": "faces_detected",
+                  "type": "text",
+                  "value": "0"
+                },
+                {
+                  "description": "Attach a local file. For the vision-clip probe use backend/tests/fixtures/probe_clip.mp4.",
+                  "key": "frame_file",
+                  "src": [],
+                  "type": "file"
+                },
+                {
+                  "key": "frame_type",
+                  "type": "text",
+                  "value": ""
+                },
+                {
+                  "key": "masking_status",
+                  "type": "text",
+                  "value": ""
+                },
+                {
+                  "key": "phi_regions_redacted",
+                  "type": "text",
+                  "value": "0"
+                },
+                {
+                  "key": "timestamp_ms",
+                  "type": "text",
+                  "value": "0"
+                }
+              ],
+              "mode": "formdata"
+            },
+            "description": "Persist a single masked frame to S3 for later Stage 2 enrichment.\n\nP0-02: rejects uploads without a verifiable masking proof. The proof\nfields are recorded on the `frame_uploaded` audit event so the PHI\nmasking report can prove 100% on-device masking before transmission.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "frames",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/frames/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Frames"
+    },
+    {
+      "description": "Endpoints tagged `health` in the OpenAPI spec.",
+      "id": "34a117015bda04f0c709e44d",
+      "item": [
+        {
+          "id": "6d1e78f8c1baff42571887cc",
+          "name": "Health Check",
+          "request": {
+            "description": "Health Check",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "health"
+              ],
+              "raw": "{{base_url}}/health"
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Health"
+    },
+    {
+      "description": "Endpoints tagged `me` in the OpenAPI spec.",
+      "id": "9de6372b0facbbea7217129d",
+      "item": [
+        {
+          "id": "859aba1f77aaf214fba83322",
+          "name": "Bulk Export",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"session_ids\": [\n    \"00000000-0000-0000-0000-000000000000\"\n  ]\n}"
+            },
+            "description": "Zip up DOCX exports for multiple owned sessions.\n\nEach session in the body must be owned by the caller AND have an\napproved note (REVIEW_COMPLETE state). Non-owner / non-approved\nsessions are silently SKIPPED (logged) rather than aborting the\nwhole zip \u2014 physicians can re-include them once they're ready.\nThe audit log records the bulk-export event with the included\nsession ids so the audit trail isn't ambiguous.\n\nStream the zip as it's built \u2014 for 50 sessions this stays small\n(<10 MB typically) but the streaming pattern is correct and lets\niOS-style clients consume without holding everything in browser\nmemory.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "export-bulk"
+              ],
+              "raw": "{{base_url}}/api/v1/me/export-bulk"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "f204254e193c7008cb6471a3",
+          "name": "Cancel My Session Order",
+          "request": {
+            "description": "Cancel an order. Soft delete \u2014 the row stays for audit; status\nflips to 'cancelled'. Sent orders can't be cancelled in-system\n(the EMR owns them at that point).",
+            "header": [],
+            "method": "DELETE",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "orders",
+                ":order_id"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/orders/:order_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                },
+                {
+                  "description": "Path parameter.",
+                  "key": "order_id",
+                  "value": "{{order_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "102cd74a1c74caf9207e27d6",
+          "name": "Confirm My Coding Suggestion",
+          "request": {
+            "description": "Suggested / edited \u2192 confirmed.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "coding-suggestions",
+                ":suggestion_id",
+                "confirm"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/coding-suggestions/:suggestion_id/confirm",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                },
+                {
+                  "description": "Path parameter.",
+                  "key": "suggestion_id",
+                  "value": "{{suggestion_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "5cb1bc9dc6a756f3c5be2512",
+          "name": "Confirm My Session Order",
+          "request": {
+            "description": "Draft \u2192 confirmed. Sets `physician_confirmed_at` server-side.\nIdempotent \u2014 confirming an already-confirmed row returns it\nunchanged with a 200.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "orders",
+                ":order_id",
+                "confirm"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/orders/:order_id/confirm",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                },
+                {
+                  "description": "Path parameter.",
+                  "key": "order_id",
+                  "value": "{{order_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "d0a0a03d9e64ee37ff8f179a",
+          "name": "Continue Template Authoring",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"message\": \"\"\n}"
+            },
+            "description": "Append a user turn; returns the assistant reply + any new draft.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "template-authoring",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/me/template-authoring/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "3c1cba5e76e119d29da063cb",
+          "name": "Create My Custom Template",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"template\": {}\n}"
+            },
+            "description": "Create My Custom Template",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "custom-templates"
+              ],
+              "raw": "{{base_url}}/api/v1/me/custom-templates"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "1625da26c499e65a47ec5310",
+          "name": "Create My Macro",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"body\": \"\",\n  \"shortcut\": \"\"\n}"
+            },
+            "description": "Create My Macro",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "macros"
+              ],
+              "raw": "{{base_url}}/api/v1/me/macros"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "c50d3cd63b21bd189a21d928",
+          "name": "Delete My Custom Template",
+          "request": {
+            "description": "Delete My Custom Template",
+            "header": [],
+            "method": "DELETE",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "custom-templates",
+                ":template_id"
+              ],
+              "raw": "{{base_url}}/api/v1/me/custom-templates/:template_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "template_id",
+                  "value": "{{template_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "b02f06bb44b25ec5bc41e3f6",
+          "name": "Delete My Macro",
+          "request": {
+            "description": "Delete My Macro",
+            "header": [],
+            "method": "DELETE",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "macros",
+                ":macro_id"
+              ],
+              "raw": "{{base_url}}/api/v1/me/macros/:macro_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "macro_id",
+                  "value": "{{macro_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "28d0b5489404414f22f047e1",
+          "name": "Edit My Coding Suggestion",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"code\": \"\",\n  \"description\": \"\"\n}"
+            },
+            "description": "Override the code and/or description. Status flips to 'edited'.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "coding-suggestions",
+                ":suggestion_id"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/coding-suggestions/:suggestion_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                },
+                {
+                  "description": "Path parameter.",
+                  "key": "suggestion_id",
+                  "value": "{{suggestion_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "e27c7bba92296e64e487206a",
+          "name": "Edit My Patient Summary",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"body\": \"\"\n}"
+            },
+            "description": "Save a physician-edited version of the patient summary.\n\nEach edit creates a new version row so the history is preserved.\nThe portal modal currently surfaces only the latest version, but\nthe persistence shape leaves room for a compliance-facing view of\nthe edit chain later.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "patient-summary"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/patient-summary",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "dc1c639b8045c5b3b5d83288",
+          "name": "Edit My Session Order",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"details\": {}\n}"
+            },
+            "description": "Edit the details JSON. Allowed in draft + confirmed; refused\nin sent (EMR has it) / cancelled.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "orders",
+                ":order_id"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/orders/:order_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                },
+                {
+                  "description": "Path parameter.",
+                  "key": "order_id",
+                  "value": "{{order_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "16cd6813f1a3848a3812724f",
+          "name": "Extract My Session Coding Suggestions",
+          "request": {
+            "description": "Run the LLM coding extractor on the latest approved note.\n\nRefuses when the note isn't approved (409). Re-running creates a\nfresh batch \u2014 older suggestions are not auto-rejected so the\nphysician sees both and can resolve manually. The dedupe inside\na single batch is by `(code_system, code)`; cross-batch duplicates\nare intentional (the physician may want to see what the LLM\nsuggested before vs after a note edit).",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "coding-suggestions",
+                "extract"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/coding-suggestions/extract",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "064d0aac4ec7712a50282192",
+          "name": "Extract My Session Orders",
+          "request": {
+            "description": "Run the LLM extractor on the latest approved note and persist\nthe discovered orders as drafts.\n\nRefuses when the note isn't approved (409) \u2014 orders are bound for\nEMR / e-prescribe and should never go out from a draft note.\nRe-running the extractor is allowed and creates fresh draft rows;\nolder drafts are NOT auto-cancelled, so the physician sees both\nsets and can resolve manually.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "orders",
+                "extract"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/orders/extract",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "a404b64b1a5926af26ff2b8f",
+          "name": "Finalize Template Authoring",
+          "request": {
+            "description": "Promote the current draft to a `custom_templates` row.\n\nCloses the authoring session (status='completed') but does not\ndelete it \u2014 the conversation is part of the audit story for how\nthe template came to exist.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "template-authoring",
+                ":session_id",
+                "finalize"
+              ],
+              "raw": "{{base_url}}/api/v1/me/template-authoring/:session_id/finalize",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "70a0b985e0179b430e333432",
+          "name": "Generate My Patient Summary",
+          "request": {
+            "description": "Generate a fresh patient summary from the latest approved note.\n\nRefuses when the note isn't yet approved (409) \u2014 patient-facing\noutput should never go out from a draft that hasn't been\nphysician-signed. Refuses when no note exists (409 with a\ndifferent reason).",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "patient-summary"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/patient-summary",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "e570afd1ffc18b836b793ca9",
+          "name": "Generate My Session Preview",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"partial_transcript\": \"\"\n}"
+            },
+            "description": "Run a draft preview-stage LLM call against the partial transcript.\n\nThis endpoint does NOT touch the canonical Stage 1 pipeline. Each\ncall:\n  * builds a synthetic Transcript from the body text\n  * calls provider.generate_note(stage=0)\n  * persists a new row with the next sequential version\n  * emits LIVE_PREVIEW_GENERATED audit (no PHI in row kwargs)\n\nFailures bubble up as 502 with CORS preserved (same pattern as\nthe other LLM endpoints).",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "sessions",
+                ":session_id",
+                "preview"
+              ],
+              "raw": "{{base_url}}/api/v1/me/sessions/:session_id/preview",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "c8fead15d31ed2935d59baa1",
+          "name": "Get My Audit Log",
+          "request": {
+            "description": "Audit events involving the calling clinician.\n\nFilters on `actor_id == user.user_id` (or `clinician_id == ...`,\nsame partition) so a clinician sees only the rows they generated \u2014\nnever another clinician's audit trail. This is the clinician-side\nmirror of `/admin/audit` which is COMPLIANCE/ADMIN-only and shows\neveryone.\n\nPagination + filtering are identical to the admin endpoint so the\nweb portal can reuse its table component verbatim.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "audit"
+              ],
+              "query": [
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "date_from",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "date_to",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "event_type",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "session_id",
+                  "value": ""
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "page",
+                  "value": "1"
+                },
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "page_size",
+                  "value": "50"
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/me/audit"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "92508058a3dc80b1abb48729",
+          "name": "Get My Latest Session Preview",
+          "request": {
+            "description": "The latest preview, or null when no previews have been generated yet.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "sessions",
+                ":session_id",
+                "preview"
+              ],
+              "raw": "{{base_url}}/api/v1/me/sessions/:session_id/preview",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "3855e732c8090f476b01fe83",
+          "name": "Get My Patient Summary",
+          "request": {
+            "description": "Return the latest patient-facing summary, or null when none yet.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "patient-summary"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/patient-summary",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "94ff3aaad21d37afe940a320",
+          "name": "Get Template Authoring",
+          "request": {
+            "description": "Resume an existing authoring session (e.g. another device).",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "template-authoring",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/me/template-authoring/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "01f0a171f264da0c4ea4c0ac",
+          "name": "List My Custom Templates",
+          "request": {
+            "description": "List the caller's own custom templates plus community-shared ones.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "custom-templates"
+              ],
+              "raw": "{{base_url}}/api/v1/me/custom-templates"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "cd41fd8473a0363eaf9759d8",
+          "name": "List My Emr Connectors",
+          "request": {
+            "description": "Connector keys available in this deployment. Today only `stub`;\nreal connectors land in follow-ups.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "emr",
+                "connectors"
+              ],
+              "raw": "{{base_url}}/api/v1/me/emr/connectors"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "8416e55d7237eb278a9884e2",
+          "name": "List My Macros",
+          "request": {
+            "description": "List My Macros",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "macros"
+              ],
+              "query": [
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "specialty",
+                  "value": ""
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/me/macros"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "80dfcc5db0248c25b52c0597",
+          "name": "List My Session Coding Suggestions",
+          "request": {
+            "description": "All coding suggestions for the session.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "coding-suggestions"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/coding-suggestions",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "c96db729db20ff39f7141873",
+          "name": "List My Session Emr Write Backs",
+          "request": {
+            "description": "All write-back attempts for the session (newest first).",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "emr"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/emr",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "48afb8aa479d63381adc5d0f",
+          "name": "List My Session Orders",
+          "request": {
+            "description": "All orders for the session (drafts, confirmed, sent, cancelled).",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "orders"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/orders",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "7d410a9321b32171c73dbca1",
+          "name": "List My Session Previews",
+          "request": {
+            "description": "All preview snapshots for the session (newest first).\n\nUseful for pilot analysis \u2014 chart how the note evolved across\nminute 1 / 3 / 5 of the encounter. iOS UI typically only renders\nthe latest; the portal renders the timeline.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "sessions",
+                ":session_id",
+                "previews"
+              ],
+              "raw": "{{base_url}}/api/v1/me/sessions/:session_id/previews",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "9d1433b1c5e65b27b8cab646",
+          "name": "List My Sessions By Patient Identifier",
+          "request": {
+            "description": "Return prior sessions tagged with the same patient identifier.\n\nScoped to the calling clinician \u2014 we never reveal another clinician's\nsessions even when the identifier matches. Decrypts the identifier\non each row to compare (no plaintext index column today; pilot scale\nmakes the linear scan trivial). A future PR can add a deterministic\nhash column for indexed lookup if performance demands it.\n\nEmpty/blank identifier \u2192 422; comparison is exact-match\ncase-sensitive (the same physician should reproduce the same\nidentifier across encounters).",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "patients",
+                ":identifier",
+                "sessions"
+              ],
+              "raw": "{{base_url}}/api/v1/me/patients/:identifier/sessions",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "identifier",
+                  "value": "{{identifier}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "9e33c0e57e86b910da3d4506",
+          "name": "Reject My Coding Suggestion",
+          "request": {
+            "description": "Reject a suggestion. Row stays for audit.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "coding-suggestions",
+                ":suggestion_id",
+                "reject"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/coding-suggestions/:suggestion_id/reject",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                },
+                {
+                  "description": "Path parameter.",
+                  "key": "suggestion_id",
+                  "value": "{{suggestion_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "3ab68ba5cc11f9fa4bbefe2d",
+          "name": "Send My Session To Emr",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"connector\": \"\"\n}"
+            },
+            "description": "Push the approved note to the configured EMR connector.\n\nRefuses unapproved notes (409). Refuses unknown connector keys\n(400). The connector itself may still fail (network blip, EMR\nrejection); those land as `status=failed` rows with an\n`error_reason`, NOT as HTTP errors \u2014 the audit trail must capture\nevery attempt.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "notes",
+                ":session_id",
+                "emr",
+                "send"
+              ],
+              "raw": "{{base_url}}/api/v1/me/notes/:session_id/emr/send",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "24c5a73f42a6ba9889231ad3",
+          "name": "Start Template Authoring",
+          "request": {
+            "description": "Open a fresh conversational template-authoring session.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "template-authoring"
+              ],
+              "raw": "{{base_url}}/api/v1/me/template-authoring"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "46722cb8b6e25ce45997e95e",
+          "name": "Update My Custom Template",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"template\": {}\n}"
+            },
+            "description": "Update My Custom Template",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "custom-templates",
+                ":template_id"
+              ],
+              "raw": "{{base_url}}/api/v1/me/custom-templates/:template_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "template_id",
+                  "value": "{{template_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "e01f28b23858c95d72839374",
+          "name": "Update My Macro",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"body\": \"\",\n  \"clear_specialty\": false,\n  \"shortcut\": \"\",\n  \"specialty\": \"\"\n}"
+            },
+            "description": "Update My Macro",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "macros",
+                ":macro_id"
+              ],
+              "raw": "{{base_url}}/api/v1/me/macros/:macro_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "macro_id",
+                  "value": "{{macro_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "9a40673ff53f347953e64ccc",
+          "name": "Upload Template For Extraction",
+          "request": {
+            "body": {
+              "formdata": [
+                {
+                  "description": "Attach a local file. For the vision-clip probe use backend/tests/fixtures/probe_clip.mp4.",
+                  "key": "document",
+                  "src": [],
+                  "type": "file"
+                }
+              ],
+              "mode": "formdata"
+            },
+            "description": "Upload a JSON / plain-text template document for LLM extraction.\n\nAlways lands as an *authoring session* (not a finalized custom\ntemplate) so the physician reviews the LLM's extraction and can\nrefine via chat before saving. The frontend transitions straight\nfrom the file picker to the chat UI with the extracted draft\npre-rendered in the preview card.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "me",
+                "custom-templates",
+                "upload"
+              ],
+              "raw": "{{base_url}}/api/v1/me/custom-templates/upload"
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Me"
+    },
+    {
+      "description": "Endpoints tagged `notes` in the OpenAPI spec.",
+      "id": "6d074681a77cb61dbc3b8576",
+      "item": [
+        {
+          "id": "5f259517bdaab53dca2fd4ec",
+          "name": "Approve Final Note",
+          "request": {
+            "description": "Approve the final note after Stage 2 visual enrichment.\n\nTransitions the session to REVIEW_COMPLETE. Writes audit log event.\n\nCONFLICTS must be resolved before approval -- no note with unresolved\nCONFLICTS can be approved.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notes",
+                ":session_id",
+                "approve"
+              ],
+              "raw": "{{base_url}}/api/v1/notes/:session_id/approve",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "5e8d8928015675b25771016e",
+          "name": "Approve Stage1 Note",
+          "request": {
+            "description": "Approve the Stage 1 draft and trigger Stage 2 processing.\n\nTransitions the session from AWAITING_REVIEW to PROCESSING_STAGE2.\nWrites audit log events for the approval and state transition.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notes",
+                ":session_id",
+                "approve-stage1"
+              ],
+              "raw": "{{base_url}}/api/v1/notes/:session_id/approve-stage1",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "3b59a0c6ae2272d8edf9f967",
+          "name": "Edit Note Endpoint",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"edits\": {}\n}"
+            },
+            "description": "Apply physician edits to the latest note version.\n\nCreates a new immutable version -- the original is preserved.\nSession must be in AWAITING_REVIEW or REVIEW_COMPLETE state.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notes",
+                ":session_id",
+                "edit"
+              ],
+              "raw": "{{base_url}}/api/v1/notes/:session_id/edit",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "1280b71747b0b35f73a94dee",
+          "name": "Get Full Note",
+          "request": {
+            "description": "Get the full note (latest version) for a session.\n\nReturns the most recent note version, which may include Stage 2\nvisual enrichments if processing is complete.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notes",
+                ":session_id",
+                "full"
+              ],
+              "raw": "{{base_url}}/api/v1/notes/:session_id/full",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "0b6e540805180a3ba6a7ac93",
+          "name": "Get Note Detail",
+          "request": {
+            "description": "Note detail optimized for the web review UI.\n\nReturns the latest note version plus:\n  - `citations`: per-claim expansion (transcript text, frame metadata,\n    physician-edit original text) keyed by `claim.id`.\n  - `conflict_state`: aggregate of unresolved CONFLICTS so the UI\n    can block approval at the page level, not just at submit.\n  - `export_metadata`: approval + session state so the export button\n    knows whether to be active.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notes",
+                ":session_id",
+                "detail"
+              ],
+              "raw": "{{base_url}}/api/v1/notes/:session_id/detail",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "1d198d4885585e05045b346f",
+          "name": "Get Stage1 Note",
+          "request": {
+            "description": "Get the Stage 1 draft note for a session.\n\nThe session must be in AWAITING_REVIEW or later state for the\nStage 1 note to be available.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notes",
+                ":session_id",
+                "stage1"
+              ],
+              "raw": "{{base_url}}/api/v1/notes/:session_id/stage1",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "4bec9f5da8bd723ad5b6ba63",
+          "name": "Get Stage2 Status",
+          "request": {
+            "description": "Poll Stage 2 job status. iOS hits this from the dashboard to know\nwhether the session is still processing, ready for final review, or\nblocked on a vision failure.\n\nReturns `status=\"no_job\"` (with a 200, not 404) when Stage 1 hasn't\nbeen approved yet \u2014 clients should treat that as \"Stage 2 hasn't\nstarted\" rather than an error.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notes",
+                ":session_id",
+                "stage2-status"
+              ],
+              "raw": "{{base_url}}/api/v1/notes/:session_id/stage2-status",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "e9b6a12d6bf56ba243e88e14",
+          "name": "Resolve Conflict Endpoint",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"action\": \"accept_visual\"\n}"
+            },
+            "description": "Resolve a single Stage 2 visual conflict.\n\nWrites a new immutable note version with the conflict either accepted,\nrejected, or edited. The audit log captures the action so compliance\ncan review every resolution decision.\n\nSession must be in AWAITING_REVIEW or PROCESSING_STAGE2 \u2014 conflicts\nonly exist after Stage 2, and resolution must precede final approval.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "notes",
+                ":session_id",
+                "conflicts",
+                ":claim_id",
+                "resolve"
+              ],
+              "raw": "{{base_url}}/api/v1/notes/:session_id/conflicts/:claim_id/resolve",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                },
+                {
+                  "description": "Path parameter.",
+                  "key": "claim_id",
+                  "value": "{{claim_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Notes"
+    },
+    {
+      "description": "Endpoints tagged `privacy` in the OpenAPI spec.",
+      "id": "5bd1b1958720cea5288ea16b",
+      "item": [
+        {
+          "id": "3eb2a871ba15656aa320a28e",
+          "name": "Delete My Account",
+          "request": {
+            "description": "Full account deletion \u2014 Quebec Law 25 right to erasure.\n\nDeletes:\n  - All sessions (cascades to note_versions via DB)\n  - All pilot metrics for the user\n  - All remaining S3 objects for the user's sessions\n\nRetained:\n  - Audit log entries are immutable and cannot be deleted.\n    An ``account_deleted`` event is appended recording what was removed.\n    Audit logs are retained for 7 years per Quebec regulatory requirements.",
+            "header": [],
+            "method": "DELETE",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privacy",
+                "my-account"
+              ],
+              "raw": "{{base_url}}/api/v1/privacy/my-account"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "9c73d3b7d537c86d064e0332",
+          "name": "Export My Data",
+          "request": {
+            "description": "Machine-readable export of all personal data.\n\nSupports JSON format. Uses streaming for large datasets.\nQuebec Law 25 requires data portability in a structured format.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privacy",
+                "export"
+              ],
+              "query": [
+                {
+                  "description": "",
+                  "disabled": true,
+                  "key": "format",
+                  "value": "json"
+                }
+              ],
+              "raw": "{{base_url}}/api/v1/privacy/export"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "279bbc9128d4af25e56fbb81",
+          "name": "Get Consent History",
+          "request": {
+            "description": "Return all consent events for the authenticated user.\n\nIncludes: consent_confirmed, biometric_consent_confirmed,\nand voice_enrollment_complete events extracted from the\nimmutable audit log.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privacy",
+                "consents"
+              ],
+              "raw": "{{base_url}}/api/v1/privacy/consents"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "5983de0e936f6a281a10c302",
+          "name": "Get My Data",
+          "request": {
+            "description": "Data Subject Access Request (DSAR) \u2014 Quebec Law 25.\n\nReturns all personal data held for the authenticated user:\naccount info, sessions, note versions, pilot metrics,\nconsent events, and voice enrollment status.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "privacy",
+                "my-data"
+              ],
+              "raw": "{{base_url}}/api/v1/privacy/my-data"
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Privacy"
+    },
+    {
+      "description": "Endpoints tagged `profile` in the OpenAPI spec.",
+      "id": "b8bc7a705993d638f29e8bc3",
+      "item": [
+        {
+          "id": "b91029b9ad5342b1a295468f",
+          "name": "Get Profile",
+          "request": {
+            "description": "Get current user's profile. Auto-creates with defaults on first call.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile"
+              ],
+              "raw": "{{base_url}}/api/v1/profile"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "176c55a26d5b83366eb53646",
+          "name": "Get Profile Templates",
+          "request": {
+            "description": "Get the user's preferred templates as full template objects.",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile",
+                "templates"
+              ],
+              "raw": "{{base_url}}/api/v1/profile/templates"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "4b4b4a5ebec51278aeb48cbe",
+          "name": "Update Profile Route",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"allied_health_team\": [\n    {}\n  ],\n  \"auto_upload\": false,\n  \"consent_reprompt\": \"\",\n  \"consultation_types\": [\n    \"\"\n  ],\n  \"display_name\": \"\",\n  \"output_language\": \"\",\n  \"practice_type\": \"\",\n  \"preferred_templates\": [\n    \"\"\n  ],\n  \"primary_specialty\": \"\",\n  \"retention_days\": 0,\n  \"ui_language\": \"\",\n  \"ui_theme\": \"\"\n}"
+            },
+            "description": "Update current user's profile fields.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PUT",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "profile"
+              ],
+              "raw": "{{base_url}}/api/v1/profile"
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Profile"
+    },
+    {
+      "description": "Endpoints tagged `screen` in the OpenAPI spec.",
+      "id": "8d5310cc067fde6f47533f01",
+      "item": [
+        {
+          "id": "7769b028bb9462001ad456b3",
+          "name": "Upload Screen Frame",
+          "request": {
+            "body": {
+              "formdata": [
+                {
+                  "key": "faces_detected",
+                  "type": "text",
+                  "value": "0"
+                },
+                {
+                  "description": "Attach a local file. For the vision-clip probe use backend/tests/fixtures/probe_clip.mp4.",
+                  "key": "frame_file",
+                  "src": [],
+                  "type": "file"
+                },
+                {
+                  "key": "frame_type",
+                  "type": "text",
+                  "value": ""
+                },
+                {
+                  "key": "masking_status",
+                  "type": "text",
+                  "value": ""
+                },
+                {
+                  "key": "phi_regions_redacted",
+                  "type": "text",
+                  "value": "0"
+                },
+                {
+                  "key": "timestamp_ms",
+                  "type": "text",
+                  "value": "0"
+                }
+              ],
+              "mode": "formdata"
+            },
+            "description": "Persist + process a single screen frame, merging extracted data\nas new screen-sourced claims on the session's note.\n\nFailure modes are explicit:\n- Bad proof \u2192 400.\n- Missing session \u2192 404.\n- Empty body \u2192 400.\n- OCR/processing exceptions bubble up as 500.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "screen",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/screen/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Screen"
+    },
+    {
+      "description": "Endpoints tagged `sessions` in the OpenAPI spec.",
+      "id": "0bc9b0543e86e8ca656dcc31",
+      "item": [
+        {
+          "id": "04629f222392414a9d309014",
+          "name": "Confirm Consent Route",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"consent_method\": \"verbal\"\n}"
+            },
+            "description": "Confirm Consent Route",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                ":session_id",
+                "consent"
+              ],
+              "raw": "{{base_url}}/api/v1/sessions/:session_id/consent",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "ee50373426901cb2e994cc05",
+          "name": "Create Session Route",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"specialty\": \"\"\n}"
+            },
+            "description": "Create Session Route",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions"
+              ],
+              "raw": "{{base_url}}/api/v1/sessions"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "c800d7aed18a007e26a0eb4b",
+          "name": "Discard Session Route",
+          "request": {
+            "description": "Permanently delete a session and all of its data.\n\nClinician-scoped self-service cleanup (e.g. clearing a session that\ngot wedged in PROCESSING_STAGE1 after a failed Stage 1). The caller may\nonly discard their own sessions \u2014 another clinician's session 404s so\nits existence isn't revealed. Removes the session plus its transcript /\nnote-version / pilot-metric / stage-2 rows.\n\nThe DynamoDB audit trail is append-only and is NOT erased: a\n``session_discarded`` event is written instead, after the delete is\ndurably committed, so the record of the deletion survives.",
+            "header": [],
+            "method": "DELETE",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/sessions/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "46544d317ca1acc271d1ee2b",
+          "name": "Get Session Route",
+          "request": {
+            "description": "Get Session Route",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/sessions/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "e5596a6ad53c9175e1fa2bf0",
+          "name": "List Sessions Route",
+          "request": {
+            "description": "List Sessions Route",
+            "header": [],
+            "method": "GET",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions"
+              ],
+              "raw": "{{base_url}}/api/v1/sessions"
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "e2973018ad973f60e9c2ed1a",
+          "name": "Pause Session Route",
+          "request": {
+            "description": "Pause Session Route",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                ":session_id",
+                "pause"
+              ],
+              "raw": "{{base_url}}/api/v1/sessions/:session_id/pause",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "412113de496698de8609ac12",
+          "name": "Resume Session Route",
+          "request": {
+            "description": "Resume Session Route",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                ":session_id",
+                "resume"
+              ],
+              "raw": "{{base_url}}/api/v1/sessions/:session_id/resume",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "208866a635ad5c50a9e8deb8",
+          "name": "Set Session External Reference Id",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"external_reference_id\": \"\"\n}"
+            },
+            "description": "Set or clear the patient identifier (external_reference_id) on a session.\n\nThe identifier is PHI: KMS-encrypted at rest, never logged in\nplaintext, never returned to non-owner callers. Empty string or\nnull clears the column (and emits an audit event with\n`cleared=True` so the trail captures the deletion).\n\nOwner-only \u2014 non-owner CLINICIAN gets 404 from get_owned_session_or_404.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                ":session_id",
+                "identifier"
+              ],
+              "raw": "{{base_url}}/api/v1/sessions/:session_id/identifier",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "0eb1bbb4b12f0b98ad7dd40d",
+          "name": "Start Recording Route",
+          "request": {
+            "description": "Start Recording Route",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                ":session_id",
+                "start"
+              ],
+              "raw": "{{base_url}}/api/v1/sessions/:session_id/start",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "0ba2c018519d1fc3b225a106",
+          "name": "Stop Recording Route",
+          "request": {
+            "description": "Stop Recording Route",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                ":session_id",
+                "stop"
+              ],
+              "raw": "{{base_url}}/api/v1/sessions/:session_id/stop",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "30bf692fd3459ace756d6238",
+          "name": "Update Session Template",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"specialty\": \"\"\n}"
+            },
+            "description": "Change the session specialty/template after recording, before note generation.\n\nOnly valid when the session is in PROCESSING_STAGE1 state (audio submitted\nbut note not yet generated).",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "sessions",
+                ":session_id",
+                "template"
+              ],
+              "raw": "{{base_url}}/api/v1/sessions/:session_id/template",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Sessions"
+    },
+    {
+      "description": "Endpoints tagged `transcription` in the OpenAPI spec.",
+      "id": "63b5c8541635dc2c3efe022c",
+      "item": [
+        {
+          "id": "4d017cebc91173c031129487",
+          "name": "Apply Speaker Tags",
+          "request": {
+            "body": {
+              "mode": "raw",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              },
+              "raw": "{\n  \"tags\": [\n    {\n      \"confidence\": 0.0,\n      \"segment_id\": \"\",\n      \"speaker\": \"physician\"\n    }\n  ]\n}"
+            },
+            "description": "Apply on-device speaker tags to the persisted transcript.\n\niOS runs `SpeakerSeparation.tagSpeaker` locally against each\ntranscript segment using the physician's voice embedding (stored in\nKeychain, never transmitted). This endpoint records the resulting\nlabels on the server-side transcript so Stage 1/2 note generation\ncan use them.\n\nReturns the number of segments updated and any unknown segment IDs\nso the client can detect drift between local and persisted state.",
+            "header": [
+              {
+                "description": "Required for JSON request bodies.",
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "method": "PATCH",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transcription",
+                ":session_id",
+                "speakers"
+              ],
+              "raw": "{{base_url}}/api/v1/transcription/:session_id/speakers",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "id": "2967cf7822dd8ccee9ed4541",
+          "name": "Submit Transcription",
+          "request": {
+            "body": {
+              "formdata": [
+                {
+                  "description": "Attach a local file. For the vision-clip probe use backend/tests/fixtures/probe_clip.mp4.",
+                  "key": "audio_file",
+                  "src": [],
+                  "type": "file"
+                }
+              ],
+              "mode": "formdata"
+            },
+            "description": "Submit audio for transcription.\n\nPipeline: S3 upload \u2192 transcription \u2192 trigger classification \u2192 PHI audit.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "transcription",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/transcription/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Transcription"
+    },
+    {
+      "description": "Endpoints tagged `vision` in the OpenAPI spec.",
+      "id": "e4cf072a7cd82570e7301c6b",
+      "item": [
+        {
+          "id": "f7c44c295d94df89f83c8e66",
+          "name": "Process Vision Frames",
+          "request": {
+            "description": "Process masked frames for a session through the vision pipeline.",
+            "header": [],
+            "method": "POST",
+            "url": {
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "vision",
+                ":session_id"
+              ],
+              "raw": "{{base_url}}/api/v1/vision/:session_id",
+              "variable": [
+                {
+                  "description": "Path parameter.",
+                  "key": "session_id",
+                  "value": "{{session_id}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        }
+      ],
+      "name": "Vision"
+    }
+  ],
+  "variable": [
+    {
+      "description": "Override per-environment.",
+      "key": "base_url",
+      "type": "default",
+      "value": "https://api-dev.aurionclinical.com"
+    },
+    {
+      "description": "Placeholder; replace with a real value before sending.",
+      "key": "claim_id",
+      "type": "default",
+      "value": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "description": "Placeholder; replace with a real value before sending.",
+      "key": "identifier",
+      "type": "default",
+      "value": "patient-placeholder"
+    },
+    {
+      "description": "Placeholder; replace with a real value before sending.",
+      "key": "macro_id",
+      "type": "default",
+      "value": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "description": "Placeholder; replace with a real value before sending.",
+      "key": "order_id",
+      "type": "default",
+      "value": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "description": "Placeholder; replace with a real value before sending.",
+      "key": "provider_type",
+      "type": "default",
+      "value": "vision"
+    },
+    {
+      "description": "Placeholder; replace with a real value before sending.",
+      "key": "report_id",
+      "type": "default",
+      "value": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "description": "Placeholder; replace with a real value before sending.",
+      "key": "session_id",
+      "type": "default",
+      "value": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "description": "Placeholder; replace with a real value before sending.",
+      "key": "suggestion_id",
+      "type": "default",
+      "value": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "description": "Placeholder; replace with a real value before sending.",
+      "key": "template_id",
+      "type": "default",
+      "value": "00000000-0000-0000-0000-000000000000"
+    },
+    {
+      "description": "Placeholder; replace with a real value before sending.",
+      "key": "template_key",
+      "type": "default",
+      "value": "orthopedic_surgery"
+    },
+    {
+      "description": "Placeholder; replace with a real value before sending.",
+      "key": "user_id",
+      "type": "default",
+      "value": "00000000-0000-0000-0000-000000000000"
+    }
+  ]
+}
