@@ -65,19 +65,22 @@ class NoteClaimResponse(BaseModel):
     source_quote: str = ""
     physician_edited: bool = False
     original_text: Optional[str] = None
-    # ── Dual-mode visual evidence (P1-6-FU) ───────────────────────────
+    # ── Dual-mode visual evidence (P1-6-FU + P1-FU-FRAME-URLS) ────────
     # Populated for visual claims only:
-    #   - frame-kind  (source_id starts `frame_`): evidence_kind="frame",
-    #     duration_ms=None, clip_url=None.
-    #   - clip-kind   (source_id ends `_clip`):    evidence_kind="clip",
-    #     duration_ms=<encoded window in ms>, clip_url=<signed S3 URL>.
-    # All three fields are None for non-visual claims (transcript,
+    #   - frame-kind (source_id starts `frame_`): evidence_kind="frame",
+    #     duration_ms=None, clip_url=None,
+    #     frame_url=<signed S3 URL>  (P1-FU-FRAME-URLS).
+    #   - clip-kind  (source_id ends `_clip`):    evidence_kind="clip",
+    #     duration_ms=<encoded window in ms>,
+    #     clip_url=<signed S3 URL>,  frame_url=None.
+    # All four fields are None for non-visual claims (transcript,
     # screen, physician_edit) so the iOS decoder (which defaults to
     # .frame / nil) treats them as it always has — additive contract,
     # byte-identical wire shape for non-visual claims.
     evidence_kind: Optional[Literal["frame", "clip"]] = None
     duration_ms: Optional[int] = None
     clip_url: Optional[str] = None
+    frame_url: Optional[str] = None
 
 
 class NoteSectionResponse(BaseModel):
@@ -115,15 +118,15 @@ class CitationExpansion(BaseModel):
     frame_s3_key: Optional[str] = None
     # physician edit
     original_text: Optional[str] = None
-    # ── Dual-mode visual evidence (P1-6-FU) ───────────────────────────
-    # Mirror NoteClaimResponse.evidence_kind / duration_ms / clip_url so
-    # the web review UI can render the inline player on the clip path the
-    # same way iOS does (parity with `GET /notes/{id}/full`). Web
-    # consumption ships in a follow-up; the wire surface lands here for
-    # symmetry.
+    # ── Dual-mode visual evidence (P1-6-FU + P1-FU-FRAME-URLS) ────────
+    # Mirror NoteClaimResponse.evidence_kind / duration_ms / clip_url /
+    # frame_url so the web review UI can render the inline player on the
+    # clip path AND the inline still on the frame path the same way iOS
+    # does (parity with `GET /notes/{id}/full`).
     evidence_kind: Optional[Literal["frame", "clip"]] = None
     duration_ms: Optional[int] = None
     clip_url: Optional[str] = None
+    frame_url: Optional[str] = None
 
 
 class ConflictState(BaseModel):
@@ -405,12 +408,15 @@ async def get_full_note(
             detail="No note found for this session.",
         )
 
-    # P1-6-FU: plumb signed clip URLs through every visual claim so the
-    # iOS reviewer can play inline. The resolver memoizes one S3 LIST
-    # per request; non-clip claims bypass it.
+    # P1-6-FU + P1-FU-FRAME-URLS: plumb signed evidence URLs (frame
+    # stills + clip MP4s) through every visual claim so the iOS reviewer
+    # and the web compliance officer can fetch evidence inline. The
+    # resolver memoizes ONE S3 LIST per *prefix* per request — frame
+    # claims only fire the frames LIST; clip claims only fire the clips
+    # LIST; non-visual claims bypass both.
     return _to_note_response(
         note,
-        clip_url_resolver=_build_clip_url_resolver(str(session_id)),
+        clip_url_resolver=_build_evidence_url_resolver(str(session_id)),
     )
 
 
@@ -524,11 +530,12 @@ async def get_note_detail(
             detail="No note found for this session.",
         )
 
-    # P1-6-FU: single resolver shared between the wire NoteResponse
-    # builder AND the per-claim citation expansion. One S3 LIST per
-    # request, two consumers — DRY across the two surfaces (which both
-    # need clip_url for the same set of visual claims).
-    clip_url_resolver = _build_clip_url_resolver(str(session_id))
+    # P1-6-FU + P1-FU-FRAME-URLS: single resolver shared between the
+    # wire NoteResponse builder AND the per-claim citation expansion.
+    # ONE S3 LIST per prefix per request, two consumers — DRY across
+    # the two surfaces (which both need clip_url + frame_url for the
+    # same set of visual claims).
+    clip_url_resolver = _build_evidence_url_resolver(str(session_id))
     citations = _build_citations(
         note,
         transcript,
@@ -815,18 +822,24 @@ def _expand_claim(
         s3_key = (
             f"{prefix}/{session_id}/{timestamp}.jpg" if timestamp is not None else None
         )
-        # P1-6-FU: resolve evidence_kind + clip_url for visual claims so
-        # the web detail view carries the same metadata the wire
-        # `NoteClaimResponse` does. Screen claims always stay frame-kind
-        # (P0-04 screen-capture path doesn't ride the clip rails). The
-        # resolver is None in non-route call paths (unit tests of pure
-        # helpers); in that case we leave the new fields as None so the
-        # legacy callers behave identically.
+        # P1-6-FU + P1-FU-FRAME-URLS: resolve evidence_kind + clip_url +
+        # frame_url for visual claims so the web detail view carries the
+        # same metadata the wire `NoteClaimResponse` does. Screen claims
+        # always stay frame-kind on the web review surface but they do
+        # NOT ride the visual-evidence rails (P0-04 screen-capture path
+        # has its own redaction guarantees), so we leave evidence_kind /
+        # URLs as None for screen claims. The resolver is None in
+        # non-route call paths (unit tests of pure helpers); in that
+        # case we leave the new fields as None so the legacy callers
+        # behave identically.
         evidence_kind: Optional[Literal["frame", "clip"]] = None
         duration_ms: Optional[int] = None
         clip_url: Optional[str] = None
+        frame_url: Optional[str] = None
         if claim.source_type == "visual" and clip_url_resolver is not None:
-            evidence_kind, duration_ms, clip_url = clip_url_resolver(claim.source_id)
+            evidence_kind, duration_ms, clip_url, frame_url = clip_url_resolver(
+                claim.source_id
+            )
         return CitationExpansion(
             source_type=claim.source_type,
             source_id=claim.source_id,
@@ -836,6 +849,7 @@ def _expand_claim(
             evidence_kind=evidence_kind,
             duration_ms=duration_ms,
             clip_url=clip_url,
+            frame_url=frame_url,
         )
 
     # physician_edit
@@ -858,18 +872,39 @@ def _parse_frame_timestamp(source_id: str) -> Optional[int]:
         return None
 
 
-# ── Clip URL plumbing (P1-6-FU) ───────────────────────────────────────────
+# ── Evidence URL plumbing (P1-6-FU + P1-FU-FRAME-URLS) ────────────────────
 #
-# A `ClipUrlResolver` returns `(evidence_kind, duration_ms, clip_url)` for a
-# claim's source_id. The contract:
+# A `ClipUrlResolver` returns `(evidence_kind, duration_ms, clip_url,
+# frame_url)` for a visual claim's source_id. The contract:
 #   - source_id is a visual claim's source_id.
-#   - returns ("clip", duration_ms, signed_url) for clip-kind claims.
-#   - returns ("frame", None, None)             for frame-kind visual claims.
-#   - returns (None, None, None)                if the claim isn't visual or
-#     the resolver couldn't decide (S3 unavailable, no clips at all).
-# The resolver memoizes the underlying S3 LIST so N visual claims = 1 LIST.
+#   - returns ("clip",  duration_ms, signed_clip_url, None) for clip-kind.
+#   - returns ("frame", None, None, signed_frame_url) for frame-kind.
+#   - returns (kind, ..., None, ...) on graceful-degradation paths where
+#     the LIST or the presign fails — the evidence_kind is preserved so
+#     the iOS chip / web UI still renders the right indicator, but the
+#     URL field is None and the player falls back to its localized
+#     "evidence not yet available" alert.
+#
+# The resolver memoizes ONE S3 LIST per *evidence prefix* per request.
+# A note with N visual claims (mixing frame and clip) costs at most 2 LIST
+# calls: one for `frames/{session_id}/`, one for `clips/{session_id}/`.
+# Unused prefixes are never listed.
+#
+# Naming: the public type is still `ClipUrlResolver` for byte-compat with
+# any callers that imported it before this refactor; the underlying
+# factory is now `_build_evidence_url_resolver` and the legacy
+# `_build_clip_url_resolver` is a thin alias preserved for call-site
+# byte-compat (the route handlers were renamed in this PR).
 
-ClipUrlResolver = Callable[[str], tuple[Optional[Literal["frame", "clip"]], Optional[int], Optional[str]]]
+ClipUrlResolver = Callable[
+    [str],
+    tuple[
+        Optional[Literal["frame", "clip"]],
+        Optional[int],
+        Optional[str],
+        Optional[str],
+    ],
+]
 
 
 def _is_clip_kind_source_id(source_id: str) -> bool:
@@ -882,29 +917,49 @@ def _is_clip_kind_source_id(source_id: str) -> bool:
     return source_id.endswith("_clip")
 
 
-def _build_clip_url_resolver(
+def _parse_frame_timestamp_ms(source_id: str) -> Optional[int]:
+    """Frame-kind source ids are `frame_NNNNN` where NNNNN is the
+    timestamp in milliseconds. Returns the int suffix, or None if the
+    shape isn't a frame-kind id (e.g. clip-kind). Used by the evidence
+    resolver to build the candidate S3 key when the LIST is empty."""
+    if not source_id.startswith("frame_"):
+        return None
+    suffix = source_id.split("_", 1)[1]
+    try:
+        return int(suffix)
+    except ValueError:
+        return None
+
+
+def _build_evidence_url_resolver(
     session_id: str,
     *,
     s3_client=None,
     clip_window_ms: Optional[int] = None,
     ttl_seconds: int = DEFAULT_EVIDENCE_TTL_SECONDS,
 ) -> ClipUrlResolver:
-    """Factory: returns a per-request resolver for visual-claim → clip URL.
+    """Factory: returns a per-request resolver for visual-claim → signed
+    evidence URL (frame still OR clip MP4).
 
-    DRY contract: ONE S3 LIST per request, regardless of how many clip
-    claims the note carries. The first call to the resolver lists
-    ``clips/{session_id}/`` and caches the keys; subsequent calls reuse
-    the cache. A LIST failure caches an empty list so the resolver
-    returns ``(None, None, None)`` for every clip claim — graceful
-    degradation: the iOS chip still surfaces the play indicator (driven
-    by `evidence_kind`), but the player guards on a nil URL and shows
-    the "clip not yet available" alert, which is the same UX as the
-    pre-P1-6-FU baseline.
+    DRY contract: ONE S3 LIST per *evidence prefix* per request. A note
+    with two frame claims + three clip claims fires exactly two LIST
+    calls (one against ``frames/{session_id}/``, one against
+    ``clips/{session_id}/``). A note with only frame claims fires one
+    LIST. The clips LIST is never made for a frame-only note, and vice
+    versa.
+
+    A LIST or presign failure caches an empty list / returns None so the
+    resolver returns ``(kind, ..., None, ...)`` for every affected
+    claim — graceful degradation: the iOS chip + web UI still surface
+    the right indicator (driven by `evidence_kind`), but the player /
+    image guards on a nil URL and shows the localized
+    "evidence not yet available" alert. Same UX as the pre-PR baseline
+    on either kind.
 
     Args:
         session_id: The session UUID. Used to build the S3 prefix and as
-            the dictionary cache key (irrelevant for the single-resolver
-            case but defensive against accidental cross-session reuse).
+            the dictionary cache key (defensive against accidental
+            cross-session reuse).
         s3_client: Optional injected boto3 client (test path). Default
             is ``core/s3.get_s3_client()``.
         clip_window_ms: Optional override for the duration emitted on
@@ -912,10 +967,12 @@ def _build_clip_url_resolver(
             ``AppConfig.pipeline.clip_window_ms`` so production
             picks up runtime tuning without a redeploy.
         ttl_seconds: Signed-URL TTL. Default 1h via
-            ``DEFAULT_EVIDENCE_TTL_SECONDS``.
+            ``DEFAULT_EVIDENCE_TTL_SECONDS``. Applies to BOTH frame and
+            clip presigns — symmetric exposure window.
 
     Returns:
-        A callable matching the ``ClipUrlResolver`` protocol.
+        A callable matching the ``ClipUrlResolver`` protocol returning
+        `(evidence_kind, duration_ms, clip_url, frame_url)`.
     """
     # Lazily import AppConfig only at resolver-construction time so this
     # module stays importable from pure-unit tests that don't bootstrap
@@ -931,66 +988,112 @@ def _build_clip_url_resolver(
             clip_window_ms = 7000
 
     client = s3_client if s3_client is not None else get_s3_client()
-    # The cache is single-key on this resolver's life. We keep the
-    # session_id check in the closure to make a future
-    # cross-session callable explicit.
-    _cache: dict[str, list[str]] = {}
+    # Two independent caches, keyed by kind. Each kind is listed at most
+    # once per resolver lifetime; if no claim of that kind exists, the
+    # cache stays untouched and no LIST fires for that prefix.
+    _clip_cache: dict[str, list[str]] = {}
+    _frame_cache: dict[str, list[str]] = {}
 
-    def _list_clip_keys() -> list[str]:
-        if session_id in _cache:
-            return _cache[session_id]
-        prefix = f"clips/{session_id}/"
+    def _list_keys(
+        prefix: str,
+        cache: dict[str, list[str]],
+        log_kind: str,
+    ) -> list[str]:
+        if session_id in cache:
+            return cache[session_id]
         try:
-            response = client.list_objects_v2(Bucket=FRAMES_BUCKET, Prefix=prefix)
+            response = client.list_objects_v2(
+                Bucket=FRAMES_BUCKET, Prefix=prefix
+            )
         except (BotoCoreError, ClientError) as exc:
             # Truncate the session UUID in logs (PHI-adjacent identifier).
             # Never log the key prefix beyond the bucket-kind.
             logger.warning(
-                "Clip listing failed for session=%s: %s",
+                "Evidence listing failed: kind=%s session=%s: %s",
+                log_kind,
                 str(session_id)[:12],
                 exc,
             )
-            _cache[session_id] = []
-            return _cache[session_id]
+            cache[session_id] = []
+            return cache[session_id]
         keys = [
             obj["Key"]
             for obj in response.get("Contents", [])
             if isinstance(obj.get("Key"), str)
         ]
-        _cache[session_id] = keys
+        cache[session_id] = keys
         return keys
 
-    def _resolve(source_id: str) -> tuple[
-        Optional[Literal["frame", "clip"]], Optional[int], Optional[str]
-    ]:
-        # Frame-kind visual: surface evidence_kind="frame" so iOS knows
-        # this is a still-image citation, not a clip. No URL is signed
-        # (frame URL plumbing is a separate follow-up).
-        if not _is_clip_kind_source_id(source_id):
-            return "frame", None, None
+    def _list_clip_keys() -> list[str]:
+        return _list_keys(f"clips/{session_id}/", _clip_cache, "clip")
 
-        # Clip-kind: list the session's clips and pick the first. For the
-        # pilot there's one clip per trigger; multi-clip-per-trigger is
-        # post-pilot territory and would key by trigger_segment_id parsed
-        # from the source_id. Empty list → degraded surface (kind only).
-        keys = _list_clip_keys()
-        if not keys:
-            return "clip", clip_window_ms, None
+    def _list_frame_keys() -> list[str]:
+        return _list_keys(f"frames/{session_id}/", _frame_cache, "frame")
+
+    def _presign(s3_key: str, kind: str) -> Optional[str]:
         try:
-            signed = generate_presigned_evidence_url(
-                keys[0],
+            return generate_presigned_evidence_url(
+                s3_key,
                 ttl_seconds=ttl_seconds,
             )
         except (BotoCoreError, ClientError) as exc:
             logger.warning(
-                "Presign failed for session=%s: %s",
+                "Presign failed: kind=%s session=%s: %s",
+                kind,
                 str(session_id)[:12],
                 exc,
             )
-            return "clip", clip_window_ms, None
-        return "clip", clip_window_ms, signed
+            return None
+
+    def _resolve(source_id: str) -> tuple[
+        Optional[Literal["frame", "clip"]],
+        Optional[int],
+        Optional[str],
+        Optional[str],
+    ]:
+        # Clip-kind: list the session's clips and pick the first. For
+        # the pilot there's one clip per trigger; multi-clip-per-trigger
+        # is post-pilot territory and would key by trigger_segment_id
+        # parsed from the source_id. Empty list → degraded surface
+        # (kind only).
+        if _is_clip_kind_source_id(source_id):
+            keys = _list_clip_keys()
+            if not keys:
+                return "clip", clip_window_ms, None, None
+            signed = _presign(keys[0], kind="clip")
+            return "clip", clip_window_ms, signed, None
+
+        # Frame-kind: list the session's frame keys. The frame id encodes
+        # the timestamp (`frame_NNNNN`), and the S3 layout the upload
+        # path uses is `frames/{session_id}/{timestamp_ms}.jpg` — see
+        # `app/api/v1/frames.py:75`. Match by timestamp suffix first;
+        # fall back to keys[0] if the timestamp lookup misses (defensive
+        # against jitter between iOS frame-id rounding and S3 key
+        # rounding).
+        keys = _list_frame_keys()
+        if not keys:
+            return "frame", None, None, None
+        timestamp_ms = _parse_frame_timestamp_ms(source_id)
+        target_key: Optional[str] = None
+        if timestamp_ms is not None:
+            ts_marker = f"/{timestamp_ms}."
+            for key in keys:
+                if ts_marker in key:
+                    target_key = key
+                    break
+        if target_key is None:
+            target_key = keys[0]
+        signed = _presign(target_key, kind="frame")
+        return "frame", None, None, signed
 
     return _resolve
+
+
+# ── Back-compat alias ───────────────────────────────────────────────────────
+# Existing call sites (P1-6-FU route handlers, integration tests) import
+# the clip-only name. Keep the symbol so we don't break those imports;
+# new code should call `_build_evidence_url_resolver`.
+_build_clip_url_resolver = _build_evidence_url_resolver
 
 
 def _to_note_response(
@@ -1036,13 +1139,16 @@ def _claim_to_response(
 
     Lifted out of the comprehension so the visual-source branch reads
     linearly (SRP). For non-visual claims OR when no resolver is
-    plumbed in, the three new fields stay None — additive contract.
+    plumbed in, the four evidence fields stay None — additive contract.
     """
     evidence_kind: Optional[Literal["frame", "clip"]] = None
     duration_ms: Optional[int] = None
     clip_url: Optional[str] = None
+    frame_url: Optional[str] = None
     if claim.source_type == "visual" and clip_url_resolver is not None:
-        evidence_kind, duration_ms, clip_url = clip_url_resolver(claim.source_id)
+        evidence_kind, duration_ms, clip_url, frame_url = clip_url_resolver(
+            claim.source_id
+        )
     return NoteClaimResponse(
         id=claim.id,
         text=claim.text,
@@ -1054,4 +1160,5 @@ def _claim_to_response(
         evidence_kind=evidence_kind,
         duration_ms=duration_ms,
         clip_url=clip_url,
+        frame_url=frame_url,
     )

@@ -349,17 +349,30 @@ async def test_per_request_memoized_s3_list(
     mock_s3_with_clips: MagicMock,
 ) -> None:
     """AC-5: two clip-kind claims in the same response trigger exactly
-    ONE S3 LIST call. Per-request memoization is the DRY guarantee."""
+    ONE LIST against ``clips/{session_id}/``. Per-request memoization
+    is the DRY guarantee per prefix. The mixed-note fixture also has a
+    frame-kind claim, which fires exactly ONE LIST against
+    ``frames/{session_id}/`` — so total LIST count = 2 (one per kind),
+    not 1, and not N-claims. P1-FU-FRAME-URLS extended the original
+    P1-6-FU "1 LIST" guarantee from "one per request" to "one per
+    prefix per request"."""
 
     note = _make_mixed_note(session_uuid)
-    # Sanity: the fixture has two clip-kind claims.
+    # Sanity: the fixture has two clip-kind claims and one frame-kind.
     clip_kind_count = sum(
         1
         for s in note.sections
         for c in s.claims
         if c.source_type == "visual" and c.source_id.endswith("_clip")
     )
+    frame_kind_count = sum(
+        1
+        for s in note.sections
+        for c in s.claims
+        if c.source_type == "visual" and not c.source_id.endswith("_clip")
+    )
     assert clip_kind_count >= 2, "Test fixture should carry >=2 clip claims"
+    assert frame_kind_count >= 1, "Test fixture should carry >=1 frame claim"
 
     patches = await _patched_route(session_uuid, session_owned_by_clinician, note)
     with patches[0], patches[1], patches[2], patches[3]:
@@ -369,9 +382,18 @@ async def test_per_request_memoized_s3_list(
         )
 
     assert response.status_code == 200, response.text
-    # Exactly ONE list_objects_v2 call for the whole request.
-    assert mock_s3_with_clips.list_objects_v2.call_count == 1, (
-        "Memoization broken — N visual claims caused N LIST calls"
+    # One LIST per prefix: clips + frames. Both kinds present in the
+    # fixture, so 2 total. N visual claims of either kind ≠ N LIST.
+    prefixes_listed = {
+        call.kwargs.get("Prefix", call.args[1] if len(call.args) > 1 else None)
+        for call in mock_s3_with_clips.list_objects_v2.call_args_list
+    }
+    assert prefixes_listed == {
+        f"clips/{session_uuid}/",
+        f"frames/{session_uuid}/",
+    }, prefixes_listed
+    assert mock_s3_with_clips.list_objects_v2.call_count == 2, (
+        "Memoization broken — N visual claims caused more than one LIST per kind"
     )
 
 
@@ -460,8 +482,11 @@ async def test_detail_endpoint_citations_carry_new_fields(
     assert citations["c_pedit"]["evidence_kind"] is None
     assert citations["c_screen"]["evidence_kind"] is None
 
-    # Sharing the resolver means ONE S3 LIST for both wire + citations.
-    assert mock_s3_with_clips.list_objects_v2.call_count == 1
+    # Sharing the resolver means ONE LIST per prefix for both wire +
+    # citations. P1-FU-FRAME-URLS extended the original guarantee to
+    # "one per prefix per request" — the mixed fixture has both clip
+    # and frame visual claims, so total = 2 (clips + frames).
+    assert mock_s3_with_clips.list_objects_v2.call_count == 2
 
 
 # ── PHI scan over the touched modules (AC-7) ────────────────────────────────
