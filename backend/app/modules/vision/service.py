@@ -12,6 +12,7 @@ Sequence:
 from __future__ import annotations
 
 import asyncio
+import json as _json
 import logging
 import time
 from typing import Optional
@@ -36,6 +37,7 @@ from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
+from app.modules.config.schema import AppConfigSchema, VisualEvidenceMode
 from app.modules.providers.usage_service import try_record_provider_usage
 
 # ── Visual evidence sentinel ─────────────────────────────────────────────
@@ -73,6 +75,58 @@ def _evidence_id_of(item: VisualEvidenceItem) -> str:
     return item.frame_id
 
 logger = logging.getLogger("aurion.vision")
+
+
+# ── Per-session evidence-mode resolution (P1-7) ──────────────────────────
+#
+# Centralizes the per-session-override-or-global-default decision so the
+# Stage 2 dispatcher and any future caller share a single read path.
+# DRY: ONE function reads `session.provider_overrides`; new override
+# keys (clip_window_ms, future evidence kinds) extend the SAME dict
+# without touching any downstream call site.
+
+def resolve_evidence_mode(
+    session,
+    app_config: Optional[AppConfigSchema] = None,
+) -> VisualEvidenceMode:
+    """Return the active VisualEvidenceMode for a session.
+
+    Resolution order:
+      1. Session-level override (``session.provider_overrides``,
+         JSON-encoded dict, key ``visual_evidence_mode``). Eval-team
+         per-session flip.
+      2. AppConfig pipeline default (``pipeline.visual_evidence_mode``).
+         Pilot-wide setting; flipped via Level-1 switching (~30s).
+
+    Raises ``ValueError`` on an invalid session-level mode string so
+    the caller can choose to fall back + log rather than failing the
+    whole Stage 2 dispatch on one bad row. The override is validated
+    at the API boundary (P1-7 schema), but a hand-written DB edit or
+    a legacy row could carry an invalid value — fail-loud here keeps
+    that visible instead of silently routing to ``frames_only``.
+
+    No PHI in any log line emitted from this function. The session
+    UUID is fine (UUID, not PHI); never log encounter_context or any
+    transcript content.
+    """
+    app_config = app_config if app_config is not None else get_config()
+    overrides_raw = getattr(session, "provider_overrides", None)
+    if overrides_raw:
+        try:
+            overrides = _json.loads(overrides_raw)
+        except (ValueError, TypeError):
+            # Pre-P1-7 rows used `str(dict)` which is not valid JSON.
+            # Treat as no-override and fall through to the AppConfig
+            # default — same behavior the rest of the pipeline saw
+            # before this PR.
+            overrides = None
+        if isinstance(overrides, dict):
+            session_mode = overrides.get("visual_evidence_mode")
+            if session_mode is not None:
+                # Will raise ValueError on an unknown enum value; the
+                # caller catches + falls back.
+                return VisualEvidenceMode(session_mode)
+    return app_config.pipeline.visual_evidence_mode
 
 
 # ── Frame Extraction ─────────────────────────────────────────────────────
