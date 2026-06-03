@@ -12,6 +12,7 @@ import {
   LayoutGrid,
   LogOut,
   Menu,
+  ScrollText,
   Settings,
   Search,
   ShieldCheck,
@@ -60,6 +61,11 @@ const navigation: {
   { tKey: "templates",  href: "/portal/templates",  icon: LayoutGrid, roles: ["CLINICIAN", "ADMIN"] },
   { tKey: "macros",     href: "/portal/macros",     icon: Zap,       roles: ["CLINICIAN", "ADMIN"] },
   { tKey: "myProfile",  href: "/portal/profile",    icon: CircleUser, roles: ["CLINICIAN", "ADMIN"] },
+  // AI Prompts Transparency — read-only catalog of every LLM system
+  // prompt the encounter pipeline uses. Sits at the bottom of the
+  // clinician nav because it's a reference / audit surface, not part
+  // of the everyday workflow.
+  { tKey: "aiPrompts",  href: "/portal/prompts",    icon: ScrollText, roles: ["CLINICIAN", "ADMIN"] },
 ];
 
 /** localStorage key for the desktop sidebar collapsed-state. */
