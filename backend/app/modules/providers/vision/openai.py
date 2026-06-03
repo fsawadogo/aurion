@@ -9,7 +9,6 @@ Uses the shared system prompt and caption builder from shared.py.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Any, Final
@@ -27,7 +26,11 @@ from app.core.types import (
 from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import VisionProvider
 from app.modules.providers.vision._clip_to_still import extract_midpoint_still
-from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT, build_frame_caption
+from app.modules.providers.vision.shared import (
+    VISION_SYSTEM_PROMPT,
+    build_frame_caption,
+    parse_caption_json,
+)
 
 logger = logging.getLogger("aurion.providers.vision.openai")
 
@@ -92,7 +95,9 @@ class OpenAIVisionProvider(VisionProvider):
                 )
                 response.raise_for_status()
                 data = response.json()
-                content = json.loads(data["choices"][0]["message"]["content"])
+                content = parse_caption_json(
+                    "openai", data["choices"][0]["message"]["content"]
+                )
                 return build_frame_caption(frame, anchor, content, "openai")
 
         except httpx.HTTPError as e:

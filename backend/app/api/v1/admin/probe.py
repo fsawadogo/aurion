@@ -56,6 +56,7 @@ from app.core.types import (
     UserRole,
 )
 from app.modules.auth.service import CurrentUser, require_role
+from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
 from app.modules.config.schema import VisionProviderKey
 
@@ -204,21 +205,28 @@ _PROVIDER_MODEL_ID: Final[dict[VisionProviderKey, str]] = {
 }
 
 
-def _resolve_provider_key_for_response(
+def _resolve_provider_key(
     provider_override: Optional[VisionProviderKey],
 ) -> VisionProviderKey:
-    """Resolve the provider key the probe will execute against for
-    the response shape's `provider_used` + `model_id` fields.
+    """Resolve the SINGLE provider key the probe will execute against.
 
-    The registry call below also resolves this internally; we resolve
-    here a second time (cheap — it's just an enum cast or a config
-    read) so the response can carry the resolved key even when the
-    provider call raises before returning.
+    Used both to (a) shape the response's ``provider_used`` /
+    ``model_id`` fields and (b) drive
+    ``registry.get_vision_provider_for_kind("clip", override=…)``. Having
+    ONE resolution call site eliminates the drift that surfaced in
+    P1-FU-PROBE-BUGS — where the response-shape resolver could disagree
+    with the actual registry resolution if the override path ever
+    branched.
+
+    Precedence matches ``ProviderRegistry.get_vision_provider_for_kind``:
+    explicit override (already typed as ``VisionProviderKey`` by
+    FastAPI's enum validator) wins; otherwise the live AppConfig
+    ``providers.vision_clip`` is the default. The clip kind does not
+    consult the DB override store today — AppConfig is the only
+    runtime knob — so this matches the registry's clip branch exactly.
     """
     if provider_override is not None:
         return provider_override
-    # Read the live config snapshot the registry will see.
-    from app.modules.config.appconfig_client import get_config
     return get_config().providers.vision_clip
 
 
@@ -283,16 +291,20 @@ async def probe_vision_clip(
     probe_id = uuid.uuid4().hex
     s3_key = f"probe/{probe_id}.mp4"
 
-    # Resolve the provider key once for the response shape — even if
-    # the registry call below raises, the response can still carry the
-    # resolved provider key + model id (so operators see which target
-    # was attempted).
+    # Resolve the provider key ONCE — used to shape the response AND
+    # passed to the registry on line ~360. Single source of truth so
+    # the response's `provider_used` can never drift from the actual
+    # call target. FastAPI has already validated the enum at the
+    # boundary (invalid values surface as 422), so this call is
+    # infallible at the type level — the try/except below is belt-
+    # and-suspenders defense in case the AppConfig snapshot is
+    # corrupt.
     try:
-        resolved_key = _resolve_provider_key_for_response(provider_override)
+        resolved_key = _resolve_provider_key(provider_override)
     except ValueError as exc:
-        # Invalid override string — caller passed a key that's not in
-        # the VisionProviderKey enum. Surface as a 400 (it's a client
-        # error, not a probe diagnostic).
+        # Defensive: would only fire if get_config() returned a
+        # corrupt providers.vision_clip value (validated by Pydantic
+        # at AppConfig parse time, so should never happen at runtime).
         raise HTTPException(
             status_code=400,
             detail=f"Invalid provider_override: {exc}",
@@ -359,11 +371,13 @@ async def probe_vision_clip(
     try:
         registry = get_registry()
         try:
+            # Single registry-resolution call site — uses the same
+            # resolved_key the response shape will carry. Pass the
+            # already-resolved key explicitly so the registry does NOT
+            # re-read AppConfig and risk a snapshot mismatch.
             provider = registry.get_vision_provider_for_kind(
                 "clip",
-                override=(
-                    provider_override.value if provider_override else None
-                ),
+                override=resolved_key.value,
             )
         except ProviderError as exc:
             # Registry resolution itself failed (e.g. unknown enum

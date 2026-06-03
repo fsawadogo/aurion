@@ -9,7 +9,6 @@ Uses the shared system prompt and caption builder from shared.py.
 
 from __future__ import annotations
 
-import json
 import logging
 import os
 from typing import Final
@@ -32,6 +31,7 @@ from app.modules.providers.vision.shared import (
     VISION_RESPONSE_SCHEMA,
     VISION_SYSTEM_PROMPT,
     build_frame_caption,
+    parse_caption_json,
 )
 
 logger = logging.getLogger("aurion.providers.vision.anthropic")
@@ -123,10 +123,16 @@ class AnthropicVisionProvider(VisionProvider):
                         break
                 if content is None:
                     # Defensive fallback — accept any text-bearing block
-                    # for resilience to API shape changes.
+                    # for resilience to API shape changes. Use the
+                    # shared `parse_caption_json` so a malformed text
+                    # block raises ProviderError (uniform LSP error
+                    # semantic with the other providers + the registry
+                    # fallback chain).
                     for block in data.get("content", []):
                         if "text" in block:
-                            content = json.loads(strip_markdown_fences(block["text"]))
+                            content = parse_caption_json(
+                                "anthropic", strip_markdown_fences(block["text"])
+                            )
                             break
                 if content is None:
                     raise ProviderError("anthropic", "No tool_use or text in vision response")

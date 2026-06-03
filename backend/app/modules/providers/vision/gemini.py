@@ -12,7 +12,6 @@ schema + caption builder live in `shared.py`.
 from __future__ import annotations
 
 import base64
-import json
 import logging
 import os
 from typing import Final
@@ -34,6 +33,7 @@ from app.modules.providers.vision.shared import (
     VISION_RESPONSE_SCHEMA,
     VISION_SYSTEM_PROMPT,
     build_frame_caption,
+    parse_caption_json,
 )
 
 logger = logging.getLogger("aurion.providers.vision.gemini")
@@ -97,7 +97,7 @@ class GeminiVisionProvider(VisionProvider):
                 response.raise_for_status()
                 data = response.json()
                 text = data["candidates"][0]["content"]["parts"][0]["text"]
-                content = json.loads(text.strip())
+                content = parse_caption_json("gemini", text)
                 return build_frame_caption(frame, anchor, content, "gemini")
 
         except httpx.HTTPError as e:
@@ -177,7 +177,7 @@ class GeminiVisionProvider(VisionProvider):
                 response.raise_for_status()
                 data = response.json()
                 text = data["candidates"][0]["content"]["parts"][0]["text"]
-                content = json.loads(text.strip())
+                content = parse_caption_json("gemini", text)
 
                 # Synthesise a `MaskedFrame`-shaped anchor for the caption
                 # builder: clip captions carry the trigger segment id +
