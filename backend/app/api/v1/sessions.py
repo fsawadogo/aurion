@@ -5,12 +5,13 @@ No business logic here — routes call module service functions only.
 
 from __future__ import annotations
 
+import json as _json
 import logging
 import uuid
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import (
@@ -23,6 +24,13 @@ from app.core.database import get_db
 from app.core.kms_encryption import decrypt_str, encrypt_str
 from app.core.types import SessionState
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.config.appconfig_client import get_config
+from app.modules.config.schema import (
+    NoteGenerationProviderKey,
+    TranscriptionProviderKey,
+    VisionProviderKey,
+    VisualEvidenceMode,
+)
 from app.modules.session.service import (
     ConsentRequiredError,
     InvalidTransitionError,
@@ -47,6 +55,38 @@ class SessionParticipantRequest(BaseModel):
     is_persistent: bool = False
 
 
+class ProviderOverridesSchema(BaseModel):
+    """Per-session provider routing overrides.
+
+    The dict on the session row historically accepted any keys (untyped
+    `Optional[dict]`). P1-7 closes the surface to the documented set so
+    typos and unsupported keys are rejected at the API boundary instead
+    of silently no-oping inside the registry.
+
+    Closed key set (extra="forbid"):
+      - `transcription`, `note_generation`, `vision`, `vision_clip`: per-
+        session provider routing (level-3 switching per CLAUDE.md
+        "Switching" table). Optional, no validation against the active
+        provider catalog at this layer — the registry surfaces unknown
+        provider strings as a 503 at dispatch time.
+      - `visual_evidence_mode`: per-session dual-mode flip. Typed
+        against the canonical `VisualEvidenceMode` enum so the route
+        rejects unknown values (e.g. `"clip_only"` typo) with 422.
+
+    Storage is JSON-encoded on `sessions.provider_overrides` (TEXT
+    column). `_to_response` deserializes back to a plain dict for the
+    client so the contract is round-trippable.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    transcription: Optional[TranscriptionProviderKey] = None
+    note_generation: Optional[NoteGenerationProviderKey] = None
+    vision: Optional[VisionProviderKey] = None
+    vision_clip: Optional[VisionProviderKey] = None
+    visual_evidence_mode: Optional[VisualEvidenceMode] = None
+
+
 class CreateSessionRequest(BaseModel):
     specialty: str
     consultation_type: Optional[str] = None
@@ -54,7 +94,7 @@ class CreateSessionRequest(BaseModel):
     output_language: str = "en"
     encounter_type: str = "doctor_patient"
     participants: Optional[list[SessionParticipantRequest]] = None
-    provider_overrides: Optional[dict] = None
+    provider_overrides: Optional[ProviderOverridesSchema] = None
     capture_mode: str = "multimodal"
 
 
@@ -72,6 +112,12 @@ class SessionResponse(BaseModel):
     # 404 on the session entirely; admin/compliance get the row but with
     # this field omitted (we don't surface decrypted PHI cross-clinician).
     external_reference_id: Optional[str] = None
+    # Round-trippable view of `sessions.provider_overrides` (P1-7). The
+    # row stores a JSON-encoded dict; the response surfaces it as a
+    # structured object so the iOS dispatcher can read
+    # `visual_evidence_mode` and route Stage 2 evidence without a
+    # second call. `None` when no overrides were set at creation.
+    provider_overrides: Optional[dict] = None
     created_at: str
     updated_at: str
 
@@ -99,6 +145,31 @@ async def create_session_route(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    # Pull the feature flag once. The route fast-fails before the row is
+    # written if the caller asked for a visual_evidence_mode override
+    # while the flag is off — the alternative (writing the row anyway,
+    # ignoring the override at dispatch) would silently drop the
+    # eval-team's intent and skew Phase 2 measurements.
+    overrides_dict: Optional[dict] = None
+    visual_evidence_mode_override: Optional[VisualEvidenceMode] = None
+    if body.provider_overrides is not None:
+        # mode="json" so enum values serialize to their string form and
+        # the persisted JSON matches what the iOS client decodes.
+        overrides_dict = body.provider_overrides.model_dump(
+            mode="json", exclude_none=True
+        )
+        visual_evidence_mode_override = body.provider_overrides.visual_evidence_mode
+        if visual_evidence_mode_override is not None:
+            cfg = get_config()
+            if not cfg.feature_flags.per_session_visual_evidence_mode_override:
+                raise HTTPException(
+                    status_code=400,
+                    detail=(
+                        "per-session visual_evidence_mode override is "
+                        "disabled in this environment"
+                    ),
+                )
+
     session = await create_session(
         db=db,
         clinician_id=user.user_id,
@@ -108,7 +179,7 @@ async def create_session_route(
         output_language=body.output_language,
         encounter_type=body.encounter_type,
         participants=[p.model_dump() for p in body.participants] if body.participants else None,
-        provider_overrides=body.provider_overrides,
+        provider_overrides=overrides_dict,
         capture_mode=body.capture_mode,
     )
     await write_audit(
@@ -117,6 +188,19 @@ async def create_session_route(
         clinician_id=str(user.user_id),
         specialty=body.specialty,
     )
+    # Separate audit row for the visual_evidence_mode override so the
+    # eval-team's Phase 2 query (find every session that opted into a
+    # non-default mode) is a single event-type filter against the
+    # immutable log. The kwargs whitelist is enforced — see
+    # ALLOWED_AUDIT_KWARGS for VISUAL_EVIDENCE_MODE_OVERRIDE_SET.
+    if visual_evidence_mode_override is not None:
+        await write_audit(
+            session.id,
+            AuditEventType.VISUAL_EVIDENCE_MODE_OVERRIDE_SET,
+            actor_id=str(user.user_id),
+            actor_role=user.role.value if hasattr(user.role, "value") else str(user.role),
+            mode=visual_evidence_mode_override.value,
+        )
     return _to_response(session)
 
 
@@ -335,6 +419,24 @@ def _to_response(session) -> SessionResponse:
                 "Failed to decrypt external_reference_id for session=%s: %s",
                 session.id, exc,
             )
+    # Deserialize the JSON-encoded provider_overrides column back to a
+    # plain dict. Older rows pre-P1-7 used `str(dict)` which is NOT
+    # valid JSON — those decode failures get swallowed and the field is
+    # omitted (None) so the response path can't 500 on a stale row.
+    overrides: Optional[dict] = None
+    raw_overrides = getattr(session, "provider_overrides", None)
+    if raw_overrides:
+        try:
+            parsed = _json.loads(raw_overrides)
+            if isinstance(parsed, dict):
+                overrides = parsed
+        except (ValueError, TypeError):
+            logger.warning(
+                "Failed to decode provider_overrides JSON for session=%s "
+                "(legacy str(dict) format?) — dropping from response",
+                session.id,
+            )
+
     return SessionResponse(
         id=session.id,
         clinician_id=session.clinician_id,
@@ -343,6 +445,7 @@ def _to_response(session) -> SessionResponse:
         encounter_type=session.encounter_type or "doctor_patient",
         capture_mode=getattr(session, "capture_mode", None) or "multimodal",
         external_reference_id=external_id,
+        provider_overrides=overrides,
         created_at=session.created_at.isoformat() if session.created_at else "",
         updated_at=session.updated_at.isoformat() if session.updated_at else "",
     )

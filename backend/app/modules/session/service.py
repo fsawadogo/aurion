@@ -85,9 +85,21 @@ async def create_session(
     provider_overrides: Optional[dict] = None,
     capture_mode: str = "multimodal",
 ) -> SessionModel:
-    """Create a new session in CONSENT_PENDING state."""
+    """Create a new session in CONSENT_PENDING state.
+
+    `provider_overrides` is the validated dict from the route (P1-7
+    closed-key Pydantic schema upstream). Persisted as JSON so the
+    response path can round-trip it; pre-P1-7 rows used `str(dict)`
+    which is not valid JSON and decoded as `None` on read — those rows
+    keep working, they just don't expose overrides on subsequent GETs.
+    """
     import json as _json
     participants_json = _json.dumps(participants) if participants else None
+    # JSON encode so `_to_response` can round-trip via json.loads. The
+    # previous str(...) call produced Python repr (single quotes, enum
+    # references) which is not parseable; the field was effectively
+    # write-only on the wire.
+    overrides_json = _json.dumps(provider_overrides) if provider_overrides else None
 
     if capture_mode not in VALID_CAPTURE_MODES:
         capture_mode = "multimodal"
@@ -102,7 +114,7 @@ async def create_session(
         participants_json=participants_json,
         capture_mode=capture_mode,
         state=SessionState.CONSENT_PENDING,
-        provider_overrides=str(provider_overrides) if provider_overrides else None,
+        provider_overrides=overrides_json,
     )
     db.add(session)
     await db.flush()
