@@ -226,6 +226,18 @@ export interface CitationExpansion {
   frame_s3_key?: string | null;
   /** physician edit */
   original_text?: string | null;
+  /** ── Dual-mode visual evidence (P1-6-FU backend, P1-FU-WEB-CLIPS UI) ──
+   *  Populated for visual citations only:
+   *    - frame-kind  (source_id starts `frame_`): evidence_kind="frame",
+   *      duration_ms=null, clip_url=null.
+   *    - clip-kind   (source_id ends `_clip`):    evidence_kind="clip",
+   *      duration_ms=<encoded window in ms>, clip_url=<signed S3 URL>.
+   *  All three are null/undefined for non-visual citations so older
+   *  responses (and non-visual rows) decode unchanged — additive shape.
+   */
+  evidence_kind?: "frame" | "clip" | null;
+  duration_ms?: number | null;
+  clip_url?: string | null;
 }
 
 export interface ConflictState {
