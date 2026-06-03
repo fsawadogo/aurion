@@ -4,9 +4,9 @@ import SwiftUI
 /// identifier (#61, full slice).
 ///
 /// Reached from the rail's "See all (N)" link on `NoteReviewView`.
-/// Same data source as the rail — calls
-/// `APIClient.listMySessionsByPatientIdentifier` (DRY gate, see
-/// `PriorEncountersTests`). No 5-cap; renders the full sorted list.
+/// Same data source as the rail — both share `PriorEncountersModel`
+/// (DRY gate, see `PriorEncountersTests`). No 5-cap; renders the full
+/// sorted list.
 ///
 /// ## Behaviour
 ///
@@ -22,22 +22,17 @@ import SwiftUI
 /// It is NEVER logged or echoed in error messages. The PHI test in
 /// `PriorEncountersTests` enforces this contract on this file too.
 struct PriorEncountersListView: View {
-    let currentSessionId: String
-    let identifier: String
 
-    /// Test seam — same shape as `PriorEncountersRail.fetch`. The
-    /// production caller passes `nil` and gets the real APIClient.
-    var fetch: (String) async throws -> [PatientSessionMatch] = {
-        try await APIClient.shared.listMySessionsByPatientIdentifier($0)
-    }
+    /// Backing model — owns the fetch, the sort, the
+    /// loading/failure/empty derivations. Constructed by the convenience
+    /// init from `NoteReviewView`; tests construct one directly to drive
+    /// the assertions without mounting the view.
+    @StateObject var model: PriorEncountersModel
 
-    /// Invoked when the user taps a row — default routes through the
+    /// Invoked when the user taps a row — inits default this to the
     /// shared AppNavigation router so the inbox stack handles the
     /// push (no new routing layer per §6c OCP).
-    var onTap: (String) -> Void = { sessionId in
-        AppNavigation.shared.requestNote(sessionID: sessionId)
-        AppNavigation.shared.requestTab(.sessions)
-    }
+    var onTap: (String) -> Void
 
     /// Sheet dismiss handle — when nil, the sheet stays open after a
     /// tap (useful for tests). The production caller (NoteReviewView)
@@ -45,33 +40,59 @@ struct PriorEncountersListView: View {
     /// inbox push happens behind it.
     @Environment(\.dismiss) private var dismiss
 
-    @State private var matches: [PatientSessionMatch] = []
-    @State private var isLoading = true
-    @State private var loadFailed = false
+    /// Convenience initializer used by `NoteReviewView`. Mirrors the
+    /// rail's surface so the call site is identical between the rail
+    /// and the list.
+    init(
+        currentSessionId: String,
+        identifier: String,
+        fetch: @escaping (String) async throws -> [PatientSessionMatch] = {
+            try await APIClient.shared.listMySessionsByPatientIdentifier($0)
+        },
+        onTap: @escaping (String) -> Void = { sessionId in
+            Task { @MainActor in
+                AppNavigation.shared.requestNote(sessionID: sessionId)
+                AppNavigation.shared.requestTab(.sessions)
+            }
+        }
+    ) {
+        _model = StateObject(wrappedValue: PriorEncountersModel(
+            currentSessionId: currentSessionId,
+            identifier: identifier,
+            fetch: fetch
+        ))
+        self.onTap = onTap
+    }
 
-    /// Display list — filters to "relevant" prior encounters using the
-    /// same rule as the rail (drop current session id + PURGED). Sorted
-    /// newest first.
-    var displayMatches: [PatientSessionMatch] {
-        matches
-            .filter { $0.sessionId != currentSessionId && $0.state != "PURGED" }
-            .sorted { $0.createdAt > $1.createdAt }
+    /// Model-driven initializer — tests construct the model first, then
+    /// inject it. Symmetrical with the rail.
+    init(
+        model: PriorEncountersModel,
+        onTap: @escaping (String) -> Void = { sessionId in
+            Task { @MainActor in
+                AppNavigation.shared.requestNote(sessionID: sessionId)
+                AppNavigation.shared.requestTab(.sessions)
+            }
+        }
+    ) {
+        _model = StateObject(wrappedValue: model)
+        self.onTap = onTap
     }
 
     var body: some View {
         NavigationStack {
             Group {
-                if isLoading && matches.isEmpty {
+                if model.isLoading && model.matches.isEmpty {
                     loadingState
-                } else if loadFailed && matches.isEmpty {
+                } else if model.loadFailed && model.matches.isEmpty {
                     retryState
-                } else if displayMatches.isEmpty {
+                } else if model.relevantMatches.isEmpty {
                     emptyState
                 } else {
                     list
                 }
             }
-            .navigationTitle(L("priorEncounters.fullList.title", identifier))
+            .navigationTitle(L("priorEncounters.fullList.title", model.identifier))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
@@ -80,8 +101,8 @@ struct PriorEncountersListView: View {
             }
             .background(Color.aurionBackground)
         }
-        .task(id: identifier) {
-            await load()
+        .task(id: model.identifier) {
+            await model.load()
         }
     }
 
@@ -122,10 +143,10 @@ struct PriorEncountersListView: View {
                 .aurionFont(14, relativeTo: .subheadline)
                 .foregroundColor(.aurionTextPrimary)
             Button {
-                Task { await load() }
+                Task { await model.load() }
             } label: {
                 HStack(spacing: 6) {
-                    if isLoading {
+                    if model.isLoading {
                         ProgressView().tint(.aurionNavy)
                     } else {
                         Image(systemName: "arrow.clockwise")
@@ -140,7 +161,7 @@ struct PriorEncountersListView: View {
                 .background(Color.aurionGold)
                 .clipShape(Capsule())
             }
-            .disabled(isLoading)
+            .disabled(model.isLoading)
             Spacer()
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -148,13 +169,13 @@ struct PriorEncountersListView: View {
 
     private var list: some View {
         List {
-            ForEach(displayMatches) { match in
+            ForEach(model.relevantMatches) { match in
                 Button {
                     AurionHaptics.selection()
                     onTap(match.sessionId)
                     dismiss()
                 } label: {
-                    PriorEncounterRow(match: match, identifier: identifier)
+                    PriorEncounterRow(match: match, identifier: model.identifier)
                 }
                 .listRowBackground(Color.aurionCardBackground)
                 .listRowSeparatorTint(Color.aurionBorder)
@@ -164,34 +185,8 @@ struct PriorEncountersListView: View {
         .scrollContentBackground(.hidden)
         .background(Color.aurionBackground)
         .refreshable {
-            await load()
+            await model.load()
         }
-    }
-
-    // MARK: - Data
-
-    /// `internal` so tests can drive a reload directly. Mirrors the
-    /// rail's loader to keep the two surfaces' contract aligned.
-    @MainActor
-    func load() async {
-        isLoading = true
-        do {
-            let result = try await fetch(identifier)
-            matches = result
-            loadFailed = false
-        } catch {
-            // Same PHI guard as the rail — do NOT surface the
-            // underlying error verbatim; generic copy + retry button.
-            loadFailed = true
-            // Don't clobber a previously-good list on a transient
-            // refresh failure — the list keeps showing what it had,
-            // and the user sees the inline error only via the
-            // refresh control state.
-            if matches.isEmpty {
-                matches = []
-            }
-        }
-        isLoading = false
     }
 }
 

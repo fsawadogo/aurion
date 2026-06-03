@@ -11,7 +11,7 @@ import SwiftUI
 ///
 /// ## Privacy
 ///
-/// The identifier IS PHI. We carry it as a String so the API call has
+/// The identifier IS PHI. We carry it via the model so the API call has
 /// what it needs, and surface it inline in the title ("Prior encounters
 /// · MRN-12345"). It is NEVER logged, NEVER passed to
 /// `AuditLogger.log(extra:)`, NEVER included in error messages. The
@@ -27,64 +27,70 @@ import SwiftUI
 ///
 /// ## DRY
 ///
-/// The fetcher is parameterized so the test suite can inject a mock
-/// without subclassing APIClient. The production caller passes
-/// `nil` and gets the real `APIClient.shared.listMySessionsByPatientIdentifier`.
-/// Both the rail and the full list resolve to THIS same closure type
-/// — see `PriorEncountersListView.swift`.
+/// All data plumbing lives on `PriorEncountersModel` — same model the
+/// `PriorEncountersListView` consumes. The rail and the list never
+/// duplicate the filter/sort/load logic.
 struct PriorEncountersRail: View {
-    let currentSessionId: String
-    let identifier: String
 
-    /// Test seam — defaults to the real API client. Tests pass a closure
-    /// that returns canned data (or throws) so the rail's branches can
-    /// be exercised without a network or backend.
-    var fetch: (String) async throws -> [PatientSessionMatch] = {
-        try await APIClient.shared.listMySessionsByPatientIdentifier($0)
+    /// Backing model — owns the fetch, the sort, the
+    /// loading/failure/empty derivations. Tests construct one of these
+    /// directly so the assertions don't rely on a mounted view tree.
+    @StateObject var model: PriorEncountersModel
+
+    /// Invoked when the user taps a card. The inits set the default to
+    /// the AppNavigation router; tests pass a probe closure to assert
+    /// the right session id was surfaced. Open/Closed: the rail doesn't
+    /// introduce a router — it fires the SAME event the dashboard
+    /// recent strip uses.
+    var onTap: (String) -> Void
+
+    /// Tap on "See all (N)" — drives the parent's sheet binding. Inits
+    /// default this to a no-op so the rail compiles standalone in tests.
+    var onSeeAll: () -> Void
+
+    /// Convenience initializer used by `NoteReviewView`. Wraps the model
+    /// construction so callers don't have to allocate it explicitly.
+    /// The `fetch` parameter stays open so the SwiftUI preview / smoke
+    /// tests can still inject a canned closure here.
+    init(
+        currentSessionId: String,
+        identifier: String,
+        fetch: @escaping (String) async throws -> [PatientSessionMatch] = {
+            try await APIClient.shared.listMySessionsByPatientIdentifier($0)
+        },
+        onTap: @escaping (String) -> Void = { sessionId in
+            Task { @MainActor in
+                AppNavigation.shared.requestNote(sessionID: sessionId)
+                AppNavigation.shared.requestTab(.sessions)
+            }
+        },
+        onSeeAll: @escaping () -> Void = { }
+    ) {
+        _model = StateObject(wrappedValue: PriorEncountersModel(
+            currentSessionId: currentSessionId,
+            identifier: identifier,
+            fetch: fetch
+        ))
+        self.onTap = onTap
+        self.onSeeAll = onSeeAll
     }
 
-    /// Invoked when the user taps a card. Default emits the standard
-    /// AppNavigation request so the inbox stack handles the push;
-    /// tests pass a probe closure to assert the right session id was
-    /// surfaced. Open/Closed: the rail doesn't introduce a router — it
-    /// fires the SAME event the dashboard recent strip uses.
-    var onTap: (String) -> Void = { sessionId in
-        AppNavigation.shared.requestNote(sessionID: sessionId)
-        AppNavigation.shared.requestTab(.sessions)
-    }
-
-    /// Tap on "See all (N)" — drives the parent's sheet binding.
-    /// Default is a no-op so the rail compiles standalone in tests.
-    var onSeeAll: () -> Void = { }
-
-    @State private var matches: [PatientSessionMatch] = []
-    @State private var isLoading = true
-    @State private var loadFailed = false
-
-    /// At most this many cards in the rail. Anything past this rolls
-    /// into the "See all (N)" link. Matches the UX size sweet spot
-    /// for a horizontal scroll on iPhone (~ three cards on a 6.1"
-    /// display + a hint of the next).
-    private static let maxRailCards = 5
-
-    /// Sessions surfaced in the rail. Filters first
-    /// (current session id + PURGED), THEN caps. This ordering matters
-    /// because the see-all gate fires off the **filtered** total, not
-    /// the raw API response size.
-    var displayMatches: [PatientSessionMatch] {
-        let filtered = matches.filter {
-            $0.sessionId != currentSessionId && $0.state != "PURGED"
-        }
-        return Array(filtered.prefix(Self.maxRailCards))
-    }
-
-    /// Filtered total — the number behind "See all (N)" and the
-    /// see-all visibility gate. Both the rail and the list display this
-    /// same view of "relevant prior encounters".
-    var totalRelevant: Int {
-        matches.filter {
-            $0.sessionId != currentSessionId && $0.state != "PURGED"
-        }.count
+    /// Model-driven initializer — tests construct the model first, then
+    /// inject it. Keeps the rail's surface symmetrical with the list
+    /// view's `model:` overload.
+    init(
+        model: PriorEncountersModel,
+        onTap: @escaping (String) -> Void = { sessionId in
+            Task { @MainActor in
+                AppNavigation.shared.requestNote(sessionID: sessionId)
+                AppNavigation.shared.requestTab(.sessions)
+            }
+        },
+        onSeeAll: @escaping () -> Void = { }
+    ) {
+        _model = StateObject(wrappedValue: model)
+        self.onTap = onTap
+        self.onSeeAll = onSeeAll
     }
 
     var body: some View {
@@ -96,8 +102,8 @@ struct PriorEncountersRail: View {
         .padding(.top, 14)
         .padding(.bottom, 8)
         .background(Color.aurionBackground)
-        .task(id: identifier) {
-            await load()
+        .task(id: model.identifier) {
+            await model.load()
         }
     }
 
@@ -111,18 +117,18 @@ struct PriorEncountersRail: View {
             // Title carries the identifier inline — same chip pattern as
             // the inbox row so the physician sees "which patient" without
             // a second glance back at the post-encounter row.
-            Text(L("priorEncounters.titleWith", identifier))
+            Text(L("priorEncounters.titleWith", model.identifier))
                 .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                 .foregroundColor(.aurionTextPrimary)
                 .lineLimit(1)
                 .truncationMode(.tail)
             Spacer()
-            if totalRelevant > Self.maxRailCards {
+            if model.totalRelevant > PriorEncountersModel.maxRailCards {
                 Button {
                     AurionHaptics.selection()
                     onSeeAll()
                 } label: {
-                    Text(L("priorEncounters.seeAll", totalRelevant))
+                    Text(L("priorEncounters.seeAll", model.totalRelevant))
                         .aurionFont(12, weight: .semibold, relativeTo: .caption)
                         .foregroundColor(.aurionGold)
                 }
@@ -135,11 +141,11 @@ struct PriorEncountersRail: View {
 
     @ViewBuilder
     private var content: some View {
-        if isLoading {
+        if model.isLoading {
             skeletons
-        } else if loadFailed {
+        } else if model.loadFailed {
             retryBlock
-        } else if displayMatches.isEmpty {
+        } else if model.railMatches.isEmpty {
             emptyState
         } else {
             cardRow
@@ -170,7 +176,7 @@ struct PriorEncountersRail: View {
     private var cardRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
-                ForEach(displayMatches) { match in
+                ForEach(model.railMatches) { match in
                     PriorEncounterCard(match: match) {
                         AurionHaptics.selection()
                         onTap(match.sessionId)
@@ -216,10 +222,10 @@ struct PriorEncountersRail: View {
                 .lineLimit(2)
             Spacer()
             Button {
-                Task { await load() }
+                Task { await model.load() }
             } label: {
                 HStack(spacing: 4) {
-                    if isLoading {
+                    if model.isLoading {
                         ProgressView().tint(.aurionTextPrimary)
                     } else {
                         Image(systemName: "arrow.clockwise")
@@ -234,40 +240,12 @@ struct PriorEncountersRail: View {
                 .background(Color.aurionBackground)
                 .clipShape(Capsule())
             }
-            .disabled(isLoading)
+            .disabled(model.isLoading)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 10)
         .background(Color.aurionAmberBg.opacity(0.5))
         .clipShape(RoundedRectangle(cornerRadius: AurionRadius.sm))
-    }
-
-    // MARK: - Data
-
-    /// `internal` so tests can drive a reload without having to mount
-    /// the SwiftUI view in a host. Awaits the (possibly injected)
-    /// fetcher; on success the rail repopulates with the new list, on
-    /// failure it flips to the retry block.
-    @MainActor
-    func load() async {
-        isLoading = true
-        do {
-            let result = try await fetch(identifier)
-            // Newest first — backend already sorts this way, but we
-            // re-sort on the client to be defensive against a future
-            // reordering that would break the UX without a backend
-            // version bump.
-            matches = result.sorted { $0.createdAt > $1.createdAt }
-            loadFailed = false
-        } catch {
-            // PHI guard: the error.localizedDescription may include the
-            // request URL, which embeds the identifier. We deliberately
-            // do NOT surface the error verbatim — the retry block uses
-            // generic copy, and nothing logs the underlying error.
-            loadFailed = true
-            matches = []
-        }
-        isLoading = false
     }
 }
 
