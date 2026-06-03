@@ -14,7 +14,8 @@
       "myNotes": "Mes notes",
       "templates": "Modèles",
       "macros": "Macros",
-      "myProfile": "Mon profil"
+      "myProfile": "Mon profil",
+      "aiPrompts": "Invites IA"
     },
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
@@ -181,5 +182,30 @@
     "close": "Fermer",
     "unavailable": "Clip non disponible pour l’instant. La note est peut-être encore en traitement.",
     "controls": "Utilisez les contrôles vidéo pour lire ou mettre en pause."
+  },
+  "AIPrompts": {
+    "eyebrow": "Transparence",
+    "title": "Invites IA",
+    "subtitle": "Les instructions exactes que chaque modèle d’IA reçoit lors de l’analyse de vos consultations.",
+    "descriptiveModeCallout": "Chaque invite ci-dessous applique le mode descriptif : l’IA est invitée à décrire ce qui a été capté, jamais à interpréter, diagnostiquer ou suggérer une conclusion clinique. C’est la limite de sécurité du pilote Aurion.",
+    "phaseAReadOnlyChip": "Phase A : lecture seule",
+    "phaseBHint": "Une future mise à jour permettra de personnaliser ces instructions par médecin.",
+    "searchPlaceholder": "Filtrer par nom ou rôle…",
+    "noResults": "Aucune invite ne correspond à votre filtre.",
+    "expandLabel": "Afficher les instructions exactes envoyées à l’IA",
+    "collapseLabel": "Masquer les instructions exactes",
+    "runsWhenLabel": "Quand cela s’exécute",
+    "purposeLabel": "Rôle",
+    "instructionsLabel": "Invite système exacte",
+    "outputShapeLabel": "Sortie attendue",
+    "poweredByLabel": "Champ fournisseur",
+    "loadError": "Impossible de charger le catalogue des invites IA.",
+    "loading": "Chargement…",
+    "category": {
+      "note": "Notes",
+      "vision": "Vision",
+      "extraction": "Extraction",
+      "preview": "Aperçu en direct"
+    }
   }
 }

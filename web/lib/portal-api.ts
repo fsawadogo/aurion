@@ -620,3 +620,17 @@ export async function generateMySessionPreview(
   );
   return r.json();
 }
+
+/* ─── AI Prompts Transparency (AI-PROMPTS-A) ─────────────────────────────── */
+
+/** GET /api/v1/me/prompts — read-only catalog of LLM system prompts.
+ *
+ * Backs the /portal/prompts Transparency page. Accessible to CLINICIAN
+ * + ADMIN / EVAL_TEAM / COMPLIANCE_OFFICER. Phase B will overlay
+ * per-physician customisations into the same response shape; clients
+ * shouldn't need a second migration.
+ */
+export async function listMyPrompts(): Promise<import("@/types").AIPrompt[]> {
+  const r = await fetchWithAuth("/api/v1/me/prompts");
+  return r.json();
+}
