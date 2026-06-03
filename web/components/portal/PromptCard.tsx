@@ -4,7 +4,7 @@ import { CheckCircle2, ChevronDown, ChevronUp, Edit3, Lock } from "lucide-react"
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import Card from "@/components/ui/Card";
-import PromptOverrideEditor from "@/components/portal/PromptOverrideEditor";
+import PromptUserPromptEditor from "@/components/portal/PromptUserPromptEditor";
 import type { AIPrompt } from "@/types";
 
 /**
@@ -13,16 +13,18 @@ import type { AIPrompt } from "@/types";
  * Phase A: dense rest state (name + purpose + when-it-runs) that
  * expands on demand to reveal the full system prompt.
  *
- * Phase B added:
- *   - "Override active" badge when `is_overridden` is true.
- *   - "Edit preferences" button that opens the
- *     `PromptOverrideEditor` modal — CLINICIAN-only at the server
+ * Phase B (replacement semantics) added:
+ *   - "Custom prompt active" badge when `is_overridden` is true (the
+ *     physician has saved their own prompt that REPLACES the system
+ *     default).
+ *   - "Edit your prompt" button that opens the
+ *     `PromptUserPromptEditor` modal — CLINICIAN-only at the server
  *     level (the button is rendered for everyone but the PATCH
  *     endpoint 403s for ADMIN/EVAL_TEAM/COMPLIANCE_OFFICER, who
- *     never have overlays anyway).
- *   - Expanded view shows the `assembled_preview` text rather than
- *     the bare `system_prompt` — physicians see what the LLM
- *     actually receives.
+ *     never have user prompts anyway).
+ *   - Expanded view shows the `active_prompt` text — what the LLM
+ *     actually receives for THIS physician (their saved prompt when
+ *     set, the system default otherwise — NOT both).
  *
  * The card owns its own modal state. A successful save updates the
  * card-local `current` AIPrompt so the parent page doesn't need to
@@ -55,11 +57,11 @@ export default function PromptCard({ prompt, onChange }: PromptCardProps) {
   const [current, setCurrent] = useState<AIPrompt>(prompt);
 
   const categoryClasses = CATEGORY_BADGE[current.category];
-  // Expanded view shows the assembled prompt (base + overlay) — the
-  // "what the LLM is actually told today" view. Phase A was bare
-  // system_prompt; physicians who care about the boundary still see
-  // the base verbatim at the top of assembled_preview.
-  const displayedText = current.assembled_preview;
+  // Expanded view shows the active prompt — the "what the LLM is
+  // actually told today" view. Under replacement semantics this is
+  // either the physician's saved user prompt OR the system default —
+  // never a concatenation of both.
+  const displayedText = current.active_prompt;
 
   function handleSaved(next: AIPrompt) {
     setCurrent(next);
@@ -94,7 +96,7 @@ export default function PromptCard({ prompt, onChange }: PromptCardProps) {
                     data-testid={`prompt-card-${current.id}-override-badge`}
                   >
                     <CheckCircle2 className="h-3 w-3" />
-                    {t("override.activeBadge")}
+                    {t("userPrompt.activeBadge")}
                   </span>
                 )}
               </div>
@@ -109,7 +111,7 @@ export default function PromptCard({ prompt, onChange }: PromptCardProps) {
               type="button"
               onClick={() => setEditorOpen(true)}
               className="inline-flex shrink-0 items-center gap-1.5 rounded-aurion-xs bg-navy-50 px-2 py-1 text-aurion-micro text-navy-600 ring-1 ring-inset ring-navy-200 hover:bg-navy-100 transition-colors duration-short"
-              title={t("override.editButton")}
+              title={t("userPrompt.editButton")}
               data-testid={`prompt-card-${current.id}-edit-button`}
             >
               {current.is_overridden ? (
@@ -117,7 +119,7 @@ export default function PromptCard({ prompt, onChange }: PromptCardProps) {
               ) : (
                 <Lock className="h-3 w-3" />
               )}
-              {t("override.editButton")}
+              {t("userPrompt.editButton")}
             </button>
           </div>
         }
@@ -189,7 +191,7 @@ export default function PromptCard({ prompt, onChange }: PromptCardProps) {
           )}
         </div>
       </Card>
-      <PromptOverrideEditor
+      <PromptUserPromptEditor
         key={`${current.id}:${editorOpen}`}
         prompt={current}
         isOpen={editorOpen}

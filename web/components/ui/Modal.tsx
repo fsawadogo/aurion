@@ -4,9 +4,10 @@ import { X } from "lucide-react";
 import { ReactNode, useEffect } from "react";
 
 /**
- * Width sizes for the modal card. The Phase B PromptOverrideEditor
- * needs a wider canvas than the default md (~28rem) for a 3-pane
- * layout (base / overlay / preview); other consumers stick with md.
+ * Width sizes for the modal card. The Phase B PromptUserPromptEditor
+ * needs a wider canvas than the default md (~28rem) for the four-pane
+ * layout (system default / your prompt / active preview /
+ * requirements); other consumers stick with md.
  */
 const SIZE_CLASSES: Record<NonNullable<ModalProps["size"]>, string> = {
   md: "max-w-md",

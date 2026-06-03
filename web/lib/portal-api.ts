@@ -623,46 +623,50 @@ export async function generateMySessionPreview(
 
 /* ─── AI Prompts Transparency (AI-PROMPTS-A + B) ─────────────────────────── */
 
-/** GET /api/v1/me/prompts — catalog of LLM system prompts + caller's overlays.
+/** GET /api/v1/me/prompts — catalog of LLM system prompts + caller's
+ *  saved user prompts (replacement semantics).
  *
  * Backs the /portal/prompts Transparency page. Accessible to CLINICIAN
  * + ADMIN / EVAL_TEAM / COMPLIANCE_OFFICER (the support roles get
- * base-only views — overlays are per-physician personal config). The
- * response shape carries `overlay_text` / `is_overridden` /
- * `assembled_preview` for the Phase B editor.
+ * system-default views — user prompts are per-physician personal
+ * config). The response shape carries `user_prompt_text` /
+ * `is_overridden` / `active_prompt` for the Phase B editor.
  */
 export async function listMyPrompts(): Promise<import("@/types").AIPrompt[]> {
   const r = await fetchWithAuth("/api/v1/me/prompts");
   return r.json();
 }
 
-/** PATCH /api/v1/me/prompts/{promptId} — save or update an overlay.
+/** PATCH /api/v1/me/prompts/{promptId} — save or update the user prompt
+ *  that REPLACES the system default for this physician's sessions.
  *
  * CLINICIAN-only on the server. Returns the updated `AIPrompt` shape
  * on success. On structural safety failure the server returns 400
- * with a `PromptOverlayValidationError` in `detail`; callers should
- * pull the matched_phrase and surface a localised inline error.
+ * with a `PromptUserPromptValidationError` in `detail`; callers should
+ * pull `matched_phrase` (banned phrase) or `missing_anchor_group` (the
+ * descriptive-mode anchor check) and surface a localised inline error.
  */
-export async function patchMyPromptOverride(
+export async function patchMyUserPrompt(
   promptId: string,
-  overlayText: string,
+  userPromptText: string,
 ): Promise<import("@/types").AIPrompt> {
   const r = await fetchWithAuth(
     `/api/v1/me/prompts/${encodeURIComponent(promptId)}`,
     {
       method: "PATCH",
-      body: JSON.stringify({ overlay_text: overlayText }),
+      body: JSON.stringify({ user_prompt_text: userPromptText }),
     },
   );
   return r.json();
 }
 
-/** DELETE /api/v1/me/prompts/{promptId} — reset to the base prompt.
+/** DELETE /api/v1/me/prompts/{promptId} — remove the saved user prompt
+ *  so the system default takes over.
  *
- * Idempotent — returns 200 with the base-only `AIPrompt` shape even
- * when no overlay exists.
+ * Idempotent — returns 200 with the system-default `AIPrompt` shape
+ * even when no user prompt exists.
  */
-export async function deleteMyPromptOverride(
+export async function deleteMyUserPrompt(
   promptId: string,
 ): Promise<import("@/types").AIPrompt> {
   const r = await fetchWithAuth(

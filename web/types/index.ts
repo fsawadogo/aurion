@@ -770,16 +770,25 @@ export type PromptCategory = "note" | "vision" | "extraction" | "preview";
  * One LLM system prompt the encounter-analysis pipeline uses,
  * surfaced on /portal/prompts.
  *
- * Phase A: read-only catalog. Phase B added per-physician append-only
- * overlays — `overlay_text` is the calling physician's customisation
- * (or null when they haven't set one); `is_overridden` is the
- * convenience flag (`overlay_text != null`); `assembled_preview` is
- * the combined `base + separator + overlay` string the LLM would
- * receive today (equal to `system_prompt` when no overlay set).
+ * Phase A: read-only catalog. Phase B (replacement semantics) added
+ * per-physician REPLACEMENT user prompts:
  *
- * Clients should render `assembled_preview` when they want the
- * "what the AI is actually told" view, and `system_prompt` when they
- * specifically want the unmodified base (the safety boundary).
+ *  - `system_prompt` is the registry default — the FALLBACK used when
+ *    the calling physician has not saved their own prompt.
+ *  - `system_prompt_is_fallback` is always `true`; the portal uses it
+ *    to render the system prompt with muted styling so the physician
+ *    sees clearly that it's a fallback, not the active default.
+ *  - `user_prompt_text` is the calling physician's saved REPLACEMENT
+ *    prompt (or `null` when they haven't saved one).
+ *  - `is_overridden` is the convenience flag (`user_prompt_text != null`).
+ *  - `active_prompt` is the exact text the LLM would receive for this
+ *    physician's next call: `user_prompt_text` when set,
+ *    `system_prompt` otherwise. There is NO concatenation — replacement
+ *    semantics, not append-overlay.
+ *
+ * Clients should render `active_prompt` when they want the "what the
+ * AI is actually told" view, and `system_prompt` when they
+ * specifically want the system default (the fallback).
  */
 export interface AIPrompt {
   id: string;
@@ -789,20 +798,29 @@ export interface AIPrompt {
   runs_when: string;
   provider_field: string;
   system_prompt: string;
+  system_prompt_is_fallback: boolean;
   schema_note: string | null;
-  overlay_text: string | null;
+  user_prompt_text: string | null;
   is_overridden: boolean;
-  assembled_preview: string;
+  active_prompt: string;
 }
 
 /**
- * Phase B PATCH error shape. The server returns 400 with this
- * structure when an overlay fails structural validation. The
- * frontend uses `code` to localise the message and `matched_phrase`
- * to highlight which banned phrase tripped the gate.
+ * Phase B PATCH error shape (replacement semantics). The server
+ * returns 400 with this structure when a saved user prompt fails
+ * structural validation. The frontend uses `code` to localise the
+ * message, `matched_phrase` to highlight which banned phrase tripped
+ * the gate, and `missing_anchor_group` to render the right localised
+ * hint when the descriptive-mode anchor check fails (0 → "describe /
+ * document / record"; 1 → "do not interpret / diagnose").
  */
-export interface PromptOverlayValidationError {
-  code: "empty" | "too_long" | "banned_phrase";
+export interface PromptUserPromptValidationError {
+  code:
+    | "empty"
+    | "too_long"
+    | "banned_phrase"
+    | "missing_descriptive_anchor";
   message: string;
   matched_phrase: string | null;
+  missing_anchor_group: number | null;
 }

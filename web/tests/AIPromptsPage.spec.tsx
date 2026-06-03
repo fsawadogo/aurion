@@ -26,14 +26,24 @@ vi.mock("@/lib/portal-api", () => ({
 
 import { listMyPrompts } from "@/lib/portal-api";
 
-// Helper — every base-only fixture has assembled_preview == system_prompt
-// (the server contract when no overlay is set).
-function basePrompt<T extends Omit<AIPrompt, "overlay_text" | "is_overridden" | "assembled_preview">>(p: T): AIPrompt {
+// Helper — every default-only fixture has active_prompt == system_prompt
+// (the server contract when no user prompt is set — replacement
+// semantics: system_prompt is the fallback).
+function basePrompt<
+  T extends Omit<
+    AIPrompt,
+    | "user_prompt_text"
+    | "is_overridden"
+    | "active_prompt"
+    | "system_prompt_is_fallback"
+  >,
+>(p: T): AIPrompt {
   return {
     ...p,
-    overlay_text: null,
+    user_prompt_text: null,
     is_overridden: false,
-    assembled_preview: p.system_prompt,
+    system_prompt_is_fallback: true,
+    active_prompt: p.system_prompt,
   };
 }
 
@@ -228,11 +238,13 @@ describe("PromptCard — expand toggle exposes the exact system prompt (AC-7)", 
       screen.queryByTestId("prompt-card-note_generation-override-badge"),
     ).toBeNull();
     unmount();
+    // Under replacement semantics: when a user prompt is set, the
+    // active_prompt is the user prompt VERBATIM — no concatenation.
     const overridden: AIPrompt = {
       ...NOTE_GEN,
-      overlay_text: "anything",
+      user_prompt_text: "anything",
       is_overridden: true,
-      assembled_preview: NOTE_GEN.system_prompt,
+      active_prompt: "anything",
     };
     render(withIntl(<PromptCard prompt={overridden} />));
     expect(
@@ -248,28 +260,32 @@ describe("PromptCard — expand toggle exposes the exact system prompt (AC-7)", 
     expect(providerField.textContent).toContain("vision");
   });
 
-  it("renders the assembled_preview (base + overlay) in the expanded view when overridden", async () => {
+  it("renders the active_prompt (user prompt VERBATIM, NOT concatenation) in the expanded view when overridden", async () => {
     const user = userEvent.setup();
+    // Replacement semantics: active_prompt is the user prompt alone —
+    // the registry default is NOT concatenated below it. The expanded
+    // view should show the user prompt and ONLY the user prompt.
+    const customPrompt =
+      "Custom physician documentation prompt. Describe what was " +
+      "observed. Do not interpret findings.";
     const overridden: AIPrompt = {
       ...NOTE_GEN,
-      overlay_text: "Custom physician override goes here.",
+      user_prompt_text: customPrompt,
       is_overridden: true,
-      assembled_preview:
-        NOTE_GEN.system_prompt +
-        "\n\n--- Physician preferences ---\n" +
-        "Custom physician override goes here.",
+      active_prompt: customPrompt,
     };
     render(withIntl(<PromptCard prompt={overridden} />));
     await user.click(
       screen.getByTestId("prompt-card-note_generation-toggle"),
     );
     const pre = screen.getByTestId("prompt-card-note_generation-pre");
-    // Phase B: assembled_preview keeps the base on top (the safety
-    // boundary is always visible) AND appends the overlay below the
-    // separator. Both parts should be present.
-    expect(pre.textContent).toContain("Describe only what was directly captured");
-    expect(pre.textContent).toContain("Custom physician override");
-    expect(pre.textContent).toContain("Physician preferences");
+    // The user prompt is present verbatim.
+    expect(pre.textContent).toContain(customPrompt);
+    // CRITICAL: the registry default ("Describe only what was directly
+    // captured") is NOT present under it — replacement, not append.
+    expect(pre.textContent).not.toContain(
+      "Describe only what was directly captured",
+    );
   });
 });
 
