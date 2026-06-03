@@ -9,8 +9,9 @@ import asyncio
 import json
 import logging
 import uuid
-from typing import Literal, Optional
+from typing import Callable, Literal, Optional
 
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
@@ -20,6 +21,12 @@ from app.api.v1._helpers import get_owned_session_or_404, write_audit
 from app.core.audit_events import AuditEventType
 from app.core.database import async_session_factory, get_db
 from app.core.models import TranscriptModel
+from app.core.s3 import (
+    DEFAULT_EVIDENCE_TTL_SECONDS,
+    FRAMES_BUCKET,
+    generate_presigned_evidence_url,
+    get_s3_client,
+)
 from app.core.types import SessionState, Transcript
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
@@ -58,6 +65,19 @@ class NoteClaimResponse(BaseModel):
     source_quote: str = ""
     physician_edited: bool = False
     original_text: Optional[str] = None
+    # ── Dual-mode visual evidence (P1-6-FU) ───────────────────────────
+    # Populated for visual claims only:
+    #   - frame-kind  (source_id starts `frame_`): evidence_kind="frame",
+    #     duration_ms=None, clip_url=None.
+    #   - clip-kind   (source_id ends `_clip`):    evidence_kind="clip",
+    #     duration_ms=<encoded window in ms>, clip_url=<signed S3 URL>.
+    # All three fields are None for non-visual claims (transcript,
+    # screen, physician_edit) so the iOS decoder (which defaults to
+    # .frame / nil) treats them as it always has — additive contract,
+    # byte-identical wire shape for non-visual claims.
+    evidence_kind: Optional[Literal["frame", "clip"]] = None
+    duration_ms: Optional[int] = None
+    clip_url: Optional[str] = None
 
 
 class NoteSectionResponse(BaseModel):
@@ -95,6 +115,15 @@ class CitationExpansion(BaseModel):
     frame_s3_key: Optional[str] = None
     # physician edit
     original_text: Optional[str] = None
+    # ── Dual-mode visual evidence (P1-6-FU) ───────────────────────────
+    # Mirror NoteClaimResponse.evidence_kind / duration_ms / clip_url so
+    # the web review UI can render the inline player on the clip path the
+    # same way iOS does (parity with `GET /notes/{id}/full`). Web
+    # consumption ships in a follow-up; the wire surface lands here for
+    # symmetry.
+    evidence_kind: Optional[Literal["frame", "clip"]] = None
+    duration_ms: Optional[int] = None
+    clip_url: Optional[str] = None
 
 
 class ConflictState(BaseModel):
@@ -376,7 +405,13 @@ async def get_full_note(
             detail="No note found for this session.",
         )
 
-    return _to_note_response(note)
+    # P1-6-FU: plumb signed clip URLs through every visual claim so the
+    # iOS reviewer can play inline. The resolver memoizes one S3 LIST
+    # per request; non-clip claims bypass it.
+    return _to_note_response(
+        note,
+        clip_url_resolver=_build_clip_url_resolver(str(session_id)),
+    )
 
 
 @router.post("/{session_id}/approve", response_model=NoteApprovalResponse)
@@ -489,7 +524,17 @@ async def get_note_detail(
             detail="No note found for this session.",
         )
 
-    citations = _build_citations(note, transcript, session_id=str(session_id))
+    # P1-6-FU: single resolver shared between the wire NoteResponse
+    # builder AND the per-claim citation expansion. One S3 LIST per
+    # request, two consumers — DRY across the two surfaces (which both
+    # need clip_url for the same set of visual claims).
+    clip_url_resolver = _build_clip_url_resolver(str(session_id))
+    citations = _build_citations(
+        note,
+        transcript,
+        session_id=str(session_id),
+        clip_url_resolver=clip_url_resolver,
+    )
     conflict_state = _summarize_conflicts(note)
     external_id: Optional[str] = None
     if session.external_reference_id_encrypted:
@@ -510,7 +555,7 @@ async def get_note_detail(
     )
 
     return NoteDetailResponse(
-        note=_to_note_response(note),
+        note=_to_note_response(note, clip_url_resolver=clip_url_resolver),
         citations=citations,
         conflict_state=conflict_state,
         export_metadata=export_metadata,
@@ -714,6 +759,7 @@ def _build_citations(
     transcript: Optional[Transcript],
     *,
     session_id: str,
+    clip_url_resolver: Optional["ClipUrlResolver"] = None,
 ) -> dict[str, CitationExpansion]:
     """Build per-claim source expansion. The web review UI shows this
     under each claim so the clinician can verify the anchor without
@@ -725,7 +771,12 @@ def _build_citations(
     citations: dict[str, CitationExpansion] = {}
     for section in note.sections:
         for claim in section.claims:
-            citations[claim.id] = _expand_claim(claim, segment_index, session_id=session_id)
+            citations[claim.id] = _expand_claim(
+                claim,
+                segment_index,
+                session_id=session_id,
+                clip_url_resolver=clip_url_resolver,
+            )
     return citations
 
 
@@ -734,6 +785,7 @@ def _expand_claim(
     segment_index: dict,
     *,
     session_id: str,
+    clip_url_resolver: Optional["ClipUrlResolver"] = None,
 ) -> CitationExpansion:
     if claim.source_type == "transcript":
         seg = segment_index.get(claim.source_id)
@@ -763,12 +815,27 @@ def _expand_claim(
         s3_key = (
             f"{prefix}/{session_id}/{timestamp}.jpg" if timestamp is not None else None
         )
+        # P1-6-FU: resolve evidence_kind + clip_url for visual claims so
+        # the web detail view carries the same metadata the wire
+        # `NoteClaimResponse` does. Screen claims always stay frame-kind
+        # (P0-04 screen-capture path doesn't ride the clip rails). The
+        # resolver is None in non-route call paths (unit tests of pure
+        # helpers); in that case we leave the new fields as None so the
+        # legacy callers behave identically.
+        evidence_kind: Optional[Literal["frame", "clip"]] = None
+        duration_ms: Optional[int] = None
+        clip_url: Optional[str] = None
+        if claim.source_type == "visual" and clip_url_resolver is not None:
+            evidence_kind, duration_ms, clip_url = clip_url_resolver(claim.source_id)
         return CitationExpansion(
             source_type=claim.source_type,
             source_id=claim.source_id,
             frame_timestamp_ms=timestamp,
             frame_s3_key=s3_key,
             original_text=claim.original_text,
+            evidence_kind=evidence_kind,
+            duration_ms=duration_ms,
+            clip_url=clip_url,
         )
 
     # physician_edit
@@ -791,8 +858,154 @@ def _parse_frame_timestamp(source_id: str) -> Optional[int]:
         return None
 
 
-def _to_note_response(note) -> NoteResponse:
-    """Convert a Note domain object to a NoteResponse."""
+# ── Clip URL plumbing (P1-6-FU) ───────────────────────────────────────────
+#
+# A `ClipUrlResolver` returns `(evidence_kind, duration_ms, clip_url)` for a
+# claim's source_id. The contract:
+#   - source_id is a visual claim's source_id.
+#   - returns ("clip", duration_ms, signed_url) for clip-kind claims.
+#   - returns ("frame", None, None)             for frame-kind visual claims.
+#   - returns (None, None, None)                if the claim isn't visual or
+#     the resolver couldn't decide (S3 unavailable, no clips at all).
+# The resolver memoizes the underlying S3 LIST so N visual claims = 1 LIST.
+
+ClipUrlResolver = Callable[[str], tuple[Optional[Literal["frame", "clip"]], Optional[int], Optional[str]]]
+
+
+def _is_clip_kind_source_id(source_id: str) -> bool:
+    """A visual claim's source_id is clip-kind if it carries the `_clip`
+    suffix the Gemini provider attaches to clip-path captions
+    (`providers/vision/gemini.py:188`:
+    ``frame_id=f"{clip.trigger_segment_id}_clip"``). Frame-kind visual
+    captions carry `frame_NNNNN`. The suffix is the LSP-stable marker we
+    detect on the note JSON without a schema migration."""
+    return source_id.endswith("_clip")
+
+
+def _build_clip_url_resolver(
+    session_id: str,
+    *,
+    s3_client=None,
+    clip_window_ms: Optional[int] = None,
+    ttl_seconds: int = DEFAULT_EVIDENCE_TTL_SECONDS,
+) -> ClipUrlResolver:
+    """Factory: returns a per-request resolver for visual-claim → clip URL.
+
+    DRY contract: ONE S3 LIST per request, regardless of how many clip
+    claims the note carries. The first call to the resolver lists
+    ``clips/{session_id}/`` and caches the keys; subsequent calls reuse
+    the cache. A LIST failure caches an empty list so the resolver
+    returns ``(None, None, None)`` for every clip claim — graceful
+    degradation: the iOS chip still surfaces the play indicator (driven
+    by `evidence_kind`), but the player guards on a nil URL and shows
+    the "clip not yet available" alert, which is the same UX as the
+    pre-P1-6-FU baseline.
+
+    Args:
+        session_id: The session UUID. Used to build the S3 prefix and as
+            the dictionary cache key (irrelevant for the single-resolver
+            case but defensive against accidental cross-session reuse).
+        s3_client: Optional injected boto3 client (test path). Default
+            is ``core/s3.get_s3_client()``.
+        clip_window_ms: Optional override for the duration emitted on
+            clip-kind claims. Default reads
+            ``AppConfig.pipeline.clip_window_ms`` so production
+            picks up runtime tuning without a redeploy.
+        ttl_seconds: Signed-URL TTL. Default 1h via
+            ``DEFAULT_EVIDENCE_TTL_SECONDS``.
+
+    Returns:
+        A callable matching the ``ClipUrlResolver`` protocol.
+    """
+    # Lazily import AppConfig only at resolver-construction time so this
+    # module stays importable from pure-unit tests that don't bootstrap
+    # AppConfig.
+    if clip_window_ms is None:
+        try:
+            from app.modules.config.appconfig_client import get_config
+
+            clip_window_ms = get_config().pipeline.clip_window_ms
+        except Exception:
+            # Fall back to the schema default (7s). AppConfig downtime
+            # never blocks the review flow.
+            clip_window_ms = 7000
+
+    client = s3_client if s3_client is not None else get_s3_client()
+    # The cache is single-key on this resolver's life. We keep the
+    # session_id check in the closure to make a future
+    # cross-session callable explicit.
+    _cache: dict[str, list[str]] = {}
+
+    def _list_clip_keys() -> list[str]:
+        if session_id in _cache:
+            return _cache[session_id]
+        prefix = f"clips/{session_id}/"
+        try:
+            response = client.list_objects_v2(Bucket=FRAMES_BUCKET, Prefix=prefix)
+        except (BotoCoreError, ClientError) as exc:
+            # Truncate the session UUID in logs (PHI-adjacent identifier).
+            # Never log the key prefix beyond the bucket-kind.
+            logger.warning(
+                "Clip listing failed for session=%s: %s",
+                str(session_id)[:12],
+                exc,
+            )
+            _cache[session_id] = []
+            return _cache[session_id]
+        keys = [
+            obj["Key"]
+            for obj in response.get("Contents", [])
+            if isinstance(obj.get("Key"), str)
+        ]
+        _cache[session_id] = keys
+        return keys
+
+    def _resolve(source_id: str) -> tuple[
+        Optional[Literal["frame", "clip"]], Optional[int], Optional[str]
+    ]:
+        # Frame-kind visual: surface evidence_kind="frame" so iOS knows
+        # this is a still-image citation, not a clip. No URL is signed
+        # (frame URL plumbing is a separate follow-up).
+        if not _is_clip_kind_source_id(source_id):
+            return "frame", None, None
+
+        # Clip-kind: list the session's clips and pick the first. For the
+        # pilot there's one clip per trigger; multi-clip-per-trigger is
+        # post-pilot territory and would key by trigger_segment_id parsed
+        # from the source_id. Empty list → degraded surface (kind only).
+        keys = _list_clip_keys()
+        if not keys:
+            return "clip", clip_window_ms, None
+        try:
+            signed = generate_presigned_evidence_url(
+                keys[0],
+                ttl_seconds=ttl_seconds,
+            )
+        except (BotoCoreError, ClientError) as exc:
+            logger.warning(
+                "Presign failed for session=%s: %s",
+                str(session_id)[:12],
+                exc,
+            )
+            return "clip", clip_window_ms, None
+        return "clip", clip_window_ms, signed
+
+    return _resolve
+
+
+def _to_note_response(
+    note,
+    *,
+    clip_url_resolver: Optional[ClipUrlResolver] = None,
+) -> NoteResponse:
+    """Convert a Note domain object to a NoteResponse.
+
+    `clip_url_resolver` is plumbed through to populate `evidence_kind`,
+    `duration_ms`, and `clip_url` on visual claims. Non-route callers
+    (unit tests of pure helpers, write-paths that don't surface a URL)
+    may pass `None`; in that case the new fields stay `None` on every
+    claim — additive-only, byte-identical to the pre-P1-6-FU shape.
+    """
     return NoteResponse(
         session_id=note.session_id,
         stage=note.stage,
@@ -806,18 +1019,39 @@ def _to_note_response(note) -> NoteResponse:
                 title=s.title,
                 status=s.status,
                 claims=[
-                    NoteClaimResponse(
-                        id=c.id,
-                        text=c.text,
-                        source_type=c.source_type,
-                        source_id=c.source_id,
-                        source_quote=c.source_quote,
-                        physician_edited=c.physician_edited,
-                        original_text=c.original_text,
-                    )
+                    _claim_to_response(c, clip_url_resolver)
                     for c in s.claims
                 ],
             )
             for s in note.sections
         ],
+    )
+
+
+def _claim_to_response(
+    claim,
+    clip_url_resolver: Optional[ClipUrlResolver],
+) -> NoteClaimResponse:
+    """Build a single `NoteClaimResponse` from a `NoteClaim`.
+
+    Lifted out of the comprehension so the visual-source branch reads
+    linearly (SRP). For non-visual claims OR when no resolver is
+    plumbed in, the three new fields stay None — additive contract.
+    """
+    evidence_kind: Optional[Literal["frame", "clip"]] = None
+    duration_ms: Optional[int] = None
+    clip_url: Optional[str] = None
+    if claim.source_type == "visual" and clip_url_resolver is not None:
+        evidence_kind, duration_ms, clip_url = clip_url_resolver(claim.source_id)
+    return NoteClaimResponse(
+        id=claim.id,
+        text=claim.text,
+        source_type=claim.source_type,
+        source_id=claim.source_id,
+        source_quote=claim.source_quote,
+        physician_edited=claim.physician_edited,
+        original_text=claim.original_text,
+        evidence_kind=evidence_kind,
+        duration_ms=duration_ms,
+        clip_url=clip_url,
     )
