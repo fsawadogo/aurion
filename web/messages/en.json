@@ -174,5 +174,12 @@
     "save": "Save",
     "delete": "Delete",
     "confirm": "Confirm"
+  },
+  "ClipModal": {
+    "title": "Video clip",
+    "duration": "{seconds} seconds",
+    "close": "Close",
+    "unavailable": "Clip not yet available. The note may still be processing.",
+    "controls": "Use video controls to play or pause."
   }
 }

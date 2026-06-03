@@ -174,5 +174,12 @@
     "save": "Enregistrer",
     "delete": "Supprimer",
     "confirm": "Confirmer"
+  },
+  "ClipModal": {
+    "title": "Clip vidéo",
+    "duration": "{seconds} secondes",
+    "close": "Fermer",
+    "unavailable": "Clip non disponible pour l’instant. La note est peut-être encore en traitement.",
+    "controls": "Utilisez les contrôles vidéo pour lire ou mettre en pause."
   }
 }
