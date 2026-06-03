@@ -19,6 +19,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
 import { getMyAuditLog } from "@/lib/portal-api";
+import { formatRelative } from "@/lib/session-format";
 import type { AuditEvent, PaginatedResponse } from "@/types";
 
 /**
@@ -403,18 +404,3 @@ function uniqueKey(e: AuditEvent): string {
   return `${e.session_id}:${e.event_timestamp}`;
 }
 
-function formatRelative(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const m = Math.round((Date.now() - d.getTime()) / 60_000);
-  if (m < 1) return "just now";
-  if (m < 60) return `${m} min ago`;
-  const h = Math.round(m / 60);
-  if (h < 24) return `${h} hr ago`;
-  const days = Math.round(h / 24);
-  if (days < 7) return `${days}d ago`;
-  return d.toLocaleDateString(undefined, {
-    month: "short",
-    day: "numeric",
-  });
-}

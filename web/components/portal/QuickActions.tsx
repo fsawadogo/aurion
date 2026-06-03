@@ -144,6 +144,13 @@ function ActionCard({
  * types an identifier and submits; results render below the input
  * as a list of clickable session matches.
  *
+ * Clicking any result navigates to /portal/patients/{identifier} —
+ * the dedicated detail page that surfaces every session at once.
+ * Per-row click + "open all" CTA would be the same destination, so
+ * we collapse it to a single behaviour: every row opens the patient
+ * page. The result list itself stays useful as a confirmation that
+ * the identifier matches the right encounters before navigating.
+ *
  * Submit-on-enter; Escape closes; backdrop click closes.
  */
 function FindByIdentifierDialog({ onClose }: { onClose: () => void }) {
@@ -189,8 +196,14 @@ function FindByIdentifierDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
-  function openSession(sessionId: string) {
-    router.push(`/portal/notes/${sessionId}`);
+  // Navigate to the patient detail page (one page that aggregates
+  // every match) rather than picking a single session. The user's
+  // question when they search by identifier is "show me everything
+  // for this patient", and the per-row destination is the same
+  // regardless of which row they clicked. Identifier is URL-encoded
+  // so a `/`-containing chart number stays in one path segment.
+  function openPatientPage() {
+    router.push(`/portal/patients/${encodeURIComponent(query.trim())}`);
     onClose();
   }
 
@@ -282,7 +295,7 @@ function FindByIdentifierDialog({ onClose }: { onClose: () => void }) {
                     <li key={match.session_id}>
                       <button
                         type="button"
-                        onClick={() => openSession(match.session_id)}
+                        onClick={openPatientPage}
                         className="w-full px-3 py-2.5 text-left hover:bg-aurion-muted transition-colors"
                       >
                         <div className="flex items-center gap-2">

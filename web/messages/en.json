@@ -183,6 +183,30 @@
     "unavailable": "Clip not yet available. The note may still be processing.",
     "controls": "Use video controls to play or pause."
   },
+  "PatientDetail": {
+    "eyebrow": "Patient encounters",
+    "title": "Patient encounters",
+    "refresh": "Refresh",
+    "backToInbox": "My Notes",
+    "subtitle": {
+      "summary": "{count, plural, one {# session} other {# sessions}} · first visit {first} · last visit {last}",
+      "none": "No encounters recorded yet for this identifier."
+    },
+    "stats": {
+      "totalSessions": "Total sessions",
+      "lastVisit": "Last visit",
+      "recentSpecialty": "Most recent specialty",
+      "never": "Never",
+      "notAvailable": "—"
+    },
+    "sessions": {
+      "title": "All encounters",
+      "empty": "No encounters for this identifier yet",
+      "emptyHint": "Sessions you record against this chart number, MRN, or RAMQ will appear here."
+    },
+    "loadFailed": "Couldn't load encounters for this patient.",
+    "retry": "Retry"
+  },
   "AIPrompts": {
     "eyebrow": "Transparency",
     "title": "AI Prompts",

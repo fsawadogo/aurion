@@ -183,6 +183,30 @@
     "unavailable": "Clip non disponible pour l’instant. La note est peut-être encore en traitement.",
     "controls": "Utilisez les contrôles vidéo pour lire ou mettre en pause."
   },
+  "PatientDetail": {
+    "eyebrow": "Consultations du patient",
+    "title": "Consultations du patient",
+    "refresh": "Actualiser",
+    "backToInbox": "Mes notes",
+    "subtitle": {
+      "summary": "{count, plural, one {# consultation} other {# consultations}} · première visite {first} · dernière visite {last}",
+      "none": "Aucune consultation enregistrée pour cet identifiant."
+    },
+    "stats": {
+      "totalSessions": "Total des consultations",
+      "lastVisit": "Dernière visite",
+      "recentSpecialty": "Spécialité la plus récente",
+      "never": "Jamais",
+      "notAvailable": "—"
+    },
+    "sessions": {
+      "title": "Toutes les consultations",
+      "empty": "Aucune consultation pour cet identifiant",
+      "emptyHint": "Les séances enregistrées pour ce numéro de dossier, MRN ou RAMQ apparaîtront ici."
+    },
+    "loadFailed": "Impossible de charger les consultations pour ce patient.",
+    "retry": "Réessayer"
+  },
   "AIPrompts": {
     "eyebrow": "Transparence",
     "title": "Invites IA",
