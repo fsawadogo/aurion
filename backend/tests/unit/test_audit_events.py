@@ -106,6 +106,9 @@ EXPECTED_VALUES: dict[str, str] = {
     "VISUAL_EVIDENCE_MODE_OVERRIDE_SET": "visual_evidence_mode_override_set",
     # Operator probes (P1-FU-GEMINI-PROBE)
     "VISION_CLIP_PROBED": "vision_clip_probed",
+    # AI prompt overlay lifecycle (AI-PROMPTS-B)
+    "PROMPT_OVERRIDE_SET": "prompt_override_set",
+    "PROMPT_OVERRIDE_CLEARED": "prompt_override_cleared",
 }
 
 

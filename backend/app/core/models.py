@@ -1001,3 +1001,56 @@ class LiveNotePreviewModel(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class PromptOverrideModel(Base):
+    """Per-physician append-only overlay on an AI system prompt.
+
+    Phase B of AI Prompts Transparency. Each row pairs an ``owner_id``
+    (the clinician's user UUID) with a ``prompt_id`` (the registry
+    dict key in ``app.modules.prompts.registry``) and stores the
+    physician's appended preferences in ``overlay_text``.
+
+    Assembly never modifies the base prompt — the overlay is joined
+    below a clear separator at call time by
+    ``app.modules.prompts.assembly.assemble_prompt``. The base text is
+    the descriptive-mode safety boundary (CLAUDE.md "Single Most
+    Important Constraint"); the overlay only adds physician preferences
+    on top.
+
+    Ownership is strict: Marie's overlay never bleeds into Perry's
+    assembled prompt, and vice versa. The ``UNIQUE (owner_id,
+    prompt_id)`` constraint guarantees one overlay per (physician,
+    prompt). Re-saving upserts.
+
+    Overlay text is NOT considered PHI but is sensitive (it's the
+    physician's personal phrasing). It's never logged, never echoed in
+    audit rows — only the ``overlay_length`` int makes the audit trail.
+    """
+
+    __tablename__ = "prompt_overrides"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    # Matches the PROMPTS dict key in ``app.modules.prompts.registry``.
+    # Not a foreign key — the registry lives in code, not the DB; new
+    # prompts ship with the next deploy. The 64-char cap matches the
+    # convention used by PhysicianMacroModel.shortcut for the same
+    # reason (identifiers, not free text).
+    prompt_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    overlay_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

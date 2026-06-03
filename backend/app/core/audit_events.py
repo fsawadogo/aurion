@@ -147,6 +147,17 @@ class AuditEventType(StrEnum):
     # the synthetic session id `00000000-0000-0000-0000-000000000000`
     # is used to keep the row out of any real session's history.
     VISION_CLIP_PROBED = "vision_clip_probed"
+    # Per-physician AI Prompt overlay set / cleared (AI-PROMPTS-B).
+    # Fires when a clinician saves or resets an append-only overlay on
+    # one of the catalog prompts via PATCH/DELETE /me/prompts/{id}.
+    # The overlay text itself is NEVER carried into the audit row —
+    # only ``prompt_id`` + ``overlay_length`` + ``actor_id``. Personal
+    # phrasing stays out of the immutable trail. Like
+    # ``VISION_CLIP_PROBED`` these events are not session-scoped; the
+    # synthetic session id ``00000000-0000-0000-0000-000000000000``
+    # keeps the row out of any real session's history.
+    PROMPT_OVERRIDE_SET = "prompt_override_set"
+    PROMPT_OVERRIDE_CLEARED = "prompt_override_cleared"
 
 
 # ── Q-03 — kwarg whitelist ────────────────────────────────────────────────
@@ -452,6 +463,20 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     # classified exception name when success is false (else absent).
     AuditEventType.VISION_CLIP_PROBED: frozenset(
         {"provider", "success", "latency_ms", "error_type"}
+    ),
+    # AI prompt overlay lifecycle (AI-PROMPTS-B). ``actor_id`` is the
+    # owning clinician's UUID; ``prompt_id`` is the registry key the
+    # overlay targets; ``overlay_length`` is a small integer (char
+    # count). The overlay TEXT itself is deliberately excluded — it's
+    # personal phrasing the physician wouldn't want quoted in an audit
+    # query, and the length is sufficient for the "did anything change?"
+    # audit story. CLEARED doesn't carry overlay_length (it's zero by
+    # definition) — the actor_id + prompt_id pair is enough.
+    AuditEventType.PROMPT_OVERRIDE_SET: frozenset(
+        {"actor_id", "prompt_id", "overlay_length"}
+    ),
+    AuditEventType.PROMPT_OVERRIDE_CLEARED: frozenset(
+        {"actor_id", "prompt_id"}
     ),
 }
 
