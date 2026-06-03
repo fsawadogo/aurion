@@ -36,11 +36,18 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
         template: Template,
         stage: int,
         output_language: str = "en",
+        system_prompt: str | None = None,
     ) -> Note:
         if not _OPENAI_API_KEY:
             raise ProviderError("openai", "OPENAI_API_KEY not configured")
 
         user_prompt = build_user_prompt(transcript, template, stage, output_language)
+        # AI-PROMPTS-B — use the service-assembled system prompt when
+        # provided (base + per-physician overlay). Falls back to the
+        # bare base constant for callers that haven't (yet) wired the
+        # overlay path. The base prompt itself is never mutated; the
+        # overlay is appended below a separator at assembly time.
+        effective_system = system_prompt or NOTE_GEN_SYSTEM_PROMPT
         # Read model params from AppConfig at call time so admins can
         # tune temperature / max_tokens at runtime without a redeploy
         # (CLAUDE.md §"Runtime Configuration"). Falls back to the
@@ -60,7 +67,7 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
                         "temperature": params.temperature,
                         "max_tokens": params.max_tokens,
                         "messages": [
-                            {"role": "system", "content": NOTE_GEN_SYSTEM_PROMPT},
+                            {"role": "system", "content": effective_system},
                             {"role": "user", "content": user_prompt},
                         ],
                         "response_format": {"type": "json_object"},

@@ -37,11 +37,16 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
         template: Template,
         stage: int,
         output_language: str = "en",
+        system_prompt: str | None = None,
     ) -> Note:
         if not _ANTHROPIC_API_KEY:
             raise ProviderError("anthropic", "ANTHROPIC_API_KEY not configured")
 
         user_prompt = build_user_prompt(transcript, template, stage, output_language)
+        # AI-PROMPTS-B — service-assembled system prompt (base +
+        # per-physician overlay) when present; bare base constant
+        # otherwise. The base text is never mutated.
+        effective_system = system_prompt or NOTE_GEN_SYSTEM_PROMPT
         # Read model params from AppConfig at call time (CLAUDE.md
         # §"Runtime Configuration") — admins can tune temp / max_tokens
         # without a redeploy.
@@ -60,7 +65,7 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
                         "model": _MODEL,
                         "max_tokens": params.max_tokens,
                         "temperature": params.temperature,
-                        "system": NOTE_GEN_SYSTEM_PROMPT,
+                        "system": effective_system,
                         "messages": [
                             {"role": "user", "content": user_prompt},
                         ],

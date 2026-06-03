@@ -25,7 +25,7 @@ import os
 import re
 import uuid
 from typing import AsyncGenerator
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 # Env vars before app import — APP_ENV=local enables the dev-token
 # ``<role>:<user_id>`` bearer parser. See clips_endpoint suite for the
@@ -49,13 +49,24 @@ EXPECTED_PROMPT_COUNT = 8
 
 @pytest_asyncio.fixture
 async def app_client() -> AsyncGenerator[AsyncClient, None]:
-    """In-process ASGI client. No DB needed — /me/prompts is pure
-    metadata."""
+    """In-process ASGI client. Phase B adds a DB read to the GET path
+    for the per-physician overlay lookup — we still don't want a real
+    DB for these metadata-only assertions, so we stub the session so
+    ``db.execute(...)`` returns an empty result. That keeps Phase A's
+    "no overlays" expectation true."""
     from app.core.database import get_db
     from app.main import app
 
     async def _yield_mock_db() -> AsyncGenerator[MagicMock, None]:
-        yield MagicMock()
+        db = MagicMock()
+        # ``db.execute`` is awaited — return an AsyncMock whose result
+        # serves an empty scalars().all() list. That keeps the GET
+        # endpoint's overlay-lookup path happy with zero overlays.
+        empty_result = MagicMock()
+        empty_result.scalars.return_value.all.return_value = []
+        empty_result.scalar_one_or_none.return_value = None
+        db.execute = AsyncMock(return_value=empty_result)
+        yield db
 
     app.dependency_overrides[get_db] = _yield_mock_db
     try:
@@ -139,9 +150,12 @@ async def test_every_prompt_has_required_fields(
             "extraction",
             "preview",
         }, f"{prompt['id']} has invalid category {prompt['category']}"
-        # Forward-compatible Phase B overlay fields default to None/False.
-        assert prompt["override_text"] is None
+        # Phase B overlay fields. For a fresh CLINICIAN with no saved
+        # overlays the response is base-only — overlay_text is None,
+        # is_overridden is False, assembled_preview == system_prompt.
+        assert prompt["overlay_text"] is None
         assert prompt["is_overridden"] is False
+        assert prompt["assembled_preview"] == prompt["system_prompt"]
 
 
 @pytest.mark.asyncio
@@ -161,8 +175,9 @@ async def test_response_schema_keys_stable(app_client: AsyncClient) -> None:
         "provider_field",
         "system_prompt",
         "schema_note",
-        "override_text",
+        "overlay_text",
         "is_overridden",
+        "assembled_preview",
     }
     for prompt in payload:
         assert set(prompt.keys()) == expected_keys, prompt["id"]

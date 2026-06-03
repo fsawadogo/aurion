@@ -53,11 +53,20 @@ class NoteGenerationProvider(ABC):
         template: Template,
         stage: int,
         output_language: str = "en",
+        system_prompt: str | None = None,
     ) -> Note:
         """Generate a structured SOAP note from a transcript and template.
 
         ``output_language`` (e.g. "en", "fr") selects the language of the
         generated note content. Defaults to English.
+
+        ``system_prompt`` (AI-PROMPTS-B) — when set, used as the system
+        instruction instead of the provider's default ``NOTE_GEN_SYSTEM_PROMPT``
+        constant. The service layer assembles the (base + per-physician
+        overlay) text via :func:`app.modules.prompts.assemble_prompt` and
+        passes it down so providers stay stateless and DB-free. ``None``
+        preserves the pre-Phase-B behaviour for callers that don't (yet)
+        need per-physician customisation. Liskov: additive optional kwarg.
         """
         ...
 
@@ -92,14 +101,26 @@ class VisionProvider(ABC):
 
     @abstractmethod
     async def caption_frame(
-        self, frame: MaskedFrame, anchor: TranscriptSegment
+        self,
+        frame: MaskedFrame,
+        anchor: TranscriptSegment,
+        system_prompt: str | None = None,
     ) -> FrameCaption:
-        """Generate a descriptive caption for a masked clinical frame."""
+        """Generate a descriptive caption for a masked clinical frame.
+
+        ``system_prompt`` (AI-PROMPTS-B) — when set, used as the system
+        instruction instead of the default ``VISION_SYSTEM_PROMPT``
+        constant. ``None`` preserves the pre-Phase-B behaviour. Liskov:
+        additive optional kwarg, same semantic as NoteGenerationProvider.
+        """
         ...
 
     @abstractmethod
     async def caption_clip(
-        self, clip: MaskedClip, anchor: TranscriptSegment
+        self,
+        clip: MaskedClip,
+        anchor: TranscriptSegment,
+        system_prompt: str | None = None,
     ) -> FrameCaption:
         """Generate a descriptive caption for a masked clinical clip.
 

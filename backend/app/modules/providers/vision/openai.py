@@ -46,17 +46,22 @@ class OpenAIVisionProvider(VisionProvider):
     """GPT-4o Vision provider for frame captioning."""
 
     async def caption_frame(
-        self, frame: MaskedFrame, anchor: TranscriptSegment
+        self,
+        frame: MaskedFrame,
+        anchor: TranscriptSegment,
+        system_prompt: str | None = None,
     ) -> FrameCaption:
         if not _OPENAI_API_KEY:
             raise ProviderError("openai", "OPENAI_API_KEY not configured")
 
         image_data = load_frame_image_base64(frame.s3_key)
+        # AI-PROMPTS-B — assembled prompt or base constant.
+        effective_system = system_prompt or VISION_SYSTEM_PROMPT
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 messages: list[dict[str, Any]] = [
-                    {"role": "system", "content": VISION_SYSTEM_PROMPT},
+                    {"role": "system", "content": effective_system},
                     {
                         "role": "user",
                         "content": [
@@ -105,7 +110,10 @@ class OpenAIVisionProvider(VisionProvider):
             raise ProviderError("openai", f"Vision captioning failed: {e}", e)
 
     async def caption_clip(
-        self, clip: MaskedClip, anchor: TranscriptSegment
+        self,
+        clip: MaskedClip,
+        anchor: TranscriptSegment,
+        system_prompt: str | None = None,
     ) -> FrameCaption:
         """Caption a video clip via the lossy midpoint-still fallback.
 
@@ -120,6 +128,10 @@ class OpenAIVisionProvider(VisionProvider):
            `model_copy(update=...)`. The reviewer surfaces the "still
            extracted from clip" badge from that flag.
 
+        ``system_prompt`` (AI-PROMPTS-B) flows through to the inner
+        ``caption_frame`` call — the synthetic frame uses the same
+        physician-customised prompt the clip path would have.
+
         Provider errors from the inner `caption_frame` call (e.g. a 5xx
         from OpenAI) propagate as-is so the registry's fallback chain
         can trip to the next provider.
@@ -132,7 +144,9 @@ class OpenAIVisionProvider(VisionProvider):
         # Reuse the existing GPT-4o path. The inner call may raise
         # ProviderError on 5xx; we let it propagate so the registry's
         # fallback chain can trip.
-        caption = await self.caption_frame(synthetic_frame, anchor)
+        caption = await self.caption_frame(
+            synthetic_frame, anchor, system_prompt=system_prompt
+        )
         return caption.model_copy(
             update={
                 "evidence_kind": "clip",
