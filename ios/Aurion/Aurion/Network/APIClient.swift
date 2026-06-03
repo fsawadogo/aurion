@@ -111,6 +111,30 @@ final class APIClient: Sendable {
         return try await patch(path: "/sessions/\(sessionId)/identifier", body: body)
     }
 
+    /// Prior sessions for the same patient identifier (#61, full slice).
+    ///
+    /// Backend endpoint `GET /me/patients/{identifier}/sessions` returns
+    /// the caller's owned sessions tagged with the same identifier,
+    /// newest first. PHI scoping is enforced server-side: the response
+    /// is empty for any other clinician's encounters even when their
+    /// identifier matches.
+    ///
+    /// This is the single API call site for prior-encounters lookup —
+    /// both `PriorEncountersRail` and `PriorEncountersListView` call
+    /// here (DRY gate per AURION-CODING-WORKFLOW.md §6c).
+    ///
+    /// The identifier IS PHI — do NOT log it. The URL bakes it into the
+    /// path, so anything that prints the URL is leaking; performRequest
+    /// already redacts the path from error messages on this method
+    /// because the generic error formatter never echoes the URL — see
+    /// `validateResponse` for the contract.
+    func listMySessionsByPatientIdentifier(_ identifier: String) async throws -> [PatientSessionMatch] {
+        let escaped = identifier.addingPercentEncoding(
+            withAllowedCharacters: .urlPathAllowed
+        ) ?? identifier
+        return try await get(path: "/me/patients/\(escaped)/sessions")
+    }
+
     func confirmConsent(sessionId: String, method: ConsentMethod) async throws -> SessionResponse {
         return try await post(
             path: "/sessions/\(sessionId)/consent",
@@ -1536,6 +1560,36 @@ struct PatientSummaryResponse: Codable, Sendable, Equatable {
         case physicianEdited = "physician_edited"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+}
+
+/// One match from `GET /me/patients/{identifier}/sessions` (#61, full slice).
+///
+/// Mirror of the FastAPI `PatientSessionMatch` model in
+/// `backend/app/api/v1/me.py` and the TS type in `web/types/index.ts`.
+/// Slim on purpose — the consumer (`PriorEncountersRail` /
+/// `PriorEncountersListView`) only needs enough to render a date +
+/// specialty + state pill and route on tap, so we resolve the rest of
+/// the session lazily by id if the user opens it.
+///
+/// Backend already excludes other clinicians' sessions; iOS additionally
+/// filters out PURGED rows + the current session id at the consumer
+/// layer (matches the dashboard recent-strip rule shipped earlier).
+struct PatientSessionMatch: Codable, Sendable, Equatable, Identifiable {
+    let sessionId: String
+    let specialty: String
+    let state: String
+    let createdAt: String
+
+    /// Identifiable via session id so SwiftUI lists / ForEach iterate
+    /// stably across reloads.
+    var id: String { sessionId }
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case specialty
+        case state
+        case createdAt = "created_at"
     }
 }
 

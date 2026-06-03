@@ -101,6 +101,15 @@ struct NoteReviewView: View {
     /// so the section cards staircase in instead of all appearing at once.
     /// Restarts on note (re)load.
     @State private var sectionsRevealed = false
+    /// Session row for THIS session — fetched alongside the note so we
+    /// can read `externalReferenceId` for the prior-encounters rail
+    /// (#61, full slice). nil while loading or when the session lookup
+    /// failed; the rail is hidden in either case so the view degrades
+    /// to its pre-#61 layout on a failure.
+    @State private var session: SessionResponse?
+    /// Drives the full-list sheet for "See all (N)" — non-nil when
+    /// open, with the identifier baked in so the sheet can refetch.
+    @State private var priorEncountersListIdentifier: String?
 
     init(sessionId: String, initialNote: NoteResponse? = nil, onDismiss: @escaping () -> Void = {}) {
         self.sessionId = sessionId
@@ -136,6 +145,11 @@ struct NoteReviewView: View {
                 conflictsBanner(n)
                 ScrollViewReader { proxy in
                     ScrollView {
+                        // #61 — prior encounters rail. Mounts only when
+                        // the session carries an external_reference_id;
+                        // empty / failure states render inside the rail
+                        // so the layout stays stable.
+                        priorEncountersRailOrNil
                         if isEditing {
                             editableProseBody(n)
                         } else {
@@ -232,6 +246,45 @@ struct NoteReviewView: View {
             Button(L("common.ok"), role: .cancel) { }
         } message: {
             Text(L("clip.unavailable.message"))
+        }
+        // #61 — full prior-encounters list. Identifier-driven so a fresh
+        // tap on "See all" always rebinds against the latest identifier;
+        // dismissing the sheet clears the binding.
+        .sheet(item: Binding(
+            get: { priorEncountersListIdentifier.map(PriorEncountersIdentifier.init) },
+            set: { _ in priorEncountersListIdentifier = nil }
+        )) { wrapper in
+            PriorEncountersListView(
+                currentSessionId: sessionId,
+                identifier: wrapper.value
+            )
+        }
+    }
+
+    /// Identifiable wrapper so the prior-encounters list sheet can be
+    /// presented with a `.sheet(item:)` modifier — string isn't
+    /// Identifiable on its own. Scoping to this file (private) keeps
+    /// the helper out of the global namespace.
+    private struct PriorEncountersIdentifier: Identifiable {
+        let value: String
+        var id: String { value }
+        init(_ value: String) { self.value = value }
+    }
+
+    /// Prior-encounters rail (#61, full slice). Hidden when the session
+    /// has no `external_reference_id` so notes that aren't tagged to a
+    /// patient identifier render the pre-#61 layout unchanged. Tapping
+    /// "See all" drives the parent sheet via the binding above.
+    @ViewBuilder
+    private var priorEncountersRailOrNil: some View {
+        if let identifier = session?.externalReferenceId, !identifier.isEmpty {
+            PriorEncountersRail(
+                currentSessionId: sessionId,
+                identifier: identifier,
+                onSeeAll: {
+                    priorEncountersListIdentifier = identifier
+                }
+            )
         }
     }
 
@@ -828,11 +881,18 @@ struct NoteReviewView: View {
     private func loadNote() {
         if let initialNote {
             note = initialNote
-            return
+        } else {
+            wsClient.connect()
+            Task {
+                note = try? await APIClient.shared.getFullNote(sessionId: sessionId)
+            }
         }
-        wsClient.connect()
+        // #61 — fetch the session row in parallel so the prior-encounters
+        // rail can read `external_reference_id`. Fire-and-forget: a
+        // failure here just hides the rail (degrades to pre-#61 layout)
+        // and doesn't block the note rendering.
         Task {
-            note = try? await APIClient.shared.getFullNote(sessionId: sessionId)
+            session = try? await APIClient.shared.getSession(sessionId: sessionId)
         }
     }
 

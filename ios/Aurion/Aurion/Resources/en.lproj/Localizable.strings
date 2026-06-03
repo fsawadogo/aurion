@@ -77,6 +77,17 @@
 "patientId.privacyHint" = "Stored encrypted. Never appears in the audit log or in the AI prompts.";
 "patientId.saveFailed" = "Couldn\U2019t save the identifier. Please try again.";
 
+/* ── Prior encounters rail / list (#61 full slice) ──────── */
+"priorEncounters.title" = "Prior encounters";
+"priorEncounters.titleWith" = "Prior encounters \U00B7 %@";
+"priorEncounters.seeAll" = "See all (%d)";
+"priorEncounters.empty" = "First encounter with this patient";
+"priorEncounters.loadFailed" = "Couldn\U2019t load prior encounters.";
+"priorEncounters.retry" = "Retry";
+"priorEncounters.fullList.title" = "Encounters for %@";
+"priorEncounters.fullList.empty" = "No prior encounters yet.";
+"priorEncounters.a11y.tapCard" = "Open encounter from %@";
+
 /* ── Patient summary (#59) ─────────────────────────────── */
 "summary.title" = "Patient Summary";
 "summary.subtitle" = "Plain-language handout for the patient. Generated only after you approve the note.";
