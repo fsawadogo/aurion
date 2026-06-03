@@ -26,6 +26,7 @@ from app.modules.note_gen import repository as note_repo
 from app.modules.note_gen.critique import critique_note
 from app.modules.note_gen.few_shot import get_few_shot_examples, render_examples_block
 from app.modules.note_gen.specialty_style import get_specialty_style
+from app.modules.prompts import assemble_prompt_for_session
 from app.modules.providers.usage_service import get_provider_usage_service
 
 logger = logging.getLogger("aurion.note_gen")
@@ -346,6 +347,7 @@ async def _record_provider_usage(
 
 # ── Stage 1 Note Generation ──────────────────────────────────────────────
 
+
 async def generate_stage1_note(
     transcript: Transcript,
     specialty: str,
@@ -358,7 +360,9 @@ async def generate_stage1_note(
 
     Pipeline:
     1. Load the specialty template
-    2. Build the prompt using the exact system prompt from CLAUDE.md
+    2. Select the system prompt — the calling physician's saved user
+       prompt when present, the CLAUDE.md default otherwise
+       (AI-PROMPTS-B replacement semantics)
     3. Call the active NoteGenerationProvider via the registry
     4. Calculate completeness score
     5. Create version record in the database
@@ -380,6 +384,15 @@ async def generate_stage1_note(
         type(provider).__name__,
     )
 
+    # AI-PROMPTS-B — select the prompt at call time. When the calling
+    # physician has saved a user prompt it replaces the base; otherwise
+    # the registry default is used. Sessions without a resolvable
+    # clinician_id always use the default (defensive — shouldn't happen
+    # in production but the helper handles it).
+    system_prompt = await assemble_prompt_for_session(
+        "note_generation", session_id, db
+    )
+
     # Wrap the registry call to capture per-call telemetry (issue #73).
     # Both the success and failure paths record so dashboards can show
     # failure / fallback rates accurately. Telemetry is best-effort —
@@ -387,7 +400,11 @@ async def generate_stage1_note(
     _usage_started = time.monotonic()
     try:
         note = await provider.generate_note(
-            transcript, template, stage=1, output_language=output_language
+            transcript,
+            template,
+            stage=1,
+            output_language=output_language,
+            system_prompt=system_prompt,
         )
         await _record_provider_usage(
             db=db,

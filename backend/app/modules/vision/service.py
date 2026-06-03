@@ -343,6 +343,8 @@ async def caption_visual_evidence(
     trigger_segments: list[TranscriptSegment],
     provider_override: Optional[str] = None,
     clip_telemetry_sink: Optional[list[ClipTelemetry]] = None,
+    frame_system_prompt: Optional[str] = None,
+    clip_system_prompt: Optional[str] = None,
 ) -> list[FrameCaption]:
     """Caption a mixed list of frames + clips using kind-routed providers.
 
@@ -356,6 +358,18 @@ async def caption_visual_evidence(
     evidence kind = one branch on the kind switch + one method on the
     `VisionProvider` ABC + one branch in the cleanup TTL helper. No
     `if provider == 'gemini'` branches anywhere (OCP).
+
+    AI-PROMPTS-B: ``frame_system_prompt`` / ``clip_system_prompt`` are
+    pre-selected system prompts for the two kinds (the calling
+    physician's saved user prompt when present, the registry default
+    otherwise — REPLACEMENT, not concatenation). Routed by kind
+    through ``_dispatch_caption``; when ``None`` (frame-only mode or
+    no per-physician customisation configured) the provider falls
+    back to its bare ``VISION_SYSTEM_PROMPT`` constant. The two are
+    split (not one shared override) so a physician can customise
+    the frame and clip prompts independently — they're different
+    registry entries even though the underlying constant is shared
+    today.
 
     Items are captioned concurrently via asyncio.gather for throughput.
     Low-confidence items are discarded before classification — clips
@@ -441,9 +455,15 @@ async def caption_visual_evidence(
 
         provider = registry.get_vision_provider_for_kind_with_fallback(kind)
         operation_name = "caption_clip" if kind == "clip" else "caption_frame"
+        # AI-PROMPTS-B — kind-routed system prompt override.
+        system_for_kind = (
+            clip_system_prompt if kind == "clip" else frame_system_prompt
+        )
         _started = time.monotonic()
         try:
-            caption = await _dispatch_caption(provider, item, anchor)
+            caption = await _dispatch_caption(
+                provider, item, anchor, system_for_kind
+            )
             _latency_ms = int((time.monotonic() - _started) * 1000)
             await try_record_provider_usage(
                 provider_type="vision",
@@ -504,7 +524,13 @@ async def caption_visual_evidence(
                 fallback_provider = (
                     registry.get_vision_provider_for_kind_with_fallback(kind)
                 )
-                caption = await _dispatch_caption(fallback_provider, item, anchor)
+                # AI-PROMPTS-B — same kind-routed system prompt for
+                # fallback so the synthetic still / native clip uses the
+                # physician's customised instruction on the fallback path
+                # too. No re-assembly needed; we already resolved above.
+                caption = await _dispatch_caption(
+                    fallback_provider, item, anchor, system_for_kind
+                )
                 _fb_latency_ms = int((time.monotonic() - _fb_started) * 1000)
                 await try_record_provider_usage(
                     provider_type="vision",
@@ -656,6 +682,7 @@ async def _dispatch_caption(
     provider,
     item: VisualEvidenceItem,
     anchor: TranscriptSegment,
+    system_prompt: Optional[str] = None,
 ) -> FrameCaption:
     """Single dispatch site — frame vs clip provider methods.
 
@@ -664,10 +691,19 @@ async def _dispatch_caption(
     returns the existing `caption_frame` result unchanged; clip path
     returns `caption_clip` which produces a `FrameCaption` with
     `evidence_kind="clip"` and `duration_ms=<clip window>` (LSP).
+
+    ``system_prompt`` (AI-PROMPTS-B) is the pre-selected per-physician
+    user prompt (when set) or registry default for whichever kind the
+    dispatch picks — REPLACEMENT, not concatenation. ``None`` defers
+    to the provider's bare ``VISION_SYSTEM_PROMPT``.
     """
     if isinstance(item, MaskedClip):
-        return await provider.caption_clip(item, anchor)
-    return await provider.caption_frame(item, anchor)
+        return await provider.caption_clip(
+            item, anchor, system_prompt=system_prompt
+        )
+    return await provider.caption_frame(
+        item, anchor, system_prompt=system_prompt
+    )
 
 
 def _find_anchor_segment(

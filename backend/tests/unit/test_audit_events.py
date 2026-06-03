@@ -106,6 +106,10 @@ EXPECTED_VALUES: dict[str, str] = {
     "VISUAL_EVIDENCE_MODE_OVERRIDE_SET": "visual_evidence_mode_override_set",
     # Operator probes (P1-FU-GEMINI-PROBE)
     "VISION_CLIP_PROBED": "vision_clip_probed",
+    # AI per-physician user prompt lifecycle (AI-PROMPTS-B, replacement
+    # semantics — see app.modules.prompts).
+    "PROMPT_USER_PROMPT_SET": "prompt_user_prompt_set",
+    "PROMPT_USER_PROMPT_CLEARED": "prompt_user_prompt_cleared",
 }
 
 

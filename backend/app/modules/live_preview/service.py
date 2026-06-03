@@ -33,6 +33,7 @@ from app.core.models import LiveNotePreviewModel
 from app.core.types import Note, Transcript, TranscriptSegment
 from app.modules.config.provider_registry import get_registry
 from app.modules.note_gen.service import get_template
+from app.modules.prompts import assemble_prompt_for_session
 
 logger = logging.getLogger("aurion.live_preview")
 
@@ -115,9 +116,21 @@ async def generate_preview(
     registry = get_registry()
     provider = registry.get_note_provider()
 
+    # AI-PROMPTS-B — select the ``live_preview`` user prompt for the
+    # session's clinician (replacement) or fall back to the registry
+    # default. Same registry entry the Transparency page surfaces;
+    # same per-physician scope.
+    system_prompt = await assemble_prompt_for_session(
+        "live_preview", session_id, db
+    )
+
     started = time.monotonic()
     note: Note = await provider.generate_note(
-        transcript, template, stage=PREVIEW_STAGE, output_language=output_language
+        transcript,
+        template,
+        stage=PREVIEW_STAGE,
+        output_language=output_language,
+        system_prompt=system_prompt,
     )
     latency_ms = int((time.monotonic() - started) * 1000)
 

@@ -50,12 +50,17 @@ class GeminiVisionProvider(VisionProvider):
     """Gemini Vision provider for frame captioning."""
 
     async def caption_frame(
-        self, frame: MaskedFrame, anchor: TranscriptSegment
+        self,
+        frame: MaskedFrame,
+        anchor: TranscriptSegment,
+        system_prompt: str | None = None,
     ) -> FrameCaption:
         if not _GOOGLE_AI_API_KEY:
             raise ProviderError("gemini", "GOOGLE_AI_API_KEY not configured")
 
         image_data = load_frame_image_base64(frame.s3_key)
+        # AI-PROMPTS-B — assembled prompt or base constant.
+        effective_system = system_prompt or VISION_SYSTEM_PROMPT
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
@@ -64,7 +69,7 @@ class GeminiVisionProvider(VisionProvider):
                     params={"key": _GOOGLE_AI_API_KEY},
                     headers={"Content-Type": "application/json"},
                     json={
-                        "systemInstruction": {"parts": [{"text": VISION_SYSTEM_PROMPT}]},
+                        "systemInstruction": {"parts": [{"text": effective_system}]},
                         "contents": [
                             {
                                 "parts": [
@@ -105,7 +110,10 @@ class GeminiVisionProvider(VisionProvider):
             raise ProviderError("gemini", f"Vision captioning failed: {e}", e)
 
     async def caption_clip(
-        self, clip: MaskedClip, anchor: TranscriptSegment
+        self,
+        clip: MaskedClip,
+        anchor: TranscriptSegment,
+        system_prompt: str | None = None,
     ) -> FrameCaption:
         """Caption a video clip natively via Gemini's video understanding.
 
@@ -117,6 +125,9 @@ class GeminiVisionProvider(VisionProvider):
         the same as the frame path -- Liskov: the output schema is
         identical, only `evidence_kind` and `duration_ms` differ.
 
+        ``system_prompt`` (AI-PROMPTS-B) is the service-assembled
+        ``vision_clip`` overlay; falls back to ``VISION_SYSTEM_PROMPT``.
+
         Raises `ProviderError` on any HTTP failure so the fallback chain
         in `provider_registry.get_vision_provider_with_fallback` can
         trip to the next provider (typically OpenAI/Anthropic with
@@ -124,6 +135,8 @@ class GeminiVisionProvider(VisionProvider):
         """
         if not _GOOGLE_AI_API_KEY:
             raise ProviderError("gemini", "GOOGLE_AI_API_KEY not configured")
+        # AI-PROMPTS-B — assembled prompt or base constant.
+        effective_system = system_prompt or VISION_SYSTEM_PROMPT
 
         # Fetch the MP4 bytes from S3 via the shared client (DIP).
         # Falls back to a tiny placeholder on local-dev S3 misses so the
@@ -143,7 +156,7 @@ class GeminiVisionProvider(VisionProvider):
                     params={"key": _GOOGLE_AI_API_KEY},
                     headers={"Content-Type": "application/json"},
                     json={
-                        "systemInstruction": {"parts": [{"text": VISION_SYSTEM_PROMPT}]},
+                        "systemInstruction": {"parts": [{"text": effective_system}]},
                         "contents": [
                             {
                                 "parts": [

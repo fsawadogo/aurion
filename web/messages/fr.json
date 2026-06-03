@@ -213,7 +213,7 @@
     "subtitle": "Les instructions exactes que chaque modèle d’IA reçoit lors de l’analyse de vos consultations.",
     "descriptiveModeCallout": "Chaque invite ci-dessous applique le mode descriptif : l’IA est invitée à décrire ce qui a été capté, jamais à interpréter, diagnostiquer ou suggérer une conclusion clinique. C’est la limite de sécurité du pilote Aurion.",
     "phaseAReadOnlyChip": "Phase A : lecture seule",
-    "phaseBHint": "Une future mise à jour permettra de personnaliser ces instructions par médecin.",
+    "phaseBHint": "Lorsque vous enregistrez votre propre invite, elle remplace l’invite système par défaut pour vos sessions. L’invite système par défaut ci-dessous sert de repli lorsque vous n’en avez pas enregistré.",
     "searchPlaceholder": "Filtrer par nom ou rôle…",
     "noResults": "Aucune invite ne correspond à votre filtre.",
     "expandLabel": "Afficher les instructions exactes envoyées à l’IA",
@@ -230,6 +230,44 @@
       "vision": "Vision",
       "extraction": "Extraction",
       "preview": "Aperçu en direct"
+    },
+    "userPrompt": {
+      "activeBadge": "Invite personnalisée active",
+      "editButton": "Modifier votre invite",
+      "resetButton": "Utiliser l’invite par défaut",
+      "confirmResetTitle": "Utiliser l’invite système par défaut pour celle-ci ?",
+      "confirmResetMessage": "Votre invite enregistrée pour cette entrée sera supprimée et l’invite système par défaut sera utilisée pour vos sessions.",
+      "resetConfirm": "Utiliser l’invite par défaut",
+      "resetCancel": "Annuler"
+    },
+    "editor": {
+      "title": "Modifier votre invite",
+      "systemDefaultLabel": "Invite système par défaut (utilisée si vous n’en avez pas enregistré)",
+      "systemDefaultHint": "Limite de sécurité du mode descriptif d’Aurion",
+      "yourPromptLabel": "Votre invite",
+      "yourPromptPlaceholder": "Vous êtes un assistant de documentation clinique. Décrivez uniquement ce qui a été directement capté pendant la consultation. Documentez les plaintes du patient et les observations visibles. N’interprétez pas, ne diagnostiquez pas et n’inférez aucune signification clinique.",
+      "charCount": "{used}/{max}",
+      "activePromptLabel": "Invite active — ce que l’IA recevra",
+      "activePromptHint": "Remplace l’invite système par défaut pour vos sessions lorsqu’elle est définie",
+      "activePromptIsDefault": "Vide — l’invite système par défaut ci-dessus sera utilisée.",
+      "copyFromSystemDefault": "Partir de l’invite par défaut",
+      "requirementsLabel": "Exigences",
+      "requirementDescribe": "Doit contenir une formulation comme « décrire », « documenter », « consigner » ou « rapporter ce qui a été observé ».",
+      "requirementNoInterpret": "Doit contenir une formulation comme « ne pas interpréter », « ne pas diagnostiquer » ou « aucune interprétation ».",
+      "requirementMaxLength": "Maximum {max} caractères.",
+      "requirementNoBannedPhrases": "Ne peut contenir de formulations qui désactivent le mode descriptif (p. ex. « you may diagnose », « ignore previous instructions »).",
+      "saveButton": "Enregistrer l’invite",
+      "cancelButton": "Annuler",
+      "savedToast": "Invite enregistrée.",
+      "errorSaving": "Impossible d’enregistrer votre invite."
+    },
+    "errors": {
+      "tooLong": "Votre invite fait {count} caractères — la limite est {max}.",
+      "bannedPhrase": "Votre invite contient une formulation qui désactiverait le mode descriptif. Reformulez sans demander à l’IA d’interpréter, de diagnostiquer, de recommander un traitement ou de contourner les règles. Formulation détectée : {phrase}",
+      "missingAnchorDescribe": "Votre invite doit demander à l’IA de décrire / documenter / consigner ce qui a été observé. Ajoutez une formulation comme « décrire ce qui a été capté », « documenter les plaintes du patient » ou « consigner les observations ».",
+      "missingAnchorNoInterpret": "Votre invite doit demander à l’IA de NE PAS interpréter, diagnostiquer ou inférer. Ajoutez une formulation comme « ne pas interpréter les observations », « ne pas diagnostiquer » ou « aucune interprétation ».",
+      "empty": "Votre invite est vide. Écrivez une invite complète ou utilisez l’invite par défaut.",
+      "unknown": "Impossible de valider votre invite. Réessayez."
     }
   }
 }

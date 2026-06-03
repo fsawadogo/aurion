@@ -2,12 +2,27 @@
 
 import { X } from "lucide-react";
 import { ReactNode, useEffect } from "react";
+
+/**
+ * Width sizes for the modal card. The Phase B PromptUserPromptEditor
+ * needs a wider canvas than the default md (~28rem) for the four-pane
+ * layout (system default / your prompt / active preview /
+ * requirements); other consumers stick with md.
+ */
+const SIZE_CLASSES: Record<NonNullable<ModalProps["size"]>, string> = {
+  md: "max-w-md",
+  lg: "max-w-lg",
+  xl: "max-w-2xl",
+  "2xl": "max-w-4xl",
+};
+
 interface ModalProps {
   isOpen: boolean;
   onClose: () => void;
   title: string;
   children: ReactNode;
   footer?: ReactNode;
+  size?: "md" | "lg" | "xl" | "2xl";
 }
 
 export default function Modal({
@@ -16,6 +31,7 @@ export default function Modal({
   title,
   children,
   footer,
+  size = "md",
 }: ModalProps) {
   useEffect(() => {
     if (!isOpen) return;
@@ -37,7 +53,9 @@ export default function Modal({
       />
 
       {/* Card */}
-      <div className="relative z-10 w-full max-w-md animate-modal-in rounded-xl bg-white shadow-2xl ring-1 ring-gray-900/5">
+      <div
+        className={`relative z-10 w-full ${SIZE_CLASSES[size]} animate-modal-in rounded-xl bg-white shadow-2xl ring-1 ring-gray-900/5 max-h-[90vh] overflow-y-auto`}
+      >
         {/* Title bar */}
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
           <h3 className="text-base font-semibold text-navy-700">{title}</h3>

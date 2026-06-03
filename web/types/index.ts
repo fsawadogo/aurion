@@ -762,18 +762,33 @@ export interface CodingSuggestion {
   updated_at: string;
 }
 
-/* ─── AI Prompts Transparency (AI-PROMPTS-A) ─────────────────────────────── */
+/* ─── AI Prompts Transparency (AI-PROMPTS-A + B) ─────────────────────────── */
 
 export type PromptCategory = "note" | "vision" | "extraction" | "preview";
 
 /**
  * One LLM system prompt the encounter-analysis pipeline uses,
- * surfaced read-only on /portal/prompts.
+ * surfaced on /portal/prompts.
  *
- * `override_text` + `is_overridden` are forward-compatible fields
- * for Phase B per-physician overlays — always null / false today.
- * Clients should prefer `override_text` when populated and fall
- * back to `system_prompt` otherwise.
+ * Phase A: read-only catalog. Phase B (replacement semantics) added
+ * per-physician REPLACEMENT user prompts:
+ *
+ *  - `system_prompt` is the registry default — the FALLBACK used when
+ *    the calling physician has not saved their own prompt.
+ *  - `system_prompt_is_fallback` is always `true`; the portal uses it
+ *    to render the system prompt with muted styling so the physician
+ *    sees clearly that it's a fallback, not the active default.
+ *  - `user_prompt_text` is the calling physician's saved REPLACEMENT
+ *    prompt (or `null` when they haven't saved one).
+ *  - `is_overridden` is the convenience flag (`user_prompt_text != null`).
+ *  - `active_prompt` is the exact text the LLM would receive for this
+ *    physician's next call: `user_prompt_text` when set,
+ *    `system_prompt` otherwise. There is NO concatenation — replacement
+ *    semantics, not append-overlay.
+ *
+ * Clients should render `active_prompt` when they want the "what the
+ * AI is actually told" view, and `system_prompt` when they
+ * specifically want the system default (the fallback).
  */
 export interface AIPrompt {
   id: string;
@@ -783,7 +798,29 @@ export interface AIPrompt {
   runs_when: string;
   provider_field: string;
   system_prompt: string;
+  system_prompt_is_fallback: boolean;
   schema_note: string | null;
-  override_text: string | null;
+  user_prompt_text: string | null;
   is_overridden: boolean;
+  active_prompt: string;
+}
+
+/**
+ * Phase B PATCH error shape (replacement semantics). The server
+ * returns 400 with this structure when a saved user prompt fails
+ * structural validation. The frontend uses `code` to localise the
+ * message, `matched_phrase` to highlight which banned phrase tripped
+ * the gate, and `missing_anchor_group` to render the right localised
+ * hint when the descriptive-mode anchor check fails (0 → "describe /
+ * document / record"; 1 → "do not interpret / diagnose").
+ */
+export interface PromptUserPromptValidationError {
+  code:
+    | "empty"
+    | "too_long"
+    | "banned_phrase"
+    | "missing_descriptive_anchor";
+  message: string;
+  matched_phrase: string | null;
+  missing_anchor_group: number | null;
 }

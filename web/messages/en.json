@@ -213,7 +213,7 @@
     "subtitle": "The exact instructions every AI model receives when analyzing your encounters.",
     "descriptiveModeCallout": "Every prompt below enforces descriptive mode: the AI is told to describe what was captured, never to interpret, diagnose, or suggest clinical conclusions. This is the safety boundary Aurion's pilot operates under.",
     "phaseAReadOnlyChip": "Phase A: read-only",
-    "phaseBHint": "A future update will let you customize these instructions per physician.",
+    "phaseBHint": "When you save your own prompt, it replaces the system default for your own sessions. The system default below is the fallback used when you haven't saved one.",
     "searchPlaceholder": "Filter by name or purpose…",
     "noResults": "No prompts match your filter.",
     "expandLabel": "Show the exact instructions sent to the AI",
@@ -230,6 +230,44 @@
       "vision": "Vision",
       "extraction": "Extraction",
       "preview": "Live preview"
+    },
+    "userPrompt": {
+      "activeBadge": "Custom prompt active",
+      "editButton": "Edit your prompt",
+      "resetButton": "Use system default",
+      "confirmResetTitle": "Use the system default for this prompt?",
+      "confirmResetMessage": "Your saved prompt for this entry will be removed and the system default will run for your sessions.",
+      "resetConfirm": "Use system default",
+      "resetCancel": "Cancel"
+    },
+    "editor": {
+      "title": "Edit your prompt",
+      "systemDefaultLabel": "System default (used when you haven't saved your own)",
+      "systemDefaultHint": "Aurion's descriptive-mode safety boundary",
+      "yourPromptLabel": "Your prompt",
+      "yourPromptPlaceholder": "You are a clinical documentation assistant. Describe only what was directly captured during the encounter. Document the patient's complaints and visible findings. Do not interpret findings, do not diagnose, and do not infer clinical meaning.",
+      "charCount": "{used}/{max}",
+      "activePromptLabel": "Active prompt — what the AI will receive",
+      "activePromptHint": "Replaces the system default for your sessions when set",
+      "activePromptIsDefault": "Empty — the system default above will be used.",
+      "copyFromSystemDefault": "Start from system default",
+      "requirementsLabel": "Requirements",
+      "requirementDescribe": "Must include language like 'describe', 'document', 'record', or 'report what was observed'.",
+      "requirementNoInterpret": "Must include language like 'do not interpret', 'do not diagnose', or 'no interpretation'.",
+      "requirementMaxLength": "Maximum {max} characters.",
+      "requirementNoBannedPhrases": "Cannot contain phrases that disable descriptive mode (e.g. 'you may diagnose', 'ignore previous instructions').",
+      "saveButton": "Save prompt",
+      "cancelButton": "Cancel",
+      "savedToast": "Prompt saved.",
+      "errorSaving": "Couldn't save your prompt."
+    },
+    "errors": {
+      "tooLong": "Your prompt is {count} characters — the maximum is {max}.",
+      "bannedPhrase": "Your prompt contains a phrase that would disable descriptive mode. Rephrase without telling the AI to interpret, diagnose, recommend treatment, or override prior rules. Matched phrase: {phrase}",
+      "missingAnchorDescribe": "Your prompt must tell the AI to describe / document / record what was observed. Add language like 'describe what was captured', 'document the patient's complaints', or 'record observed findings'.",
+      "missingAnchorNoInterpret": "Your prompt must tell the AI NOT to interpret, diagnose, or infer. Add language like 'do not interpret findings', 'do not diagnose', or 'no interpretation'.",
+      "empty": "Your prompt is empty. Either write a full prompt or use the system default.",
+      "unknown": "Couldn't validate your prompt. Try again."
     }
   }
 }

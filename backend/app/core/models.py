@@ -1001,3 +1001,69 @@ class LiveNotePreviewModel(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
     )
+
+
+class PromptOverrideModel(Base):
+    """Per-physician REPLACEMENT user prompt for an AI system prompt.
+
+    Phase B of AI Prompts Transparency (replacement semantics — CTO
+    clarification). Each row pairs an ``owner_id`` (the clinician's
+    user UUID) with a ``prompt_id`` (the registry dict key in
+    ``app.modules.prompts.registry``) and stores the physician's full
+    standalone system prompt in ``user_prompt_text``.
+
+    Selection (not assembly): when this row exists,
+    ``app.modules.prompts.assembly.assemble_prompt`` returns
+    ``user_prompt_text`` **alone**. The registry's base prompt is the
+    fallback used only when no row exists for ``(owner_id,
+    prompt_id)``. There is no concatenation — the saved text fully
+    replaces the system default for this physician's sessions.
+
+    Why ``PromptOverrideModel`` (not ``UserPromptModel``)? The table
+    name ``prompt_overrides`` and the model class name shipped in PR
+    #227 v1; renaming both costs a destructive migration without buying
+    a behavioural change. The column name (``user_prompt_text``) is
+    what carries the corrected mental model — that is what the
+    validator, the API, and the LLM all see.
+
+    Ownership is strict: Marie's saved prompt never bleeds into
+    Perry's assembled prompt, and vice versa. The ``UNIQUE (owner_id,
+    prompt_id)`` constraint guarantees one row per (physician,
+    prompt). Re-saving upserts.
+
+    User prompt text is NOT PHI but is sensitive (it's the
+    physician's personal phrasing). It's never logged, never echoed
+    in audit rows — only the ``user_prompt_length`` int makes the
+    audit trail.
+    """
+
+    __tablename__ = "prompt_overrides"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    # Matches the PROMPTS dict key in ``app.modules.prompts.registry``.
+    # Not a foreign key — the registry lives in code, not the DB; new
+    # prompts ship with the next deploy. The 64-char cap matches the
+    # convention used by PhysicianMacroModel.shortcut for the same
+    # reason (identifiers, not free text).
+    prompt_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    # The physician's full standalone system prompt that REPLACES the
+    # registry default for their own sessions. Validator-enforced cap
+    # is 5000 chars (see ``app.modules.prompts.safety``); no DB CHECK
+    # because length policy may evolve faster than schema.
+    user_prompt_text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )

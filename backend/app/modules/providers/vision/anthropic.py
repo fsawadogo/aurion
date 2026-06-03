@@ -48,12 +48,17 @@ class AnthropicVisionProvider(VisionProvider):
     """Claude Vision provider for frame captioning."""
 
     async def caption_frame(
-        self, frame: MaskedFrame, anchor: TranscriptSegment
+        self,
+        frame: MaskedFrame,
+        anchor: TranscriptSegment,
+        system_prompt: str | None = None,
     ) -> FrameCaption:
         if not _ANTHROPIC_API_KEY:
             raise ProviderError("anthropic", "ANTHROPIC_API_KEY not configured")
 
         image_data = load_frame_image_base64(frame.s3_key)
+        # AI-PROMPTS-B — assembled prompt or base constant.
+        effective_system = system_prompt or VISION_SYSTEM_PROMPT
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
@@ -69,7 +74,7 @@ class AnthropicVisionProvider(VisionProvider):
                         # AppConfig vision params — admin-tunable at runtime.
                         "max_tokens": get_config().model_params.vision.max_tokens,
                         "temperature": get_config().model_params.vision.temperature,
-                        "system": VISION_SYSTEM_PROMPT,
+                        "system": effective_system,
                         "messages": [
                             {
                                 "role": "user",
@@ -143,7 +148,10 @@ class AnthropicVisionProvider(VisionProvider):
             raise ProviderError("anthropic", f"Vision captioning failed: {e}", e)
 
     async def caption_clip(
-        self, clip: MaskedClip, anchor: TranscriptSegment
+        self,
+        clip: MaskedClip,
+        anchor: TranscriptSegment,
+        system_prompt: str | None = None,
     ) -> FrameCaption:
         """Caption a video clip via the lossy midpoint-still fallback.
 
@@ -159,6 +167,9 @@ class AnthropicVisionProvider(VisionProvider):
            `model_copy(update=...)`. The reviewer surfaces the "still
            extracted from clip" badge from that flag.
 
+        ``system_prompt`` (AI-PROMPTS-B) flows through to the inner
+        ``caption_frame`` call.
+
         Provider errors from the inner `caption_frame` call (e.g. a 5xx
         from Anthropic) propagate as-is so the registry's fallback chain
         can trip to the next provider.
@@ -171,7 +182,9 @@ class AnthropicVisionProvider(VisionProvider):
         # Reuse the existing Claude path. The inner call may raise
         # ProviderError on 5xx; we let it propagate so the registry's
         # fallback chain can trip.
-        caption = await self.caption_frame(synthetic_frame, anchor)
+        caption = await self.caption_frame(
+            synthetic_frame, anchor, system_prompt=system_prompt
+        )
         return caption.model_copy(
             update={
                 "evidence_kind": "clip",

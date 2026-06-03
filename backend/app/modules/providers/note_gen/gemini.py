@@ -37,11 +37,16 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
         template: Template,
         stage: int,
         output_language: str = "en",
+        system_prompt: str | None = None,
     ) -> Note:
         if not _GOOGLE_AI_API_KEY:
             raise ProviderError("gemini", "GOOGLE_AI_API_KEY not configured")
 
         user_prompt = build_user_prompt(transcript, template, stage, output_language)
+        # AI-PROMPTS-B — service-assembled system prompt (base +
+        # per-physician overlay) when present; bare base constant
+        # otherwise.
+        effective_system = system_prompt or NOTE_GEN_SYSTEM_PROMPT
         # Read model params from AppConfig at call time (CLAUDE.md
         # §"Runtime Configuration").
         params = get_config().model_params.note_generation
@@ -54,7 +59,7 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
                     headers={"Content-Type": "application/json"},
                     json={
                         "systemInstruction": {
-                            "parts": [{"text": NOTE_GEN_SYSTEM_PROMPT}]
+                            "parts": [{"text": effective_system}]
                         },
                         "contents": [
                             {"parts": [{"text": user_prompt}]}
