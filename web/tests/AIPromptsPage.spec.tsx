@@ -26,7 +26,18 @@ vi.mock("@/lib/portal-api", () => ({
 
 import { listMyPrompts } from "@/lib/portal-api";
 
-const NOTE_GEN: AIPrompt = {
+// Helper — every base-only fixture has assembled_preview == system_prompt
+// (the server contract when no overlay is set).
+function basePrompt<T extends Omit<AIPrompt, "overlay_text" | "is_overridden" | "assembled_preview">>(p: T): AIPrompt {
+  return {
+    ...p,
+    overlay_text: null,
+    is_overridden: false,
+    assembled_preview: p.system_prompt,
+  };
+}
+
+const NOTE_GEN: AIPrompt = basePrompt({
   id: "note_generation",
   name: "Note generation",
   purpose: "Drafts the SOAP note from the audio transcript.",
@@ -36,11 +47,9 @@ const NOTE_GEN: AIPrompt = {
   system_prompt:
     "You are a clinical documentation assistant for Aurion Clinical AI. Describe only what was directly captured. Do not infer.",
   schema_note: "Output: strict JSON.",
-  override_text: null,
-  is_overridden: false,
-};
+});
 
-const VISION_FRAME: AIPrompt = {
+const VISION_FRAME: AIPrompt = basePrompt({
   id: "vision_frame",
   name: "Vision (still frame)",
   purpose: "Describes what is visible in a still frame.",
@@ -50,11 +59,9 @@ const VISION_FRAME: AIPrompt = {
   system_prompt:
     "You are a clinical visual documentation assistant. Describe only what is literally visible.",
   schema_note: "Output: JSON description + confidence.",
-  override_text: null,
-  is_overridden: false,
-};
+});
 
-const PATIENT_SUMMARY: AIPrompt = {
+const PATIENT_SUMMARY: AIPrompt = basePrompt({
   id: "patient_summary",
   name: "Patient after-visit summary",
   purpose: "Plain-language handout for the patient.",
@@ -63,11 +70,9 @@ const PATIENT_SUMMARY: AIPrompt = {
   provider_field: "note_generation",
   system_prompt: "You are an after-visit summary writer.",
   schema_note: "Output: single paragraph.",
-  override_text: null,
-  is_overridden: false,
-};
+});
 
-const LIVE_PREVIEW: AIPrompt = {
+const LIVE_PREVIEW: AIPrompt = basePrompt({
   id: "live_preview",
   name: "Live note preview",
   purpose: "Rolling draft during recording.",
@@ -76,9 +81,7 @@ const LIVE_PREVIEW: AIPrompt = {
   provider_field: "note_generation",
   system_prompt: "Stage 0 note draft system prompt.",
   schema_note: null,
-  override_text: null,
-  is_overridden: false,
-};
+});
 
 const MOCK_PROMPTS = [NOTE_GEN, VISION_FRAME, PATIENT_SUMMARY, LIVE_PREVIEW];
 
@@ -212,10 +215,28 @@ describe("PromptCard — expand toggle exposes the exact system prompt (AC-7)", 
     expect(pre.textContent).toContain("Describe only what was directly captured");
   });
 
-  it("renders the Phase A read-only chip on every card", () => {
+  it("renders the Edit preferences button on every card (Phase B)", () => {
     render(withIntl(<PromptCard prompt={NOTE_GEN} />));
     expect(
-      screen.getByTestId("prompt-card-note_generation-readonly-chip"),
+      screen.getByTestId("prompt-card-note_generation-edit-button"),
+    ).toBeInTheDocument();
+  });
+
+  it("renders the override-active badge ONLY when is_overridden=true", () => {
+    const { unmount } = render(withIntl(<PromptCard prompt={NOTE_GEN} />));
+    expect(
+      screen.queryByTestId("prompt-card-note_generation-override-badge"),
+    ).toBeNull();
+    unmount();
+    const overridden: AIPrompt = {
+      ...NOTE_GEN,
+      overlay_text: "anything",
+      is_overridden: true,
+      assembled_preview: NOTE_GEN.system_prompt,
+    };
+    render(withIntl(<PromptCard prompt={overridden} />));
+    expect(
+      screen.getByTestId("prompt-card-note_generation-override-badge"),
     ).toBeInTheDocument();
   });
 
@@ -227,20 +248,28 @@ describe("PromptCard — expand toggle exposes the exact system prompt (AC-7)", 
     expect(providerField.textContent).toContain("vision");
   });
 
-  it("renders override_text when present in place of system_prompt (Phase B forward-compat)", async () => {
+  it("renders the assembled_preview (base + overlay) in the expanded view when overridden", async () => {
     const user = userEvent.setup();
     const overridden: AIPrompt = {
       ...NOTE_GEN,
-      override_text: "Custom physician override goes here.",
+      overlay_text: "Custom physician override goes here.",
       is_overridden: true,
+      assembled_preview:
+        NOTE_GEN.system_prompt +
+        "\n\n--- Physician preferences ---\n" +
+        "Custom physician override goes here.",
     };
     render(withIntl(<PromptCard prompt={overridden} />));
     await user.click(
       screen.getByTestId("prompt-card-note_generation-toggle"),
     );
     const pre = screen.getByTestId("prompt-card-note_generation-pre");
+    // Phase B: assembled_preview keeps the base on top (the safety
+    // boundary is always visible) AND appends the overlay below the
+    // separator. Both parts should be present.
+    expect(pre.textContent).toContain("Describe only what was directly captured");
     expect(pre.textContent).toContain("Custom physician override");
-    expect(pre.textContent).not.toContain("Describe only what was directly captured");
+    expect(pre.textContent).toContain("Physician preferences");
   });
 });
 
@@ -277,10 +306,9 @@ describe("AIPrompts i18n parity (AC-8)", () => {
         screen.getByTestId("prompt-card-note_generation-name"),
       ).toBeInTheDocument(),
     );
-    // "Phase A : lecture seule" — locale-specific phrase that only
-    // exists in the FR catalog. Presence proves the namespace is
-    // wired through correctly.
-    expect(screen.getAllByText(/Phase A/i).length).toBeGreaterThan(0);
+    // "Invites IA" — the FR title. Presence proves the namespace is
+    // wired through correctly and no key is missing.
+    expect(screen.getAllByText(/Invites IA/i).length).toBeGreaterThan(0);
   });
 });
 

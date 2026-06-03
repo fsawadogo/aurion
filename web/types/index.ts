@@ -762,18 +762,24 @@ export interface CodingSuggestion {
   updated_at: string;
 }
 
-/* ─── AI Prompts Transparency (AI-PROMPTS-A) ─────────────────────────────── */
+/* ─── AI Prompts Transparency (AI-PROMPTS-A + B) ─────────────────────────── */
 
 export type PromptCategory = "note" | "vision" | "extraction" | "preview";
 
 /**
  * One LLM system prompt the encounter-analysis pipeline uses,
- * surfaced read-only on /portal/prompts.
+ * surfaced on /portal/prompts.
  *
- * `override_text` + `is_overridden` are forward-compatible fields
- * for Phase B per-physician overlays — always null / false today.
- * Clients should prefer `override_text` when populated and fall
- * back to `system_prompt` otherwise.
+ * Phase A: read-only catalog. Phase B added per-physician append-only
+ * overlays — `overlay_text` is the calling physician's customisation
+ * (or null when they haven't set one); `is_overridden` is the
+ * convenience flag (`overlay_text != null`); `assembled_preview` is
+ * the combined `base + separator + overlay` string the LLM would
+ * receive today (equal to `system_prompt` when no overlay set).
+ *
+ * Clients should render `assembled_preview` when they want the
+ * "what the AI is actually told" view, and `system_prompt` when they
+ * specifically want the unmodified base (the safety boundary).
  */
 export interface AIPrompt {
   id: string;
@@ -784,6 +790,19 @@ export interface AIPrompt {
   provider_field: string;
   system_prompt: string;
   schema_note: string | null;
-  override_text: string | null;
+  overlay_text: string | null;
   is_overridden: boolean;
+  assembled_preview: string;
+}
+
+/**
+ * Phase B PATCH error shape. The server returns 400 with this
+ * structure when an overlay fails structural validation. The
+ * frontend uses `code` to localise the message and `matched_phrase`
+ * to highlight which banned phrase tripped the gate.
+ */
+export interface PromptOverlayValidationError {
+  code: "empty" | "too_long" | "banned_phrase";
+  message: string;
+  matched_phrase: string | null;
 }

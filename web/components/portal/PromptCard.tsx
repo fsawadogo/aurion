@@ -1,27 +1,40 @@
 "use client";
 
-import { ChevronDown, ChevronUp, Lock } from "lucide-react";
+import { CheckCircle2, ChevronDown, ChevronUp, Edit3, Lock } from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import Card from "@/components/ui/Card";
+import PromptOverrideEditor from "@/components/portal/PromptOverrideEditor";
 import type { AIPrompt } from "@/types";
 
 /**
  * One row on the AI Prompts Transparency page.
  *
- * The card is intentionally dense at rest (name + purpose + when-it-
- * runs) and expands on demand to show the full system prompt in a
- * monospace `<pre>` block. Most physicians won't expand; the ones
- * who care about the safety boundary will, and they'll see the same
- * text the LLM does.
+ * Phase A: dense rest state (name + purpose + when-it-runs) that
+ * expands on demand to reveal the full system prompt.
  *
- * Phase A only. The "Phase A: read-only" chip + the locked icon
- * telegraph that customization is coming but not here yet. Phase B
- * will swap the expanded view for a textarea bound to
- * `override_text`; no other component-level changes needed.
+ * Phase B added:
+ *   - "Override active" badge when `is_overridden` is true.
+ *   - "Edit preferences" button that opens the
+ *     `PromptOverrideEditor` modal — CLINICIAN-only at the server
+ *     level (the button is rendered for everyone but the PATCH
+ *     endpoint 403s for ADMIN/EVAL_TEAM/COMPLIANCE_OFFICER, who
+ *     never have overlays anyway).
+ *   - Expanded view shows the `assembled_preview` text rather than
+ *     the bare `system_prompt` — physicians see what the LLM
+ *     actually receives.
+ *
+ * The card owns its own modal state. A successful save updates the
+ * card-local `current` AIPrompt so the parent page doesn't need to
+ * refetch on every edit; the parent can also pass an onChange
+ * callback if it wants to sync the page's prompts list.
  */
+
 interface PromptCardProps {
   prompt: AIPrompt;
+  /** Optional callback — parents that want the page list to update
+   *  in lock-step with the card's local state can wire this in. */
+  onChange?: (next: AIPrompt) => void;
 }
 
 const CATEGORY_BADGE: Record<AIPrompt["category"], string> = {
@@ -35,118 +48,154 @@ const CATEGORY_BADGE: Record<AIPrompt["category"], string> = {
     "bg-emerald-50 text-emerald-700 ring-emerald-200",
 };
 
-export default function PromptCard({ prompt }: PromptCardProps) {
+export default function PromptCard({ prompt, onChange }: PromptCardProps) {
   const t = useTranslations("AIPrompts");
   const [expanded, setExpanded] = useState(false);
-  const categoryClasses = CATEGORY_BADGE[prompt.category];
-  const displayedText = prompt.override_text ?? prompt.system_prompt;
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [current, setCurrent] = useState<AIPrompt>(prompt);
+
+  const categoryClasses = CATEGORY_BADGE[current.category];
+  // Expanded view shows the assembled prompt (base + overlay) — the
+  // "what the LLM is actually told today" view. Phase A was bare
+  // system_prompt; physicians who care about the boundary still see
+  // the base verbatim at the top of assembled_preview.
+  const displayedText = current.assembled_preview;
+
+  function handleSaved(next: AIPrompt) {
+    setCurrent(next);
+    onChange?.(next);
+  }
 
   return (
-    <Card
-      className="transition-shadow duration-short"
-      title={
-        <div className="flex items-start justify-between gap-3 w-full">
-          <div className="min-w-0">
-            <div className="flex items-center gap-2 flex-wrap">
-              <h3
-                className="text-aurion-headline truncate"
-                data-testid={`prompt-card-${prompt.id}-name`}
-              >
-                {prompt.name}
-              </h3>
-              <span
-                className={
-                  "text-aurion-micro rounded-aurion-xs px-2 py-0.5 ring-1 ring-inset " +
-                  categoryClasses
-                }
-              >
-                {t(`category.${prompt.category}`)}
-              </span>
+    <>
+      <Card
+        className="transition-shadow duration-short"
+        title={
+          <div className="flex items-start justify-between gap-3 w-full">
+            <div className="min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <h3
+                  className="text-aurion-headline truncate"
+                  data-testid={`prompt-card-${current.id}-name`}
+                >
+                  {current.name}
+                </h3>
+                <span
+                  className={
+                    "text-aurion-micro rounded-aurion-xs px-2 py-0.5 ring-1 ring-inset " +
+                    categoryClasses
+                  }
+                >
+                  {t(`category.${current.category}`)}
+                </span>
+                {current.is_overridden && (
+                  <span
+                    className="inline-flex items-center gap-1 rounded-aurion-xs bg-emerald-50 px-2 py-0.5 text-aurion-micro text-emerald-700 ring-1 ring-inset ring-emerald-200"
+                    data-testid={`prompt-card-${current.id}-override-badge`}
+                  >
+                    <CheckCircle2 className="h-3 w-3" />
+                    {t("override.activeBadge")}
+                  </span>
+                )}
+              </div>
+              <p className="mt-1 text-aurion-caption text-navy-500">
+                <span className="font-medium text-navy-600">
+                  {t("runsWhenLabel")}:
+                </span>{" "}
+                {current.runs_when}
+              </p>
             </div>
-            <p className="mt-1 text-aurion-caption text-navy-500">
-              <span className="font-medium text-navy-600">
-                {t("runsWhenLabel")}:
-              </span>{" "}
-              {prompt.runs_when}
-            </p>
-          </div>
-          <span
-            className="inline-flex shrink-0 items-center gap-1 rounded-aurion-xs bg-navy-50 px-2 py-1 text-aurion-micro text-navy-600 ring-1 ring-inset ring-navy-200"
-            title={t("phaseBHint")}
-            data-testid={`prompt-card-${prompt.id}-readonly-chip`}
-          >
-            <Lock className="h-3 w-3" />
-            {t("phaseAReadOnlyChip")}
-          </span>
-        </div>
-      }
-    >
-      <div className="space-y-3">
-        <div>
-          <p className="aurion-micro text-gold-600">{t("purposeLabel")}</p>
-          <p className="text-aurion-callout text-navy-700 mt-1">
-            {prompt.purpose}
-          </p>
-        </div>
-
-        {prompt.schema_note && (
-          <div>
-            <p className="aurion-micro text-gold-600">
-              {t("outputShapeLabel")}
-            </p>
-            <p className="text-aurion-caption text-navy-500 mt-1">
-              {prompt.schema_note}
-            </p>
-          </div>
-        )}
-
-        <div className="flex items-center justify-between gap-3 pt-1">
-          <span
-            className="text-aurion-micro text-navy-400"
-            data-testid={`prompt-card-${prompt.id}-provider-field`}
-          >
-            {t("poweredByLabel")}:{" "}
-            <span className="font-mono text-navy-600">
-              {prompt.provider_field}
-            </span>
-          </span>
-          <button
-            type="button"
-            onClick={() => setExpanded((v) => !v)}
-            aria-expanded={expanded}
-            aria-controls={`prompt-card-${prompt.id}-pre`}
-            className="inline-flex items-center gap-1.5 rounded-aurion-sm border border-hairline px-3 py-1.5 text-aurion-caption text-navy-700 hover:bg-canvas/60 transition-colors duration-short"
-            data-testid={`prompt-card-${prompt.id}-toggle`}
-          >
-            {expanded ? (
-              <>
-                <ChevronUp className="h-3.5 w-3.5" />
-                {t("collapseLabel")}
-              </>
-            ) : (
-              <>
-                <ChevronDown className="h-3.5 w-3.5" />
-                {t("expandLabel")}
-              </>
-            )}
-          </button>
-        </div>
-
-        {expanded && (
-          <div>
-            <p className="aurion-micro text-gold-600 mb-1">
-              {t("instructionsLabel")}
-            </p>
-            <pre
-              id={`prompt-card-${prompt.id}-pre`}
-              data-testid={`prompt-card-${prompt.id}-pre`}
-              className="whitespace-pre-wrap break-words rounded-aurion-sm bg-navy-50 px-3 py-2 text-aurion-caption text-navy-800 font-mono leading-relaxed ring-1 ring-inset ring-navy-100"
+            <button
+              type="button"
+              onClick={() => setEditorOpen(true)}
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-aurion-xs bg-navy-50 px-2 py-1 text-aurion-micro text-navy-600 ring-1 ring-inset ring-navy-200 hover:bg-navy-100 transition-colors duration-short"
+              title={t("override.editButton")}
+              data-testid={`prompt-card-${current.id}-edit-button`}
             >
-              {displayedText}
-            </pre>
+              {current.is_overridden ? (
+                <Edit3 className="h-3 w-3" />
+              ) : (
+                <Lock className="h-3 w-3" />
+              )}
+              {t("override.editButton")}
+            </button>
           </div>
-        )}
-      </div>
-    </Card>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <p className="aurion-micro text-gold-600">{t("purposeLabel")}</p>
+            <p className="text-aurion-callout text-navy-700 mt-1">
+              {current.purpose}
+            </p>
+          </div>
+
+          {current.schema_note && (
+            <div>
+              <p className="aurion-micro text-gold-600">
+                {t("outputShapeLabel")}
+              </p>
+              <p className="text-aurion-caption text-navy-500 mt-1">
+                {current.schema_note}
+              </p>
+            </div>
+          )}
+
+          <div className="flex items-center justify-between gap-3 pt-1">
+            <span
+              className="text-aurion-micro text-navy-400"
+              data-testid={`prompt-card-${current.id}-provider-field`}
+            >
+              {t("poweredByLabel")}:{" "}
+              <span className="font-mono text-navy-600">
+                {current.provider_field}
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              aria-controls={`prompt-card-${current.id}-pre`}
+              className="inline-flex items-center gap-1.5 rounded-aurion-sm border border-hairline px-3 py-1.5 text-aurion-caption text-navy-700 hover:bg-canvas/60 transition-colors duration-short"
+              data-testid={`prompt-card-${current.id}-toggle`}
+            >
+              {expanded ? (
+                <>
+                  <ChevronUp className="h-3.5 w-3.5" />
+                  {t("collapseLabel")}
+                </>
+              ) : (
+                <>
+                  <ChevronDown className="h-3.5 w-3.5" />
+                  {t("expandLabel")}
+                </>
+              )}
+            </button>
+          </div>
+
+          {expanded && (
+            <div>
+              <p className="aurion-micro text-gold-600 mb-1">
+                {t("instructionsLabel")}
+              </p>
+              <pre
+                id={`prompt-card-${current.id}-pre`}
+                data-testid={`prompt-card-${current.id}-pre`}
+                className="whitespace-pre-wrap break-words rounded-aurion-sm bg-navy-50 px-3 py-2 text-aurion-caption text-navy-800 font-mono leading-relaxed ring-1 ring-inset ring-navy-100"
+              >
+                {displayedText}
+              </pre>
+            </div>
+          )}
+        </div>
+      </Card>
+      <PromptOverrideEditor
+        key={`${current.id}:${editorOpen}`}
+        prompt={current}
+        isOpen={editorOpen}
+        onClose={() => setEditorOpen(false)}
+        onSaved={handleSaved}
+      />
+    </>
   );
 }

@@ -213,7 +213,7 @@
     "subtitle": "Les instructions exactes que chaque modèle d’IA reçoit lors de l’analyse de vos consultations.",
     "descriptiveModeCallout": "Chaque invite ci-dessous applique le mode descriptif : l’IA est invitée à décrire ce qui a été capté, jamais à interpréter, diagnostiquer ou suggérer une conclusion clinique. C’est la limite de sécurité du pilote Aurion.",
     "phaseAReadOnlyChip": "Phase A : lecture seule",
-    "phaseBHint": "Une future mise à jour permettra de personnaliser ces instructions par médecin.",
+    "phaseBHint": "Vos préférences personnelles s’ajoutent sous les instructions de base — la limite de sécurité au-dessus reste inchangée.",
     "searchPlaceholder": "Filtrer par nom ou rôle…",
     "noResults": "Aucune invite ne correspond à votre filtre.",
     "expandLabel": "Afficher les instructions exactes envoyées à l’IA",
@@ -230,6 +230,40 @@
       "vision": "Vision",
       "extraction": "Extraction",
       "preview": "Aperçu en direct"
+    },
+    "override": {
+      "activeBadge": "Préférences actives",
+      "editButton": "Modifier les préférences",
+      "resetButton": "Revenir au défaut",
+      "confirmResetTitle": "Revenir à l’invite de base ?",
+      "confirmResetMessage": "Vos préférences pour cette invite seront supprimées. Les instructions de base restent inchangées.",
+      "resetConfirm": "Réinitialiser",
+      "resetCancel": "Annuler"
+    },
+    "editor": {
+      "title": "Modifier les préférences",
+      "basePromptLabel": "Invite de base (verrouillée)",
+      "basePromptHint": "Limite de sécurité du mode descriptif d’Aurion",
+      "yourPreferencesLabel": "Vos préférences",
+      "yourPreferencesPlaceholder": "Toujours noter la comparaison bilatérale lorsque cela s’applique.",
+      "charCount": "{used}/{max}",
+      "previewLabel": "Aperçu — invite combinée",
+      "previewHint": "Ce que l’IA recevra lors de votre prochain appel",
+      "tipsLabel": "Conseils",
+      "tip1": "Restez précis et bref — une ou deux phrases.",
+      "tip2": "Utilisez les millimètres plutôt que les centimètres pour les mesures de plaies.",
+      "tip3": "Notez la comparaison bilatérale lorsque c’est pertinent.",
+      "tip4": "N’invitez pas l’IA à interpréter, diagnostiquer ou contourner les règles — ces formulations sont bloquées.",
+      "saveButton": "Enregistrer",
+      "cancelButton": "Annuler",
+      "savedToast": "Préférences enregistrées.",
+      "errorSaving": "Impossible d’enregistrer vos préférences."
+    },
+    "errors": {
+      "tooLong": "Vos préférences font {count} caractères — la limite est {max}.",
+      "bannedPhrase": "Vos préférences contiennent une formulation qui affaiblirait la limite de sécurité. Reformulez sans demander à l’IA d’interpréter, de diagnostiquer ou de contourner les règles. Formulation détectée : {phrase}",
+      "empty": "Les préférences sont vides — ajoutez du texte ou revenez à l’invite de base.",
+      "unknown": "Impossible de valider vos préférences. Réessayez."
     }
   }
 }

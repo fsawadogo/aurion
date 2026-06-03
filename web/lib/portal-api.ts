@@ -621,16 +621,53 @@ export async function generateMySessionPreview(
   return r.json();
 }
 
-/* ─── AI Prompts Transparency (AI-PROMPTS-A) ─────────────────────────────── */
+/* ─── AI Prompts Transparency (AI-PROMPTS-A + B) ─────────────────────────── */
 
-/** GET /api/v1/me/prompts — read-only catalog of LLM system prompts.
+/** GET /api/v1/me/prompts — catalog of LLM system prompts + caller's overlays.
  *
  * Backs the /portal/prompts Transparency page. Accessible to CLINICIAN
- * + ADMIN / EVAL_TEAM / COMPLIANCE_OFFICER. Phase B will overlay
- * per-physician customisations into the same response shape; clients
- * shouldn't need a second migration.
+ * + ADMIN / EVAL_TEAM / COMPLIANCE_OFFICER (the support roles get
+ * base-only views — overlays are per-physician personal config). The
+ * response shape carries `overlay_text` / `is_overridden` /
+ * `assembled_preview` for the Phase B editor.
  */
 export async function listMyPrompts(): Promise<import("@/types").AIPrompt[]> {
   const r = await fetchWithAuth("/api/v1/me/prompts");
+  return r.json();
+}
+
+/** PATCH /api/v1/me/prompts/{promptId} — save or update an overlay.
+ *
+ * CLINICIAN-only on the server. Returns the updated `AIPrompt` shape
+ * on success. On structural safety failure the server returns 400
+ * with a `PromptOverlayValidationError` in `detail`; callers should
+ * pull the matched_phrase and surface a localised inline error.
+ */
+export async function patchMyPromptOverride(
+  promptId: string,
+  overlayText: string,
+): Promise<import("@/types").AIPrompt> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/prompts/${encodeURIComponent(promptId)}`,
+    {
+      method: "PATCH",
+      body: JSON.stringify({ overlay_text: overlayText }),
+    },
+  );
+  return r.json();
+}
+
+/** DELETE /api/v1/me/prompts/{promptId} — reset to the base prompt.
+ *
+ * Idempotent — returns 200 with the base-only `AIPrompt` shape even
+ * when no overlay exists.
+ */
+export async function deleteMyPromptOverride(
+  promptId: string,
+): Promise<import("@/types").AIPrompt> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/prompts/${encodeURIComponent(promptId)}`,
+    { method: "DELETE" },
+  );
   return r.json();
 }

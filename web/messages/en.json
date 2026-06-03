@@ -213,7 +213,7 @@
     "subtitle": "The exact instructions every AI model receives when analyzing your encounters.",
     "descriptiveModeCallout": "Every prompt below enforces descriptive mode: the AI is told to describe what was captured, never to interpret, diagnose, or suggest clinical conclusions. This is the safety boundary Aurion's pilot operates under.",
     "phaseAReadOnlyChip": "Phase A: read-only",
-    "phaseBHint": "A future update will let you customize these instructions per physician.",
+    "phaseBHint": "Personal preferences are appended below the base instructions — the safety boundary above remains unchanged.",
     "searchPlaceholder": "Filter by name or purpose…",
     "noResults": "No prompts match your filter.",
     "expandLabel": "Show the exact instructions sent to the AI",
@@ -230,6 +230,40 @@
       "vision": "Vision",
       "extraction": "Extraction",
       "preview": "Live preview"
+    },
+    "override": {
+      "activeBadge": "Override active",
+      "editButton": "Edit preferences",
+      "resetButton": "Reset to default",
+      "confirmResetTitle": "Reset to the base prompt?",
+      "confirmResetMessage": "Your preferences for this prompt will be removed. The base instructions stay unchanged.",
+      "resetConfirm": "Reset",
+      "resetCancel": "Cancel"
+    },
+    "editor": {
+      "title": "Edit preferences",
+      "basePromptLabel": "Base prompt (locked)",
+      "basePromptHint": "Aurion's descriptive-mode safety boundary",
+      "yourPreferencesLabel": "Your preferences",
+      "yourPreferencesPlaceholder": "Always note bilateral comparison when applicable.",
+      "charCount": "{used}/{max}",
+      "previewLabel": "Preview — combined prompt",
+      "previewHint": "What the AI will receive on your next call",
+      "tipsLabel": "Tips",
+      "tip1": "Keep preferences specific and short — one or two sentences.",
+      "tip2": "Use millimeters not centimeters for wound measurements.",
+      "tip3": "Note bilateral comparison when relevant.",
+      "tip4": "Don't ask the AI to interpret, diagnose, or override prior rules — those phrases are blocked.",
+      "saveButton": "Save preferences",
+      "cancelButton": "Cancel",
+      "savedToast": "Preferences saved.",
+      "errorSaving": "Couldn't save your preferences."
+    },
+    "errors": {
+      "tooLong": "Your preferences are {count} characters — the maximum is {max}.",
+      "bannedPhrase": "Your preferences contain a phrase that would weaken the safety boundary. Rephrase without telling the AI to interpret, diagnose, or override prior rules. Matched phrase: {phrase}",
+      "empty": "Preferences are empty — add some text or reset to the base prompt.",
+      "unknown": "Couldn't validate your preferences. Try again."
     }
   }
 }
