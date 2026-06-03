@@ -1,0 +1,203 @@
+# P1-FU-PROBE-BUGS — Probe `provider_override` routing + Gemini JSON resilience
+
+## Task
+
+`P1-FU-PROBE-BUGS` — Two real bugs found via live probe against
+`https://api-dev.aurionclinical.com/api/v1/admin/probe/vision-clip`:
+
+1. **Bug 1 — `provider_override` is ignored.** Sending
+   `provider_override=anthropic` to the probe endpoint, the response
+   always returns `"provider_used": "gemini"`. The override exists in
+   the form parameter and is forwarded to the registry, but the
+   response-shape resolver (`_resolve_provider_key_for_response`) and
+   the registry call resolve the provider key TWICE — at two
+   different call sites. The duplication invites drift and the
+   live-probe symptom is the first instance of that drift biting.
+
+2. **Bug 2 — Gemini JSON parse failure escapes as `ValueError`.** The
+   live probe response captured this:
+   ```json
+   {
+     "provider_used": "gemini",
+     "success": false,
+     "error_type": "ValueError",
+     "error_message": "Unterminated string starting at: line 4 column 24 (char 141)"
+   }
+   ```
+   `gemini.py:caption_clip` calls `json.loads(text.strip())` on a
+   provider response that came back truncated. The resulting
+   `json.JSONDecodeError` (a `ValueError` subclass) escapes the
+   provider boundary and is classified as a generic `ValueError`
+   downstream — the Stage 2 dispatcher does not treat it as a
+   provider failure, so the fallback chain (`get_vision_provider_with_fallback`)
+   never trips. Same pattern in `openai.py:caption_frame` (line 95),
+   `anthropic.py:caption_frame` fallback path (line 129), and
+   `gemini.py:caption_frame` (line 100).
+
+## Why
+
+* **Pilot blocking.** Without `provider_override` routing, operators
+  cannot test the Anthropic / OpenAI fallback paths through the
+  probe before flipping `vision_clip` in AppConfig — defeats the
+  probe's stated purpose (`docs/dev/gemini-probe.md`).
+* **Fallback chain semantics broken.** `CLAUDE.md` §Error handling:
+  "Provider unavailable → fallback to next, log it." A JSON parse
+  failure IS a provider failure (the wire response is malformed);
+  the registry's `get_vision_provider_with_fallback` already handles
+  `ProviderError` correctly, but never gets a chance because the
+  inner `json.loads` raises a bare `ValueError`.
+* **LSP boundary.** Every provider's error semantic should be
+  uniform: JSON parse failures look like provider failures, not
+  generic Python errors. Today only OpenAI's `httpx.HTTPError` path
+  yields `ProviderError`; the JSON-parse path does not.
+
+## Approach
+
+### Bug 1 — collapse the duplicate registry resolution in `probe.py`
+
+`_resolve_provider_key_for_response` currently resolves the override
+into a `VisionProviderKey` independently of the actual registry
+call. The fix:
+
+* Resolve ONCE: call `registry.get_vision_provider_for_kind("clip",
+  override=…)` and let the registry be the single source of truth.
+* Capture the resolved key by reading it from the registry's
+  resolution (or from the provider instance's class type) so the
+  response-shape `provider_used` field reflects what actually got
+  called.
+* Delete `_resolve_provider_key_for_response`; replace with a
+  helper that maps the provider INSTANCE → key (using the existing
+  `_VISION_PROVIDERS` reverse map) so the resolved key cannot drift
+  from the actual call target.
+
+The brief flags: "there should be ONE registry-resolution call site
+in `probe.py` — no branching on the override at the route handler
+level." Today the override is forwarded correctly, but the response
+shape is resolved independently, so a future drift between the two
+call sites would silently lie about which provider was hit.
+
+### Bug 2 — extract a shared JSON-parse helper into `vision/shared.py`
+
+The brief flags: "extract to a helper if used ≥ 3 times (it will be:
+3 providers × 2 methods = 6 sites at worst)."
+
+Real distribution:
+* `gemini.py:caption_frame` — `json.loads(text.strip())` (line 100)
+* `gemini.py:caption_clip` — `json.loads(text.strip())` (line 180)
+* `openai.py:caption_frame` — `json.loads(data["choices"][0]["message"]["content"])` (line 95)
+* `anthropic.py:caption_frame` — `json.loads(strip_markdown_fences(block["text"]))` (line 129, fallback path)
+
+That's FOUR sites. Crosses the DRY threshold.
+
+Add `vision/shared.py::parse_caption_json(provider_name, text) -> dict`:
+
+```python
+def parse_caption_json(provider_name: str, raw: str) -> dict:
+    """Parse a provider's JSON response, raising ProviderError on
+    failure.
+
+    Catches json.JSONDecodeError (a ValueError subclass) and re-raises
+    as ProviderError(provider_name, ...) so the registry's fallback
+    chain in get_vision_provider_with_fallback can trip cleanly.
+
+    Logs the first 120 chars of the failing response at WARNING level
+    so operators can diagnose truncation / shape changes without the
+    bytes ever flowing to a higher log level. No PHI — vision responses
+    are descriptive text generated by the model, not user content.
+    """
+    try:
+        return json.loads(raw.strip())
+    except json.JSONDecodeError as exc:
+        excerpt = raw[:_PARSE_FAILURE_LOG_LEN]
+        logger.warning(
+            "vision provider response JSON parse failed: provider=%s "
+            "error=%s excerpt=%r",
+            provider_name, type(exc).__name__, excerpt,
+        )
+        raise ProviderError(
+            provider_name,
+            f"response JSON parse failed: {type(exc).__name__}",
+        ) from exc
+```
+
+* OpenAI / Gemini swap `json.loads(...)` for `parse_caption_json(...)`.
+* Anthropic swaps the line-129 fallback path for `parse_caption_json(...)`.
+* The existing `ProviderError("anthropic", "No tool_use or text in vision response")`
+  fallthrough stays untouched (it's already correct semantics).
+
+### Optional finding — Gemini `maxOutputTokens` truncation
+
+The live probe error `"Unterminated string starting at: line 4
+column 24 (char 141)"` strongly suggests the Gemini response was
+truncated mid-stream. Document the current value
+(`get_config().model_params.vision.max_tokens` — defaults to 500
+per `CLAUDE.md`); raising this is out of scope for this PR. File a
+follow-up in the PR body so the AppConfig tunable can be revisited
+post-pilot.
+
+## Acceptance criteria
+
+* [ ] AC-1: `probe_vision_clip` calls `registry.get_vision_provider_for_kind("clip", override=…)` exactly ONCE per request; the resolved key the response carries is read from the same call. Verified by `tests/unit/test_probe_provider_override.py::test_probe_provider_override_forwarded_to_registry`.
+* [ ] AC-2: `probe_vision_clip` with `provider_override="anthropic"` resolves the Anthropic provider AND `response.provider_used == "anthropic"`. Verified by `tests/unit/test_probe_provider_override.py::test_probe_provider_override_alters_provider_used`.
+* [ ] AC-3: `probe_vision_clip` with no `provider_override` resolves the default provider and `response.provider_used` reflects whatever `get_config().providers.vision_clip` returns. Verified by `tests/unit/test_probe_provider_override.py::test_probe_no_override_uses_default`.
+* [ ] AC-4: `gemini.GeminiVisionProvider.caption_clip` with a Gemini response body that contains malformed JSON (truncated) raises `ProviderError("gemini", ...)`, NOT `ValueError` / `JSONDecodeError`. Verified by `tests/unit/test_vision_provider_json_resilience.py::test_gemini_caption_clip_raises_provider_error_on_json_parse_failure`.
+* [ ] AC-5: Same for `gemini.caption_frame`, `openai.caption_frame`, `anthropic.caption_frame` (line-129 fallback path). Verified by `test_vision_provider_json_resilience.py::test_*_caption_frame_raises_provider_error_on_json_parse_failure`.
+* [ ] AC-6: A WARNING log is emitted on every JSON parse failure containing the provider name + a 120-char excerpt of the raw response. No PHI; no API key. Verified by `test_vision_provider_json_resilience.py::test_*_warning_log_contains_provider_and_excerpt`.
+* [ ] AC-7: End-to-end through the registry — `get_vision_provider_with_fallback` falls through when the primary provider raises `ProviderError` from a JSON parse failure. Verified by `test_vision_provider_json_resilience.py::test_registry_fallback_trips_on_json_parse_provider_error`.
+* [ ] AC-8: No regression on `tests/integration/test_vision_clip_probe.py` (39 tests) or `tests/unit/test_clip_captioning.py`.
+
+## DRY / SOLID check
+
+* **Existing helpers to reuse**: `ProviderError`, `_VISION_PROVIDERS` (registry reverse-lookup), `build_frame_caption`, `VISION_SYSTEM_PROMPT`, `VISION_RESPONSE_SCHEMA` (all in `vision/shared.py`).
+* **New helpers introduced**:
+  * `vision/shared.py::parse_caption_json(provider_name, raw)` — crosses the DRY threshold (4 sites), and yields uniform LSP error semantics across all three providers (LSP).
+  * `provider_registry.py` — no new helper. A reverse map `_VISION_PROVIDER_KEYS` (class → key) is needed if we go the "read resolved key from provider instance" route; alternatively `probe.py` computes the resolved key locally by inspecting the override + config once.
+* **OCP**: adding a new vision provider doesn't require touching `parse_caption_json` — it works for any provider name; the registry's existing `_VISION_PROVIDERS` map carries the OCP extension point.
+
+## Security implications
+
+* **PHI in logs**: the WARNING log excerpt is the first 120 chars of
+  the *provider's* response — model-generated descriptive text per
+  the vision prompt, not user content. Still defensively truncated.
+  Compliance scan in §8 verifies no `frame_id`, `session_id`, `s3_key`,
+  or `audio_anchor.text` ever ends up in the WARNING log.
+* **API key leakage**: `parse_caption_json` only sees the JSON
+  text from the provider response — keys are scrubbed at the probe
+  boundary by `_scrub_secrets` if they appear in error messages.
+  The helper does not log the full exception (which is what could
+  carry a key in `RequestException.__str__`).
+* **Audit log**: untouched. The probe's existing `VISION_CLIP_PROBED`
+  emit on success and failure still fires; the error_type now reads
+  `"ProviderError"` (uniform) instead of `"ValueError"` (drift-prone).
+* **Fallback chain semantics**: preserved. A `ProviderError` from
+  Gemini → registry trips to OpenAI → still-extraction path runs.
+  Stage 2 dispatcher's existing `ProviderError` handler does not
+  change.
+
+## Out of scope
+
+* Raising Gemini's `maxOutputTokens`. Filed as a follow-up.
+* Refactoring the three `caption_clip` methods to a common base.
+  Each provider's clip handling differs by design (Gemini native
+  vs OpenAI/Anthropic still-extraction); only the JSON parse step
+  collapses.
+* Changing the probe's form-vs-query parameter style. The endpoint
+  remains `Form(default=None)` for compatibility with the existing
+  Postman collection and `docs/dev/gemini-probe.md` curl examples.
+
+## Test plan (executable)
+
+1. `cd backend && python3 -m pytest tests/unit/test_probe_provider_override.py tests/unit/test_vision_provider_json_resilience.py -v` → all pass.
+2. `cd backend && python3 -m pytest tests/integration/test_vision_clip_probe.py tests/unit/test_clip_captioning.py -v` → no regression.
+3. `cd backend && python3 -m pytest -q` → 831 baseline → 845+ (14 new tests across the two new files).
+4. `cd backend && ruff check .` → clean.
+
+## Findings to file (PR body)
+
+* **Gemini `maxOutputTokens`** — current value is
+  `get_config().model_params.vision.max_tokens` (defaults to 500 per
+  `CLAUDE.md`). The live probe truncation at "char 141" suggests the
+  Gemini response was cut mid-stream. A 2-second clip's literal
+  description SHOULDN'T need 500 tokens, but the response also includes
+  the `confidence_reason` field. Investigate post-pilot whether the
+  cap should be raised or the prompt tightened to shorten output.
