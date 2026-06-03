@@ -761,3 +761,29 @@ export interface CodingSuggestion {
   created_at: string;
   updated_at: string;
 }
+
+/* ─── AI Prompts Transparency (AI-PROMPTS-A) ─────────────────────────────── */
+
+export type PromptCategory = "note" | "vision" | "extraction" | "preview";
+
+/**
+ * One LLM system prompt the encounter-analysis pipeline uses,
+ * surfaced read-only on /portal/prompts.
+ *
+ * `override_text` + `is_overridden` are forward-compatible fields
+ * for Phase B per-physician overlays — always null / false today.
+ * Clients should prefer `override_text` when populated and fall
+ * back to `system_prompt` otherwise.
+ */
+export interface AIPrompt {
+  id: string;
+  name: string;
+  purpose: string;
+  category: PromptCategory;
+  runs_when: string;
+  provider_field: string;
+  system_prompt: string;
+  schema_note: string | null;
+  override_text: string | null;
+  is_overridden: boolean;
+}

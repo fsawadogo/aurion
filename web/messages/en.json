@@ -14,7 +14,8 @@
       "myNotes": "My Notes",
       "templates": "Templates",
       "macros": "Macros",
-      "myProfile": "My Profile"
+      "myProfile": "My Profile",
+      "aiPrompts": "AI Prompts"
     },
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
@@ -181,5 +182,30 @@
     "close": "Close",
     "unavailable": "Clip not yet available. The note may still be processing.",
     "controls": "Use video controls to play or pause."
+  },
+  "AIPrompts": {
+    "eyebrow": "Transparency",
+    "title": "AI Prompts",
+    "subtitle": "The exact instructions every AI model receives when analyzing your encounters.",
+    "descriptiveModeCallout": "Every prompt below enforces descriptive mode: the AI is told to describe what was captured, never to interpret, diagnose, or suggest clinical conclusions. This is the safety boundary Aurion's pilot operates under.",
+    "phaseAReadOnlyChip": "Phase A: read-only",
+    "phaseBHint": "A future update will let you customize these instructions per physician.",
+    "searchPlaceholder": "Filter by name or purpose…",
+    "noResults": "No prompts match your filter.",
+    "expandLabel": "Show the exact instructions sent to the AI",
+    "collapseLabel": "Hide the exact instructions",
+    "runsWhenLabel": "When this runs",
+    "purposeLabel": "What it does",
+    "instructionsLabel": "Exact system prompt",
+    "outputShapeLabel": "Expected output",
+    "poweredByLabel": "Provider field",
+    "loadError": "Couldn't load the AI prompts catalog.",
+    "loading": "Loading…",
+    "category": {
+      "note": "Notes",
+      "vision": "Vision",
+      "extraction": "Extraction",
+      "preview": "Live preview"
+    }
   }
 }
