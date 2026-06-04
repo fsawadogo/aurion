@@ -88,7 +88,6 @@ from app.modules.longitudinal_context.service import (  # noqa: E402
 )
 from app.modules.note_gen.service import calculate_completeness  # noqa: E402
 
-
 # ── Postgres reachability gate (mirrors e2e conftest) ───────────────────────
 
 _PG_HOST = os.getenv("AURION_TEST_PG_HOST", "localhost")

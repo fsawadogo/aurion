@@ -79,6 +79,16 @@ def upgrade() -> None:
         ["external_reference_id_hash"],
     )
 
+    # Offline mode (``alembic upgrade --sql``) renders the upgrade as
+    # static SQL and the bind doesn't return rows. Back-fill is a no-
+    # op there; the operator runs the script against a live DB instead.
+    if op.get_context().as_sql:
+        logger.info(
+            "Skipping #61 back-fill in offline SQL mode — run "
+            "scripts/backfill_identifier_hash.py against the live DB."
+        )
+        return
+
     # Back-fill — decrypt every existing ciphertext and write its hash.
     # Imports are inside the function so a `downgrade` shell that
     # doesn't have the FastAPI app's import path still works (Alembic
@@ -98,14 +108,22 @@ def upgrade() -> None:
         return
 
     bind = op.get_bind()
-    rows = bind.execute(
+    result = bind.execute(
         sa.text(
             "SELECT id, external_reference_id_encrypted "
             "FROM sessions "
             "WHERE external_reference_id_encrypted IS NOT NULL "
             "AND external_reference_id_hash IS NULL"
         )
-    ).fetchall()
+    )
+    # Defensive — some test harnesses stub the bind so `execute`
+    # returns None; treat that the same as offline mode.
+    if result is None:
+        logger.warning(
+            "Skipping #61 back-fill — bind.execute returned no result."
+        )
+        return
+    rows = result.fetchall()
 
     for row in rows:
         try:

@@ -47,7 +47,6 @@ from app.core.identifier_hash import hash_identifier  # noqa: E402
 from app.core.models import SessionModel, UserModel  # noqa: E402
 from app.core.types import SessionState, UserRole  # noqa: E402
 
-
 _PG_HOST = os.getenv("AURION_TEST_PG_HOST", "localhost")
 _PG_PORT = int(os.getenv("AURION_TEST_PG_PORT", "5434"))
 _PG_USER = os.getenv("AURION_TEST_PG_USER", "aurion")
