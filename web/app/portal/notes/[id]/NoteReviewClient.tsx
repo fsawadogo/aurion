@@ -11,6 +11,7 @@ import CodingSuggestionsCard from "@/components/portal/CodingSuggestionsCard";
 import CompletenessRing from "@/components/portal/CompletenessRing";
 import EmrWriteBackCard from "@/components/portal/EmrWriteBackCard";
 import LivePreviewCard from "@/components/portal/LivePreviewCard";
+import NoteContextBadge from "@/components/portal/NoteContextBadge";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
 import OrdersCard from "@/components/portal/OrdersCard";
 import PageHeader from "@/components/portal/PageHeader";
@@ -202,11 +203,24 @@ export default function NoteReviewPage() {
         }
         actions={
           detail ? (
-            <PatientIdentifierEditor
-              sessionId={sessionId}
-              currentIdentifier={detail.export_metadata.external_reference_id}
-              onChange={() => void load()}
-            />
+            <div className="flex items-center gap-2">
+              {/* #61 full slice — "Context-aware" badge surfaces when
+                  Stage 1 actually consumed prior encounters into the
+                  LLM prompt. Hidden when prior_context_used is null
+                  (cold-start session, pre-#61 backend) or its count
+                  is zero. Clicking routes to the patient timeline. */}
+              <NoteContextBadge
+                encountersReferenced={
+                  detail.note.prior_context_used?.encounters_referenced ?? 0
+                }
+                identifier={detail.export_metadata.external_reference_id}
+              />
+              <PatientIdentifierEditor
+                sessionId={sessionId}
+                currentIdentifier={detail.export_metadata.external_reference_id}
+                onChange={() => void load()}
+              />
+            </div>
           ) : undefined
         }
       />
