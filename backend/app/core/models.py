@@ -6,7 +6,17 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
-from sqlalchemy import Boolean, DateTime, Enum, Float, Integer, LargeBinary, String, Text
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+)
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
@@ -38,6 +48,46 @@ class UserModel(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
     voice_enrolled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     last_login_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # ── AUTH-PIVOT-BACKEND — backend-issued JWT + TOTP MFA ─────────────────
+    #
+    # ``mfa_secret_encrypted`` is the KMS-encrypted TOTP base32 secret. The
+    # raw secret is never persisted plaintext and never logged; the helper
+    # in ``app.core.kms_encryption`` is the only call site. NULL until the
+    # user enrolls; cleared back to NULL on admin-issued MFA reset.
+    #
+    # ``mfa_enrolled_at`` is the canonical "MFA on?" flag for the login
+    # router. We keep both columns because the encrypted secret alone
+    # would force a KMS round-trip every login just to know whether MFA
+    # was set — the timestamp lets us short-circuit cheaply, then decrypt
+    # only when verifying a code.
+    #
+    # ``failed_login_count`` + ``locked_until`` back the in-DB lockout
+    # gate (5 failures → 15 minutes). Counter resets on successful login
+    # so a returning user with a few stale failures doesn't stay near
+    # the threshold forever. ``locked_until`` is a wall-clock timestamp:
+    # once it passes, the next ``record_failure`` flips the counter
+    # back to 1 (a fresh lockout window starts only after the next
+    # streak), and a successful login zeroes both columns.
+    #
+    # ``last_password_changed_at`` is for the iOS forced-change UI in a
+    # follow-up PR (we never enforce a hard rotation cadence here; the
+    # column is the data anchor that lets a future policy do so without
+    # a schema migration).
+    mfa_secret_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    mfa_enrolled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    failed_login_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_password_changed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
@@ -1077,4 +1127,98 @@ class PromptOverrideModel(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class RefreshTokenModel(Base):
+    """Refresh-token row for the backend-issued JWT pipeline (AUTH-PIVOT-BACKEND).
+
+    The raw token (a 256-bit URL-safe base64 string) is returned to the
+    client exactly once — in the body of the issuing /auth/login or
+    /auth/refresh response. The DB stores only ``token_hash`` (SHA-256
+    of the raw token). SHA-256 was chosen over bcrypt because the read
+    path is a constant-time hash + indexed equality lookup, not a
+    password verification — refresh tokens are random opaque secrets,
+    not user-chosen, so brute-force resistance comes from entropy, not
+    work factor.
+
+    ``revoked_at`` is the canonical "is this token still good?" flag.
+    Rotation on /auth/refresh sets the previous row's ``revoked_at``
+    and writes a new row. Logout sets ``revoked_at`` on the row of the
+    refresh token presented in the request. Password reset revokes
+    every refresh token for the user. Lookups always filter on
+    ``revoked_at IS NULL AND expires_at > now()``.
+
+    ``issued_user_agent`` and ``issued_ip_hash`` are best-effort
+    forensics signals so a compromise audit can correlate a leaked
+    token to a device — never logged in plaintext, never PHI, never
+    user-presented. ``issued_ip_hash`` is SHA-256 of the raw IP for
+    the same one-way reason refresh tokens are stored hashed.
+    """
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, index=True)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, index=True
+    )
+    revoked_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    issued_user_agent: Mapped[str | None] = mapped_column(
+        String(255), nullable=True
+    )
+    issued_ip_hash: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+
+
+class PasswordResetTokenModel(Base):
+    """Self-serve email-link password reset token (AUTH-PIVOT-BACKEND).
+
+    Same one-way storage as ``RefreshTokenModel``: the raw token is
+    URL-safe and goes into the reset link emailed to the user; the DB
+    stores SHA-256. 24-hour TTL. Each row is single-use — verifying a
+    token sets ``consumed_at`` so a replay of the same link 401s. The
+    audit-trail invariant is reconstructible from the row regardless
+    of whether the reset succeeded.
+
+    The forgot-password endpoint always returns 204, even when the email
+    doesn't map to a user, so the column ``user_id`` is FK-CASCADE'd
+    from ``users.id`` because we never write a row at all for unknown
+    emails — there's nothing to FK to.
+    """
+
+    __tablename__ = "password_reset_tokens"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    user_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    token_hash: Mapped[bytes] = mapped_column(LargeBinary, nullable=False, index=True)
+    issued_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    consumed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )

@@ -113,6 +113,19 @@ EXPECTED_VALUES: dict[str, str] = {
     # Longitudinal patient context (#61, full slice). Fires once per
     # Stage 1 note-gen call where prior encounters were consumed.
     "LONGITUDINAL_CONTEXT_LOADED": "longitudinal_context_loaded",
+    # Auth pivot (AUTH-PIVOT-BACKEND) — every auth state change.
+    "LOGIN_SUCCESS": "login_success",
+    "LOGIN_FAILURE": "login_failure",
+    "LOGIN_LOCKED": "login_locked",
+    "LOGOUT": "logout",
+    "MFA_ENROLLED": "mfa_enrolled",
+    "MFA_RESET": "mfa_reset",
+    "PASSWORD_RESET_REQUESTED": "password_reset_requested",
+    "PASSWORD_CHANGED": "password_changed",
+    "ADMIN_PASSWORD_RESET_ISSUED": "admin_password_reset_issued",
+    "REFRESH_TOKEN_ISSUED": "refresh_token_issued",
+    "REFRESH_TOKEN_ROTATED": "refresh_token_rotated",
+    "REFRESH_TOKEN_REVOKED": "refresh_token_revoked",
 }
 
 
