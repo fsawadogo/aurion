@@ -2,7 +2,6 @@
 
 import { Download, Filter, Search } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -28,7 +27,6 @@ function eventBadgeVariant(
 }
 
 export default function AuditPage() {
-  const router = useRouter();
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -239,8 +237,13 @@ export default function AuditPage() {
                   events.map((evt, i) => (
                     <tr
                       key={`${evt.session_id}-${evt.event_timestamp}-${i}`}
+                      // Hard navigation for dynamic `/audit/[sessionId]` —
+                      // Next router collapses the URL under static export.
+                      // See web/lib/use-route-segment.ts.
                       onClick={() =>
-                        router.push(`/audit/${encodeURIComponent(evt.session_id)}`)
+                        window.location.assign(
+                          `/audit/${encodeURIComponent(evt.session_id)}`,
+                        )
                       }
                       className="cursor-pointer transition-colors hover:bg-gray-50/80"
                     >

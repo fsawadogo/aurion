@@ -186,14 +186,18 @@ export default function EvalPage() {
                             {s.scores ? `${s.scores.overall}%` : "--"}
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-sm">
-                            <Link
+                            {/* Plain anchor for dynamic `/eval/[id]` —
+                                Next `<Link>` collapses the URL under
+                                static export.
+                                See web/lib/use-route-segment.ts. */}
+                            <a
                               href={`/eval/${encodeURIComponent(s.id)}`}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <Button variant="ghost" size="sm">
                                 Open triad
                               </Button>
-                            </Link>
+                            </a>
                           </td>
                         </tr>
                       ))

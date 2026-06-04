@@ -2,7 +2,6 @@
 
 import { CheckCircle2, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -50,7 +49,6 @@ function ProgressRing({ value, size = 100 }: { value: number; size?: number }) {
 }
 
 export default function MaskingPage() {
-  const router = useRouter();
   const [report, setReport] = useState<MaskingReport | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -214,8 +212,13 @@ export default function MaskingPage() {
                   displayReport.sessions.map((s) => (
                     <tr
                       key={s.session_id}
+                      // Hard navigation for dynamic `/audit/[sessionId]` —
+                      // Next router collapses the URL under static export.
+                      // See web/lib/use-route-segment.ts.
                       onClick={() =>
-                        router.push(`/audit/${encodeURIComponent(s.session_id)}`)
+                        window.location.assign(
+                          `/audit/${encodeURIComponent(s.session_id)}`,
+                        )
                       }
                       className="cursor-pointer transition-colors hover:bg-gray-50/80"
                     >

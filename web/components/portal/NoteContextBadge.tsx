@@ -1,7 +1,6 @@
 "use client";
 
 import { Clock4 } from "lucide-react";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 /**
@@ -47,12 +46,15 @@ export default function NoteContextBadge({
   if (!identifier || !identifier.trim()) return null;
 
   return (
-    <Link
+    // Plain anchor (not Next `<Link>`) for dynamic routes — Next's
+    // client-side router collapses unknown `[identifier]` segments
+    // under `output: "export"` + `dynamicParams = false`, breaking
+    // the URL bar and downstream `useRouteSegment()`. A full browser
+    // navigation lets Amplify's status-200 rewrite serve the
+    // placeholder shell with the real URL intact. See
+    // web/lib/use-route-segment.ts for the bug history.
+    <a
       href={`/portal/patients/${encodeURIComponent(identifier)}`}
-      // Gold-tinted chip — matches the patient identifier chip pattern
-      // already used elsewhere on this header so the affordances feel
-      // related. Same neutral border + amber-leaning fill the iOS
-      // badge uses.
       className="inline-flex items-center gap-2 rounded-full border border-gold-200 bg-gold-50 px-3 py-1.5 text-sm font-medium text-gold-700 transition hover:bg-gold-100 hover:text-gold-800 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-gold-500"
       aria-label={t("badge.contextAware")}
       title={t("badge.tapToView")}
@@ -64,6 +66,6 @@ export default function NoteContextBadge({
       <span>
         {t("badge.priorVisitsCount", { count: encountersReferenced })}
       </span>
-    </Link>
+    </a>
   );
 }

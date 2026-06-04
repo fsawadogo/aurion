@@ -162,13 +162,16 @@ export default function PortalTemplatesPage() {
                   </p>
                 </div>
                 {t.is_shared && <Badge variant="info">Shared</Badge>}
-                <Link
+                {/* Plain anchor for dynamic `/portal/templates/[id]` —
+                    Next `<Link>` collapses the URL under static export.
+                    See web/lib/use-route-segment.ts. */}
+                <a
                   href={`/portal/templates/${t.id}`}
                   className="inline-flex items-center gap-1 text-sm text-navy-700 hover:text-navy-900"
                 >
                   <SquarePen className="h-4 w-4" />
                   Open
-                </Link>
+                </a>
                 <button
                   type="button"
                   onClick={() => void onDelete(t)}

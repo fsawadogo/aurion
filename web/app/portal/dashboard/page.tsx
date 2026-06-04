@@ -278,7 +278,9 @@ function SessionRow({
 }) {
   return (
     <li className="py-2.5">
-      <Link
+      {/* Plain anchor — Next `<Link>` collapses dynamic `[id]` segments
+          under static export. See web/lib/use-route-segment.ts. */}
+      <a
         href={`/portal/notes/${session.id}`}
         className="flex items-center gap-3 hover:bg-gray-50 -mx-2 px-2 py-1 rounded-md transition-colors"
       >
@@ -301,7 +303,7 @@ function SessionRow({
           <Badge variant="warning" dot>Review</Badge>
         )}
         <ArrowRight className="h-4 w-4 text-gray-300 shrink-0" />
-      </Link>
+      </a>
     </li>
   );
 }
@@ -392,7 +394,9 @@ function RecentCard({
 }) {
   const variant = badgeVariantFor(session.state);
   return (
-    <Link
+    /* Plain anchor — Next `<Link>` collapses dynamic `[id]` segments
+       under static export. See web/lib/use-route-segment.ts. */
+    <a
       href={`/portal/notes/${session.id}`}
       className="snap-start min-w-[220px] flex-1 rounded-aurion-md border border-aurion-hairline bg-aurion-card p-3.5 transition-all duration-aurion ease-aurion hover:shadow-card hover:-translate-y-px hover:border-gold-300"
     >
@@ -416,7 +420,7 @@ function RecentCard({
           {session.id.slice(0, 8)}
         </p>
       )}
-    </Link>
+    </a>
   );
 }
 

@@ -2,7 +2,7 @@
 
 import { Check } from "lucide-react";
 import { Suspense, useCallback, useEffect, useState } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
@@ -38,7 +38,6 @@ export default function NewTemplatePage() {
 }
 
 function NewTemplateInner() {
-  const router = useRouter();
   const search = useSearchParams();
   const resumeId = search.get("session");
 
@@ -98,7 +97,10 @@ function NewTemplateInner() {
     setError(null);
     try {
       const custom = await finalizeTemplateAuthoring(authSession.id);
-      router.push(`/portal/templates/${custom.id}`);
+      // Hard navigation for dynamic `/portal/templates/[id]` — Next
+      // router collapses the URL under static export. See
+      // web/lib/use-route-segment.ts.
+      window.location.assign(`/portal/templates/${custom.id}`);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Save failed.");
       setFinalizing(false);

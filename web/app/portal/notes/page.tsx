@@ -246,7 +246,11 @@ export default function PortalSessionsInboxPage() {
                   />
                 )}
                 {!isSelectable && <span className="w-6 shrink-0" aria-hidden />}
-                <Link
+                {/* Plain anchor for dynamic-route nav — see
+                    web/lib/use-route-segment.ts header. Next `<Link>`
+                    under `output: "export"` + `dynamicParams = false`
+                    collapses the URL bar to `/portal/notes`. */}
+                <a
                   href={`/portal/notes/${s.id}`}
                   className="flex flex-1 items-center gap-4 py-3 px-1 hover:bg-gray-50 transition-colors rounded-md"
                 >
@@ -270,7 +274,7 @@ export default function PortalSessionsInboxPage() {
                     <StateBadge state={s.state} />
                   </div>
                   <ArrowRight className="h-4 w-4 text-gray-300 shrink-0" />
-                </Link>
+                </a>
               </li>
               );
             })}
