@@ -1076,6 +1076,30 @@ struct SessionResponse: Codable, Sendable {
     }
 }
 
+/// Slim, count-only summary of the prior-encounter context Stage 1
+/// note-gen consumed for this note (#61, full slice).
+///
+/// Mirrors the backend `PriorContextUsedSummary` Pydantic type
+/// (`backend/app/core/types.py`). Carries NO PHI:
+///   * ``encountersReferenced`` is the integer count of prior visits
+///     the LLM actually saw — drives the badge's
+///     ``encounters_referenced > 0`` visibility gate.
+///   * ``lastEncounterDate`` is the ISO-8601 calendar date of the
+///     most recent prior visit, or nil when no prior was found.
+///
+/// Decoded from ``prior_context_used`` on the note response payload.
+/// Older payloads (pre-#61 backends) decode unchanged because the
+/// field is optional all the way down.
+struct PriorContextUsed: Codable, Sendable, Equatable {
+    let encountersReferenced: Int
+    let lastEncounterDate: String?
+
+    enum CodingKeys: String, CodingKey {
+        case encountersReferenced = "encounters_referenced"
+        case lastEncounterDate = "last_encounter_date"
+    }
+}
+
 struct NoteResponse: Codable, Equatable, Sendable {
     let sessionId: String
     let stage: Int
@@ -1084,12 +1108,57 @@ struct NoteResponse: Codable, Equatable, Sendable {
     let specialty: String
     let completenessScore: Double
     let sections: [NoteSectionResponse]
+    /// #61 full slice — populated when Stage 1 actually consumed
+    /// prior encounters into the LLM prompt. nil for cold-start
+    /// sessions (no identifier set) and for older backend payloads
+    /// pre-#61. Read by ``NoteReviewView`` to gate the
+    /// "Context-aware" badge: visible iff
+    /// ``priorContextUsed?.encountersReferenced > 0``.
+    let priorContextUsed: PriorContextUsed?
 
     enum CodingKeys: String, CodingKey {
         case stage, version, specialty, sections
         case sessionId = "session_id"
         case providerUsed = "provider_used"
         case completenessScore = "completeness_score"
+        case priorContextUsed = "prior_context_used"
+    }
+
+    init(
+        sessionId: String,
+        stage: Int,
+        version: Int,
+        providerUsed: String,
+        specialty: String,
+        completenessScore: Double,
+        sections: [NoteSectionResponse],
+        priorContextUsed: PriorContextUsed? = nil
+    ) {
+        self.sessionId = sessionId
+        self.stage = stage
+        self.version = version
+        self.providerUsed = providerUsed
+        self.specialty = specialty
+        self.completenessScore = completenessScore
+        self.sections = sections
+        self.priorContextUsed = priorContextUsed
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        stage = try c.decode(Int.self, forKey: .stage)
+        version = try c.decode(Int.self, forKey: .version)
+        providerUsed = try c.decode(String.self, forKey: .providerUsed)
+        specialty = try c.decode(String.self, forKey: .specialty)
+        completenessScore = try c.decode(Double.self, forKey: .completenessScore)
+        sections = try c.decode([NoteSectionResponse].self, forKey: .sections)
+        // Optional + back-compatible: older Stage 1 payloads (pre-#61)
+        // simply lack the key, and `decodeIfPresent` returns nil
+        // without throwing. The badge stays hidden in that case.
+        priorContextUsed = try c.decodeIfPresent(
+            PriorContextUsed.self, forKey: .priorContextUsed
+        )
     }
 }
 

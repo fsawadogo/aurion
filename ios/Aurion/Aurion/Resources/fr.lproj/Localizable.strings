@@ -87,6 +87,9 @@
 "priorEncounters.fullList.title" = "Visites pour %@";
 "priorEncounters.fullList.empty" = "Aucune visite pr\U00E9c\U00E9dente pour l\U2019instant.";
 "priorEncounters.a11y.tapCard" = "Ouvrir la visite du %@";
+"priorEncounters.contextBadge.title" = "Contexte int\U00E9gr\U00E9";
+"priorEncounters.contextBadge.subtitle" = "Note g\U00E9n\U00E9r\U00E9e \U00E0 partir de %d visite(s) ant\U00E9rieure(s)";
+"priorEncounters.contextBadge.tapToView" = "Toucher pour voir les visites pr\U00E9c\U00E9dentes";
 
 /* ── R\U00E9sum\U00E9 patient (#59) ───────────────────────────── */
 "summary.title" = "R\U00E9sum\U00E9 patient";

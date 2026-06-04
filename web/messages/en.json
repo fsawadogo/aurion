@@ -183,6 +183,13 @@
     "unavailable": "Clip not yet available. The note may still be processing.",
     "controls": "Use video controls to play or pause."
   },
+  "LongitudinalContext": {
+    "badge": {
+      "contextAware": "Context-aware",
+      "priorVisitsCount": "{count, plural, one {# prior visit} other {# prior visits}}",
+      "tapToView": "Tap to view prior encounters"
+    }
+  },
   "PatientDetail": {
     "eyebrow": "Patient encounters",
     "title": "Patient encounters",

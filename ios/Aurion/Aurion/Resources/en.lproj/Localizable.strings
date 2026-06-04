@@ -87,6 +87,9 @@
 "priorEncounters.fullList.title" = "Encounters for %@";
 "priorEncounters.fullList.empty" = "No prior encounters yet.";
 "priorEncounters.a11y.tapCard" = "Open encounter from %@";
+"priorEncounters.contextBadge.title" = "Context-aware";
+"priorEncounters.contextBadge.subtitle" = "Note generated using %d prior visit(s)";
+"priorEncounters.contextBadge.tapToView" = "Tap to view prior encounters";
 
 /* ── Patient summary (#59) ─────────────────────────────── */
 "summary.title" = "Patient Summary";

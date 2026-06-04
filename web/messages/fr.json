@@ -183,6 +183,13 @@
     "unavailable": "Clip non disponible pour l’instant. La note est peut-être encore en traitement.",
     "controls": "Utilisez les contrôles vidéo pour lire ou mettre en pause."
   },
+  "LongitudinalContext": {
+    "badge": {
+      "contextAware": "Contexte intégré",
+      "priorVisitsCount": "{count, plural, one {# visite antérieure} other {# visites antérieures}}",
+      "tapToView": "Toucher pour voir les visites précédentes"
+    }
+  },
   "PatientDetail": {
     "eyebrow": "Consultations du patient",
     "title": "Consultations du patient",

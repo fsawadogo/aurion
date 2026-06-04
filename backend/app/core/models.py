@@ -89,6 +89,17 @@ class SessionModel(Base):
     external_reference_id_encrypted: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True
     )
+    # Deterministic HMAC-SHA256 of the same identifier, used for indexed
+    # lookups (#61, full slice). 32 raw bytes; NULL when no identifier is
+    # set on the row. The hash is one-way (HMAC; even with the column
+    # leaked an attacker can't reverse it without the key), and is the
+    # WHERE-clause anchor for `GET /me/patients/{identifier}/sessions`
+    # and `get_prior_context`. Kept in sync with the encrypted column on
+    # every PATCH /sessions/{id}/identifier. See
+    # `app/core/identifier_hash.py` for the hashing rule.
+    external_reference_id_hash: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True, index=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

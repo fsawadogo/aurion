@@ -81,3 +81,54 @@ output "secret_arn_assemblyai_api_key" {
   description = "ARN of the AssemblyAI API key secret"
   value       = aws_secretsmanager_secret.provider_api_key["assemblyai"].arn
 }
+
+# -----------------------------------------------------------------------------
+# Patient identifier HMAC key (#61, full slice)
+# -----------------------------------------------------------------------------
+# Backs `app/core/identifier_hash.py`. The new
+# `sessions.external_reference_id_hash` column (Alembic 0027) stores an
+# HMAC-SHA256 of the patient identifier so the per-physician prior-
+# encounters lookup can hit an indexed equality predicate. The key MUST
+# be a 32-byte secret; the placeholder below ships as a literal string so
+# `terraform apply` succeeds on a fresh account. Operator rotates the
+# real key in via:
+#
+#   aws secretsmanager put-secret-value \
+#     --secret-id aurion/$ENV/identifier-hmac-key \
+#     --secret-string "$(openssl rand -base64 32)"
+#
+# `lifecycle.ignore_changes = [secret_string]` prevents Terraform from
+# clobbering the rotated value on subsequent applies, same pattern as
+# the provider API keys above.
+#
+# Rotating the key is a breaking change for the indexed lookup: every
+# hash in the DB becomes incomparable until back-filled. A dual-write
+# rotation window is deferred to a future PR; for the pilot the single
+# key is set once and left alone.
+
+resource "aws_secretsmanager_secret" "identifier_hmac_key" {
+  name        = "aurion/${var.environment}/identifier-hmac-key"
+  description = "HMAC-SHA256 key for the deterministic patient identifier hash column (#61). 32 random bytes, base64-encoded."
+  kms_key_id  = aws_kms_key.main.id
+
+  recovery_window_in_days = var.environment == "prod" ? 30 : 7
+
+  tags = {
+    Name        = "aurion-identifier-hmac-key-${var.environment}"
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "identifier_hmac_key" {
+  secret_id     = aws_secretsmanager_secret.identifier_hmac_key.id
+  secret_string = "PLACEHOLDER - rotate via 'openssl rand -base64 32 | aws secretsmanager put-secret-value'"
+
+  lifecycle {
+    ignore_changes = [secret_string]
+  }
+}
+
+output "secret_arn_identifier_hmac_key" {
+  description = "ARN of the patient identifier HMAC key secret"
+  value       = aws_secretsmanager_secret.identifier_hmac_key.arn
+}

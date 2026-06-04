@@ -122,6 +122,11 @@ resource "aws_appconfig_configuration_profile" "main" {
             clip_window_ms           = { type = "integer", minimum = 1000, maximum = 30000 }
             clip_ring_buffer_seconds = { type = "integer", minimum = 5, maximum = 60 }
             clip_trigger_kinds       = { type = "array", items = { type = "string" } }
+            # Longitudinal patient context (#61, full slice). Cap on
+            # the number of prior encounters Stage 1 note-gen feeds to
+            # the LLM as additional context. Mirrors PipelineConfig in
+            # backend/app/modules/config/schema.py.
+            longitudinal_context_max_encounters = { type = "integer", minimum = 1, maximum = 10 }
           }
         }
         feature_flags = {
@@ -203,6 +208,11 @@ resource "aws_appconfig_hosted_configuration_version" "main" {
       clip_window_ms           = 7000
       clip_ring_buffer_seconds = 15
       clip_trigger_kinds       = ["motion", "rom", "gait", "procedural"]
+      # Longitudinal patient context (#61, full slice). Default of 3
+      # matches the Pydantic schema default — "last visit, the one
+      # before, and one more for context" — and stays well inside the
+      # LLM input budget. Tunable up to 10 without a code change.
+      longitudinal_context_max_encounters = 3
     }
     feature_flags = {
       # Disabled for the pilot. Aurion is a wearable scribe — clinical signal

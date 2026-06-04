@@ -38,11 +38,18 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
         stage: int,
         output_language: str = "en",
         system_prompt: str | None = None,
+        prior_context_text: str | None = None,
     ) -> Note:
         if not _GOOGLE_AI_API_KEY:
             raise ProviderError("gemini", "GOOGLE_AI_API_KEY not configured")
 
-        user_prompt = build_user_prompt(transcript, template, stage, output_language)
+        user_prompt = build_user_prompt(
+            transcript,
+            template,
+            stage,
+            output_language,
+            prior_context_text=prior_context_text,
+        )
         # AI-PROMPTS-B — service-assembled system prompt (base +
         # per-physician overlay) when present; bare base constant
         # otherwise.

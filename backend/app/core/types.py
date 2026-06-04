@@ -80,6 +80,29 @@ class NoteSection(BaseModel):
     claims: list[NoteClaim] = Field(default_factory=list)
 
 
+class PriorContextUsedSummary(BaseModel):
+    """Slim count-only summary of how much prior-encounter context was
+    fed into the Stage 1 LLM call for this note (#61, full slice).
+
+    Attached to ``Note.prior_context_used`` after a Stage 1 generation
+    that consumed prior context. Carries NO PHI: the integer count of
+    encounters the model actually saw and the calendar date of the
+    most recent prior visit (or null when no prior was found). The
+    iOS badge and web chip read ``encounters_referenced > 0`` to
+    decide whether to show the "Context-aware" affordance. Neither
+    surface ever sees the prior session ids or any clinical content
+    through this attribute — they re-fetch the rail via the existing
+    ``/me/patients/{identifier}/sessions`` endpoint when the physician
+    taps through.
+    """
+
+    encounters_referenced: int = Field(..., ge=0)
+    # ISO-8601 calendar date as a string so the wire serialization is
+    # deterministic across iOS / web clients without timezone
+    # surprises. ``None`` when the lookup found zero prior encounters.
+    last_encounter_date: Optional[str] = None
+
+
 class Note(BaseModel):
     session_id: str
     stage: int
@@ -88,6 +111,14 @@ class Note(BaseModel):
     specialty: str
     completeness_score: float = 0.0
     sections: list[NoteSection] = Field(default_factory=list)
+    # ``prior_context_used`` is populated by the Stage 1 service when
+    # the session's identifier matched at least one prior encounter
+    # for this clinician. ``None`` when no prior context was loaded
+    # (no identifier, lookup skipped, etc.) — distinct from
+    # ``{encounters_referenced: 0, ...}`` which means "we looked but
+    # found nothing". Older Stage 1 payloads pre-#61 decode unchanged
+    # (defaults to None). NEVER carries PHI.
+    prior_context_used: Optional[PriorContextUsedSummary] = None
 
     def get_section(self, section_id: str) -> Optional[NoteSection]:
         for s in self.sections:

@@ -39,6 +39,7 @@ from app.api.v1.admin._shared import (
 )
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
+from app.core.identifier_hash import hash_identifier
 from app.core.kms_encryption import decrypt_str
 from app.core.models import (
     CustomTemplateModel,
@@ -995,10 +996,16 @@ async def list_my_sessions_by_patient_identifier(
     """Return prior sessions tagged with the same patient identifier.
 
     Scoped to the calling clinician — we never reveal another clinician's
-    sessions even when the identifier matches. Decrypts the identifier
-    on each row to compare (no plaintext index column today; pilot scale
-    makes the linear scan trivial). A future PR can add a deterministic
-    hash column for indexed lookup if performance demands it.
+    sessions even when the identifier matches.
+
+    Lookup is indexed on the deterministic HMAC hash column
+    (``ix_sessions_external_reference_id_hash`` from Alembic 0027). The
+    plaintext identifier never lands in the DB; we hash the request
+    parameter the same way ``PATCH /sessions/{id}/identifier`` did when
+    the row was first written, and equality on the hash column hits the
+    index directly. The post-#61-foundation linear-scan + per-row
+    decrypt was the right shape at pilot launch but didn't scale past
+    a few hundred sessions per physician.
 
     Empty/blank identifier → 422; comparison is exact-match
     case-sensitive (the same physician should reproduce the same
@@ -1010,38 +1017,27 @@ async def list_my_sessions_by_patient_identifier(
             status_code=422, detail="identifier must be non-empty"
         )
 
-    stmt = select(SessionModel).where(
-        SessionModel.clinician_id == user.user_id,
-        SessionModel.external_reference_id_encrypted.is_not(None),
+    target_hash = hash_identifier(target)
+    stmt = (
+        select(SessionModel)
+        .where(
+            SessionModel.clinician_id == user.user_id,
+            SessionModel.external_reference_id_hash == target_hash,
+        )
+        .order_by(SessionModel.created_at.desc())
     )
     result = await db.execute(stmt)
     rows = list(result.scalars().all())
 
-    matches: list[PatientSessionMatch] = []
-    for row in rows:
-        try:
-            plain = decrypt_str(row.external_reference_id_encrypted)
-        except Exception:
-            # Decryption failure on this row — skip + log; surfaces as
-            # a CMK incident in the dashboards rather than crashing the
-            # entire lookup.
-            logger.warning(
-                "Skip identifier match on session=%s (decrypt failed)", row.id
-            )
-            continue
-        if plain == target:
-            matches.append(
-                PatientSessionMatch(
-                    session_id=str(row.id),
-                    specialty=row.specialty,
-                    state=row.state.value if hasattr(row.state, "value") else str(row.state),
-                    created_at=row.created_at.isoformat() if row.created_at else "",
-                )
-            )
-
-    # Newest first so the consumer renders most-recent at the top.
-    matches.sort(key=lambda m: m.created_at, reverse=True)
-    return matches
+    return [
+        PatientSessionMatch(
+            session_id=str(row.id),
+            specialty=row.specialty,
+            state=row.state.value if hasattr(row.state, "value") else str(row.state),
+            created_at=row.created_at.isoformat() if row.created_at else "",
+        )
+        for row in rows
+    ]
 
 
 # ── /me/export-bulk ────────────────────────────────────────────────────────

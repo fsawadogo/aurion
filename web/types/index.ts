@@ -199,6 +199,26 @@ export interface NoteSection {
   claims: Claim[];
 }
 
+/** Slim, count-only summary of the prior-encounter context Stage 1
+ * note-gen consumed for this note (#61, full slice).
+ *
+ * Mirrors the backend `PriorContextUsedSummary` Pydantic type
+ * (`backend/app/core/types.py`) and the iOS `PriorContextUsed`
+ * struct. Carries NO PHI — only:
+ *   - `encounters_referenced`: integer count of prior visits the LLM
+ *     actually saw (drives the badge's visibility gate).
+ *   - `last_encounter_date`: ISO-8601 calendar date of the most
+ *     recent prior visit, or null when the lookup found nothing.
+ *
+ * Older payloads (pre-#61 backends) omit this field entirely; the
+ * type is optional all the way down so the existing review UI
+ * renders unchanged.
+ */
+export interface PriorContextUsed {
+  encounters_referenced: number;
+  last_encounter_date: string | null;
+}
+
 export interface Note {
   session_id: string;
   stage: number;
@@ -208,6 +228,11 @@ export interface Note {
   completeness_score: number;
   sections: NoteSection[];
   created_at: string;
+  /** Stage 1 actually consumed prior encounters into the LLM prompt
+   * for this note (#61). null for cold-start sessions (no identifier)
+   * and pre-#61 backends. Read by `NoteContextBadge` to gate the
+   * "Context: N prior visits" affordance. */
+  prior_context_used?: PriorContextUsed | null;
 }
 
 /** Per-claim citation expansion for the note review pane. Only the

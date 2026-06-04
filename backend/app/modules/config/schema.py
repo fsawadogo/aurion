@@ -97,6 +97,17 @@ class PipelineConfig(BaseModel):
     clip_trigger_kinds: list[str] = Field(
         default_factory=lambda: ["motion", "rom", "gait", "procedural"]
     )
+    # ── Longitudinal patient context (#61, full slice) ─────────────────
+    # Cap on the number of prior encounters the Stage 1 note-gen
+    # pipeline feeds into the LLM prompt as context. Three is the
+    # default — it's enough to surface "the last visit", "the visit
+    # before that", and one more for trend-without-trajectory framing,
+    # while staying well inside the LLM's input budget for the pre-
+    # transcript header. The eval team can dial this up to 10 (per the
+    # schema bound) to test how the model behaves with a richer
+    # history; below 1 makes the lookup pointless (would never include
+    # any encounters).
+    longitudinal_context_max_encounters: int = Field(default=3, ge=1, le=10)
 
 
 class FeatureFlagsConfig(BaseModel):
