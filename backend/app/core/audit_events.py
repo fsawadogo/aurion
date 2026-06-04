@@ -159,6 +159,24 @@ class AuditEventType(StrEnum):
     # any real session's history.
     PROMPT_USER_PROMPT_SET = "prompt_user_prompt_set"
     PROMPT_USER_PROMPT_CLEARED = "prompt_user_prompt_cleared"
+    # ── Auth pivot (backend JWT + TOTP + password reset) ──────────────────
+    # Replaces the Cognito-managed flow. Every auth state change writes
+    # one of these. Emitted with the synthetic session id
+    # ``00000000-0000-0000-0000-000000000000`` because auth events are
+    # not session-scoped (same pattern as PROMPT_USER_PROMPT_*). Email
+    # NEVER appears in the kwargs — only actor_id / target_user_id UUIDs.
+    LOGIN_SUCCESS = "login_success"
+    LOGIN_FAILURE = "login_failure"
+    LOGIN_LOCKED = "login_locked"
+    LOGOUT = "logout"
+    MFA_ENROLLED = "mfa_enrolled"
+    MFA_RESET = "mfa_reset"
+    PASSWORD_RESET_REQUESTED = "password_reset_requested"
+    PASSWORD_CHANGED = "password_changed"
+    ADMIN_PASSWORD_RESET_ISSUED = "admin_password_reset_issued"
+    REFRESH_TOKEN_ISSUED = "refresh_token_issued"
+    REFRESH_TOKEN_ROTATED = "refresh_token_rotated"
+    REFRESH_TOKEN_REVOKED = "refresh_token_revoked"
     # Longitudinal patient context loaded into Stage 1 note generation
     # (#61, full slice). Emitted once per Stage 1 call when at least
     # one prior encounter was actually fed into the LLM prompt. The
@@ -511,6 +529,32 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
             "encounters_count",
             "last_encounter_date",
         }
+    ),
+    # ── Auth pivot ────────────────────────────────────────────────────────
+    # Email NEVER appears in any of these whitelists — only UUIDs. The
+    # ``reason`` strings are bounded enums (see auth router), not free
+    # text. ``token_id`` is the UUID of the refresh_tokens row, never
+    # the raw token. ``via`` distinguishes self-reset from admin-reset
+    # for the post-pilot security review.
+    AuditEventType.LOGIN_SUCCESS: frozenset({"actor_id"}),
+    AuditEventType.LOGIN_FAILURE: frozenset({"target_user_id", "reason"}),
+    AuditEventType.LOGIN_LOCKED: frozenset(
+        {"target_user_id", "failed_count"}
+    ),
+    AuditEventType.LOGOUT: frozenset({"actor_id"}),
+    AuditEventType.MFA_ENROLLED: frozenset({"actor_id"}),
+    AuditEventType.MFA_RESET: frozenset({"actor_id", "target_user_id"}),
+    AuditEventType.PASSWORD_RESET_REQUESTED: frozenset({"target_user_id"}),
+    AuditEventType.PASSWORD_CHANGED: frozenset({"actor_id", "via"}),
+    AuditEventType.ADMIN_PASSWORD_RESET_ISSUED: frozenset(
+        {"actor_id", "target_user_id"}
+    ),
+    AuditEventType.REFRESH_TOKEN_ISSUED: frozenset({"actor_id", "token_id"}),
+    AuditEventType.REFRESH_TOKEN_ROTATED: frozenset(
+        {"actor_id", "previous_token_id", "new_token_id"}
+    ),
+    AuditEventType.REFRESH_TOKEN_REVOKED: frozenset(
+        {"actor_id", "token_id", "reason"}
     ),
 }
 
