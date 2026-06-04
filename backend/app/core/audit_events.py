@@ -159,6 +159,15 @@ class AuditEventType(StrEnum):
     # any real session's history.
     PROMPT_USER_PROMPT_SET = "prompt_user_prompt_set"
     PROMPT_USER_PROMPT_CLEARED = "prompt_user_prompt_cleared"
+    # Longitudinal patient context loaded into Stage 1 note generation
+    # (#61, full slice). Emitted once per Stage 1 call when at least
+    # one prior encounter was actually fed into the LLM prompt. The
+    # kwarg whitelist (``encounters_count`` + ``last_encounter_date``)
+    # carries only the slim PHI-free signal that lets pilot analysis
+    # measure how often the prior-context branch fires. NEVER carries
+    # the identifier value, the prior session ids, or any clinical
+    # content.
+    LONGITUDINAL_CONTEXT_LOADED = "longitudinal_context_loaded"
 
 
 # ── Q-03 — kwarg whitelist ────────────────────────────────────────────────
@@ -479,6 +488,29 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.PROMPT_USER_PROMPT_CLEARED: frozenset(
         {"actor_id", "prompt_id"}
+    ),
+    # Longitudinal patient context loaded into Stage 1 note generation
+    # (#61, full slice). The whitelist is the entire PHI-safety
+    # contract for this event — adding a key here is a deliberate
+    # security decision, not an incidental refactor.
+    #   * actor_id              — clinician_id of the session owner.
+    #   * current_session_id    — anchor row for the Stage 1 call.
+    #   * encounters_count      — integer count of prior encounters
+    #                              the LLM prompt actually consumed.
+    #   * last_encounter_date   — ISO date of the most recent prior
+    #                              visit. Calendar-grain only, never
+    #                              the timestamp; date alone is the
+    #                              minimum signal pilot analysis
+    #                              needs and avoids re-encoding when
+    #                              prior context fired.
+    # NO identifier value. NO prior session ids. NO clinical content.
+    AuditEventType.LONGITUDINAL_CONTEXT_LOADED: frozenset(
+        {
+            "actor_id",
+            "current_session_id",
+            "encounters_count",
+            "last_encounter_date",
+        }
     ),
 }
 

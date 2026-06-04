@@ -19,9 +19,16 @@ from typing import Optional
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.models import NoteVersionModel
-from app.core.types import Note, NoteClaim, Template, Transcript
+from app.core.audit_events import AuditEventType
+from app.core.models import NoteVersionModel, SessionModel
+from app.core.types import Note, NoteClaim, PriorContextUsedSummary, Template, Transcript
+from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.provider_registry import get_registry
+from app.modules.longitudinal_context import (
+    PriorContextBlock,
+    get_prior_context,
+    render_prior_context_block,
+)
 from app.modules.note_gen import repository as note_repo
 from app.modules.note_gen.critique import critique_note
 from app.modules.note_gen.few_shot import get_few_shot_examples, render_examples_block
@@ -51,6 +58,30 @@ NOTE_GENERATION_SYSTEM_PROMPT = (
     "\n"
     "Return only valid JSON matching the provided schema. No preamble, "
     "no explanation, no markdown."
+)
+
+# Descriptive-mode reinforcement that gets appended to the system prompt
+# at call time ONLY when prior-encounter context is being fed to the
+# model (#61, full slice). Kept OUT of the registry so the prompt
+# safety-lock test (``test_descriptive_mode_phrases_locked`` in
+# tests/integration/test_me_prompts.py) sees the unchanged base catalog
+# entry; the concatenation happens here, in one place, in
+# ``generate_stage1_note``.
+#
+# Why a runtime concatenation and not a registry edit?
+#   * The base prompt must stay byte-identical across every Stage 1
+#     call (the safety test pins literal substrings). Mutating it via
+#     the registry forces every test fixture + every replacement-mode
+#     physician override to learn about the new sentence.
+#   * Prior context is the only branch where this sentence has any
+#     meaning; gluing it on only when prior context is present keeps
+#     the prompt minimal for the cold-start case.
+_PRIOR_CONTEXT_SYSTEM_SUFFIX = (
+    "\n\n"
+    "When prior visits are listed, you may reference them factually "
+    "(for example 'patient reports continued pain since prior visit "
+    "on YYYY-MM-DD'). Do not infer trends or trajectories — only "
+    "state what the prior note recorded."
 )
 
 # ── Template Loading ──────────────────────────────────────────────────────
@@ -166,6 +197,7 @@ def build_stage1_user_prompt(
     encounter_context: Optional[str] = None,
     output_language: str = "en",
     participants: Optional[list[dict]] = None,
+    prior_context_text: Optional[str] = None,
 ) -> str:
     """Build the user prompt for Stage 1 note generation.
 
@@ -197,6 +229,18 @@ def build_stage1_user_prompt(
             f"ENCOUNTER CONTEXT (provided by physician before session):\n"
             f"{encounter_context}\n\n"
         )
+
+    # Prior-encounter context (#61, full slice). The rendered block is
+    # already formatted by app.modules.longitudinal_context — empty
+    # string when no prior was found (skip the heading entirely),
+    # multi-line bullet list otherwise. Appended to the USER message
+    # rather than the system prompt so the system prompt's strict
+    # descriptive-mode rules stay unambiguous — see the
+    # ``_PRIOR_CONTEXT_SYSTEM_SUFFIX`` rationale at the top of the
+    # module.
+    prior_context_section = ""
+    if prior_context_text:
+        prior_context_section = f"{prior_context_text}\n\n"
 
     language_block = ""
     if output_language != "en":
@@ -258,6 +302,7 @@ def build_stage1_user_prompt(
         f"{language_block}"
         f"{participants_block}"
         f"{context_block}"
+        f"{prior_context_section}"
         f"{few_shot_block}"
         f"TRANSCRIPT:\n{transcript_text}\n\n"
         f"TEMPLATE SECTIONS:\n{json.dumps(sections_spec, indent=2)}\n\n"
@@ -363,9 +408,11 @@ async def generate_stage1_note(
     2. Select the system prompt — the calling physician's saved user
        prompt when present, the CLAUDE.md default otherwise
        (AI-PROMPTS-B replacement semantics)
-    3. Call the active NoteGenerationProvider via the registry
-    4. Calculate completeness score
-    5. Create version record in the database
+    3. Load prior-encounter context for the same clinician + patient
+       identifier (#61, full slice). Skipped when no identifier set.
+    4. Call the active NoteGenerationProvider via the registry
+    5. Calculate completeness score
+    6. Create version record in the database
 
     Returns the generated Note with completeness score and version.
     """
@@ -393,6 +440,21 @@ async def generate_stage1_note(
         "note_generation", session_id, db
     )
 
+    # #61, full slice — load prior-encounter context for this clinician
+    # + patient identifier. Returns None when no identifier is set on
+    # the session (cold-start signal — the prior-context branch is
+    # skipped entirely). When non-None, the rendered block goes into
+    # the USER message and a descriptive-mode reinforcement sentence
+    # gets concatenated onto the SYSTEM prompt at call time (the base
+    # registry prompt itself is never mutated; see
+    # ``_PRIOR_CONTEXT_SYSTEM_SUFFIX`` rationale at the top of this
+    # module).
+    prior_block, prior_context_text = await _load_prior_context_block(
+        session_id, db
+    )
+    if prior_context_text:
+        system_prompt = system_prompt + _PRIOR_CONTEXT_SYSTEM_SUFFIX
+
     # Wrap the registry call to capture per-call telemetry (issue #73).
     # Both the success and failure paths record so dashboards can show
     # failure / fallback rates accurately. Telemetry is best-effort —
@@ -405,6 +467,7 @@ async def generate_stage1_note(
             stage=1,
             output_language=output_language,
             system_prompt=system_prompt,
+            prior_context_text=prior_context_text or None,
         )
         await _record_provider_usage(
             db=db,
@@ -442,6 +505,22 @@ async def generate_stage1_note(
     # populated -> not_captured changes the completeness denominator.
     note.completeness_score = round(calculate_completeness(note, template), 4)
 
+    # Attach the slim count-only prior-context summary (#61). Carries
+    # NO PHI — only the integer count of prior encounters the model
+    # actually consumed and the date of the most recent one. iOS badge
+    # + web chip read ``encounters_referenced > 0`` to decide whether
+    # to surface the "Context-aware" affordance.
+    note.prior_context_used = _build_prior_context_used(prior_block)
+
+    # Audit row — count + date only, NEVER the identifier value, the
+    # prior session ids, or any clinical content. The whitelist in
+    # app.core.audit_events.ALLOWED_AUDIT_KWARGS pins the exact key
+    # set; an accidental new kwarg here would fail strict mode in
+    # tests immediately (see backend/tests/conftest.py).
+    await _emit_longitudinal_context_audit(
+        session_id=session_id, db=db, prior_block=prior_block
+    )
+
     logger.info(
         "Stage 1 note generated: session=%s provider=%s completeness=%.2f sections=%d",
         session_id,
@@ -453,6 +532,160 @@ async def generate_stage1_note(
     await create_note_version(session_id, note, db)
 
     return note
+
+
+# ── Prior-context wiring helpers ────────────────────────────────────────
+
+async def _load_prior_context_block(
+    session_id: str, db: AsyncSession
+) -> tuple[Optional[PriorContextBlock], str]:
+    """Resolve the session's clinician + identifier and load prior
+    context.
+
+    Returns ``(block, rendered_text)``:
+      * ``block`` is the raw :class:`PriorContextBlock` (or ``None``
+        when no identifier is set or the session lookup fails).
+        ``_build_prior_context_used`` consumes this to populate
+        ``note.prior_context_used``; the audit emitter also reads it.
+      * ``rendered_text`` is the deterministic block from
+        :func:`render_prior_context_block` — empty string when there's
+        nothing to render. Lets the caller decide unconditionally
+        whether to inject it.
+
+    Any DB error / lookup failure degrades to ``(None, "")`` — Stage 1
+    must never fail because the prior-context branch hiccuped.
+    """
+    try:
+        result = await db.execute(
+            select(SessionModel.clinician_id, SessionModel.external_reference_id_encrypted).where(
+                SessionModel.id == uuid.UUID(session_id)
+            )
+        )
+        row = result.one_or_none()
+    except Exception:  # noqa: BLE001 — defensive; never crash Stage 1
+        logger.warning(
+            "Prior-context lookup skipped — session row fetch failed (session=%s)",
+            session_id,
+            exc_info=True,
+        )
+        return None, ""
+
+    if row is None or row.external_reference_id_encrypted is None:
+        return None, ""
+
+    # We need plaintext to hash. Direct decrypt here rather than
+    # re-walking the model layer; this is the only site outside the
+    # API surface that needs to read the identifier, and pulling in a
+    # helper just for this would be DRY-overkill.
+    try:
+        from app.core.kms_encryption import decrypt_str
+
+        plaintext = decrypt_str(bytes(row.external_reference_id_encrypted))
+    except Exception:  # noqa: BLE001 — decrypt failure → no context, log
+        logger.warning(
+            "Prior-context lookup skipped — identifier decrypt failed (session=%s)",
+            session_id,
+        )
+        return None, ""
+
+    try:
+        block = await get_prior_context(
+            clinician_id=row.clinician_id,
+            patient_identifier=plaintext,
+            current_session_id=uuid.UUID(session_id),
+            db=db,
+        )
+    except Exception:  # noqa: BLE001 — same defensive contract
+        logger.warning(
+            "Prior-context lookup failed (session=%s)", session_id, exc_info=True
+        )
+        return None, ""
+
+    if block is None:
+        return None, ""
+    return block, render_prior_context_block(block)
+
+
+def _build_prior_context_used(
+    prior_block: Optional[PriorContextBlock],
+) -> Optional[PriorContextUsedSummary]:
+    """Roll the loaded block into the slim wire summary that gets
+    attached to ``Note.prior_context_used``.
+
+    Returns ``None`` when no block was loaded (cold-start), or when
+    the block was loaded but had zero encounters — keeping the wire
+    null in both "we didn't look" and "we looked but found nothing"
+    avoids the iOS / web badges needing to distinguish the two; if a
+    physician ever wants that surfaced separately we promote the
+    "looked, found zero" branch to a non-None summary with
+    ``encounters_referenced=0``.
+    """
+    if prior_block is None or not prior_block.encounters:
+        return None
+    most_recent = prior_block.encounters[0]
+    return PriorContextUsedSummary(
+        encounters_referenced=len(prior_block.encounters),
+        last_encounter_date=most_recent.date.isoformat(),
+    )
+
+
+async def _emit_longitudinal_context_audit(
+    *,
+    session_id: str,
+    db: AsyncSession,
+    prior_block: Optional[PriorContextBlock],
+) -> None:
+    """Write the LONGITUDINAL_CONTEXT_LOADED audit event when prior
+    context was actually consumed.
+
+    Keys are exactly ``{actor_id, current_session_id, encounters_count,
+    last_encounter_date}`` — the whitelist in
+    ``ALLOWED_AUDIT_KWARGS`` is pinned to this set. No identifier
+    value, no prior session ids, no clinical content. ``actor_id`` is
+    the session's clinician (we look it up rather than threading it
+    through — Stage 1 is server-initiated and there isn't always a
+    request-bound user in scope at this layer).
+    """
+    if prior_block is None or not prior_block.encounters:
+        # No event when nothing was loaded — the absence of a row IS
+        # the signal. Forcing an "empty load" event for every cold-
+        # start session would dilute the audit-log signal.
+        return
+    try:
+        result = await db.execute(
+            select(SessionModel.clinician_id).where(
+                SessionModel.id == uuid.UUID(session_id)
+            )
+        )
+        clinician_id = result.scalar_one_or_none()
+    except Exception:  # noqa: BLE001 — never crash Stage 1 over audit
+        logger.warning(
+            "LONGITUDINAL_CONTEXT_LOADED audit skipped — clinician lookup "
+            "failed (session=%s)",
+            session_id,
+            exc_info=True,
+        )
+        return
+
+    if clinician_id is None:
+        return
+
+    most_recent = prior_block.encounters[0]
+    try:
+        await get_audit_log_service().write_event(
+            session_id=session_id,
+            event_type=AuditEventType.LONGITUDINAL_CONTEXT_LOADED,
+            actor_id=str(clinician_id),
+            current_session_id=session_id,
+            encounters_count=len(prior_block.encounters),
+            last_encounter_date=most_recent.date.isoformat(),
+        )
+    except Exception:  # noqa: BLE001 — audit is best-effort
+        logger.warning(
+            "LONGITUDINAL_CONTEXT_LOADED audit write failed (session=%s)",
+            session_id,
+            exc_info=True,
+        )
 
 
 # ── Note Versioning ───────────────────────────────────────────────────────

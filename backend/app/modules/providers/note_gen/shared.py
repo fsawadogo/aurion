@@ -86,12 +86,21 @@ def build_user_prompt(
     template: Template,
     stage: int,
     output_language: str = "en",
+    prior_context_text: str | None = None,
 ) -> str:
     """Build the user prompt with transcript and template context.
 
     ``output_language`` controls the language of the generated note content.
     The transcript may be in either language (FR or EN); the note is written
     in the requested output language regardless of what was spoken.
+
+    ``prior_context_text`` (#61, full slice) — when non-empty, the
+    rendered prior-encounter block from
+    :func:`app.modules.longitudinal_context.render_prior_context_block`
+    is injected just above the transcript so the model reads it as
+    additional ground-truth context. Empty / ``None`` skips the section
+    entirely so cold-start sessions produce a byte-identical prompt to
+    the pre-#61 build.
     """
     sections_spec = json.dumps(
         [{"id": s.id, "title": s.title, "required": s.required} for s in template.sections],
@@ -109,12 +118,15 @@ def build_user_prompt(
             "Keep the JSON structure, section \"id\" values, and status values "
             "exactly as specified in English (do not translate keys or ids).\n"
         )
+    prior_block = ""
+    if prior_context_text:
+        prior_block = f"{prior_context_text}\n\n"
     return f"""Generate a Stage {stage} clinical note for specialty: {template.key}
 {language_instruction}
 Template sections (generate each):
 {sections_spec}
 
-Transcript segments:
+{prior_block}Transcript segments:
 {segments_text}
 
 Return JSON with this schema:

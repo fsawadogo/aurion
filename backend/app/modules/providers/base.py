@@ -54,6 +54,7 @@ class NoteGenerationProvider(ABC):
         stage: int,
         output_language: str = "en",
         system_prompt: str | None = None,
+        prior_context_text: str | None = None,
     ) -> Note:
         """Generate a structured SOAP note from a transcript and template.
 
@@ -68,6 +69,15 @@ class NoteGenerationProvider(ABC):
         passes it down so providers stay stateless and DB-free. ``None``
         preserves the pre-Phase-B behaviour for callers that don't (yet)
         need per-physician customisation. Liskov: additive optional kwarg.
+
+        ``prior_context_text`` (#61, full slice) — when set, the
+        deterministic block produced by
+        :func:`app.modules.longitudinal_context.render_prior_context_block`
+        is appended to the USER message just above the transcript.
+        Empty / ``None`` skips the prior-context section entirely so
+        cold-start sessions render unchanged. Additive optional kwarg
+        on the base — every concrete provider forwards it into
+        ``build_user_prompt``.
         """
         ...
 
