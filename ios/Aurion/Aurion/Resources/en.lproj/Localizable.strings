@@ -481,7 +481,25 @@
 "login.signingIn" = "Signing in\U2026";
 "login.firstTimeHint" = "First-time access? Use the temporary password your administrator sent \U2014 Aurion will prompt you to set a new one.";
 "login.backendLookupFailed" = "Signed in but backend lookup failed: %@";
-"login.mfaUnsupported" = "MFA is enabled on this pool, but this build can\U2019t prompt for a code. Contact admin.";
+
+/* ── MFA: daily TOTP challenge ───────────────────────── */
+"login.mfa.challenge.title" = "Verification code";
+"login.mfa.challenge.subtitle" = "Enter the 6-digit code from your authenticator app.";
+"login.mfa.challenge.codeLabel" = "Code";
+"login.mfa.challenge.verifyButton" = "Verify";
+"login.mfa.challenge.cancelButton" = "Cancel";
+"login.mfa.challenge.invalidCode" = "Incorrect code. Try again.";
+"login.mfa.challenge.expiredCode" = "Code expired. Enter the current one.";
+
+/* ── MFA: first-time TOTP setup ──────────────────────── */
+"login.mfa.setup.title" = "Set up two-factor";
+"login.mfa.setup.intro" = "Scan this QR code with an authenticator app (Google Authenticator, 1Password, Authy).";
+"login.mfa.setup.secretLabel" = "Or enter this code manually";
+"login.mfa.setup.copySecret" = "Copy";
+"login.mfa.setup.copied" = "Copied";
+"login.mfa.setup.confirmLabel" = "Confirm the 6-digit code from the app.";
+"login.mfa.setup.completeButton" = "Complete setup";
+"login.mfa.setup.codeMismatch" = "That code didn\U2019t match. Try again.";
 
 /* ── New Password Challenge ───────────────────────────── */
 "newpw.title" = "Set a new password";

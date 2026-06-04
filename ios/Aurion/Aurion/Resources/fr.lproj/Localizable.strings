@@ -481,7 +481,25 @@
 "login.signingIn" = "Connexion\U2026";
 "login.firstTimeHint" = "Premier acc\U00E8s\U202F? Utilisez le mot de passe temporaire envoy\U00E9 par votre administrateur \U2014 Aurion vous invitera \U00E0 en d\U00E9finir un nouveau.";
 "login.backendLookupFailed" = "Connect\U00E9, mais la r\U00E9cup\U00E9ration c\U00F4t\U00E9 serveur a \U00E9chou\U00E9 : %@";
-"login.mfaUnsupported" = "L\U2019authentification multifacteur est activ\U00E9e, mais cette version ne peut pas demander de code. Contactez l\U2019administrateur.";
+
+/* ── MFA : v\U00E9rification quotidienne ────────────────────── */
+"login.mfa.challenge.title" = "Code de v\U00E9rification";
+"login.mfa.challenge.subtitle" = "Entrez le code \U00E0 6 chiffres de votre application d\U2019authentification.";
+"login.mfa.challenge.codeLabel" = "Code";
+"login.mfa.challenge.verifyButton" = "V\U00E9rifier";
+"login.mfa.challenge.cancelButton" = "Annuler";
+"login.mfa.challenge.invalidCode" = "Code incorrect. R\U00E9essayez.";
+"login.mfa.challenge.expiredCode" = "Code expir\U00E9. Entrez le code en cours.";
+
+/* ── MFA : premi\U00E8re configuration ──────────────────────── */
+"login.mfa.setup.title" = "Configurer l\U2019authentification \U00E0 deux facteurs";
+"login.mfa.setup.intro" = "Scannez ce code QR avec une application d\U2019authentification (Google Authenticator, 1Password, Authy).";
+"login.mfa.setup.secretLabel" = "Ou entrez ce code manuellement";
+"login.mfa.setup.copySecret" = "Copier";
+"login.mfa.setup.copied" = "Copi\U00E9";
+"login.mfa.setup.confirmLabel" = "Confirmez le code \U00E0 6 chiffres affich\U00E9 par l\U2019application.";
+"login.mfa.setup.completeButton" = "Terminer la configuration";
+"login.mfa.setup.codeMismatch" = "Ce code ne correspond pas. R\U00E9essayez.";
 
 /* ── Nouveau mot de passe ─────────────────────────────── */
 "newpw.title" = "D\U00E9finir un nouveau mot de passe";
