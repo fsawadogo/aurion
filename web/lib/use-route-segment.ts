@@ -1,67 +1,83 @@
 "use client";
 
 import { useParams, usePathname } from "next/navigation";
-import { useMemo } from "react";
+import { useEffect, useState } from "react";
 
 /**
  * Returns the dynamic segment value for the current route, robust
- * against the Next.js static-export gotcha that broke the deployed
- * portal.
+ * against the Next.js static-export gotchas that have broken the
+ * deployed portal twice now. The browser address bar is the only
+ * source of truth this hook trusts.
  *
- * Under `output: "export"`, every dynamic route must declare a
- * `generateStaticParams()` set. We don't know real IDs at build time —
- * sessions are issued at runtime when a physician finishes a recording —
- * so each page returns `[{ id: "_" }]` (a sentinel) and we lean on
- * Amplify's SPA-fallback rewrite (see `infrastructure/amplify.tf`'s
- * `custom_rules`) to serve the `_/index.html` shell for any real URL.
+ * Background — two compounding bugs:
  *
- * But `useParams()` from `next/navigation` reads from the *matched route
- * params*, which in static export are baked at build time — so it
- * returns the sentinel `"_"` regardless of what the browser URL bar
- * actually says. Code that does `params.id` then fetches
- * `/api/v1/notes/_/detail` and gets 422'd by the backend UUID
- * validator. `usePathname()` reflects the real URL bar at runtime;
- * the last segment is what we want.
+ *  1. Under `output: "export"`, every dynamic route declares a
+ *     `generateStaticParams()` set. We don't know real IDs at build
+ *     time, so each page returns `[{ id: "_" }]` (sentinel) and leans
+ *     on Amplify's SPA-fallback rewrite to serve the `_/index.html`
+ *     shell for any real URL. But `useParams()` reads from the
+ *     *matched route params*, baked at build time — so it returns
+ *     `"_"` regardless of the URL bar. (PR #228 v1.)
  *
- * Build-time / SSR safe — at build there's no real URL, so we trust
- * `useParams()`. At runtime the URL always wins.
+ *  2. With `dynamicParams = false`, the App Router's pathname context
+ *     refuses to recognise the unknown dynamic segment and *collapses*
+ *     the pathname back to the closest matching parent route. For
+ *     `/portal/notes/<uuid>` that's `/portal/notes` (the list page).
+ *     So `usePathname()` returns `/portal/notes`, the last-segment
+ *     trick produces `"notes"`, and downstream fetches hit
+ *     `/api/v1/notes/notes/detail` → 422. (Found immediately after
+ *     v1 deployed; this is v2.)
+ *
+ * `window.location.pathname` always reflects the literal URL bar,
+ * which Amplify's 200-status rewrite never modifies. That's the only
+ * value safe to trust in static export.
+ *
+ * Two-pass render keeps hydration warning-free: the initial render
+ * uses the param (matches the SSR'd shell), then the post-mount
+ * effect rewrites to the URL-derived value. The effect re-runs on
+ * Next router navigations (`pathname` dep) and on browser
+ * back/forward (`popstate` listener), so navigating between dynamic
+ * routes stays correct without a full reload.
  *
  * @param paramKey  The `[slug]` name from the route, used as the
- *                  SSR fallback key (e.g. "id", "sessionId",
- *                  "identifier").
+ *                  hydration-safe initial value.
  */
 export function useRouteSegment(paramKey: string): string {
-  const pathname = usePathname();
   const params = useParams<Record<string, string | string[]>>();
+  // `usePathname()` is wrong (see header), but we still depend on it
+  // so this hook re-evaluates after a Next router push — that fires a
+  // pathname change even when the value collapses to the parent route.
+  const pathname = usePathname();
 
-  return useMemo(() => {
-    const paramVal = params?.[paramKey];
-    const raw = Array.isArray(paramVal) ? paramVal[0] : paramVal;
+  // Initial state mirrors what the SSR shell rendered with: the
+  // baked-in build-time param ("_"). The effect immediately replaces
+  // it on mount; the initial value just keeps hydration mismatch-free.
+  const [segment, setSegment] = useState<string>(() => {
+    const p = params?.[paramKey];
+    const raw = Array.isArray(p) ? p[0] : p;
+    return raw ?? "";
+  });
 
-    // Build-time / SSR path: usePathname is unreliable; trust the param.
-    if (!pathname || pathname === "/") return raw ?? "";
+  useEffect(() => {
+    if (typeof window === "undefined") return;
 
-    // Runtime: read the real URL. The dynamic segment is the last
-    // non-empty path segment in every dynamic route we ship — the routes
-    // are `/sessions/[id]`, `/audit/[sessionId]`, `/eval/[id]`,
-    // `/portal/notes/[id]`, `/portal/patients/[identifier]`,
-    // `/portal/templates/[id]`. Last segment covers all of them.
-    const segments = pathname.split("/").filter(Boolean);
-    const last = segments[segments.length - 1] ?? "";
-
-    // If the URL last segment is the placeholder sentinel itself, the
-    // user really did navigate to /sessions/_ (Amplify direct hit on
-    // the placeholder). Surface the sentinel — the caller's loader
-    // will surface the resulting 422 in its error banner, which is
-    // less confusing than silently swallowing the navigation.
-    const candidate = last || raw || "";
-
-    try {
-      return decodeURIComponent(candidate);
-    } catch {
-      // Identifier with invalid % escapes — render raw, let the API
-      // call surface the 422 rather than crashing the client.
-      return candidate;
+    function readFromUrl(): void {
+      const segs = window.location.pathname.split("/").filter(Boolean);
+      const last = segs[segs.length - 1] ?? "";
+      try {
+        setSegment(decodeURIComponent(last));
+      } catch {
+        // Identifier with invalid % escapes — render the raw segment
+        // rather than crashing. The downstream API call will surface
+        // the 422 in the page's normal failure banner.
+        setSegment(last);
+      }
     }
-  }, [pathname, params, paramKey]);
+
+    readFromUrl();
+    window.addEventListener("popstate", readFromUrl);
+    return () => window.removeEventListener("popstate", readFromUrl);
+  }, [pathname]);
+
+  return segment;
 }
