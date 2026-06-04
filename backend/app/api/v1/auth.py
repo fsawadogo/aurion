@@ -55,7 +55,6 @@ from app.core.types import UserRole
 from app.modules.auth import lockout, password_reset, totp
 from app.modules.auth.email import send_password_reset_email
 from app.modules.auth.jwt_tokens import (
-    ACCESS_TOKEN_TTL_SECONDS,
     REFRESH_TOKEN_TTL_SECONDS,
     compare_token_hashes,
     hash_ip,
@@ -72,7 +71,11 @@ logger = logging.getLogger("aurion.auth")
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-_APP_ENV = os.getenv("APP_ENV", "local")
+def _is_local_env() -> bool:
+    """Per-call APP_ENV lookup. Reading at module import would pin the
+    value at first-import, which the auth integration tests need to
+    override after pytest has loaded ``app.main``."""
+    return os.getenv("APP_ENV", "local") == "local"
 
 # Synthetic session id for auth events — auth events are not session-
 # scoped (a single user issues N login events across M sessions over
@@ -794,7 +797,7 @@ async def seed_dev_users() -> None:
     (``ROLE:UUID``) keep resolving to the same user IDs the iOS client
     may have cached. Only runs when ``APP_ENV=local``.
     """
-    if _APP_ENV != "local":
+    if not _is_local_env():
         return
 
     async with async_session_factory() as db:

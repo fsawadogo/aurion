@@ -42,10 +42,21 @@ from app.modules.auth.jwt_tokens import verify_access_token
 logger = logging.getLogger("aurion.auth")
 
 _security = HTTPBearer()
-_APP_ENV = os.getenv("APP_ENV", "local")
-_ACCEPT_LEGACY_COGNITO = os.getenv(
-    "AUTH_ACCEPT_LEGACY_COGNITO_JWT", "false"
-).lower() in ("1", "true", "yes")
+
+
+def _app_env() -> str:
+    """Per-call APP_ENV lookup. Reading at module import time would
+    pin the value at first-import, which breaks tests that flip
+    ``APP_ENV=production`` after pytest has already loaded ``app.main``."""
+    return os.getenv("APP_ENV", "local")
+
+
+def _accept_legacy_cognito() -> bool:
+    return os.getenv("AUTH_ACCEPT_LEGACY_COGNITO_JWT", "false").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
 # ── Cognito Configuration ────────────────────────────────────────────────
 
@@ -82,7 +93,21 @@ async def get_current_user(
     """
     token = credentials.credentials
 
-    if _APP_ENV == "local":
+    if _app_env() == "local":
+        # In local dev, accept either the dev token shape OR a real
+        # backend-issued HS256 access token. The auth integration tests
+        # always go through the backend path (they call /auth/login
+        # which mints HS256), while the broader test suite continues
+        # to pass dev-token bearers (``CLINICIAN:<uuid>``).
+        backend_payload = verify_access_token(token)
+        if backend_payload is not None:
+            user = CurrentUser(
+                user_id=backend_payload.user_id,
+                role=backend_payload.role,
+                email=backend_payload.email,
+            )
+            await _ensure_active(db, user.user_id)
+            return user
         return _parse_dev_token(token)
 
     # Primary path: backend-issued HS256 access token.
@@ -99,7 +124,7 @@ async def get_current_user(
     # Legacy cutover fallback — only attempted while the cutover env
     # flag is on. Once all clients have moved to backend tokens the
     # flag flips off and this branch becomes dead code we delete.
-    if _ACCEPT_LEGACY_COGNITO:
+    if _accept_legacy_cognito():
         try:
             user = await _validate_cognito_jwt(token)
             await _ensure_active(db, user.user_id)

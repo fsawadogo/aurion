@@ -14,7 +14,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import write_audit
 from app.api.v1.admin._shared import (
-    CreateUserRequest,
     UpdateUserRequest,
     UserResponse,
     user_to_response,
