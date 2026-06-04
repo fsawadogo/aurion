@@ -31,10 +31,10 @@ const mockUsePathname = vi.fn();
 vi.mock("next/navigation", () => ({
   useParams: () => mockUseParams(),
   // `useRouteSegment` (web/lib/use-route-segment.ts) reads from
-  // `usePathname()` to dodge the static-export `_` sentinel that
-  // `useParams()` returns in production. Test mock returns the same
-  // path the route would produce, so the helper resolves to the
-  // identifier we set on mockUseParams.
+  // `window.location.pathname` in its mount effect — `usePathname()`
+  // returns the collapsed parent route under static export. The
+  // mock is here so the dep stays callable; the actual URL is set
+  // on `window.location` via `history.replaceState` in beforeEach.
   usePathname: () => mockUsePathname(),
 }));
 
@@ -74,9 +74,12 @@ beforeEach(() => {
   mockUseParams.mockReset();
   mockUsePathname.mockReset();
   mockUseParams.mockReturnValue({ identifier: IDENTIFIER });
-  // `useRouteSegment` prefers the URL bar over the route params; mirror
-  // the route shape so the helper resolves to the identifier above.
   mockUsePathname.mockReturnValue(`/portal/patients/${IDENTIFIER}`);
+  // `useRouteSegment` reads from `window.location.pathname` post-mount
+  // (see hook header for the static-export bug it dodges). jsdom defaults
+  // to `/` — set the URL bar to the route the page would actually be on
+  // so the hook resolves to the identifier.
+  window.history.replaceState({}, "", `/portal/patients/${IDENTIFIER}`);
 });
 
 describe("PatientDetailPage — page shell + stats", () => {
@@ -100,6 +103,7 @@ describe("PatientDetailPage — page shell + stats", () => {
   it("decodes a URL-encoded identifier in the param", async () => {
     mockUseParams.mockReturnValue({ identifier: "MRN%2F12345" });
     mockUsePathname.mockReturnValue("/portal/patients/MRN%2F12345");
+    window.history.replaceState({}, "", "/portal/patients/MRN%2F12345");
     vi.mocked(listMySessionsByPatientIdentifier).mockResolvedValue([]);
     render(withIntl(<PatientDetailClient />));
 
