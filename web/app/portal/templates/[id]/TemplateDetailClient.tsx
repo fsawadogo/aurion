@@ -2,7 +2,8 @@
 
 import { Code2, Download, LayoutGrid } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useRouteSegment } from "@/lib/use-route-segment";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
@@ -30,8 +31,10 @@ import type { CustomTemplate, TemplateDefinition } from "@/types";
  */
 export default function TemplateDetailPage() {
   const router = useRouter();
-  const params = useParams<{ id: string }>();
-  const templateId = params.id;
+  // Static-export gotcha — see web/lib/use-route-segment.ts. `useParams()`
+  // returns the build-time "_" sentinel under `output: "export"`; the hook
+  // reads from the URL bar so the real template ID wins at runtime.
+  const templateId = useRouteSegment("id");
 
   const [row, setRow] = useState<CustomTemplate | null>(null);
   const [loading, setLoading] = useState(true);

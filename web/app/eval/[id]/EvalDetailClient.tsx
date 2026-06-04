@@ -3,7 +3,7 @@
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useRouteSegment } from "@/lib/use-route-segment";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -53,15 +53,13 @@ function fmtMs(ms: number): string {
   return `${m.toString().padStart(2, "0")}:${s.toString().padStart(2, "0")}`;
 }
 
-// Under static export the `params` prop carries the placeholder ID
-// from `generateStaticParams` (`"_"`). We read the real ID from
-// `useParams()` instead — see `app/sessions/[id]/SessionDetailClient.tsx`
-// for the rationale.
+// Static-export gotcha — see web/lib/use-route-segment.ts. `useParams()`
+// returns the build-time "_" sentinel under `output: "export"`; the hook
+// reads from the URL bar so the real eval ID wins at runtime.
 export default function EvalDetailClient(
   _props: { params: { id: string } },
 ) {
-  const routeParams = useParams<{ id: string }>();
-  const evalId = routeParams?.id ?? "";
+  const evalId = useRouteSegment("id");
   const [data, setData] = useState<EvalSessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);

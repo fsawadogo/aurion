@@ -3,7 +3,7 @@
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useRouteSegment } from "@/lib/use-route-segment";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -48,16 +48,18 @@ const sourceLabel: Record<string, string> = {
 };
 
 // Under static export the `params` prop carries the placeholder ID
-// from `generateStaticParams` (`"_"`). We read the real ID from
-// `useParams()` instead, which reflects the URL the browser is on
-// after Amplify's SPA-fallback rewrite served the placeholder shell.
-// `params` is ignored on purpose — preserved in the signature so the
-// server wrapper in `page.tsx` keeps working without further plumbing.
+// from `generateStaticParams` ("_"). `useParams()` returns the same
+// sentinel — it reads from the matched route, not the URL bar — so
+// downstream fetches hit /api/v1/sessions/_ and 422 in production.
+// `useRouteSegment()` reads from `usePathname()`, which reflects the
+// real URL after Amplify's SPA-fallback rewrite served the placeholder
+// shell. `params` is ignored on purpose — preserved in the signature
+// so the server wrapper in `page.tsx` keeps working without further
+// plumbing.
 export default function SessionDetailClient(
   _props: { params: { id: string } },
 ) {
-  const routeParams = useParams<{ id: string }>();
-  const sessionId = routeParams?.id ?? "";
+  const sessionId = useRouteSegment("id");
   const [data, setData] = useState<SessionDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
