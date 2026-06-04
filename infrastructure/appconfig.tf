@@ -230,6 +230,30 @@ resource "aws_appconfig_hosted_configuration_version" "main" {
       per_session_visual_evidence_mode_override = true
     }
   })
+
+  # The AWS provider's `aws_appconfig_hosted_configuration_version`
+  # resource has a long-running InvalidSignatureException bug — the
+  # em-dash (U+2014) in the description corrupts the SigV4 canonical
+  # string at the SDK layer, so every `terraform apply` that touches
+  # this resource hits a 403. Twice now (Cohort 5 keys on 2026-06-03;
+  # #61 longitudinal_context key on 2026-06-04) we've fallen back to
+  # the AWS CLI to push a new hosted version, which leaves Terraform
+  # state at v4 while live runs at v6+. Every subsequent apply then
+  # tries to "create" a fresh version → same 403 → blocks every
+  # downstream deploy (the deploy-dev workflow died on this on
+  # 2026-06-04 right after the PR #234 auth-pivot merge, leaving the
+  # new backend image queued in ECR but never rolled to ECS).
+  #
+  # Solution: declare the content + description ignored after creation.
+  # Future content changes go through the AWS CLI workflow
+  # (`aws appconfig create-hosted-configuration-version` + a fresh
+  # `aws appconfig start-deployment`), which doesn't hit the SDK bug.
+  # Terraform stops trying to recreate the resource on every apply, so
+  # the deploy pipeline unblocks. The schema validator on the profile
+  # still gates content shape — that resource is updated normally.
+  lifecycle {
+    ignore_changes = [content, description]
+  }
 }
 
 # -----------------------------------------------------------------------------
