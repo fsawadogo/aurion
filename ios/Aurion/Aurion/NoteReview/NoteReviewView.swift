@@ -142,6 +142,7 @@ struct NoteReviewView: View {
 
             if let n = note {
                 stage2Banner
+                contextAwareBadgeOrNil(n)
                 conflictsBanner(n)
                 ScrollViewReader { proxy in
                     ScrollView {
@@ -269,6 +270,60 @@ struct NoteReviewView: View {
         let value: String
         var id: String { value }
         init(_ value: String) { self.value = value }
+    }
+
+    /// "Context-aware" badge (#61, full slice — Stage 1 note-gen now
+    /// consumes prior encounters into the LLM prompt). Visible iff
+    /// the note carries a non-nil `priorContextUsed` whose
+    /// `encountersReferenced > 0`. Tapping opens the same
+    /// `PriorEncountersListView` sheet the "See all" affordance on
+    /// the rail drives, so there's a single navigation destination.
+    ///
+    /// Hidden in three cases:
+    ///   * `priorContextUsed` is nil (no identifier on the session OR
+    ///     pre-#61 backend payload).
+    ///   * `encountersReferenced == 0` (lookup ran but found nothing).
+    ///   * `session?.externalReferenceId` is empty (defensive — should
+    ///     line up with the first case, but a backend / iOS race
+    ///     between the two payloads could land us here briefly).
+    @ViewBuilder
+    private func contextAwareBadgeOrNil(_ note: NoteResponse) -> some View {
+        let count = note.priorContextUsed?.encountersReferenced ?? 0
+        if count > 0,
+           let identifier = session?.externalReferenceId,
+           !identifier.isEmpty {
+            Button {
+                AurionHaptics.selection()
+                priorEncountersListIdentifier = identifier
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "clock.arrow.circlepath")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundColor(.aurionGoldDark)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("priorEncounters.contextBadge.title"))
+                            .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                            .foregroundColor(.aurionGoldDark)
+                        Text(L("priorEncounters.contextBadge.subtitle", count))
+                            .aurionFont(12, relativeTo: .caption)
+                            .foregroundColor(.aurionTextSecondary)
+                    }
+                    Spacer()
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .semibold))
+                        .foregroundColor(.aurionGoldDark)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 10)
+                .background(Color.aurionGoldBg)
+                .overlay(alignment: .bottom) {
+                    Rectangle().fill(Color.aurionBorder).frame(height: 1)
+                }
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L("priorEncounters.contextBadge.title"))
+            .accessibilityHint(L("priorEncounters.contextBadge.tapToView"))
+        }
     }
 
     /// Prior-encounters rail (#61, full slice). Hidden when the session
