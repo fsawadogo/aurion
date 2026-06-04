@@ -22,18 +22,53 @@ import Foundation
 @MainActor
 final class CognitoNativeAuth {
     static let shared = CognitoNativeAuth()
-    private init() {}
+
+    /// Injected for tests; production always uses `URLSession.shared`.
+    /// Kept `internal` (not `private`) so `@testable import Aurion` can
+    /// swap a URLProtocol-based fake without ceremony.
+    let urlSession: URLSession
+
+    init(urlSession: URLSession = .shared) {
+        self.urlSession = urlSession
+    }
 
     private let endpoint = URL(string: "https://cognito-idp.\(AppConfig.cognitoRegion).amazonaws.com/")!
 
     // MARK: - Public API
 
-    /// Result of an `InitiateAuth` call. Either tokens (signed in) or a
-    /// challenge the caller must respond to with a separate screen.
+    /// Result of an `InitiateAuth` (or `RespondToAuthChallenge`) call.
+    /// Either tokens (signed in) or a challenge the caller must respond
+    /// to with a separate screen.
+    ///
+    /// - `mfaRequired`: user has already enrolled TOTP. The MFA challenge
+    ///    view collects the 6-digit code and calls `respondToTotpChallenge`.
+    /// - `mfaSetupRequired`: pool policy is mandatory MFA and the user has
+    ///    not enrolled yet. The setup view kicks off `signInForMfaSetup` to
+    ///    get a fresh session, then `beginTotpSetup` for the shared secret,
+    ///    then `verifyTotpSetup` to confirm and finish the sign-in.
     enum SignInOutcome {
         case authenticated(AuthSession)
         case newPasswordRequired(session: String, username: String)
         case mfaRequired(session: String, username: String)
+        case mfaSetupRequired(session: String, username: String)
+    }
+
+    /// First-step return from a TOTP enrolment kickoff. The `secretCode`
+    /// is the base32 shared secret the authenticator app needs; render it
+    /// as both a copyable string AND a QR (`otpauth://…`). The optional
+    /// `session` is non-nil only when enrolment was initiated mid-challenge
+    /// (the `MFA_SETUP` branch) and the verify call must echo it back.
+    struct TotpSetup {
+        let secretCode: String
+        let session: String?
+    }
+
+    /// Result of `VerifySoftwareToken`. We deliberately collapse Cognito's
+    /// `Status` field into a tiny enum — the caller cares about success vs
+    /// "wrong code, ask the user to try again", nothing more.
+    enum TotpVerificationOutcome {
+        case success(session: String?)
+        case codeMismatch
     }
 
     /// Username + password → tokens (or challenge). Token bundle is
@@ -71,6 +106,155 @@ final class CognitoNativeAuth {
         ]
         let raw = try await postJSON(target: "RespondToAuthChallenge", body: body)
         return try processAuthResult(raw, username: username)
+    }
+
+    /// Respond to a `SOFTWARE_TOKEN_MFA` challenge — the daily sign-in
+    /// path once the user is enrolled. The 6-digit `code` is from the
+    /// authenticator app; the `session` token came from the failed
+    /// `InitiateAuth` that returned the challenge.
+    ///
+    /// On success Cognito returns `AuthenticationResult` and we land in
+    /// `.authenticated`, identical to the password-only happy path.
+    func respondToTotpChallenge(
+        session: String,
+        username: String,
+        code: String
+    ) async throws -> SignInOutcome {
+        let body: [String: Any] = [
+            "ChallengeName": "SOFTWARE_TOKEN_MFA",
+            "ClientId": AppConfig.cognitoClientID,
+            "Session": session,
+            "ChallengeResponses": [
+                "USERNAME": username,
+                "SOFTWARE_TOKEN_MFA_CODE": code,
+            ],
+        ]
+        let raw = try await postJSON(target: "RespondToAuthChallenge", body: body)
+        return try processAuthResult(raw, username: username)
+    }
+
+    /// Respond to an `MFA_SETUP` challenge. Cognito does not actually
+    /// return tokens here — it returns a fresh `Session` that
+    /// `AssociateSoftwareToken` (i.e. ``beginTotpSetup``) needs.
+    ///
+    /// We surface that session inside `.mfaSetupRequired` so the setup
+    /// view's state machine is symmetric with the daily-login one — both
+    /// branches start from a Cognito-issued session token.
+    func signInForMfaSetup(
+        session: String,
+        username: String
+    ) async throws -> SignInOutcome {
+        let body: [String: Any] = [
+            "ChallengeName": "MFA_SETUP",
+            "ClientId": AppConfig.cognitoClientID,
+            "Session": session,
+            "ChallengeResponses": [
+                "USERNAME": username,
+            ],
+        ]
+        let raw = try await postJSON(target: "RespondToAuthChallenge", body: body)
+        // Cognito's MFA_SETUP response: either AuthenticationResult
+        // (if the pool didn't actually require setup — unlikely) OR a new
+        // Session that the caller hands to AssociateSoftwareToken.
+        if let auth = raw["AuthenticationResult"] as? [String: Any] {
+            let parsed = try parseSession(auth)
+            KeychainHelper.shared.saveTokens(
+                accessToken: parsed.accessToken,
+                idToken: parsed.idToken,
+                refreshToken: parsed.refreshToken,
+                expiresAt: parsed.expiresAt
+            )
+            return .authenticated(parsed)
+        }
+        let newSession = (raw["Session"] as? String) ?? ""
+        return .mfaSetupRequired(session: newSession, username: username)
+    }
+
+    /// Kick off TOTP enrolment.
+    ///
+    /// Two callers:
+    ///   - Mid-challenge (mandatory-MFA first sign-in): pass the `Session`
+    ///     from ``signInForMfaSetup``. `accessToken` is nil.
+    ///   - Post-signin opt-in (not used in this PR but symmetric for the
+    ///     future Profile › Security flow): pass the `AccessToken`. `session`
+    ///     is nil.
+    ///
+    /// Exactly one of `accessToken` / `session` must be non-nil; the
+    /// `precondition` makes that contract loud at the call site.
+    func beginTotpSetup(
+        accessToken: String? = nil,
+        session: String? = nil
+    ) async throws -> TotpSetup {
+        precondition(
+            (accessToken != nil) != (session != nil),
+            "beginTotpSetup requires exactly one of accessToken or session"
+        )
+        var body: [String: Any] = [:]
+        if let accessToken {
+            body["AccessToken"] = accessToken
+        }
+        if let session {
+            body["Session"] = session
+        }
+        let raw = try await postJSON(target: "AssociateSoftwareToken", body: body)
+        guard let secret = raw["SecretCode"] as? String, !secret.isEmpty else {
+            throw NativeAuthError.malformed
+        }
+        let newSession = raw["Session"] as? String
+        return TotpSetup(secretCode: secret, session: newSession)
+    }
+
+    /// Verify the user-entered 6-digit code against the freshly-associated
+    /// TOTP secret. On `Status: SUCCESS` Cognito flips the user's
+    /// `mfa_setting` to `SOFTWARE_TOKEN_MFA` and future sign-ins will
+    /// challenge.
+    ///
+    /// As with ``beginTotpSetup``, exactly one of `accessToken` / `session`
+    /// must be non-nil — caller passes whatever ``beginTotpSetup`` returned.
+    func verifyTotpSetup(
+        accessToken: String? = nil,
+        session: String? = nil,
+        code: String,
+        friendlyDeviceName: String
+    ) async throws -> TotpVerificationOutcome {
+        precondition(
+            (accessToken != nil) != (session != nil),
+            "verifyTotpSetup requires exactly one of accessToken or session"
+        )
+        var body: [String: Any] = [
+            "UserCode": code,
+            "FriendlyDeviceName": friendlyDeviceName,
+        ]
+        if let accessToken {
+            body["AccessToken"] = accessToken
+        }
+        if let session {
+            body["Session"] = session
+        }
+        do {
+            let raw = try await postJSON(target: "VerifySoftwareToken", body: body)
+            let status = (raw["Status"] as? String) ?? ""
+            switch status {
+            case "SUCCESS":
+                let nextSession = raw["Session"] as? String
+                return .success(session: nextSession)
+            case "ERROR":
+                // Cognito's documented "the code didn't validate" outcome.
+                // Surface as `.codeMismatch` so the UI prompts a retry
+                // without bubbling a raw Cognito string.
+                return .codeMismatch
+            default:
+                throw NativeAuthError.malformed
+            }
+        } catch NativeAuthError.cognito(let type, let message) {
+            // CodeMismatchException is what Cognito uses when the TOTP
+            // code is simply wrong; treat it like the SUCCESS=ERROR case so
+            // the UI shows a single, non-leaky retry message.
+            if type == "CodeMismatchException" {
+                return .codeMismatch
+            }
+            throw NativeAuthError.cognito(type: type, message: message)
+        }
     }
 
     /// Mint a fresh token set from a stored refresh token (biometric
@@ -122,7 +306,7 @@ final class CognitoNativeAuth {
         request.setValue("AWSCognitoIdentityProviderService.\(target)", forHTTPHeaderField: "X-Amz-Target")
         request.httpBody = try JSONSerialization.data(withJSONObject: body)
 
-        let (data, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await urlSession.data(for: request)
         guard let http = response as? HTTPURLResponse else {
             throw NativeAuthError.network("Unexpected response shape")
         }
@@ -161,6 +345,11 @@ final class CognitoNativeAuth {
             return .newPasswordRequired(session: sessionToken, username: username)
         case "SOFTWARE_TOKEN_MFA":
             return .mfaRequired(session: sessionToken, username: username)
+        case "MFA_SETUP":
+            // First sign-in once the pool's mfa_configuration is ON: user
+            // hasn't enrolled TOTP yet, the SetupView will run them through
+            // AssociateSoftwareToken → VerifySoftwareToken → finish.
+            return .mfaSetupRequired(session: sessionToken, username: username)
         default:
             throw NativeAuthError.unsupportedChallenge(name: challengeName)
         }
@@ -214,6 +403,22 @@ enum NativeAuthError: LocalizedError {
                 return message
             case "LimitExceededException", "TooManyRequestsException":
                 return "Too many attempts. Wait a minute, then try again."
+            case "CodeMismatchException":
+                // The setup/verify path collapses this into
+                // `.codeMismatch` before it reaches the user. This branch
+                // exists only for the daily-login challenge path, where we
+                // want a generic message that does NOT echo the entered
+                // digits (no PHI / no auth-secret in surfaces).
+                return "Incorrect code. Try again."
+            case "ExpiredCodeException":
+                return "Code expired. Enter the current one."
+            case "EnableSoftwareTokenMFAException":
+                // Cognito rejected the verify call — usually a TOTP secret
+                // mismatch between AssociateSoftwareToken and the
+                // authenticator app. Surface as a retry prompt.
+                return "Couldn\u{2019}t enable two-factor. Re-scan the code and try again."
+            case "SoftwareTokenMFANotFoundException":
+                return "Two-factor isn\u{2019}t set up on this account. Contact your administrator."
             default:
                 return message
             }
