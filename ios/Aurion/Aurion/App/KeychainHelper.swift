@@ -12,9 +12,15 @@ final class KeychainHelper {
     private let userIdKey = "aurion.auth.user_id"
     private let userRoleKey = "aurion.auth.user_role"
     private let userNameKey = "aurion.auth.user_name"
-    // Cognito hosted-UI OAuth tokens. `authTokenKey` above stays as the
-    // dev-only legacy slot; the Cognito-issued access token is the new
-    // canonical Authorization-Bearer value for any non-local APP_ENV.
+    // Backend-issued JWT slots. Storage keys retain the historical
+    // ``aurion.cognito.*`` prefix on purpose: ``saveTokens`` /
+    // ``getAccessToken`` / ``getRefreshToken`` keep their contracts
+    // byte-identical so no Keychain migration is required during the
+    // AUTH-PIVOT cutover. The values stored here are now
+    // backend-issued JWTs + opaque refresh tokens — not Cognito's
+    // id_token / access_token — but the slot names are stable so a
+    // mixed-cohort fleet (some pilots on backend JWTs, others
+    // mid-cutover on Cognito) keeps working without divergence.
     private let cognitoAccessTokenKey  = "aurion.cognito.access_token"
     private let cognitoIDTokenKey      = "aurion.cognito.id_token"
     private let cognitoRefreshTokenKey = "aurion.cognito.refresh_token"
@@ -58,11 +64,13 @@ final class KeychainHelper {
         delete(key: userNameKey)
     }
 
-    // MARK: - Cognito hosted-UI tokens
+    // MARK: - Backend-issued tokens (post AUTH-PIVOT)
 
-    /// Persist the full OAuth token set after a successful sign-in or
+    /// Persist the full token set after a successful sign-in or
     /// refresh. `accessToken` rides on every API call; `refreshToken`
-    /// is used by ``CognitoAuth.refreshIfNeeded()`` near expiry.
+    /// is used by ``AurionAuth.refreshIfNeeded()`` near expiry.
+    /// Signature preserved for backwards compatibility — see the
+    /// comment block above the storage keys.
     func saveTokens(accessToken: String, idToken: String, refreshToken: String, expiresAt: Date) {
         saveString(key: cognitoAccessTokenKey, value: accessToken)
         saveString(key: cognitoIDTokenKey, value: idToken)
@@ -72,23 +80,21 @@ final class KeychainHelper {
         saveString(key: cognitoExpiresAtKey, value: String(expiresAt.timeIntervalSince1970))
     }
 
-    /// Cognito access token — what APIClient sends as `Bearer …`.
+    /// Backend-issued access JWT — what APIClient sends as `Bearer …`.
     func getAccessToken() -> String? { loadString(key: cognitoAccessTokenKey) }
 
-    /// Cognito id_token — carries the user's email + sub. Useful when
-    /// a view needs to render the signed-in identity without a backend
-    /// round-trip; the backend still validates JWTs via JWKS for every
-    /// real authorisation decision.
+    /// Mirrors ``getAccessToken``. The legacy Cognito flow stored a
+    /// separate id_token here; ``AurionAuth.parseSession`` writes the
+    /// access token to both slots so ``bearerToken``'s fallback chain
+    /// keeps working without a Keychain migration during cutover.
     func getIDToken() -> String? { loadString(key: cognitoIDTokenKey) }
 
-    /// The token to send as the API `Bearer …` header. Prefers the Cognito
-    /// id_token (the backend validates it and reads the `email` claim on
-    /// first sign-in); falls back to the legacy dev token for local-mode
-    /// builds. SINGLE SOURCE OF TRUTH — every request path (APIClient and
-    /// any raw URLSession upload) must use this so they can't drift. The
-    /// transcription upload once read `loadAuthToken()` directly and 401'd
-    /// after the switch to native Cognito login, which writes only the
-    /// Cognito token slots; this helper prevents that class of bug.
+    /// The token to send as the API `Bearer …` header. Prefers the
+    /// id-token slot (populated with the backend access JWT in the
+    /// post-AUTH-PIVOT flow; was the Cognito id_token historically);
+    /// falls back to the legacy dev token for local-mode builds.
+    /// SINGLE SOURCE OF TRUTH — every request path (APIClient and any
+    /// raw URLSession upload) must use this so they can't drift.
     func bearerToken() -> String? { getIDToken() ?? loadAuthToken() }
 
     func getRefreshToken() -> String? { loadString(key: cognitoRefreshTokenKey) }
