@@ -27,8 +27,15 @@ vi.mock("@/lib/portal-api", () => ({
 }));
 
 const mockUseParams = vi.fn();
+const mockUsePathname = vi.fn();
 vi.mock("next/navigation", () => ({
   useParams: () => mockUseParams(),
+  // `useRouteSegment` (web/lib/use-route-segment.ts) reads from
+  // `usePathname()` to dodge the static-export `_` sentinel that
+  // `useParams()` returns in production. Test mock returns the same
+  // path the route would produce, so the helper resolves to the
+  // identifier we set on mockUseParams.
+  usePathname: () => mockUsePathname(),
 }));
 
 import { listMySessionsByPatientIdentifier } from "@/lib/portal-api";
@@ -65,7 +72,11 @@ const UNSORTED_SESSIONS = [SESSION_OLD, SESSION_NEW, SESSION_MID];
 beforeEach(() => {
   vi.mocked(listMySessionsByPatientIdentifier).mockReset();
   mockUseParams.mockReset();
+  mockUsePathname.mockReset();
   mockUseParams.mockReturnValue({ identifier: IDENTIFIER });
+  // `useRouteSegment` prefers the URL bar over the route params; mirror
+  // the route shape so the helper resolves to the identifier above.
+  mockUsePathname.mockReturnValue(`/portal/patients/${IDENTIFIER}`);
 });
 
 describe("PatientDetailPage — page shell + stats", () => {
@@ -88,6 +99,7 @@ describe("PatientDetailPage — page shell + stats", () => {
 
   it("decodes a URL-encoded identifier in the param", async () => {
     mockUseParams.mockReturnValue({ identifier: "MRN%2F12345" });
+    mockUsePathname.mockReturnValue("/portal/patients/MRN%2F12345");
     vi.mocked(listMySessionsByPatientIdentifier).mockResolvedValue([]);
     render(withIntl(<PatientDetailClient />));
 

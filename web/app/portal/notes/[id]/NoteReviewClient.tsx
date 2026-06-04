@@ -2,7 +2,7 @@
 
 import { AlertTriangle, BadgeCheck, Download } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
-import { useParams } from "next/navigation";
+import { useRouteSegment } from "@/lib/use-route-segment";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -50,8 +50,10 @@ import type { Claim, NoteDetail, PhysicianMacro, Session as SessionRow } from "@
  * unresolved (iOS NoteReviewView lines 714-715).
  */
 export default function NoteReviewPage() {
-  const params = useParams<{ id: string }>();
-  const sessionId = params.id;
+  // Static-export gotcha — see web/lib/use-route-segment.ts. `useParams()`
+  // returns the build-time "_" sentinel under `output: "export"`; the
+  // hook reads from `usePathname()` so the real URL wins at runtime.
+  const sessionId = useRouteSegment("id");
 
   const [detail, setDetail] = useState<NoteDetail | null>(null);
   const [loading, setLoading] = useState(true);

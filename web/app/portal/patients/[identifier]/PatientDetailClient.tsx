@@ -13,7 +13,7 @@ import {
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useRouteSegment } from "@/lib/use-route-segment";
 
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -56,25 +56,10 @@ import type { PatientSessionMatch } from "@/types";
  */
 export default function PatientDetailClient() {
   const t = useTranslations("PatientDetail");
-  const params = useParams();
-
-  // `useParams()` returns the raw path segment, still URL-encoded;
-  // decode before display + before passing to the API client.
-  // Defensive: identifier is always a single string param for this
-  // route, but `useParams` types it as `string | string[]`.
-  const rawParam = params?.identifier;
-  const identifier = useMemo(() => {
-    if (!rawParam) return "";
-    const segment = Array.isArray(rawParam) ? rawParam[0] : rawParam;
-    try {
-      return decodeURIComponent(segment);
-    } catch {
-      // Identifier with invalid % escapes — render the raw segment
-      // rather than crashing. The API call will surface the upstream
-      // 422 in the failure banner.
-      return segment;
-    }
-  }, [rawParam]);
+  // Static-export gotcha — see web/lib/use-route-segment.ts. The hook
+  // also handles URI decoding and the array-vs-string `useParams()`
+  // typing, so the call site stays a single line.
+  const identifier = useRouteSegment("identifier");
 
   const [sessions, setSessions] = useState<PatientSessionMatch[]>([]);
   const [loading, setLoading] = useState(true);

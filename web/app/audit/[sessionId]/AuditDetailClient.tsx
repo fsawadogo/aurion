@@ -3,7 +3,7 @@
 import { ArrowLeft } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useRouteSegment } from "@/lib/use-route-segment";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -35,15 +35,13 @@ function eventBadgeVariant(
   return "info";
 }
 
-// Under static export the `params` prop carries the placeholder ID
-// from `generateStaticParams` (`"_"`). We read the real ID from
-// `useParams()` instead — see SessionDetailClient.tsx for the
-// rationale.
+// Static-export gotcha — see web/lib/use-route-segment.ts for the full
+// rationale. `useParams()` returns the "_" sentinel; the hook reads
+// from the URL bar so the real session ID wins at runtime.
 export default function AuditDetailClient(
   _props: { params: { sessionId: string } },
 ) {
-  const routeParams = useParams<{ sessionId: string }>();
-  const sessionId = decodeURIComponent(routeParams?.sessionId ?? "");
+  const sessionId = useRouteSegment("sessionId");
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
