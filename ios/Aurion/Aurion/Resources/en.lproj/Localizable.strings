@@ -481,7 +481,42 @@
 "login.signingIn" = "Signing in\U2026";
 "login.firstTimeHint" = "First-time access? Use the temporary password your administrator sent \U2014 Aurion will prompt you to set a new one.";
 "login.backendLookupFailed" = "Signed in but backend lookup failed: %@";
-"login.mfaUnsupported" = "MFA is enabled on this pool, but this build can\U2019t prompt for a code. Contact admin.";
+
+/* ── Login errors (account-enumeration safe) ──────────── */
+"login.error.invalidCredentials" = "Invalid email or password.";
+"login.error.passwordTooWeak" = "That password doesn\U2019t meet the policy. Use 12+ characters with mixed case, a digit, and a symbol.";
+"login.error.invalidResetToken" = "That reset link has expired or already been used. Request a new one.";
+"login.error.network" = "Couldn\U2019t reach Aurion. Check your connection and try again.";
+"login.error.malformed" = "Aurion returned a response we couldn\U2019t read. Try again, or contact support if it keeps happening.";
+
+/* ── MFA: daily TOTP challenge ───────────────────────── */
+"login.mfa.challenge.title" = "Verification code";
+"login.mfa.challenge.subtitle" = "Enter the 6-digit code from your authenticator app.";
+"login.mfa.challenge.codeLabel" = "Code";
+"login.mfa.challenge.verifyButton" = "Verify";
+"login.mfa.challenge.cancelButton" = "Cancel";
+"login.mfa.challenge.invalidCode" = "Incorrect code. Try again.";
+"login.mfa.challenge.expiredCode" = "Code expired. Enter the current one.";
+
+/* ── MFA: first-time TOTP setup ──────────────────────── */
+"login.mfa.setup.title" = "Set up two-factor";
+"login.mfa.setup.intro" = "Scan this QR code with an authenticator app (Google Authenticator, 1Password, Authy).";
+"login.mfa.setup.secretLabel" = "Or enter this code manually";
+"login.mfa.setup.copySecret" = "Copy";
+"login.mfa.setup.copied" = "Copied";
+"login.mfa.setup.confirmLabel" = "Confirm the 6-digit code from the app.";
+"login.mfa.setup.completeButton" = "Complete setup";
+"login.mfa.setup.codeMismatch" = "That code didn\U2019t match. Try again.";
+
+/* ── Forgot password (email-link reset) ──────────────── */
+"login.forgotPassword.linkText" = "Forgot password?";
+"login.forgotPassword.title" = "Reset your password";
+"login.forgotPassword.subtitle" = "Enter the email tied to your Aurion account. We\U2019ll send a reset link if it matches an active account.";
+"login.forgotPassword.emailLabel" = "Email";
+"login.forgotPassword.sendButton" = "Send reset link";
+"login.forgotPassword.sending" = "Sending\U2026";
+"login.forgotPassword.confirmation" = "If that email is on file, a reset link is on its way. Check your inbox.";
+"login.forgotPassword.backToLogin" = "Back to sign in";
 
 /* ── New Password Challenge ───────────────────────────── */
 "newpw.title" = "Set a new password";
