@@ -393,6 +393,12 @@ struct LoginView: View {
     /// full-screen cover sheet rather than swapping the form so the
     /// transition reads as "you got past the first gate, now do this."
     @State private var newPasswordChallenge: (session: String, username: String)?
+    /// Set when Cognito returns the daily `SOFTWARE_TOKEN_MFA` challenge
+    /// for a user who has already enrolled TOTP.
+    @State private var mfaChallenge: MfaChallenge?
+    /// Set when Cognito returns the first-time `MFA_SETUP` challenge —
+    /// pool policy is mandatory MFA and the user hasn't enrolled yet.
+    @State private var mfaSetup: MfaSetupChallenge?
     @FocusState private var focusedField: Field?
 
     enum Field { case email, password }
@@ -542,6 +548,20 @@ struct LoginView: View {
                 handleOutcome(outcome)
             } onCancel: {
                 newPasswordChallenge = nil
+            }
+        }
+        .fullScreenCover(item: $mfaChallenge) { challenge in
+            MfaChallengeView(challenge: challenge) { outcome in
+                handleOutcome(outcome)
+            } onCancel: {
+                mfaChallenge = nil
+            }
+        }
+        .fullScreenCover(item: $mfaSetup) { challenge in
+            MfaSetupView(challenge: challenge) { outcome in
+                handleOutcome(outcome)
+            } onCancel: {
+                mfaSetup = nil
             }
         }
     }
@@ -716,6 +736,8 @@ struct LoginView: View {
                     isSigningIn = false
                     signInSucceeded = true
                     newPasswordChallenge = nil
+                    mfaChallenge = nil
+                    mfaSetup = nil
                     try? await Task.sleep(nanoseconds: 600_000_000)
                     appState.applyAuth(userId: me.userId, role: me.role)
                 } catch {
@@ -727,10 +749,17 @@ struct LoginView: View {
         case .newPasswordRequired(let session, let username):
             isSigningIn = false
             newPasswordChallenge = (session: session, username: username)
-        case .mfaRequired:
+        case .mfaRequired(let session, let username):
+            // User has TOTP enrolled — collect the 6-digit code, ship it
+            // back via respondToTotpChallenge, then return here through
+            // .authenticated on the same outcome handler.
             isSigningIn = false
-            loginError = L("login.mfaUnsupported")
-            AurionHaptics.notification(.error)
+            mfaChallenge = MfaChallenge(session: session, username: username)
+        case .mfaSetupRequired(let session, let username):
+            // Pool is in mandatory-MFA mode and the user hasn't enrolled
+            // yet — run the QR + verify flow, then return to .authenticated.
+            isSigningIn = false
+            mfaSetup = MfaSetupChallenge(session: session, username: username)
         }
     }
 }
