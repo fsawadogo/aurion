@@ -21,6 +21,7 @@ from app.api.v1._helpers import (
 )
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
+from app.core.identifier_hash import hash_identifier
 from app.core.kms_encryption import decrypt_str, encrypt_str
 from app.core.types import SessionState
 from app.modules.auth.service import CurrentUser, get_current_user
@@ -316,8 +317,16 @@ async def set_session_external_reference_id(
     cleared = not raw
     if cleared:
         session.external_reference_id_encrypted = None
+        session.external_reference_id_hash = None
     else:
         session.external_reference_id_encrypted = encrypt_str(raw)
+        # Recompute the deterministic hash alongside the ciphertext so
+        # the indexed lookup (#61) and the rail (#61 foundation) stay
+        # in lockstep. Both columns are NULL together / non-NULL
+        # together; the longitudinal-context query filters on the hash
+        # column directly and would silently miss any row that has
+        # ciphertext but no hash.
+        session.external_reference_id_hash = hash_identifier(raw)
     await db.flush()
 
     # Audit row carries only the bool — never the identifier value
