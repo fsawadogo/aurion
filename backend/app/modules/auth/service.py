@@ -1,7 +1,22 @@
 """JWT authentication and role-based authorization.
 
-Validates JWT tokens issued by AWS Cognito. In local dev, accepts
-a simple bearer token with role claim for testing.
+AUTH-PIVOT-BACKEND: the primary path is the backend-issued HS256
+token from ``app.modules.auth.jwt_tokens``. The Cognito JWKS path
+stays available behind ``AUTH_ACCEPT_LEGACY_COGNITO_JWT=true`` so the
+cutover doesn't have to be flag-day; once all clients have moved to
+the backend tokens the flag flips off in a follow-up PR and the
+JWKS code path is deleted entirely.
+
+In local dev (``APP_ENV=local``) the simple bearer ``<role>:<user_id>``
+token is still accepted — most of the integration test suite is built
+on it and the iOS dev workflow uses it during the simulator loop.
+
+Resolution order:
+  1. ``APP_ENV=local``  → dev token.
+  2. Try the backend HS256 access token.
+  3. If ``AUTH_ACCEPT_LEGACY_COGNITO_JWT=true``, fall through to Cognito
+     JWKS validation.
+  4. Otherwise — or if the legacy path also fails — return 401.
 """
 
 from __future__ import annotations
@@ -22,11 +37,15 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.models import UserModel
 from app.core.types import UserRole
+from app.modules.auth.jwt_tokens import verify_access_token
 
 logger = logging.getLogger("aurion.auth")
 
 _security = HTTPBearer()
 _APP_ENV = os.getenv("APP_ENV", "local")
+_ACCEPT_LEGACY_COGNITO = os.getenv(
+    "AUTH_ACCEPT_LEGACY_COGNITO_JWT", "false"
+).lower() in ("1", "true", "yes")
 
 # ── Cognito Configuration ────────────────────────────────────────────────
 
@@ -53,21 +72,45 @@ async def get_current_user(
     credentials: HTTPAuthorizationCredentials = Depends(_security),
     db: AsyncSession = Depends(get_db),
 ) -> CurrentUser:
-    """FastAPI dependency — extract and validate the current user from JWT.
+    """FastAPI dependency — extract and validate the current user.
 
-    In local dev, accepts a simple token format: <role>:<user_id>
-    In production, validates against Cognito JWKS, then enforces account
-    activation (a deactivated user is blocked on their next request).
+    Resolution order (see module docstring): dev token → backend HS256
+    JWT → optional Cognito JWKS legacy fallback. Whichever path
+    succeeds runs through ``_ensure_active`` so a deactivated user is
+    blocked on the next request regardless of which credential path
+    they used.
     """
     token = credentials.credentials
 
     if _APP_ENV == "local":
         return _parse_dev_token(token)
 
-    # Production: validate JWT against Cognito JWKS
-    user = await _validate_cognito_jwt(token)
-    await _ensure_active(db, user.user_id)
-    return user
+    # Primary path: backend-issued HS256 access token.
+    payload = verify_access_token(token)
+    if payload is not None:
+        user = CurrentUser(
+            user_id=payload.user_id,
+            role=payload.role,
+            email=payload.email,
+        )
+        await _ensure_active(db, user.user_id)
+        return user
+
+    # Legacy cutover fallback — only attempted while the cutover env
+    # flag is on. Once all clients have moved to backend tokens the
+    # flag flips off and this branch becomes dead code we delete.
+    if _ACCEPT_LEGACY_COGNITO:
+        try:
+            user = await _validate_cognito_jwt(token)
+            await _ensure_active(db, user.user_id)
+            return user
+        except HTTPException:
+            pass
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Invalid or expired token.",
+    )
 
 
 async def _ensure_active(db: AsyncSession, user_id: uuid.UUID) -> None:
