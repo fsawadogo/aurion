@@ -40,6 +40,46 @@ class UserModel(Base):
     last_login_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # ── AUTH-PIVOT-BACKEND — backend-issued JWT + TOTP MFA ─────────────────
+    #
+    # ``mfa_secret_encrypted`` is the KMS-encrypted TOTP base32 secret. The
+    # raw secret is never persisted plaintext and never logged; the helper
+    # in ``app.core.kms_encryption`` is the only call site. NULL until the
+    # user enrolls; cleared back to NULL on admin-issued MFA reset.
+    #
+    # ``mfa_enrolled_at`` is the canonical "MFA on?" flag for the login
+    # router. We keep both columns because the encrypted secret alone
+    # would force a KMS round-trip every login just to know whether MFA
+    # was set — the timestamp lets us short-circuit cheaply, then decrypt
+    # only when verifying a code.
+    #
+    # ``failed_login_count`` + ``locked_until`` back the in-DB lockout
+    # gate (5 failures → 15 minutes). Counter resets on successful login
+    # so a returning user with a few stale failures doesn't stay near
+    # the threshold forever. ``locked_until`` is a wall-clock timestamp:
+    # once it passes, the next ``record_failure`` flips the counter
+    # back to 1 (a fresh lockout window starts only after the next
+    # streak), and a successful login zeroes both columns.
+    #
+    # ``last_password_changed_at`` is for the iOS forced-change UI in a
+    # follow-up PR (we never enforce a hard rotation cadence here; the
+    # column is the data anchor that lets a future policy do so without
+    # a schema migration).
+    mfa_secret_encrypted: Mapped[bytes | None] = mapped_column(
+        LargeBinary, nullable=True
+    )
+    mfa_enrolled_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    failed_login_count: Mapped[int] = mapped_column(
+        Integer, nullable=False, default=0
+    )
+    locked_until: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_password_changed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
