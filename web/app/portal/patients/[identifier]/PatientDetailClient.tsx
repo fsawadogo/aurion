@@ -228,7 +228,10 @@ function SessionRow({ session }: { session: PatientSessionMatch }) {
   const variant = badgeVariantFor(session.state as never);
   return (
     <li className="py-2.5">
-      <Link
+      {/* Plain anchor for dynamic `/portal/notes/[id]` — Next `<Link>`
+          collapses the URL under static export.
+          See web/lib/use-route-segment.ts. */}
+      <a
         href={`/portal/notes/${session.session_id}`}
         className="flex items-center gap-3 hover:bg-gray-50 -mx-2 px-2 py-1 rounded-md transition-colors"
         data-testid={`patient-detail-row-${session.session_id}`}
@@ -249,7 +252,7 @@ function SessionRow({ session }: { session: PatientSessionMatch }) {
           {session.state.replace(/_/g, " ")}
         </Badge>
         <ArrowRight className="h-4 w-4 text-gray-300 shrink-0" />
-      </Link>
+      </a>
     </li>
   );
 }

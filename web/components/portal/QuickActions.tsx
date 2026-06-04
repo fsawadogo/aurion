@@ -2,7 +2,6 @@
 
 import { Download, IdCard, Search, Sparkles, X } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
@@ -155,7 +154,6 @@ function ActionCard({
  */
 function FindByIdentifierDialog({ onClose }: { onClose: () => void }) {
   const t = useTranslations("Dashboard.quickActions.findByIdentifier");
-  const router = useRouter();
   const inputRef = useRef<HTMLInputElement>(null);
 
   const [query, setQuery] = useState("");
@@ -203,7 +201,12 @@ function FindByIdentifierDialog({ onClose }: { onClose: () => void }) {
   // regardless of which row they clicked. Identifier is URL-encoded
   // so a `/`-containing chart number stays in one path segment.
   function openPatientPage() {
-    router.push(`/portal/patients/${encodeURIComponent(query.trim())}`);
+    // Hard navigation for dynamic `/portal/patients/[identifier]` —
+    // Next router collapses the URL under static export. See
+    // web/lib/use-route-segment.ts.
+    window.location.assign(
+      `/portal/patients/${encodeURIComponent(query.trim())}`,
+    );
     onClose();
   }
 

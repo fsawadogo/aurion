@@ -2,7 +2,6 @@
 
 import { Filter } from "lucide-react";
 import { useEffect, useState, useCallback } from "react";
-import { useRouter } from "next/navigation";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
@@ -26,7 +25,6 @@ const stateBadgeVariant: Record<string, "success" | "warning" | "error" | "info"
 };
 
 export default function SessionsPage() {
-  const router = useRouter();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
@@ -152,7 +150,10 @@ export default function SessionsPage() {
                     return (
                       <tr
                         key={s.id}
-                        onClick={() => router.push(`/sessions/${s.id}`)}
+                        // Hard navigation for dynamic `/sessions/[id]` —
+                        // Next router collapses the URL under static export.
+                        // See web/lib/use-route-segment.ts.
+                        onClick={() => window.location.assign(`/sessions/${s.id}`)}
                         className="cursor-pointer transition-colors hover:bg-gray-50/80"
                       >
                         <td className="whitespace-nowrap px-4 py-3">
