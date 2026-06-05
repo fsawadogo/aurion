@@ -486,6 +486,18 @@ resource "aws_ecs_task_definition" "api" {
         # provider defaults to localhost:8001 (wrong host + wrong port) and
         # every Stage 1 fails with a connection error.
         { name = "WHISPER_API_URL", value = local.whisper_api_url },
+        # AUTH-EMAIL-RESET-WIRING — turn on real SES delivery for
+        # password-reset emails. Flipping AUTH_EMAIL_ENABLED to "true"
+        # routes the call through SES instead of the dev-only log line
+        # (see backend/app/modules/auth/email.py:84 — the false branch
+        # logs the reset link, the true branch hits SES). AUTH_EMAIL_FROM
+        # is the verified sender identity; AUTH_PASSWORD_RESET_URL_BASE
+        # is the URL the reset link points to — the backend appends
+        # `?token=<token>` to whatever this value is, so the user lands
+        # at portal.aurionclinical.com/reset-password?token=<token>.
+        { name = "AUTH_EMAIL_ENABLED", value = "true" },
+        { name = "AUTH_EMAIL_FROM", value = "noreply@aurionclinical.com" },
+        { name = "AUTH_PASSWORD_RESET_URL_BASE", value = "https://${var.web_portal_subdomain}/reset-password" },
       ]
 
       secrets = [
