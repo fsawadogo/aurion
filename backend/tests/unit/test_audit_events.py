@@ -62,6 +62,11 @@ EXPECTED_VALUES: dict[str, str] = {
     # Notes
     "STAGE1_APPROVED": "stage1_approved",
     "STAGE1_FAILED": "stage1_failed",
+    # Stage 1 entry guards — no provider call when transcript is empty/low.
+    "STAGE1_SKIPPED_NO_TRANSCRIPT": "stage1_skipped_no_transcript",
+    "STAGE1_SKIPPED_LOW_TRANSCRIPT": "stage1_skipped_low_transcript",
+    # Denormalized session-stats recompute trail.
+    "SESSION_STATS_RECOMPUTED": "session_stats_recomputed",
     "STAGE2_SKIPPED": "stage2_skipped",
     "STAGE2_COMPLETE": "stage2_complete",
     "STAGE2_FAILED": "stage2_failed",
