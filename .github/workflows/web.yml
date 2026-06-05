@@ -76,6 +76,16 @@ jobs:
           # Short retention — the artifact only needs to live long
           # enough for the deploy job downstream. Trims storage cost.
           retention-days: 3
+          # Apple's swcd daemon fetches the AASA from
+          # `/.well-known/apple-app-site-association`. Next.js' static
+          # export already drops hidden dirs from `out/`, which PR #241
+          # fixed via a postbuild `cp -r public/.well-known out/.well-known`.
+          # But upload-artifact@v4 defaults to `include-hidden-files: false`,
+          # which silently strips that same `.well-known/` directory back
+          # out before the artifact reaches the deploy job. Net result was
+          # AASA still missing from the deployed bundle and Amplify
+          # auto-301ing the path. See AUTH-UNIVERSAL-LINKS thread + PR #241 retro.
+          include-hidden-files: true
 
   deploy:
     # Manual-deploy on push to main only. PRs run build + tests (above)
