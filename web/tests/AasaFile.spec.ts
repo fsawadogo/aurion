@@ -2,10 +2,25 @@
  * AUTH-UNIVERSAL-LINKS — regression coverage for the AASA file
  * served at /.well-known/apple-app-site-association.
  *
- * The file lives at web/public/.well-known/apple-app-site-association
- * (no extension — Apple's spec). Next.js copies `public/` verbatim
- * into the static-export bundle, so the file ships through
- * `next build → out/.well-known/...` unchanged.
+ * The canonical copy lives at
+ *   web/public/.well-known/apple-app-site-association
+ * (no extension — Apple's spec). Next.js' static export copies
+ * `public/` verbatim into `out/`, so the file ships through
+ * `next build → out/.well-known/...` unchanged (with help from the
+ * `postbuild: cp -r public/.well-known out/.well-known` hook —
+ * Next.js otherwise drops hidden dirs during export).
+ *
+ * Because Amplify's CDN bypasses custom_rule rewrites for paths
+ * under `.well-known/` and hands them straight to S3 (which then
+ * 301s on extensionless paths to add a trailing slash, breaking
+ * Apple's swcd), we ALSO ship the identical payload at a non-hidden
+ * path:
+ *   web/public/aurion-aasa-payload
+ * An Amplify custom_rule rewrites
+ *   /.well-known/apple-app-site-association  →  /aurion-aasa-payload
+ * with status 200. Header rules still match on the source URL, so
+ * Content-Type: application/json applies untouched. See
+ * infrastructure/amplify.tf for the full chain-of-evidence comment.
  *
  * iOS' swcd daemon validates the file's structure during the
  * domain-claim handshake; if any of these assertions drift, the
@@ -23,6 +38,12 @@ const AASA_PATH = join(
   "public",
   ".well-known",
   "apple-app-site-association",
+);
+
+const NON_HIDDEN_AASA_PATH = join(
+  process.cwd(),
+  "public",
+  "aurion-aasa-payload",
 );
 
 const EXPECTED_APP_ID = "2W2Z75Q5ZA.com.aurionclinical.physician";
@@ -74,5 +95,20 @@ describe("apple-app-site-association", () => {
     // constant and the test would fail).
     expect(EXPECTED_APP_ID).toMatch(/^2W2Z75Q5ZA\./);
     expect(EXPECTED_APP_ID).toContain(".com.aurionclinical.physician");
+  });
+
+  it("ships a non-hidden copy byte-identical to the canonical hidden file", () => {
+    // The non-hidden copy at public/aurion-aasa-payload is the
+    // rewrite TARGET that Amplify actually serves (the canonical
+    // `.well-known/...` source gets 301'd by S3 before our rewrite
+    // can fire — see infrastructure/amplify.tf). If these two ever
+    // drift, iOS will silently see the WRONG App ID / wrong path
+    // matcher on the live URL while the canonical file looks correct
+    // in code review. Lock the equality here so any change to the
+    // hidden file must also update the non-hidden file (and vice
+    // versa) — the test fails loudly the moment they diverge.
+    const canonical = readFileSync(AASA_PATH);
+    const nonHidden = readFileSync(NON_HIDDEN_AASA_PATH);
+    expect(nonHidden.equals(canonical)).toBe(true);
   });
 });

@@ -131,17 +131,38 @@ resource "aws_amplify_app" "web_portal" {
   # auto-301 every extensionless path to add `/`. Result: a request to
   # `/.well-known/apple-app-site-association` → 301 →
   # `/.well-known/apple-app-site-association/` → 404 (HTML), and iOS
-  # rejects the Universal Link claim. Confirmed live on 2026-06-05
-  # right after the PR #239 deploy.
+  # rejects the Universal Link claim.
   #
-  # This explicit rewrite serves the literal file on the no-trailing-
-  # slash URL with status 200, bypassing the auto-redirect. The
-  # `Content-Type: application/json` header on this path stays in the
-  # `custom_headers` block below; the two rules cover orthogonal
-  # concerns (URL → file mapping vs HTTP headers).
+  # Three prior PRs tried to fix this in place:
+  #   - PR #240 added an Amplify custom_rule rewrite for the canonical
+  #     URL → same path, status 200. The rule deployed but never fired
+  #     because the file was missing from the bundle (next two PRs).
+  #   - PR #241 added a postbuild `cp -r public/.well-known out/.well-known`
+  #     — fixed Next.js static export silently dropping hidden dirs.
+  #   - PR #242 added `include-hidden-files: true` to the upload-artifact
+  #     step — fixed the artifact tar stripping hidden dirs.
+  # After all three: file IS in the deploy artifact at
+  # `out/.well-known/apple-app-site-association` (474 bytes, correct
+  # content), the rewrite rule IS deployed at position 7 of 8. Yet
+  # curl still shows S3 origin 301 → trailing-slash variant, fresh
+  # CloudFront miss. Amplify bypasses custom_rule rewrites for paths
+  # under `.well-known/` at the CDN tier and hands them to S3, which
+  # then applies its own trailing-slash redirect. Undocumented but
+  # reproducible on 2026-06-05.
+  #
+  # Workaround: ship the same payload at a NON-HIDDEN path
+  # (`out/aurion-aasa-payload`, copied from `public/aurion-aasa-payload`
+  # by Next.js' standard static-export behaviour) and rewrite the
+  # canonical Apple URL to it with status 200. Amplify honors rewrites
+  # whose target is non-hidden, so the literal file ships under the
+  # URL Apple expects. Header block below still matches on the SOURCE
+  # URL, so Content-Type: application/json applies untouched. The
+  # hidden-path copy at `out/.well-known/...` is intentionally kept
+  # as a belt-and-suspenders fallback until the pilot confirms
+  # Universal Links resolve end-to-end.
   custom_rule {
     source = "/.well-known/apple-app-site-association"
-    target = "/.well-known/apple-app-site-association"
+    target = "/aurion-aasa-payload"
     status = "200"
   }
 
