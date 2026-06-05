@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev",
     "build": "next build",
+    "postbuild": "cp -r public/.well-known out/.well-known",
     "start": "next start",
     "lint": "next lint",
     "test": "vitest"
