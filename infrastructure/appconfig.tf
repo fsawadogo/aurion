@@ -160,105 +160,81 @@ resource "aws_appconfig_configuration_profile" "main" {
 }
 
 # -----------------------------------------------------------------------------
-# Hosted Configuration Version — Default Aurion Config
+# Hosted Configuration Version + Deployment — managed via AWS CLI, not Terraform
 # -----------------------------------------------------------------------------
+#
+# The AWS provider's `aws_appconfig_hosted_configuration_version` resource has
+# a long-running InvalidSignatureException bug: the em-dash (U+2014) in the
+# description string corrupts the SigV4 canonical string at the SDK layer, so
+# every `terraform apply` that touches this resource hits a 403.
+#
+# We hit this:
+#   2026-06-03 — Cohort 5 hybrid keys; CLI workaround pushed v5
+#   2026-06-04 — #61 longitudinal_context key; CLI workaround pushed v6
+#   2026-06-04 — PR #234 auth-pivot deploy died at terraform apply, leaving
+#                the new backend image queued in ECR but never rolled to ECS
+#   2026-06-05 — PR #236's `lifecycle.ignore_changes` didn't help: Terraform
+#                was in CREATE mode because the resource was never imported
+#                into state, so ignore_changes had nothing to ignore yet
+#
+# Decision: stop pretending Terraform owns these two resources. The hosted
+# version + its deployment live in AWS, are recreated via the AWS CLI when
+# we need new content, and Terraform never touches them again.
+#
+# The schema validator on `aws_appconfig_configuration_profile.main` (above)
+# is STILL Terraform-managed — it's the gate that rejects bad content shapes
+# at create-hosted-version time. We're only handing off the "publish new
+# content" step.
+#
+# Workflow when an AppConfig key needs adding / changing:
+#
+#   1. Update the schema validator in this file (the profile resource works
+#      fine in Terraform). Open a PR, merge, deploy.
+#
+#   2. Push the new content via CLI:
+#
+#        aws appconfig create-hosted-configuration-version \
+#          --application-id a8wykyf \
+#          --configuration-profile-id 3f4zwpr \
+#          --content fileb:///tmp/new.json --content-type application/json \
+#          --description "your reason" /tmp/meta.json
+#
+#   3. Deploy it via CLI (deployment strategy stays Terraform-managed):
+#
+#        aws appconfig start-deployment \
+#          --application-id a8wykyf --environment-id dyjjd5e \
+#          --configuration-profile-id 3f4zwpr \
+#          --configuration-version <N> \
+#          --deployment-strategy-id go3hmzn
+#
+# Rollback: live AppConfig still has every prior version. To roll back, run
+# `start-deployment` again with the previous --configuration-version.
+#
+# The current live hosted version + deployment that this block used to manage
+# remain in AWS untouched — we just stop tracking them in state. Removed
+# blocks tell Terraform "remove from state on next apply, do NOT destroy."
 
-resource "aws_appconfig_hosted_configuration_version" "main" {
-  application_id           = aws_appconfig_application.main.id
-  configuration_profile_id = aws_appconfig_configuration_profile.main.configuration_profile_id
-  content_type             = "application/json"
-  description              = "Aurion config — Cohort 5 Phase 1 dual-mode hybrid"
+removed {
+  from = aws_appconfig_hosted_configuration_version.main
 
-  content = jsonencode({
-    providers = {
-      # AssemblyAI (cloud) for the dev env: the self-hosted Whisper EC2
-      # service is scaled to 0 and isn't wired for service discovery, so
-      # local transcription is unavailable. ASSEMBLYAI_API_KEY is injected
-      # to the API task. Switch back to "whisper" once the local service is
-      # restored + addressable (WHISPER_API_URL / service discovery).
-      transcription   = "assemblyai"
-      note_generation = "anthropic"
-      vision          = "openai"
-      # Phase 1 dual-mode (Cohort 5): Gemini 2.5 Pro handles clip-kind
-      # evidence natively. Live-probe verified end-to-end on 2026-06-03.
-      vision_clip = "gemini"
-    }
-    model_params = {
-      note_generation = {
-        temperature = 0.1
-        max_tokens  = 2000
-      }
-      vision = {
-        temperature          = 0.1
-        max_tokens           = 500
-        confidence_threshold = "medium"
-      }
-    }
-    pipeline = {
-      stage1_skip_window_seconds = 60
-      frame_window_clinic_ms     = 3000
-      frame_window_procedural_ms = 7000
-      screen_capture_fps         = 2
-      video_capture_fps          = 1
-      # Phase 1 dual-mode (Cohort 5): hybrid routes motion/rom/gait/
-      # procedural triggers to 7s clip extraction → Gemini Pro; other
-      # triggers stay as frames → OpenAI (the configured vision provider).
-      # Flipped from "frames_only" → "hybrid" on 2026-06-03 by CTO call.
-      visual_evidence_mode     = "hybrid"
-      clip_window_ms           = 7000
-      clip_ring_buffer_seconds = 15
-      clip_trigger_kinds       = ["motion", "rom", "gait", "procedural"]
-      # Longitudinal patient context (#61, full slice). Default of 3
-      # matches the Pydantic schema default — "last visit, the one
-      # before, and one more for context" — and stays well inside the
-      # LLM input budget. Tunable up to 10 without a code change.
-      longitudinal_context_max_encounters = 3
-    }
-    feature_flags = {
-      # Disabled for the pilot. Aurion is a wearable scribe — clinical signal
-      # comes from glasses + audio, not the phone screen, and ReplayKit's
-      # screen-recording prompt + red status bar is alarming in a clinical
-      # room. The whole screen pipeline stays in the codebase, dormant behind
-      # this flag; flip back to true to re-enable without a code change.
-      screen_capture_enabled        = false
-      note_versioning_enabled       = true
-      session_pause_resume_enabled  = true
-      per_session_provider_override = true
-      # Phase 1 dual-mode (Cohort 5): allows the eval team to flip
-      # individual sessions back to clips_only / frames_only via the
-      # per-session override path (P1-7) without redeploying AppConfig.
-      per_session_visual_evidence_mode_override = true
-    }
-  })
-
-  # The AWS provider's `aws_appconfig_hosted_configuration_version`
-  # resource has a long-running InvalidSignatureException bug — the
-  # em-dash (U+2014) in the description corrupts the SigV4 canonical
-  # string at the SDK layer, so every `terraform apply` that touches
-  # this resource hits a 403. Twice now (Cohort 5 keys on 2026-06-03;
-  # #61 longitudinal_context key on 2026-06-04) we've fallen back to
-  # the AWS CLI to push a new hosted version, which leaves Terraform
-  # state at v4 while live runs at v6+. Every subsequent apply then
-  # tries to "create" a fresh version → same 403 → blocks every
-  # downstream deploy (the deploy-dev workflow died on this on
-  # 2026-06-04 right after the PR #234 auth-pivot merge, leaving the
-  # new backend image queued in ECR but never rolled to ECS).
-  #
-  # Solution: declare the content + description ignored after creation.
-  # Future content changes go through the AWS CLI workflow
-  # (`aws appconfig create-hosted-configuration-version` + a fresh
-  # `aws appconfig start-deployment`), which doesn't hit the SDK bug.
-  # Terraform stops trying to recreate the resource on every apply, so
-  # the deploy pipeline unblocks. The schema validator on the profile
-  # still gates content shape — that resource is updated normally.
   lifecycle {
-    ignore_changes = [content, description]
+    destroy = false
+  }
+}
+
+removed {
+  from = aws_appconfig_deployment.initial
+
+  lifecycle {
+    destroy = false
   }
 }
 
 # -----------------------------------------------------------------------------
 # Deployment Strategy — AllAtOnce (immediate)
 # -----------------------------------------------------------------------------
+# Still Terraform-managed — it's just a configuration object, never recreated,
+# never hits the InvalidSignatureException path.
 
 resource "aws_appconfig_deployment_strategy" "all_at_once" {
   name                           = "aurion-all-at-once-${var.environment}"
@@ -271,22 +247,5 @@ resource "aws_appconfig_deployment_strategy" "all_at_once" {
 
   tags = {
     Name = "aurion-deploy-strategy-${var.environment}"
-  }
-}
-
-# -----------------------------------------------------------------------------
-# Deployment — Deploy the initial configuration
-# -----------------------------------------------------------------------------
-
-resource "aws_appconfig_deployment" "initial" {
-  application_id           = aws_appconfig_application.main.id
-  environment_id           = aws_appconfig_environment.main.environment_id
-  configuration_profile_id = aws_appconfig_configuration_profile.main.configuration_profile_id
-  configuration_version    = aws_appconfig_hosted_configuration_version.main.version_number
-  deployment_strategy_id   = aws_appconfig_deployment_strategy.all_at_once.id
-  description              = "Initial deployment"
-
-  tags = {
-    Name = "aurion-appconfig-deployment-${var.environment}"
   }
 }
