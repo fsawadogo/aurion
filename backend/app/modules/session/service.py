@@ -32,12 +32,24 @@ VALID_TRANSITIONS: dict[SessionState, list[SessionState]] = {
     SessionState.CONSENT_PENDING: [SessionState.RECORDING],
     SessionState.RECORDING: [SessionState.PAUSED, SessionState.PROCESSING_STAGE1],
     SessionState.PAUSED: [SessionState.RECORDING, SessionState.PROCESSING_STAGE1],
-    SessionState.PROCESSING_STAGE1: [SessionState.AWAITING_REVIEW],
+    # PROCESSING_STAGE1 can also drop to STAGE1_FAILED_NO_AUDIO when the
+    # transcript is empty / minimal — see ``generate_stage1_note``. The
+    # provider is never called in that branch, so the only legal next
+    # step is AWAITING_REVIEW (happy path) or the failure terminal.
+    SessionState.PROCESSING_STAGE1: [
+        SessionState.AWAITING_REVIEW,
+        SessionState.STAGE1_FAILED_NO_AUDIO,
+    ],
     SessionState.AWAITING_REVIEW: [SessionState.PROCESSING_STAGE2],
     SessionState.PROCESSING_STAGE2: [SessionState.REVIEW_COMPLETE],
     SessionState.REVIEW_COMPLETE: [SessionState.EXPORTED],
     SessionState.EXPORTED: [SessionState.PURGED],
     SessionState.PURGED: [],  # terminal
+    # STAGE1_FAILED_NO_AUDIO is terminal — the only recovery is the
+    # physician discarding the session (DELETE /sessions/{id}) and
+    # starting a fresh one. No forward transition because there's no
+    # audio to retry against.
+    SessionState.STAGE1_FAILED_NO_AUDIO: [],  # terminal
 }
 
 # ── Audit Event Mapping ──────────��────────────────────────────────────────
@@ -53,6 +65,12 @@ STATE_AUDIT_EVENTS: dict[SessionState, AuditEventType] = {
     SessionState.REVIEW_COMPLETE: AuditEventType.FULL_NOTE_DELIVERED,
     SessionState.EXPORTED: AuditEventType.NOTE_EXPORTED,
     SessionState.PURGED: AuditEventType.SESSION_PURGED,
+    # The transcript-empty guard fires a STAGE1_SKIPPED_* event with the
+    # concrete reason BEFORE this state transition; mapping the state
+    # transition itself to STAGE1_FAILED keeps the state-machine audit
+    # uniform and lets compliance dashboards continue to roll up "Stage 1
+    # failed" without learning a new event name.
+    SessionState.STAGE1_FAILED_NO_AUDIO: AuditEventType.STAGE1_FAILED,
 }
 
 

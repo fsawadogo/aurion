@@ -30,8 +30,19 @@ class TestValidTransitions:
         assert SessionState.RECORDING in allowed
         assert SessionState.PROCESSING_STAGE1 in allowed
 
-    def test_processing_stage1_to_awaiting_review(self):
-        assert VALID_TRANSITIONS[SessionState.PROCESSING_STAGE1] == [SessionState.AWAITING_REVIEW]
+    def test_processing_stage1_to_awaiting_review_or_failed_no_audio(self):
+        # lane-backend/empty-transcript-guard: PROCESSING_STAGE1 also drops
+        # into STAGE1_FAILED_NO_AUDIO when the entry guard fires (no
+        # transcript / too short — see modules/note_gen/service.py).
+        allowed = VALID_TRANSITIONS[SessionState.PROCESSING_STAGE1]
+        assert SessionState.AWAITING_REVIEW in allowed
+        assert SessionState.STAGE1_FAILED_NO_AUDIO in allowed
+
+    def test_stage1_failed_no_audio_is_terminal(self):
+        """The guard-fail state is terminal — the only recovery is a
+        session discard (DELETE /sessions/{id}); there's no audio to
+        retry against."""
+        assert VALID_TRANSITIONS[SessionState.STAGE1_FAILED_NO_AUDIO] == []
 
     def test_awaiting_review_to_processing_stage2(self):
         assert VALID_TRANSITIONS[SessionState.AWAITING_REVIEW] == [SessionState.PROCESSING_STAGE2]
@@ -83,9 +94,16 @@ class TestAuditEventMapping:
 
 
 class TestStateCompleteness:
-    def test_ten_states_exist(self):
-        """The spec requires exactly 10 states."""
-        assert len(SessionState) == 10
+    def test_state_count_matches_documented_set(self):
+        """The CLAUDE.md spec pinned 10 happy-path states; the empty-
+        transcript guard adds STAGE1_FAILED_NO_AUDIO as a terminal off-
+        ramp. Total is 10 + 1 = 11 — every state still maps in
+        ``VALID_TRANSITIONS`` and ``STATE_AUDIT_EVENTS``."""
+        assert len(SessionState) == 11
+        # Every member has a transition entry — guard against silent
+        # state additions that skip the transition table.
+        for state in SessionState:
+            assert state in VALID_TRANSITIONS
 
     def test_no_state_can_skip_consent(self):
         """RECORDING cannot be reached from IDLE — must go through CONSENT_PENDING."""

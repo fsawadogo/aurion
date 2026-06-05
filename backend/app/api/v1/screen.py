@@ -237,5 +237,6 @@ async def _merge_screen_into_note(
         session_id=session_id,
         note=note,
         db=db,
+        stats_trigger="screen_inject",
     )
     return len(new_claims), version_record.version

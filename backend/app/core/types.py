@@ -294,6 +294,15 @@ class SessionState(str, Enum):
     REVIEW_COMPLETE = "REVIEW_COMPLETE"
     EXPORTED = "EXPORTED"
     PURGED = "PURGED"
+    # Stage 1 entry guard (lane-backend/empty-transcript-guard): set when
+    # the transcript is missing, has zero segments, or carries less than
+    # the AppConfig `pipeline.min_transcript_char_threshold` of usable
+    # text. The provider is NEVER called in this branch — the only honest
+    # documentation when there's no source material is "no audio
+    # transcribed". The session is dead at this point; the iOS client
+    # surfaces "re-record" and the session is discarded via
+    # ``SESSION_DISCARDED``.
+    STAGE1_FAILED_NO_AUDIO = "STAGE1_FAILED_NO_AUDIO"
 
 
 class UserRole(str, Enum):

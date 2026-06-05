@@ -25,10 +25,10 @@ from app.api.v1.admin._shared import (
 )
 from app.core.database import get_db
 from app.core.models import SessionModel
-from app.core.types import UserRole
+from app.core.types import Note, UserRole
 from app.modules.auth.service import CurrentUser, require_role
 from app.modules.note_gen import repository as note_repo
-from app.modules.note_gen.service import get_template
+from app.modules.note_gen.service import compute_session_stats, get_template
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -100,24 +100,47 @@ async def get_admin_sessions(
     for s in sessions:
         clinician_name = names_by_id[str(s.clinician_id)]
 
-        completeness_score = 0.0
-        sections_populated = 0
-        sections_required = 0
-        provider_used = ""
-
         latest_note = notes_by_session.get(s.id)
-        if latest_note:
-            completeness_score = latest_note.completeness_score
-            provider_used = latest_note.provider_used
+        # lane-backend/empty-transcript-guard: roll all four stats through
+        # ``compute_session_stats`` so the list endpoint, the detail
+        # endpoint, and the recompute helper share one definition of
+        # "populated". Before this PR the list endpoint counted any
+        # section with ``status == "populated"`` regardless of whether
+        # it had claims, while the detail endpoint required both — so
+        # the same session could show different numbers on the same
+        # page.
+        note_obj: Note | None = None
+        if latest_note is not None:
             try:
                 content = json.loads(latest_note.content)
-                note_sections = content.get("sections", [])
-                sections_required = len(note_sections)
-                sections_populated = sum(
-                    1 for sec in note_sections if sec.get("status") == "populated"
-                )
-            except (json.JSONDecodeError, TypeError):
-                pass
+                note_obj = Note(**content)
+            except (json.JSONDecodeError, TypeError, ValueError):
+                # Corrupt content — fall through to the "no note" zeros
+                # so the dashboard surfaces the bad row honestly rather
+                # than echoing the stale stored completeness_score.
+                note_obj = None
+
+        try:
+            template = get_template(s.specialty)
+        except Exception:
+            template = None
+
+        if note_obj is not None and template is not None:
+            (
+                completeness_score,
+                sections_populated,
+                sections_required,
+                provider_used,
+            ) = compute_session_stats(note_obj, template)
+        else:
+            completeness_score = 0.0
+            sections_populated = 0
+            sections_required = (
+                sum(1 for ts in template.sections if ts.required)
+                if template is not None
+                else 0
+            )
+            provider_used = ""
 
         items.append(SessionAdminResponse(
             id=str(s.id),
@@ -166,18 +189,13 @@ async def get_admin_session_detail(
     clinician_name = name_map[str(s.clinician_id)]
     latest = await note_repo.get_latest_version(db, s.id)
 
-    completeness_score = 0.0
-    sections_populated = 0
-    sections_required = 0
-    provider_used = ""
     note_version = 0
     note_stage = 0
     is_approved = False
     note_sections_by_id: dict[str, dict] = {}
+    note_obj: Note | None = None
 
     if latest is not None:
-        completeness_score = latest.completeness_score
-        provider_used = latest.provider_used
         note_version = latest.version
         note_stage = latest.stage
         is_approved = latest.is_approved
@@ -187,6 +205,14 @@ async def get_admin_session_detail(
                 sid = sec.get("id")
                 if isinstance(sid, str):
                     note_sections_by_id[sid] = sec
+            # Round-trip into the pydantic model so ``compute_session_stats``
+            # gets the same honest definition the scorer would. A corrupt
+            # row falls through to ``note_obj=None`` and the empty-note
+            # zeros, matching the list-endpoint behavior.
+            try:
+                note_obj = Note(**content)
+            except (TypeError, ValueError):
+                note_obj = None
         except (json.JSONDecodeError, TypeError):
             pass
 
@@ -194,6 +220,7 @@ async def get_admin_session_detail(
         template = get_template(s.specialty)
         template_sections = template.sections
     except Exception:
+        template = None
         template_sections = []
 
     section_details: list[SectionDetail] = []
@@ -214,12 +241,21 @@ async def get_admin_session_detail(
             claim_sources=source_counts,
         ))
 
-    if section_details:
+    # lane-backend/empty-transcript-guard: roll the headline four stats
+    # through ``compute_session_stats`` so this endpoint and the list
+    # endpoint can never disagree on what "populated" means.
+    if note_obj is not None and template is not None:
+        (
+            completeness_score,
+            sections_populated,
+            sections_required,
+            provider_used,
+        ) = compute_session_stats(note_obj, template)
+    else:
+        completeness_score = 0.0
+        sections_populated = 0
         sections_required = sum(1 for d in section_details if d.required)
-        sections_populated = sum(
-            1 for d in section_details
-            if d.required and d.status == "populated" and d.claims_count > 0
-        )
+        provider_used = ""
 
     return SessionDetailResponse(
         id=str(s.id),

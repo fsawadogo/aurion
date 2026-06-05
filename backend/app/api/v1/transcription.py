@@ -27,7 +27,7 @@ from app.core.models import PilotMetricsModel, TranscriptModel
 from app.core.types import SessionState
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
-from app.modules.note_gen.service import generate_stage1_note
+from app.modules.note_gen.service import EmptyTranscriptError, generate_stage1_note
 from app.modules.phi_audit.service import scan_transcript_for_phi
 from app.modules.session.service import (
     InvalidTransitionError,
@@ -155,7 +155,9 @@ async def submit_transcription(
     )
 
     # On failure we leave the session in PROCESSING_STAGE1 so a retry of
-    # /transcription/{id} can pick up where it left off.
+    # /transcription/{id} can pick up where it left off — EXCEPT for the
+    # empty-transcript guard branch, which is a terminal failure (no audio
+    # ever reached the backend; re-uploading wouldn't help).
     try:
         await generate_stage1_note(
             transcript=transcript,
@@ -163,6 +165,41 @@ async def submit_transcription(
             session_id=str(session_id),
             db=db,
             output_language=session.output_language,
+        )
+    except EmptyTranscriptError as exc:
+        # lane-backend/empty-transcript-guard: the service already wrote
+        # a STAGE1_SKIPPED_* audit row with a bounded reason string.
+        # Roll the state-machine to STAGE1_FAILED_NO_AUDIO so subsequent
+        # calls (and the iOS retry path) see the terminal state, then
+        # write the STAGE1_FAILED summary row with the same reason for
+        # parity with other Stage 1 failure modes. No 5xx — this is a
+        # 422 because the request was well-formed but the captured
+        # material was insufficient. The provider was NEVER called; no
+        # note version exists; completeness is undefined and the iOS
+        # client knows to surface "re-record".
+        try:
+            await transition_session(
+                db, session, SessionState.STAGE1_FAILED_NO_AUDIO
+            )
+        except InvalidTransitionError:
+            # Already past PROCESSING_STAGE1 somehow — log and move on.
+            # The audit trail still carries the SKIPPED row; the state
+            # machine just diverged from what we expected.
+            logger.warning(
+                "Stage 1 guard fired but session=%s could not transition "
+                "to STAGE1_FAILED_NO_AUDIO from state=%s",
+                session_id,
+                session.state.value,
+            )
+        await write_audit(
+            session_id, AuditEventType.STAGE1_FAILED, reason=exc.reason
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "reason": exc.reason,
+                "message": exc.human_message,
+            },
         )
     except Exception as exc:
         reason = str(exc)[:200]

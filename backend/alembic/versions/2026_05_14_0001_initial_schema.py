@@ -37,6 +37,10 @@ SESSION_STATE_VALUES = (
     "REVIEW_COMPLETE",
     "EXPORTED",
     "PURGED",
+    # Added by migration 0030 (lane-backend/empty-transcript-guard).
+    # Kept in lockstep with app.core.types.SessionState — see
+    # tests/integration/test_migrations.py::test_baseline_enums_match_python_enums.
+    "STAGE1_FAILED_NO_AUDIO",
 )
 
 

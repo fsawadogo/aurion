@@ -97,6 +97,17 @@ class PipelineConfig(BaseModel):
     clip_trigger_kinds: list[str] = Field(
         default_factory=lambda: ["motion", "rom", "gait", "procedural"]
     )
+    # ── Stage 1 entry guard (lane-backend/empty-transcript-guard) ─────
+    # Minimum cumulative transcript character count below which Stage 1
+    # is short-circuited with a STAGE1_SKIPPED_LOW_TRANSCRIPT audit
+    # event. 20 characters is roughly "yeah, that's good." — anything
+    # shorter is silence or button-mash noise. The provider is NEVER
+    # called below this threshold; CLAUDE.md §"The Single Most
+    # Important Constraint" forbids generative calls with no source
+    # material. Bounds 0..1000 — 0 disables the low-transcript branch
+    # (the empty/missing branch still fires), 1000 is a paranoia
+    # ceiling for eval-team experiments.
+    min_transcript_char_threshold: int = Field(default=20, ge=0, le=1000)
     # ── Longitudinal patient context (#61, full slice) ─────────────────
     # Cap on the number of prior encounters the Stage 1 note-gen
     # pipeline feeds into the LLM prompt as context. Three is the
