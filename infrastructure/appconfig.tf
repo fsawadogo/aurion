@@ -127,6 +127,23 @@ resource "aws_appconfig_configuration_profile" "main" {
             # the LLM as additional context. Mirrors PipelineConfig in
             # backend/app/modules/config/schema.py.
             longitudinal_context_max_encounters = { type = "integer", minimum = 1, maximum = 10 }
+            # Stage 1 entry guard (lane-backend/empty-transcript-guard).
+            # Minimum cumulative transcript character count below which
+            # Stage 1 is short-circuited with a
+            # STAGE1_SKIPPED_LOW_TRANSCRIPT audit event — the provider
+            # is NEVER called below this threshold. 0 disables only the
+            # low-transcript branch; the missing/empty branch always
+            # fires. Mirrors PipelineConfig in
+            # backend/app/modules/config/schema.py.
+            #
+            # TODO(lane-backend/empty-transcript-guard): push a new hosted
+            # configuration version via the AWS CLI to ship this key into
+            # the live AppConfig document — terraform owns the schema
+            # validator only (see comment block below on why hosted
+            # versions + deployments are CLI-managed). Until that CLI
+            # push lands, the backend keeps reading the Pydantic default
+            # (20), which is byte-identical to what the new schema enforces.
+            min_transcript_char_threshold = { type = "integer", minimum = 0, maximum = 1000 }
           }
         }
         feature_flags = {
