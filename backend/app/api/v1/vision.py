@@ -211,11 +211,16 @@ async def run_stage2_vision(
         captions_filtered, note, system_prompt=reconcile_system_prompt
     )
 
-    # 6. Merge into a new Stage 2 note version
+    # 6. Merge into a new Stage 2 note version. ``stats_trigger`` flows
+    # into the SESSION_STATS_RECOMPUTED audit row so dashboards can
+    # tell "Stage 2 enrichment moved the needle" apart from
+    # "physician edit moved the needle".
     enriched = merge_visual_citations(note, captions)
     enriched.session_id = str(session_id)
     enriched.stage = 2
-    await create_note_version(str(session_id), enriched, db)
+    await create_note_version(
+        str(session_id), enriched, db, stats_trigger="vision_merge"
+    )
 
     enriches = sum(1 for c in captions if c.integration_status == "ENRICHES")
     repeats = sum(1 for c in captions if c.integration_status == "REPEATS")
