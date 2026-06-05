@@ -7,7 +7,12 @@
 # =============================================================================
 
 terraform {
-  required_version = ">= 1.5.0"
+  # 1.7.0 introduced `removed` blocks; appconfig.tf uses them to detach
+  # the InvalidSignatureException-cursed `aws_appconfig_hosted_configuration_version`
+  # and `aws_appconfig_deployment.initial` resources from state without
+  # destroying the live AWS resources. CI runs 1.9.0 so this isn't a CI
+  # constraint — it's a guard for local devs running an older terraform.
+  required_version = ">= 1.7.0"
 
   required_providers {
     aws = {
