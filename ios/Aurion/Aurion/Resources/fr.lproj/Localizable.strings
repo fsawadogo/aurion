@@ -294,6 +294,13 @@
 "processing.title" = "Traitement de la session";
 "processing.generatingNote" = "G\U00E9n\U00E9ration de la note\U2026";
 "processing.a11yProgress" = "Traitement \U00E0 %@ pour cent";
+/* Marie bug-bash (Bug A) — affiché après ~45s d\U2019attente Stage 1.
+   Remplace l\U2019ancien "Stage 1 timed out" déclenché à 30 s. */
+"processing.stillWorkingLong" = "Toujours en cours \U2014 les longues sessions prennent plus de temps\U2026";
+"processing.noteReady" = "Note pr\U00EAte \U00E0 r\U00E9viser";
+/* Prompt d\U2019erreur Stage 1 (le backend a réellement échoué). */
+"processing.stage1Failed.title" = "Impossible de g\U00E9n\U00E9rer la note";
+"processing.stage1Failed.detail" = "Le pipeline Stage 1 ne s\U2019est pas termin\U00E9. Touchez R\U00E9essayer pour relancer \U2014 votre enregistrement est toujours en m\U00E9moire.";
 
 /* ── Connexion ────────────────────────────────────────── */
 "login.appName" = "Aurion";
@@ -378,6 +385,10 @@
 "onboarding.voiceRec.sentence2" = "Il y a une sensibilit\U00E9 \U00E0 la palpation au niveau de l\U2019interligne articulaire m\U00E9dial.";
 "onboarding.voiceRec.sentence3" = "Les bords de la plaie semblent bien rapproch\U00E9s, sans signe d\U2019infection.";
 "onboarding.voiceRec.sentence4" = "J\U2019examine l\U2019imagerie maintenant \U2014 aucun d\U00E9placement de fracture visible.";
+/* Marie bug-bash — copie de garde-fou qualité (Bug C). */
+"onboarding.voiceRec.notHeard" = "Nous ne vous avons pas entendu \U2014 r\U00E9essayez.";
+"onboarding.voiceRec.notHeardRow" = "Non entendu";
+"onboarding.voiceRec.qualityCheckFailed" = "Nous n\U2019avons pas saisi toutes les phrases. R\U00E9enregistrez pour continuer.";
 
 /* ── Sp\U00E9cialit\U00E9s ────────────────────────────── */
 "specialty.orthopedic_surgery" = "Chirurgie orthop\U00E9dique";
