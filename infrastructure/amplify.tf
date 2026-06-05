@@ -125,6 +125,26 @@ resource "aws_amplify_app" "web_portal" {
     status = "200"
   }
 
+  # AASA file (Universal Links) — Apple's swcd daemon NEVER follows
+  # redirects when fetching `apple-app-site-association`, but Next.js'
+  # `trailingSlash: true` setting (next.config.js:40) makes Amplify
+  # auto-301 every extensionless path to add `/`. Result: a request to
+  # `/.well-known/apple-app-site-association` → 301 →
+  # `/.well-known/apple-app-site-association/` → 404 (HTML), and iOS
+  # rejects the Universal Link claim. Confirmed live on 2026-06-05
+  # right after the PR #239 deploy.
+  #
+  # This explicit rewrite serves the literal file on the no-trailing-
+  # slash URL with status 200, bypassing the auto-redirect. The
+  # `Content-Type: application/json` header on this path stays in the
+  # `custom_headers` block below; the two rules cover orthogonal
+  # concerns (URL → file mapping vs HTTP headers).
+  custom_rule {
+    source = "/.well-known/apple-app-site-association"
+    target = "/.well-known/apple-app-site-association"
+    status = "200"
+  }
+
   # Catch-all SPA fallback for single-segment routes (`/login`,
   # `/dashboard`, etc.) — kept last so the explicit rules above win.
   custom_rule {
