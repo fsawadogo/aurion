@@ -85,6 +85,22 @@ class AuditEventType(StrEnum):
     # ── Notes / review ───────────────────────────────────────────────────
     STAGE1_APPROVED = "stage1_approved"
     STAGE1_FAILED = "stage1_failed"
+    # Stage 1 entry guards — fire BEFORE any provider call when the
+    # transcript is empty/missing or too short. We never want a
+    # generative model called with zero source material (CLAUDE.md
+    # §"The Single Most Important Constraint"); these events document
+    # that the guard fired and the provider was not invoked. Counted
+    # alongside STAGE1_FAILED in compliance reports.
+    STAGE1_SKIPPED_NO_TRANSCRIPT = "stage1_skipped_no_transcript"
+    STAGE1_SKIPPED_LOW_TRANSCRIPT = "stage1_skipped_low_transcript"
+    # Debug-tier event emitted when the live session-stats recompute
+    # helper actually changed at least one downstream count. Carries
+    # the new completeness numerator + denominator (PHI-free) so the
+    # eval team can see "this approve/edit just flipped completeness
+    # from 4/6 to 5/6" without diffing two note versions. Only emitted
+    # on actual change (no-op cases stay silent to keep the audit log
+    # quiet).
+    SESSION_STATS_RECOMPUTED = "session_stats_recomputed"
     STAGE2_SKIPPED = "stage2_skipped"
     STAGE2_COMPLETE = "stage2_complete"
     STAGE2_FAILED = "stage2_failed"
@@ -345,6 +361,30 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
         {"version", "provider_used", "completeness_score"}
     ),
     AuditEventType.STAGE1_FAILED: frozenset({"reason"}),
+    # Stage 1 entry guards. ``reason`` is a bounded enum string
+    # ("transcript_empty_or_missing" / "transcript_too_short"), not
+    # free text — see ``MIN_TRANSCRIPT_CHAR_THRESHOLD`` in
+    # ``modules/note_gen/service.py``. ``transcript_char_count`` on
+    # the low-transcript branch is a small integer carrying NO transcript
+    # content — only the cumulative char count of all segments. Strictly
+    # PHI-safe; the actual segment text never leaves the request scope.
+    AuditEventType.STAGE1_SKIPPED_NO_TRANSCRIPT: frozenset({"reason"}),
+    AuditEventType.STAGE1_SKIPPED_LOW_TRANSCRIPT: frozenset(
+        {"reason", "transcript_char_count"}
+    ),
+    # Session-stats recompute audit. ``sections_populated`` /
+    # ``sections_required`` / ``completeness_score`` are the post-
+    # recompute roll-up; they're identical to what the admin endpoints
+    # surface so a compliance check can diff "what the dashboard said"
+    # against "what the audit row recorded". No PHI — counts only.
+    AuditEventType.SESSION_STATS_RECOMPUTED: frozenset(
+        {
+            "trigger",
+            "sections_populated",
+            "sections_required",
+            "completeness_score",
+        }
+    ),
     AuditEventType.STAGE2_SKIPPED: frozenset({"reason"}),
     AuditEventType.STAGE2_COMPLETE: frozenset(
         {
