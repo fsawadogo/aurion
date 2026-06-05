@@ -12,15 +12,53 @@ import Combine
 /// the 1.6s breathing cycle. Sentence rows fade green as they complete.
 /// Audio bars are deterministic + audio-level reactive (no per-render
 /// random jitter).
+///
+/// Marie bug-bash:
+///   * Bug B — sentence rows used to ellipsis-truncate on iPhone Mini.
+///     We now let `Text` wrap naturally and pin vertical sizing with
+///     `.fixedSize(horizontal: false, vertical: true)` so the card
+///     grows to fit the full clinical sentence.
+///   * Bug C — per-sentence "completion" used to advance purely on
+///     elapsed recording time (8s per row). A silent user would see all
+///     four rows turn green and a successful enrollment that
+///     fingerprinted nothing. We now sample the recorder's average
+///     power every 0.1s, accumulate per-sentence windows, and only
+///     turn a row green when (duration ≥ 2.0s) AND (mean dBFS > -45).
+///     A failing row stays amber with "We didn't hear you — try again."
+///     and disables Continue until the user re-records.
 struct VoiceRecordingView: View {
     let onComplete: (URL) -> Void
 
     @StateObject private var recorder = VoiceRecorder()
+    /// Index of the active sentence — advances on the 8s sentence-tick
+    /// boundary regardless of speech quality so the user sees the prompt
+    /// move forward. Quality is evaluated separately per row.
     @State private var sentenceIndex = 0
+    /// Per-sentence pass/fail flags from the on-device quality gate.
+    /// `nil` = not yet evaluated (the recorder hasn't reached this
+    /// window). `true` = green (duration + dBFS thresholds met).
+    /// `false` = amber + "we didn't hear you".
+    @State private var sentenceQuality: [Bool?] = Array(repeating: nil, count: 4)
     @State private var canProceed = false
     @State private var permissionDenied = false
+    /// Set when stop fires but at least one sentence row failed the
+    /// quality gate. Shown as a banner above the record button so the
+    /// user knows WHY Continue is disabled.
+    @State private var qualityCheckFailed = false
 
     private let minimumDuration: TimeInterval = 15
+    /// Bug C — duration floor per sentence window. 2.0s is the spec
+    /// threshold. Even at a leisurely pace, reading any of the four
+    /// sentences below takes well past 2s — anything under is silence
+    /// or a barely-audible mumble.
+    private let perSentenceMinimumDurationSec: TimeInterval = 2.0
+    /// Bug C — mean amplitude floor per sentence window, expressed as
+    /// AVAudioRecorder.averagePower (dBFS, -60..0 in practice). Spec
+    /// threshold is -45 dBFS — quiet normal speech sits around -30 to
+    /// -20 dBFS at conversational distance; -45 catches the "phone in
+    /// pocket, user said nothing" failure mode.
+    private let perSentenceMeanDbFloor: Float = -45.0
+
     private let sentences = [
         L("onboarding.voiceRec.sentence1"),
         L("onboarding.voiceRec.sentence2"),
@@ -28,12 +66,18 @@ struct VoiceRecordingView: View {
         L("onboarding.voiceRec.sentence4"),
     ]
 
+    /// 8-second sentence window — the user reads one sentence per
+    /// `sentenceInterval` so a 4-sentence card covers ~32s, comfortably
+    /// inside the 30–60s embedding-quality range.
+    private let sentenceInterval: TimeInterval = 8.0
+
     var body: some View {
         VStack(spacing: 24) {
             Text(L("onboarding.voiceRec.instruction"))
-                .font(.title3)
-                .fontWeight(.semibold)
+                .aurionFont(20, weight: .semibold, relativeTo: .title3)
                 .foregroundColor(.aurionTextPrimary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
                 .aurionStagger(order: 0, baseDelay: 0.05)
 
             sentenceList
@@ -46,7 +90,7 @@ struct VoiceRecordingView: View {
                     AurionAudioBars(level: recorder.audioLevel)
                         .padding(.horizontal, 40)
                     Text(String(format: "%.0fs", recorder.duration))
-                        .font(.title2)
+                        .aurionFont(22, weight: .regular, relativeTo: .title2)
                         .monospacedDigit()
                         .foregroundColor(.aurionTextPrimary)
                 }
@@ -57,8 +101,11 @@ struct VoiceRecordingView: View {
                 .padding(.top, 8)
 
             Text(statusText)
-                .font(.caption)
+                .aurionFont(12, relativeTo: .caption)
                 .foregroundColor(.secondary)
+                .multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+                .padding(.horizontal, 20)
                 .transition(.opacity)
                 .id(statusText)
                 .animation(.aurionIOS, value: statusText)
@@ -69,20 +116,38 @@ struct VoiceRecordingView: View {
             }
 
             Button(L("onboarding.voiceRec.rerecord")) { resetRecording() }
-                .font(.caption)
+                .aurionFont(12, relativeTo: .caption)
                 .foregroundColor(.aurionTextPrimary)
-                .opacity(canProceed ? 1 : 0)
+                .opacity(canProceed || qualityCheckFailed ? 1 : 0)
 
             Spacer().frame(height: 20)
         }
         .padding(.horizontal, 20)
         .animation(.aurionIOS, value: recorder.isRecording)
         .animation(.aurionIOS, value: canProceed)
+        .animation(.aurionIOS, value: qualityCheckFailed)
         .onAppear { Task { await ensurePermission() } }
+        .onChange(of: recorder.audioLevel) { _, newLevel in
+            // Feed each meter tick into the per-sentence accumulator so
+            // the quality gate has real data to evaluate when the
+            // sentence window closes.
+            guard recorder.isRecording,
+                  sentenceIndex < sentences.count else { return }
+            recorder.recordSampleForSentence(sentenceIndex, normalizedLevel: newLevel)
+        }
         .onChange(of: recorder.duration) { _, newValue in
-            let sentenceInterval = 8.0
             let newIndex = min(Int(newValue / sentenceInterval), sentences.count)
             if newIndex > sentenceIndex {
+                // Close the previous window — evaluate its quality.
+                let closingIndex = sentenceIndex
+                if closingIndex < sentences.count {
+                    let pass = recorder.evaluateSentenceWindow(
+                        index: closingIndex,
+                        minimumDurationSec: perSentenceMinimumDurationSec,
+                        meanDbFloor: perSentenceMeanDbFloor
+                    )
+                    sentenceQuality[closingIndex] = pass
+                }
                 withAnimation(.aurionIOS) { sentenceIndex = newIndex }
             }
             if sentenceIndex >= sentences.count && recorder.isRecording {
@@ -96,28 +161,71 @@ struct VoiceRecordingView: View {
     private var sentenceList: some View {
         VStack(alignment: .leading, spacing: 12) {
             ForEach(Array(sentences.enumerated()), id: \.offset) { index, sentence in
-                let done = index < sentenceIndex
+                let quality = sentenceQuality[safe: index] ?? nil
                 let active = index == sentenceIndex
+                let pass = quality == true
+                let fail = quality == false
                 HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: done ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 16))
-                        .foregroundColor(done ? .aurionGreen : .aurionNavy.opacity(0.3))
-                        .scaleEffect(done ? 1.0 : 0.95)
-                        .animation(.aurionIOS, value: done)
-                    Text(sentence)
-                        .font(.body)
-                        .foregroundColor(active ? .aurionNavy : (done ? .aurionTextSecondary : .secondary))
-                        .opacity(done ? 0.6 : 1)
+                    sentenceIcon(pass: pass, fail: fail, active: active)
+                        .padding(.top, 2) // optical-align with first text line
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(sentence)
+                            .aurionFont(16, weight: .regular, relativeTo: .body)
+                            .foregroundColor(
+                                active ? .aurionNavy :
+                                (pass ? .aurionTextSecondary :
+                                    (fail ? .aurionNavy : .secondary))
+                            )
+                            .opacity(pass ? 0.7 : 1)
+                            .multilineTextAlignment(.leading)
+                            // Bug B — without fixedSize, a Text inside an
+                            // HStack inside a card padded by 16px on each
+                            // side can hit greedy horizontal layout and
+                            // ellipsis-clip on iPhone Mini (320pt content
+                            // width). Pinning vertical sizing forces the
+                            // row to grow to fit the full sentence.
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        if fail {
+                            Text(L("onboarding.voiceRec.notHeardRow"))
+                                .aurionFont(12, weight: .medium, relativeTo: .caption)
+                                .foregroundColor(.aurionGold)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
             }
         }
         .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .background(Color.aurionCardBackground)
         .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
         .overlay(
             RoundedRectangle(cornerRadius: AurionRadius.md)
                 .stroke(Color.aurionBorder, lineWidth: 1)
         )
+    }
+
+    /// Sentence-row leading icon. Three states:
+    /// - pass: filled green checkmark.
+    /// - fail: filled amber exclamation (matches the "we didn't hear
+    ///   you" copy below).
+    /// - active / pending: hollow circle.
+    @ViewBuilder
+    private func sentenceIcon(pass: Bool, fail: Bool, active: Bool) -> some View {
+        if pass {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 16))
+                .foregroundColor(.aurionGreen)
+        } else if fail {
+            Image(systemName: "exclamationmark.circle.fill")
+                .font(.system(size: 16))
+                .foregroundColor(.aurionGold)
+        } else {
+            Image(systemName: "circle")
+                .font(.system(size: 16))
+                .foregroundColor(active ? .aurionNavy.opacity(0.6) : .aurionNavy.opacity(0.3))
+        }
     }
 
     // MARK: - Record button (gold disc with breathing halo on press)
@@ -158,6 +266,7 @@ struct VoiceRecordingView: View {
     private var statusText: String {
         if permissionDenied { return L("onboarding.voiceRec.micDenied") }
         if recorder.isRecording { return L("onboarding.voiceRec.tapStop") }
+        if qualityCheckFailed { return L("onboarding.voiceRec.qualityCheckFailed") }
         if canProceed { return L("onboarding.voiceRec.captured") }
         return L("onboarding.voiceRec.tapStart")
     }
@@ -177,20 +286,77 @@ struct VoiceRecordingView: View {
         AurionHaptics.impact(.medium)
         sentenceIndex = 0
         canProceed = false
+        qualityCheckFailed = false
+        sentenceQuality = Array(repeating: nil, count: sentences.count)
+        recorder.resetSentenceWindows(count: sentences.count)
         recorder.start()
     }
 
     private func stopRecording() {
         recorder.stop()
-        if recorder.duration >= minimumDuration {
-            withAnimation(.aurionIOS) { canProceed = true }
+        // Close the in-flight window if the user stopped mid-sentence.
+        if sentenceIndex < sentences.count,
+           sentenceQuality[sentenceIndex] == nil {
+            let pass = recorder.evaluateSentenceWindow(
+                index: sentenceIndex,
+                minimumDurationSec: perSentenceMinimumDurationSec,
+                meanDbFloor: perSentenceMeanDbFloor
+            )
+            sentenceQuality[sentenceIndex] = pass
         }
+
+        // Quality gate: every required-sentence row must have passed
+        // AND total duration must clear the 15s minimum the embedding
+        // pipeline needs. Anything else surfaces the amber banner.
+        let allEvaluatedRows = sentenceQuality.compactMap { $0 }
+        let anyFailures = allEvaluatedRows.contains(false)
+        let coveredAllRows = allEvaluatedRows.count == sentences.count
+        let durationOK = recorder.duration >= minimumDuration
+
+        if anyFailures || !coveredAllRows || !durationOK {
+            withAnimation(.aurionIOS) { qualityCheckFailed = true }
+            canProceed = false
+
+            // Audit each rejected window so post-pilot we can tune the
+            // thresholds. No PHI — the only payload is the gate's
+            // numeric configuration + observed values.
+            for (idx, pass) in sentenceQuality.enumerated() where pass == false {
+                let observed = recorder.observedStatsForSentence(idx)
+                AuditLogger.logRaw(
+                    eventType: "voice_enrollment_sentence_rejected_low_quality",
+                    extra: [
+                        "sentence_index": "\(idx)",
+                        "duration_floor_sec": String(format: "%.1f", perSentenceMinimumDurationSec),
+                        "mean_db_floor": String(format: "%.1f", perSentenceMeanDbFloor),
+                        "observed_duration_sec": String(format: "%.2f", observed.durationSec),
+                        "observed_mean_db": String(format: "%.1f", observed.meanDb),
+                        "observed_sample_count": "\(observed.sampleCount)",
+                    ]
+                )
+            }
+            return
+        }
+
+        withAnimation(.aurionIOS) { canProceed = true }
     }
 
     private func resetRecording() {
         canProceed = false
+        qualityCheckFailed = false
         sentenceIndex = 0
+        sentenceQuality = Array(repeating: nil, count: sentences.count)
+        recorder.resetSentenceWindows(count: sentences.count)
         recorder.discardLast()
+    }
+}
+
+// MARK: - Safe subscript
+
+private extension Array {
+    /// `nil`-returning indexed access. Avoids out-of-range crashes when
+    /// SwiftUI re-renders mid-state-mutation with a stale index.
+    subscript(safe index: Int) -> Element? {
+        indices.contains(index) ? self[index] : nil
     }
 }
 
@@ -202,6 +368,24 @@ final class VoiceRecorder: ObservableObject {
 
     private let recorder = AurionAudioFileRecorder()
     private var cancellables = Set<AnyCancellable>()
+
+    /// Per-sentence sample accumulators. Each entry holds the meter
+    /// samples that landed during that sentence's 8-second window
+    /// (normalized 0…1) plus the corresponding dBFS we reconstruct from
+    /// the inverse of `AurionAudioFileRecorder`'s clamp. We compute
+    /// pass/fail in `evaluateSentenceWindow` to keep the per-tick path
+    /// allocation-free.
+    private struct SentenceAccumulator {
+        var sampleCount: Int = 0
+        var summedDb: Float = 0
+        /// First and last sample timestamps (recorder.currentTime) so
+        /// we can compute the actual covered duration. Otherwise an
+        /// 8-second nominal window with one sample at t=0 and another
+        /// at t=7.95s would look like an 8-second window of "speech."
+        var firstSampleAt: TimeInterval?
+        var lastSampleAt: TimeInterval?
+    }
+    private var sentenceAccumulators: [SentenceAccumulator] = []
 
     var isRecording: Bool { recorder.isRecording }
     var duration: TimeInterval { recorder.duration }
@@ -238,6 +422,75 @@ final class VoiceRecorder: ObservableObject {
             try? FileManager.default.removeItem(at: url)
         }
         lastRecordingURL = nil
+    }
+
+    // MARK: - Sentence-window quality gate (Marie bug-bash Bug C)
+
+    /// Clear the per-sentence accumulators so a fresh recording starts
+    /// with no carryover. Called from `VoiceRecordingView.startRecording`
+    /// and `resetRecording`.
+    func resetSentenceWindows(count: Int) {
+        sentenceAccumulators = Array(repeating: SentenceAccumulator(), count: count)
+    }
+
+    /// Append one meter tick to the running window for `index`. The
+    /// input is the normalized `audioLevel` (0…1) from
+    /// `AurionAudioFileRecorder`; we invert its `(dB + 60) / 60` clamp
+    /// to recover an approximate dBFS value for the threshold check.
+    /// Approximation, not byte-perfect — the inversion loses sub-dB
+    /// fidelity below -60 dBFS, but our floor is -45 so we're safe.
+    func recordSampleForSentence(_ index: Int, normalizedLevel: Float) {
+        guard index < sentenceAccumulators.count else { return }
+        let clamped = max(0, min(1, normalizedLevel))
+        // Inverse of AurionAudioFileRecorder's `(avgPower + 60) / 60`
+        // clamp. avgPower = clamped * 60 - 60.
+        let db = clamped * 60.0 - 60.0
+        var acc = sentenceAccumulators[index]
+        acc.sampleCount += 1
+        acc.summedDb += db
+        if acc.firstSampleAt == nil { acc.firstSampleAt = duration }
+        acc.lastSampleAt = duration
+        sentenceAccumulators[index] = acc
+    }
+
+    /// Compute pass/fail for a closed sentence window.
+    ///
+    /// Pass requires BOTH:
+    ///   * Covered duration (last sample - first sample) ≥
+    ///     `minimumDurationSec`. Without this, a 0.2s burst of throat-
+    ///     clearing followed by silence would look like a "loud" window
+    ///     by mean-dB alone.
+    ///   * Mean dBFS over the accumulated samples > `meanDbFloor`. Mean
+    ///     not peak — a single loud cough can clear a peak threshold
+    ///     trivially.
+    func evaluateSentenceWindow(
+        index: Int,
+        minimumDurationSec: TimeInterval,
+        meanDbFloor: Float
+    ) -> Bool {
+        guard index < sentenceAccumulators.count else { return false }
+        let acc = sentenceAccumulators[index]
+        guard acc.sampleCount > 0,
+              let first = acc.firstSampleAt,
+              let last = acc.lastSampleAt else {
+            return false
+        }
+        let coveredDuration = last - first
+        let meanDb = acc.summedDb / Float(acc.sampleCount)
+        return coveredDuration >= minimumDurationSec && meanDb > meanDbFloor
+    }
+
+    /// Read-only accessor for the audit-log payload after a rejection.
+    /// No PHI — just numeric meter stats.
+    func observedStatsForSentence(_ index: Int) -> (durationSec: Double, meanDb: Float, sampleCount: Int) {
+        guard index < sentenceAccumulators.count else { return (0, 0, 0) }
+        let acc = sentenceAccumulators[index]
+        let coveredDuration: Double = {
+            guard let first = acc.firstSampleAt, let last = acc.lastSampleAt else { return 0 }
+            return last - first
+        }()
+        let meanDb = acc.sampleCount > 0 ? acc.summedDb / Float(acc.sampleCount) : 0
+        return (coveredDuration, meanDb, acc.sampleCount)
     }
 }
 

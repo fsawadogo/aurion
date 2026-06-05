@@ -294,6 +294,16 @@
 "processing.title" = "Processing Session";
 "processing.generatingNote" = "Generating note\U2026";
 "processing.a11yProgress" = "Processing %@ percent";
+/* Marie bug-bash (Bug A) — shown after ~45s of Stage 1 waiting.
+   Replaces the old "Stage 1 timed out" hard wall-clock that fired
+   spuriously on long sessions. Keep timeout-neutral. */
+"processing.stillWorkingLong" = "Still working \U2014 long sessions take longer\U2026";
+"processing.noteReady" = "Note ready for review";
+/* Retry prompt copy when Stage 1 actually fails on the backend
+   (provider error, server 5xx). The 30s wall-clock case no longer
+   exists — wording stays generic so it covers any backend failure. */
+"processing.stage1Failed.title" = "Couldn\U2019t generate the note";
+"processing.stage1Failed.detail" = "The Stage 1 pipeline didn\U2019t complete. Tap Retry to try again \U2014 your recording is still in memory.";
 
 /* ── Login ─────────────────────────────────────────────── */
 "login.appName" = "Aurion";
@@ -378,6 +388,11 @@
 "onboarding.voiceRec.sentence2" = "There is tenderness on palpation at the medial joint line.";
 "onboarding.voiceRec.sentence3" = "The wound edges appear well approximated with no signs of infection.";
 "onboarding.voiceRec.sentence4" = "I am reviewing the imaging now \U2014 there is no visible fracture displacement.";
+/* Marie bug-bash — quality-gate copy (Bug C). Shown when the on-device
+   meter rejected a sentence window for being too quiet / too short. */
+"onboarding.voiceRec.notHeard" = "We didn\U2019t hear you \U2014 try again.";
+"onboarding.voiceRec.notHeardRow" = "Not heard yet";
+"onboarding.voiceRec.qualityCheckFailed" = "We didn\U2019t catch every sentence. Re-record to continue.";
 
 /* ── Specialties ──────────────────────────────────────── */
 "specialty.orthopedic_surgery" = "Orthopedic Surgery";

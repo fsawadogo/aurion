@@ -4,14 +4,28 @@ import SwiftUI
 import UIKit
 
 /// Stage 1 SLA (CLAUDE.md §"MVP Success Criteria"): record-stop → note
-/// delivered within 30 s. The UI surfaces every phase so the clinician
-/// knows whether to wait, retry, or fall back to dictation.
+/// delivered within 30 s for typical sessions. The UI surfaces every
+/// phase so the clinician knows whether to wait, retry, or fall back to
+/// dictation.
+///
+/// Marie bug-bash (Bug A): the prior `.timedOut` case was driven by a
+/// hard 30-second wall-clock cap that fired spuriously on long
+/// sessions (Marie's 3:30min encounter). Stage 1 delivery is now
+/// signalled out-of-band via `/ws/notes/{id}` and the only "timeout"
+/// the client surfaces is the WebSocket fallback poll deadline (5
+/// minutes — see `AppConfig.stage1WSFallbackPollTimeoutSeconds`).
+/// `.failed(reason:)` covers both real backend failures AND the
+/// fallback-poll deadline expiry.
 enum Stage1Status: Equatable {
     case idle
     case uploading
     case generating
+    /// Stage 1 is taking a while (≥`stage1LongRunStatusFlipSeconds`).
+    /// Same UI as `.generating` but with a reassurance label — no retry
+    /// prompt yet. The ring stays parked at 95% until either the WS
+    /// event lands or the fallback poll trips its 5-min deadline.
+    case stillWorkingLong
     case ready
-    case timedOut(elapsed: TimeInterval)
     case failed(reason: String)
     /// Recorded offline — the audio is persisted to the on-device upload
     /// queue and will sync automatically on reconnect. Not an error; no retry
@@ -19,15 +33,130 @@ enum Stage1Status: Equatable {
     case queuedOffline
 
     /// When non-nil, ProcessingView shows a retry prompt with this copy.
+    ///
+    /// Post-Bug-A: copy is timeout-neutral so it covers any backend
+    /// failure mode (provider error, 5xx, fallback-poll deadline).
+    /// Pulled from Localizable so EN/FR parity is enforced.
     var retryPrompt: (title: String, detail: String)? {
         switch self {
-        case .timedOut(let elapsed):
-            return ("Stage 1 timed out", "The note didn't generate within \(Int(elapsed))s.")
-        case .failed(let reason):
-            return ("Stage 1 failed", reason)
-        case .idle, .uploading, .generating, .ready, .queuedOffline:
+        case .failed:
+            return (
+                L("processing.stage1Failed.title"),
+                L("processing.stage1Failed.detail")
+            )
+        case .idle, .uploading, .generating, .stillWorkingLong, .ready, .queuedOffline:
             return nil
         }
+    }
+}
+
+/// One-shot WebSocket subscriber that listens on `/ws/notes/{session_id}`
+/// for the backend's `stage1_delivered` push and signals via `waitForReady`.
+///
+/// Why a private helper instead of reusing `WebSocketClient`:
+///   * `WebSocketClient` tries to decode every inbound frame as a bare
+///     `NoteResponse`, but Stage 1 / Stage 2 frames arrive wrapped in
+///     a `{"event": ..., "session_id": ..., "note": {...}}` envelope.
+///     Decoding the whole envelope as `NoteResponse` silently fails, so
+///     the client's `latestNote` never publishes a Stage 1 result.
+///   * NoteReviewView already pulls from REST after Stage 2 lands, so
+///     `WebSocketClient`'s broken-on-Stage1 path is currently unused
+///     in practice. Fixing it lives outside this lane's file scope
+///     (Network/ is owned by the audio-upload-resilience lane).
+///
+/// This subscriber decodes the envelope, checks for `event ==
+/// "stage1_delivered"`, and resolves a continuation so the SessionManager
+/// caller can await the push without polling.
+///
+/// Lifetime: `start()` once per audio-submit attempt, `cancel()` on
+/// every exit path (success, failure, defer). Calling `waitForReady`
+/// after `cancel()` returns `false` immediately so the caller can fall
+/// back to polling.
+@MainActor
+private final class Stage1WSSubscriber {
+    private let sessionId: String
+    private var task: URLSessionWebSocketTask?
+    private var continuation: CheckedContinuation<Bool, Never>?
+    /// True once the WS task has either delivered the event or been
+    /// torn down. Subsequent waiters short-circuit so the caller never
+    /// blocks on a dead subscriber.
+    private var finished = false
+
+    init(sessionId: String) {
+        self.sessionId = sessionId
+    }
+
+    func start() {
+        guard let url = URL(string: "\(AppConfig.wsBaseURL)/ws/notes/\(sessionId)") else {
+            // Bad config — treat as "WS not available" so caller falls
+            // back to polling immediately.
+            finished = true
+            return
+        }
+        let task = URLSession.shared.webSocketTask(with: url)
+        self.task = task
+        task.resume()
+        listen()
+    }
+
+    /// Suspend until `stage1_delivered` arrives, the WS drops, or the
+    /// subscriber is cancelled. Returns `true` when the event was seen,
+    /// `false` otherwise — caller should then fall back to polling.
+    func waitForReady() async -> Bool {
+        if finished {
+            return false
+        }
+        return await withCheckedContinuation { (cont: CheckedContinuation<Bool, Never>) in
+            self.continuation = cont
+        }
+    }
+
+    /// Tear down the WS task without resolving the continuation as
+    /// "ready". Idempotent. The deferred `cancel()` in submitAudio's
+    /// happy path is a no-op when `finalize(ready:)` already fired.
+    func cancel() {
+        finalize(ready: false)
+    }
+
+    private func listen() {
+        task?.receive { [weak self] result in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                switch result {
+                case .failure:
+                    // WS closed (clean or otherwise) — let the caller
+                    // fall back to polling.
+                    self.finalize(ready: false)
+                case .success(let message):
+                    let payloadData: Data?
+                    switch message {
+                    case .string(let text): payloadData = text.data(using: .utf8)
+                    case .data(let data): payloadData = data
+                    @unknown default: payloadData = nil
+                    }
+                    if let data = payloadData,
+                       let envelope = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                       let event = envelope["event"] as? String,
+                       event == "stage1_delivered" {
+                        self.finalize(ready: true)
+                        return
+                    }
+                    // Any other event (stage2_progress, stage2_delivered,
+                    // unknown future events) — keep listening; Stage 1
+                    // hasn't fired yet.
+                    self.listen()
+                }
+            }
+        }
+    }
+
+    private func finalize(ready: Bool) {
+        guard !finished else { return }
+        finished = true
+        task?.cancel(with: .goingAway, reason: nil)
+        task = nil
+        continuation?.resume(returning: ready)
+        continuation = nil
     }
 }
 
@@ -938,6 +1067,23 @@ final class SessionManager: ObservableObject {
     }
 
     // MARK: - Audio Submission
+    //
+    // Bug A (Marie bug-bash) — Stage 1 used to be gated by a 30-second
+    // hard wall-clock cap on the URLSession (both `timeoutIntervalForRequest`
+    // and `timeoutIntervalForResource`). Marie's 3:30min session hit this
+    // and surfaced as "Stage 1 timed out after 30s" with a non-functional
+    // Retry. The new flow:
+    //
+    //  1. Open `/ws/notes/{id}` BEFORE the upload POST so we never miss
+    //     the push (the backend can fire it the instant the note lands).
+    //  2. POST the audio with the 5-min upload cap from AppConfig (this
+    //     is upload-bytes, not Stage 1 latency).
+    //  3. After 2xx, await either the WS `stage1_delivered` event or a
+    //     fallback poll-with-deadline if the WS drops.
+    //  4. At ~45s, swap the processing label to a reassurance string;
+    //     the ring stays parked at 95%. No hard timeout — only failure
+    //     paths are "backend said failed", "fallback poll deadline", or
+    //     a real URLSession error.
 
     private func submitAudio() async {
         guard let session else { return }
@@ -975,18 +1121,41 @@ final class SessionManager: ObservableObject {
         stage1Status = .uploading
         processingStatus = "Uploading audio…"
         let stage1Start = Date()
+        // Stash the capture session's id BEFORE the URLSession shadow
+        // below — the inner `let session = URLSession(...)` masks the
+        // outer CaptureSession, and our WS subscriber + audit calls
+        // need the backend session id, not the URLSession instance.
+        let captureSessionId = session.id
+
+        // ── Step 1: open the push channel BEFORE the upload POST. The
+        // backend fires `stage1_delivered` the instant the note lands;
+        // if the WS wasn't already connected, we'd miss it. The
+        // subscription completes when the event arrives OR the WS task
+        // is explicitly cancelled (we cancel in the failure paths).
+        let stage1Ready = Stage1WSSubscriber(sessionId: captureSessionId)
+        stage1Ready.start()
+
+        // ── Step 1b: schedule the "still working" status flip at 45s.
+        // Pure UX — no audit event, no state change. Cancelled when we
+        // leave the audio-submit path.
+        let longRunFlipTask = scheduleStage1LongRunStatusFlip()
+
+        defer {
+            stage1Ready.cancel()
+            longRunFlipTask?.cancel()
+        }
 
         do {
             var request = URLRequest(url: url)
             request.httpMethod = "POST"
-            // True wall-clock SLA cap. `request.timeoutInterval` is only
-            // an inactivity timer (resets every byte), so a slow trickle
-            // could blow past 30s. The resource timeout below is the
-            // hard cap — set on a per-call configuration.
-            request.timeoutInterval = AppConfig.stage1TimeoutSeconds
+            // Upload-only cap. Stage 1 latency is decoupled: the WS
+            // subscription above (and its fallback poll) own the
+            // "when did the note land" signal. This timeout is just
+            // "how long do we let the bytes climb the wire."
+            request.timeoutInterval = AppConfig.stage1UploadTimeoutSeconds
             let config = URLSessionConfiguration.ephemeral
-            config.timeoutIntervalForRequest = AppConfig.stage1TimeoutSeconds
-            config.timeoutIntervalForResource = AppConfig.stage1TimeoutSeconds
+            config.timeoutIntervalForRequest = AppConfig.stage1UploadTimeoutSeconds
+            config.timeoutIntervalForResource = AppConfig.stage1UploadTimeoutSeconds
             let session = URLSession(configuration: config)
 
             let boundary = UUID().uuidString
@@ -1013,11 +1182,20 @@ final class SessionManager: ObservableObject {
                 await applySpeakerTags(transcript: transcript)
             }
 
-            try await Task.sleep(nanoseconds: 500_000_000)
+            // ── Step 2: wait for the WS push, or fall back to polling
+            // with the 5-min deadline if the channel drops. Either way
+            // we then `fetchNote()` over REST — the WS payload carries
+            // the note inline, but the existing iOS plumbing assumes
+            // the canonical store comes from `GET /notes/{id}/stage1`,
+            // so we stay consistent and re-read it. Cheap enough.
+            try await awaitStage1Ready(
+                subscription: stage1Ready,
+                sessionId: captureSessionId
+            )
+
             try await fetchNote()
-            let elapsed = Date().timeIntervalSince(stage1Start)
             stage1Status = .ready
-            processingStatus = "Note ready for review (\(Int(elapsed))s)"
+            processingStatus = L("processing.noteReady")
             uiState = .noteReady
         } catch let urlError as URLError where Self.offlineURLErrorCodes.contains(urlError.code) {
             // Connectivity dropped mid-upload — persist for deferred sync
@@ -1025,12 +1203,22 @@ final class SessionManager: ObservableObject {
             // offline submit straight to the queue; this catches the race
             // where the network died after the request started.)
             await queueAudioOffline()
-        } catch let urlError as URLError where urlError.code == .timedOut {
-            recordStage1Timeout(sessionId: session.id, since: stage1Start)
-        } catch APIError.timeout {
-            // fetchNote() can also time out; surface as the same state so
-            // the user sees retry, not a generic failure.
-            recordStage1Timeout(sessionId: session.id, since: stage1Start)
+        } catch Stage1WaitError.fallbackPollDeadlineExceeded {
+            // WS channel never delivered AND the 5-min fallback poll
+            // gave up. The audit trail already carries the
+            // `stage1_ws_fallback_to_poll` event from awaitStage1Ready
+            // — surface as a generic failure with the retry prompt so
+            // the clinician can re-fire (audio is still in memory).
+            let elapsed = Date().timeIntervalSince(stage1Start)
+            stage1Status = .failed(reason: "Stage 1 did not complete")
+            AuditLogger.log(
+                event: .stage1Failed,
+                sessionId: captureSessionId,
+                extra: [
+                    "reason": "ws_fallback_poll_deadline_exceeded",
+                    "elapsed_ms": "\(Int(elapsed * 1000))",
+                ]
+            )
         } catch {
             // P0-03: NEVER fabricate clinical content in production. The demo
             // fallback is `#if DEBUG`-stripped so the call site doesn't even
@@ -1042,7 +1230,7 @@ final class SessionManager: ObservableObject {
                     ? "Simulator has no audio. Showing demo note."
                     : "Transcription failed: \(error.localizedDescription)"
                 stage1Status = .ready
-                note = createDemoNote(sessionId: session.id, specialty: session.specialty)
+                note = createDemoNote(sessionId: captureSessionId, specialty: session.specialty)
                 uiState = .noteReady
                 return
             }
@@ -1051,23 +1239,92 @@ final class SessionManager: ObservableObject {
             stage1Status = .failed(reason: error.localizedDescription)
             AuditLogger.log(
                 event: .stage1Failed,
-                sessionId: session.id,
+                sessionId: captureSessionId,
                 extra: ["reason": String(error.localizedDescription.prefix(200))]
             )
             // Stay in uiState == .processing so the retry prompt remains reachable.
         }
     }
 
-    private func recordStage1Timeout(sessionId: String, since start: Date) {
-        let elapsed = Date().timeIntervalSince(start)
-        stage1Status = .timedOut(elapsed: elapsed)
-        processingStatus = "Stage 1 timed out after \(Int(elapsed))s"
-        AuditLogger.log(
-            event: .stage1Timeout,
+    // MARK: - Stage 1 wait helpers (Bug A)
+
+    /// Errors surfaced by the WS-or-poll wait helper. Distinct type so
+    /// `submitAudio`'s catch ladder can route the fallback-deadline case
+    /// without conflating it with real backend errors.
+    private enum Stage1WaitError: Error {
+        case fallbackPollDeadlineExceeded
+    }
+
+    /// Wait for Stage 1 to actually land. Prefers the WebSocket push
+    /// (zero polling, no jitter); if that channel dies before the event
+    /// arrives we fall back to polling `GET /notes/{id}/stage1` with a
+    /// 5-minute wall-clock cap (`stage1WSFallbackPollTimeoutSeconds`).
+    ///
+    /// Fallback path emits `stage1_ws_fallback_to_poll` so the audit
+    /// trail records WHY the iOS client paid the polling tax — useful
+    /// for sizing the WS infra post-pilot.
+    private func awaitStage1Ready(
+        subscription: Stage1WSSubscriber,
+        sessionId: String
+    ) async throws {
+        // Happy path — WS fires inside the deadline.
+        if await subscription.waitForReady() {
+            return
+        }
+
+        // WS task ended without seeing the event (disconnect or never
+        // connected). Fall back to polling with a hard deadline.
+        AuditLogger.logRaw(
+            eventType: "stage1_ws_fallback_to_poll",
             sessionId: sessionId,
-            extra: ["stage1_timeout_ms": "\(Int(elapsed * 1000))"]
+            extra: ["fallback_deadline_ms": "\(Int(AppConfig.stage1WSFallbackPollTimeoutSeconds * 1000))"]
         )
-        // Stay in uiState == .processing so ProcessingView (and the retry prompt) stay on screen.
+
+        let deadline = Date().addingTimeInterval(AppConfig.stage1WSFallbackPollTimeoutSeconds)
+        while Date() < deadline {
+            // 2s cadence — same order of magnitude as Stage 2's
+            // existing poller. Faster polls just shove load at the
+            // backend without speeding up the actual generation.
+            try? await Task.sleep(nanoseconds: 2 * 1_000_000_000)
+            do {
+                _ = try await api.getStage1Note(sessionId: sessionId)
+                return
+            } catch APIError.notFound {
+                // Note not generated yet — keep polling.
+                continue
+            } catch {
+                // Any other error — keep polling until the deadline;
+                // we don't want a single hiccup to fail the whole
+                // wait when the WS already failed.
+                continue
+            }
+        }
+        throw Stage1WaitError.fallbackPollDeadlineExceeded
+    }
+
+    /// Flip `processingStatus` to a reassurance string after
+    /// `AppConfig.stage1LongRunStatusFlipSeconds`. No state change —
+    /// just UX copy that tells the clinician "still working, the app
+    /// isn't frozen." Returns the task so the caller can cancel it on
+    /// any exit path.
+    private func scheduleStage1LongRunStatusFlip() -> Task<Void, Never>? {
+        Task { [weak self] in
+            let delay = UInt64(AppConfig.stage1LongRunStatusFlipSeconds * 1_000_000_000)
+            try? await Task.sleep(nanoseconds: delay)
+            guard !Task.isCancelled else { return }
+            await MainActor.run {
+                guard let self else { return }
+                // Only flip if we're still waiting — don't stomp a
+                // .ready or .failed status that arrived first.
+                switch self.stage1Status {
+                case .uploading, .generating:
+                    self.stage1Status = .stillWorkingLong
+                    self.processingStatus = L("processing.stillWorkingLong")
+                case .stillWorkingLong, .ready, .failed, .idle, .queuedOffline:
+                    break
+                }
+            }
+        }
     }
 
     /// Re-fire the Stage 1 pipeline after a timeout/failure. Recorded
