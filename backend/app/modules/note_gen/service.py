@@ -21,8 +21,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_events import AuditEventType
 from app.core.models import NoteVersionModel, SessionModel
-from app.core.types import Note, NoteClaim, PriorContextUsedSummary, Template, Transcript
+from app.core.types import (
+    Note,
+    NoteClaim,
+    NoteSection,
+    PriorContextUsedSummary,
+    Template,
+    Transcript,
+)
 from app.modules.audit_log.service import get_audit_log_service
+from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
 from app.modules.longitudinal_context import (
     PriorContextBlock,
@@ -160,27 +168,98 @@ def list_available_templates() -> list[str]:
 
 # ── Completeness Score ────────────────────────────────────────────────────
 
-def calculate_completeness(note: Note, template: Template) -> float:
-    """Calculate completeness = populated required sections / total required sections.
 
-    A section is considered populated if its status is 'populated' and it
-    has at least one claim.
+# Section statuses that count toward "populated" for completeness purposes.
+# ``populated`` is the Stage 1 / Stage 2 output. Keeping this as a set so
+# the scorer can be extended without revisiting every call site.
+_POPULATED_STATUSES = frozenset({"populated"})
+
+
+def is_section_populated(section: Optional[NoteSection]) -> bool:
+    """Return True iff ``section`` counts as populated for completeness.
+
+    The honest definition has three legs:
+
+    1. The status must be one of ``_POPULATED_STATUSES`` —
+       ``pending_video``, ``not_captured``, and ``processing_failed``
+       all fail this check.
+    2. The section must have at least one claim. The pilot bug that
+       motivated this lane (Marie's 2026-06-05 sessions) produced
+       ``status="populated"`` sections with zero claims when the LLM
+       was called against an empty transcript; the scorer used to
+       count those as populated, which is dishonest.
+    3. Every claim must carry a non-empty ``source_id``. The
+       ``NoteClaim`` pydantic model already enforces this at
+       deserialization time (``Field(..., min_length=1)``), but
+       belt-and-braces here lets the scorer reject any claim that
+       slipped past validation (e.g. an old DynamoDB row from a pre-
+       constraint era).
+
+    Returns False on a ``None`` section so the caller (the completeness
+    loop) can pass ``note.get_section(...)`` straight in.
+    """
+    if section is None:
+        return False
+    if section.status not in _POPULATED_STATUSES:
+        return False
+    if not section.claims:
+        return False
+    return all(bool((c.source_id or "").strip()) for c in section.claims)
+
+
+def calculate_completeness(note: Note, template: Template) -> float:
+    """Calculate completeness = populated required sections / total required.
+
+    ``populated`` is defined by :func:`is_section_populated` — see that
+    docstring for the three-leg honest definition. Sections without
+    ``required=True`` in the template are NOT in the denominator (the
+    eval team can flip an optional section ``populated`` without
+    inflating the completeness score).
+
+    Returns 0.0 when the template has no required sections — a template
+    that doesn't pin any required sections is effectively undefined for
+    completeness purposes; surfacing 0.0 keeps the dashboard honest
+    rather than the old behavior of returning 1.0 (which made an empty
+    template look perfect).
     """
     required_sections = [s for s in template.sections if s.required]
     if not required_sections:
-        return 1.0
+        return 0.0
 
-    populated_count = 0
-    for tmpl_section in required_sections:
-        note_section = note.get_section(tmpl_section.id)
-        if (
-            note_section
-            and note_section.status == "populated"
-            and len(note_section.claims) > 0
-        ):
-            populated_count += 1
-
+    populated_count = sum(
+        1
+        for tmpl_section in required_sections
+        if is_section_populated(note.get_section(tmpl_section.id))
+    )
     return round(populated_count / len(required_sections), 4)
+
+
+def compute_session_stats(
+    note: Optional[Note], template: Template
+) -> tuple[float, int, int, str]:
+    """Roll the honest scorer up into the
+    ``(completeness, populated, required, provider_used)`` tuple every
+    admin endpoint surfaces.
+
+    Single source of truth for the four denormalized stats so the list
+    endpoint, the detail endpoint, and the recompute helper can never
+    drift. ``None`` note → all zeros + empty provider; this matches the
+    "session with no notes" contract from the lane brief (and what the
+    admin endpoint already does in the empty-latest-note branch).
+    """
+    required = [s for s in template.sections if s.required]
+    if note is None:
+        return 0.0, 0, len(required), ""
+
+    populated = sum(
+        1
+        for tmpl_section in required
+        if is_section_populated(note.get_section(tmpl_section.id))
+    )
+    completeness = (
+        round(populated / len(required), 4) if required else 0.0
+    )
+    return completeness, populated, len(required), note.provider_used or ""
 
 
 # ── Prompt Building ───────────────────────────────────────────────────────
@@ -390,6 +469,135 @@ async def _record_provider_usage(
         )
 
 
+# ── Stage 1 Entry Guard (lane-backend/empty-transcript-guard) ──────────
+#
+# Calling a generative model with zero source material is a direct
+# violation of CLAUDE.md §"The Single Most Important Constraint":
+# "Describe only what was directly captured." An empty transcript means
+# nothing was captured, so the only honest documentation is the absence
+# of one. This guard short-circuits Stage 1 BEFORE any provider call
+# when:
+#
+#   * the transcript record is missing (the transcription service never
+#     persisted anything — usually because the audio upload bug Lane 2
+#     is chasing), OR
+#   * the transcript exists but has zero segments, OR
+#   * the cumulative usable text across all segments is below
+#     ``pipeline.min_transcript_char_threshold`` (default 20 — anything
+#     shorter is silence or button-mash noise).
+#
+# The route handler catches ``EmptyTranscriptError`` and transitions
+# the session to ``STAGE1_FAILED_NO_AUDIO`` instead of AWAITING_REVIEW.
+# No note version is created, no provider call is made, no completeness
+# score gets recorded — the broken session leaves zero hallucination
+# surface area.
+
+# Default keeps the guard active even when AppConfig is unreachable
+# at start-up (the `.env` fallback path in appconfig_client returns the
+# defaults). 20 chars ≈ "okay, that's good." — anything shorter is
+# silence or button-mash noise.
+DEFAULT_MIN_TRANSCRIPT_CHAR_THRESHOLD = 20
+
+
+# Bounded enum strings for the audit event ``reason`` field. Strings
+# rather than an Enum so the audit-log wire format stays string-comparable
+# in DynamoDB queries; ``ALLOWED_AUDIT_KWARGS`` constrains the kwarg
+# names, but the values are operator-readable text.
+_REASON_TRANSCRIPT_EMPTY = "transcript_empty_or_missing"
+_REASON_TRANSCRIPT_LOW = "transcript_too_short"
+
+
+class EmptyTranscriptError(Exception):
+    """Raised when the Stage 1 entry guard fires.
+
+    ``reason`` is one of the bounded strings above. ``human_message``
+    is the iOS-facing copy — descriptive, action-oriented, no
+    PHI/transcript content. ``transcript_char_count`` is None for the
+    empty/missing branch (no segments to count) and the cumulative
+    integer count for the low-transcript branch.
+    """
+
+    def __init__(
+        self,
+        *,
+        reason: str,
+        human_message: str,
+        transcript_char_count: Optional[int] = None,
+    ) -> None:
+        self.reason = reason
+        self.human_message = human_message
+        self.transcript_char_count = transcript_char_count
+        super().__init__(f"[empty-transcript-guard] {reason}")
+
+
+def _resolve_min_transcript_char_threshold() -> int:
+    """Read ``pipeline.min_transcript_char_threshold`` from AppConfig.
+
+    Wrapped in a try/except so any AppConfig hiccup degrades to the
+    Pydantic default — Stage 1 must never crash because the threshold
+    lookup hit a transient AWS error. The fallback matches the schema
+    default (20) so behavior is byte-identical to a healthy AppConfig.
+    """
+    try:
+        return int(get_config().pipeline.min_transcript_char_threshold)
+    except Exception:  # noqa: BLE001 — defensive; never crash Stage 1
+        logger.warning(
+            "Failed to read pipeline.min_transcript_char_threshold from "
+            "AppConfig; falling back to default %d",
+            DEFAULT_MIN_TRANSCRIPT_CHAR_THRESHOLD,
+            exc_info=True,
+        )
+        return DEFAULT_MIN_TRANSCRIPT_CHAR_THRESHOLD
+
+
+async def _enforce_transcript_guard(
+    transcript: Optional[Transcript], session_id: str
+) -> None:
+    """Short-circuit Stage 1 when there's no usable transcript.
+
+    Writes the STAGE1_SKIPPED_* audit event and raises
+    ``EmptyTranscriptError``. Never returns a value — successful guard
+    pass is silent. The audit row carries NO transcript content: only
+    a bounded reason string and (on the low branch) a small char count.
+    """
+    audit = get_audit_log_service()
+
+    if transcript is None or not transcript.segments:
+        await audit.write_event(
+            session_id=session_id,
+            event_type=AuditEventType.STAGE1_SKIPPED_NO_TRANSCRIPT,
+            reason=_REASON_TRANSCRIPT_EMPTY,
+        )
+        raise EmptyTranscriptError(
+            reason=_REASON_TRANSCRIPT_EMPTY,
+            human_message=(
+                "No audio was transcribed for this session. Check your "
+                "microphone and re-record."
+            ),
+        )
+
+    # Cumulative usable-character count across all segments. ``s.text``
+    # is the LLM-input text; stripping whitespace catches segments that
+    # carry only spaces (some transcription providers emit those for
+    # silence frames). NO transcript content leaks past this scope.
+    total_text_len = sum(len((s.text or "").strip()) for s in transcript.segments)
+    threshold = _resolve_min_transcript_char_threshold()
+    if total_text_len < threshold:
+        await audit.write_event(
+            session_id=session_id,
+            event_type=AuditEventType.STAGE1_SKIPPED_LOW_TRANSCRIPT,
+            reason=_REASON_TRANSCRIPT_LOW,
+            transcript_char_count=total_text_len,
+        )
+        raise EmptyTranscriptError(
+            reason=_REASON_TRANSCRIPT_LOW,
+            human_message=(
+                "Recording was too short to produce a note. Please re-record."
+            ),
+            transcript_char_count=total_text_len,
+        )
+
+
 # ── Stage 1 Note Generation ──────────────────────────────────────────────
 
 
@@ -415,7 +623,22 @@ async def generate_stage1_note(
     6. Create version record in the database
 
     Returns the generated Note with completeness score and version.
+
+    Raises:
+        EmptyTranscriptError: when the transcript is empty / missing /
+            below ``pipeline.min_transcript_char_threshold``. The provider
+            is NOT called in this branch — CLAUDE.md §"The Single Most
+            Important Constraint" forbids generative calls with zero
+            source material. The audit trail records the STAGE1_SKIPPED_*
+            event with a bounded reason string before the exception is
+            raised; the route handler catches it and transitions the
+            session to ``STAGE1_FAILED_NO_AUDIO``.
     """
+    # ── Stage 1 entry guard (lane-backend/empty-transcript-guard) ────
+    # Fires BEFORE template loading + registry lookup so we don't pay
+    # those costs for a session we already know we won't process.
+    await _enforce_transcript_guard(transcript, session_id)
+
     template = get_template(specialty)
     registry = get_registry()
 
@@ -690,14 +913,68 @@ async def _emit_longitudinal_context_audit(
 
 # ── Note Versioning ───────────────────────────────────────────────────────
 
+
+async def _emit_session_stats_recomputed(
+    *,
+    session_id: str,
+    trigger: str,
+    completeness_score: float,
+    sections_populated: int,
+    sections_required: int,
+    previous_completeness_score: float,
+) -> None:
+    """Write the SESSION_STATS_RECOMPUTED audit row when the recompute
+    actually changed the headline completeness number.
+
+    No-op when nothing changed — the audit log is append-only and we
+    don't want a row for every Stage 2 frame ingestion that didn't
+    move the needle. ``trigger`` is a small bounded label
+    ("create_note_version" today; future call sites add their own).
+    PHI-safe: only the roll-up counts cross into the audit row.
+    """
+    # Compare at the persisted precision (4 dp) so floating-point hiccups
+    # in the recompute don't trip a write.
+    if round(completeness_score, 4) == round(previous_completeness_score, 4):
+        return
+    try:
+        await get_audit_log_service().write_event(
+            session_id=session_id,
+            event_type=AuditEventType.SESSION_STATS_RECOMPUTED,
+            trigger=trigger,
+            sections_populated=sections_populated,
+            sections_required=sections_required,
+            completeness_score=round(completeness_score, 4),
+        )
+    except Exception:  # noqa: BLE001 — audit is best-effort
+        logger.warning(
+            "SESSION_STATS_RECOMPUTED audit write failed (session=%s)",
+            session_id,
+            exc_info=True,
+        )
+
+
 async def create_note_version(
     session_id: str,
     note: Note,
     db: AsyncSession,
+    *,
+    recompute_completeness: bool = True,
+    stats_trigger: str = "create_note_version",
 ) -> NoteVersionModel:
     """Create a new immutable note version record.
 
     Every edit creates a new version. No version is ever deleted.
+
+    ``recompute_completeness`` (default True) re-derives the score
+    from the in-memory ``note.sections`` + the specialty template
+    every time a version is written. Before this lane, edit_note /
+    resolve_conflict / vision / screen all called us with stale
+    in-memory ``note.completeness_score`` values; the persisted score
+    drifted from what the honest scorer would say given the same
+    sections. Recomputing centrally is the single source of truth.
+
+    ``stats_trigger`` flows into the SESSION_STATS_RECOMPUTED audit
+    row's ``trigger`` field — see ``_emit_session_stats_recomputed``.
     """
     result = await db.execute(
         select(func.max(NoteVersionModel.version)).where(
@@ -708,6 +985,35 @@ async def create_note_version(
     next_version = max_version + 1
 
     note.version = next_version
+
+    # lane-backend/empty-transcript-guard: recompute the persisted
+    # completeness so every CUD path (edit, conflict resolve, vision
+    # merge, screen inject) ends up with an honest score. We swallow
+    # template-load failures defensively — Stage 1 won't reach here
+    # without a valid template, but custom-template rows from the
+    # eval team could in theory have a stale ``specialty`` key.
+    previous_score = float(note.completeness_score or 0.0)
+    sections_populated = 0
+    sections_required = 0
+    if recompute_completeness:
+        try:
+            template = get_template(note.specialty)
+        except Exception:  # noqa: BLE001 — never crash a version write
+            logger.warning(
+                "Completeness recompute skipped — template lookup failed "
+                "(session=%s specialty=%s)",
+                session_id,
+                note.specialty,
+            )
+            template = None
+        if template is not None:
+            (
+                completeness,
+                sections_populated,
+                sections_required,
+                _provider,
+            ) = compute_session_stats(note, template)
+            note.completeness_score = round(completeness, 4)
 
     version_record = NoteVersionModel(
         session_id=uuid.UUID(session_id),
@@ -723,11 +1029,29 @@ async def create_note_version(
     await db.flush()
 
     logger.info(
-        "Note version created: session=%s version=%d stage=%d",
+        "Note version created: session=%s version=%d stage=%d "
+        "completeness=%.4f populated=%d required=%d",
         session_id,
         next_version,
         note.stage,
+        note.completeness_score,
+        sections_populated,
+        sections_required,
     )
+
+    # Only emit the recompute audit on subsequent versions — version 1
+    # is the initial creation and STAGE1_DELIVERED already captures
+    # that signal. Versions ≥ 2 represent a real edit / merge / inject
+    # path where the recompute genuinely changes the dashboard story.
+    if recompute_completeness and next_version > 1:
+        await _emit_session_stats_recomputed(
+            session_id=session_id,
+            trigger=stats_trigger,
+            completeness_score=float(note.completeness_score),
+            sections_populated=sections_populated,
+            sections_required=sections_required,
+            previous_completeness_score=previous_score,
+        )
 
     return version_record
 
@@ -852,7 +1176,12 @@ async def edit_note(
             )
             section.status = "populated"
 
-    await create_note_version(session_id, edited_note, db)
+    await create_note_version(
+        session_id,
+        edited_note,
+        db,
+        stats_trigger="edit_note",
+    )
 
     logger.info(
         "Note edited: session=%s new_version=%d sections_edited=%s",
@@ -923,7 +1252,12 @@ async def resolve_conflict(
         target_claim.text = resolution_text or ""
         target_claim.physician_edited = True
 
-    await create_note_version(session_id, updated, db)
+    await create_note_version(
+        session_id,
+        updated,
+        db,
+        stats_trigger="resolve_conflict",
+    )
 
     logger.info(
         "Conflict resolved: session=%s claim=%s action=%s new_version=%d",
