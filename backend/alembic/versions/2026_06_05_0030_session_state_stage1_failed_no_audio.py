@@ -9,12 +9,12 @@ WITHOUT calling the note-generation provider. Calling an LLM with zero
 source material invites hallucination — CLAUDE.md §"The Single Most
 Important Constraint" forbids it.
 
-PostgreSQL enum values can only be added with ``ALTER TYPE ... ADD VALUE``
-which can't run inside a transaction; ``op.execute(...)`` is wrapped in
-the standard ``COMMIT; ALTER TYPE ...; BEGIN;`` pattern alembic uses on
-``postgresql_immutable=True`` enums. We use the simpler isolation_level
-escape hatch via ``op.get_bind().execution_options(...)`` so the migration
-plays cleanly on both the dev DB and CI postgres.
+PostgreSQL 12+ accepts ``ALTER TYPE ... ADD VALUE`` inside a transaction
+block; the only caveat is that the new value can't be referenced in the
+same transaction. We don't reference it here — application code first
+sees the value on a fresh connection after the migration commits — so
+the plain ``op.execute(...)`` path works for both online migrations and
+the offline SQL renderer the test suite exercises.
 
 The downgrade is a no-op: PostgreSQL enums have no ``DROP VALUE`` and the
 defensive workaround (recreate the type without the value) would orphan
@@ -37,12 +37,13 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # ALTER TYPE ... ADD VALUE must run outside a transaction block in
-    # PostgreSQL. Alembic wraps every migration in BEGIN/COMMIT by default,
-    # so we hop to AUTOCOMMIT for this single DDL.
-    bind = op.get_bind()
-    bind = bind.execution_options(isolation_level="AUTOCOMMIT")
-    bind.exec_driver_sql(
+    # ``op.execute`` works in both online (real connection) and offline
+    # (SQL render to stdout) modes — the latter is what
+    # tests/integration/test_migrations.py exercises without a database.
+    # IF NOT EXISTS keeps the migration idempotent against an enum that
+    # already carries the value (e.g. a dev DB seeded from the updated
+    # baseline list in 2026_05_14_0001_initial_schema.py).
+    op.execute(
         "ALTER TYPE session_state ADD VALUE IF NOT EXISTS 'STAGE1_FAILED_NO_AUDIO'"
     )
 
