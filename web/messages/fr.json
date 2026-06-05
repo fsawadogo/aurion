@@ -168,6 +168,43 @@
     "signedIn": "Connecté",
     "forgotPassword": "Mot de passe oublié?"
   },
+  "Auth": {
+    "forgotPassword": {
+      "title": "Mot de passe oublié?",
+      "subtitle": "Saisissez le courriel associé à votre compte Aurion. Nous vous enverrons un lien de réinitialisation.",
+      "emailLabel": "Courriel",
+      "emailPlaceholder": "vous@aurionclinical.com",
+      "submit": "Envoyer le lien",
+      "submitting": "Envoi en cours…",
+      "backToSignIn": "Retour à la connexion",
+      "confirmationTitle": "Vérifiez votre boîte de réception",
+      "confirmationBody": "Si ce courriel est enregistré, un lien de réinitialisation est en route. Vérifiez votre boîte de réception dans quelques minutes.",
+      "transportError": "Impossible de joindre Aurion pour le moment. Vérifiez votre connexion et réessayez."
+    },
+    "resetPassword": {
+      "title": "Définir un nouveau mot de passe",
+      "subtitle": "Choisissez un mot de passe que vous n'avez jamais utilisé. Au moins 8 caractères.",
+      "newPasswordLabel": "Nouveau mot de passe",
+      "confirmPasswordLabel": "Confirmer le nouveau mot de passe",
+      "submit": "Définir le mot de passe",
+      "submitting": "Enregistrement…",
+      "backToSignIn": "Retour à la connexion",
+      "missingTokenTitle": "Lien de réinitialisation incomplet",
+      "missingTokenBody": "Ce lien de réinitialisation ne contient pas de jeton. Demandez-en un nouveau depuis l'écran de connexion.",
+      "errors": {
+        "tooShort": "Le mot de passe doit comporter au moins 8 caractères.",
+        "tooLong": "Le mot de passe ne peut pas dépasser 128 caractères.",
+        "mismatch": "Les mots de passe ne correspondent pas.",
+        "expiredHint": "Votre lien de réinitialisation a peut-être expiré. Demandez-en un nouveau depuis l'écran de connexion.",
+        "usedHint": "Ce lien de réinitialisation a déjà été utilisé. Demandez-en un nouveau depuis l'écran de connexion.",
+        "invalidHint": "Ce lien de réinitialisation n'est pas valide. Vérifiez le lien dans le courriel ou demandez-en un nouveau.",
+        "transport": "Impossible de joindre Aurion pour le moment. Vérifiez votre connexion et réessayez."
+      }
+    },
+    "loginToast": {
+      "resetSuccess": "Mot de passe réinitialisé. Connectez-vous avec votre nouveau mot de passe."
+    }
+  },
   "Common": {
     "loading": "Chargement…",
     "retry": "Réessayer",
