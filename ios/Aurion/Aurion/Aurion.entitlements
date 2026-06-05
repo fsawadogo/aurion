@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!--
+      AUTH-UNIVERSAL-LINKS — claim portal.aurionclinical.com for
+      Universal Links. Only the bare 'applinks:' prefix is needed;
+      the AASA file served from /.well-known/apple-app-site-association
+      on the domain scopes which paths actually open the app (today:
+      /reset-password with a non-empty ?token=).
+
+      Bundle ID: com.aurionclinical.physician
+      Team ID:   2W2Z75Q5ZA
+      App ID:    2W2Z75Q5ZA.com.aurionclinical.physician
+
+      Subdomain only — applinks:aurionclinical.com would claim the
+      apex marketing site too, which is NOT what we want.
+    -->
+    <key>com.apple.developer.associated-domains</key>
+    <array>
+        <string>applinks:portal.aurionclinical.com</string>
+    </array>
+</dict>
+</plist>

@@ -134,6 +134,19 @@ resource "aws_amplify_app" "web_portal" {
   }
 
   # Disallow indexing the portal — it's an admin tool, not public.
+  #
+  # The path-specific rule for `/.well-known/apple-app-site-association`
+  # (AUTH-UNIVERSAL-LINKS) forces `Content-Type: application/json` on
+  # that single file. Apple's swcd daemon will REJECT the AASA file
+  # unless it's served with a JSON content type — and the file
+  # deliberately has no extension, so Amplify's auto-MIME detection
+  # would otherwise serve it as `application/octet-stream` and break
+  # Universal Links app-claim resolution. `nosniff` keeps Safari /
+  # iOS from second-guessing the override. The path-specific block
+  # is listed AFTER the catch-all because YAML headers under
+  # Amplify's customHeaders are additive — every matching rule's
+  # headers merge, with later rules overriding earlier same-keyed
+  # entries; placing it last guarantees the Content-Type win.
   custom_headers = <<-HEADERS
     customHeaders:
       - pattern: '**/*'
@@ -148,6 +161,12 @@ resource "aws_amplify_app" "web_portal" {
             value: 'DENY'
           - key: 'Referrer-Policy'
             value: 'strict-origin-when-cross-origin'
+      - pattern: '/.well-known/apple-app-site-association'
+        headers:
+          - key: 'Content-Type'
+            value: 'application/json'
+          - key: 'X-Content-Type-Options'
+            value: 'nosniff'
   HEADERS
 
   tags = {

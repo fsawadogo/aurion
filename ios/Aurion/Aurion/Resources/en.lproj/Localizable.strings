@@ -518,6 +518,24 @@
 "login.forgotPassword.confirmation" = "If that email is on file, a reset link is on its way. Check your inbox.";
 "login.forgotPassword.backToLogin" = "Back to sign in";
 
+/* ── Reset password (Universal Link in-app surface) ──── */
+"login.resetPassword.title" = "Set a new password";
+"login.resetPassword.subtitle" = "Choose a new password for your Aurion account. You\U2019ll sign in with it on every device.";
+"login.resetPassword.newPasswordLabel" = "New password";
+"login.resetPassword.confirmLabel" = "Confirm password";
+"login.resetPassword.submitButton" = "Set new password";
+"login.resetPassword.submitting" = "Updating\U2026";
+"login.resetPassword.invalidLength" = "Use at least 8 characters.";
+"login.resetPassword.mismatch" = "Passwords don\U2019t match.";
+"login.resetPassword.tokenInvalid" = "This reset link has expired or already been used. Request a new one from the sign-in screen.";
+"login.resetPassword.tokenExpired" = "This reset link has expired. Request a new one from the sign-in screen.";
+"login.resetPassword.successTitle" = "Password updated";
+"login.resetPassword.success" = "Your password is set. Sign in with the new one.";
+"login.resetPassword.signIn" = "Sign in";
+"login.resetPassword.backToLogin" = "Back to sign in";
+"login.resetPassword.showPassword" = "Show password";
+"login.resetPassword.hidePassword" = "Hide password";
+
 /* ── New Password Challenge ───────────────────────────── */
 "newpw.title" = "Set a new password";
 "newpw.forUser" = "For %@";

@@ -518,6 +518,24 @@
 "login.forgotPassword.confirmation" = "Si cette adresse est connue, un lien de r\U00E9initialisation est en route. V\U00E9rifiez votre bo\U00EEte de r\U00E9ception.";
 "login.forgotPassword.backToLogin" = "Retour \U00E0 la connexion";
 
+/* ── R\U00E9initialiser le mot de passe (lien universel in-app) ──── */
+"login.resetPassword.title" = "D\U00E9finir un nouveau mot de passe";
+"login.resetPassword.subtitle" = "Choisissez un nouveau mot de passe pour votre compte Aurion. Il sera utilis\U00E9 sur tous vos appareils.";
+"login.resetPassword.newPasswordLabel" = "Nouveau mot de passe";
+"login.resetPassword.confirmLabel" = "Confirmer le mot de passe";
+"login.resetPassword.submitButton" = "D\U00E9finir le nouveau mot de passe";
+"login.resetPassword.submitting" = "Mise \U00E0 jour\U2026";
+"login.resetPassword.invalidLength" = "Utilisez au moins 8 caract\U00E8res.";
+"login.resetPassword.mismatch" = "Les mots de passe ne correspondent pas.";
+"login.resetPassword.tokenInvalid" = "Ce lien de r\U00E9initialisation a expir\U00E9 ou a d\U00E9j\U00E0 \U00E9t\U00E9 utilis\U00E9. Demandez-en un nouveau depuis l\U2019\U00E9cran de connexion.";
+"login.resetPassword.tokenExpired" = "Ce lien de r\U00E9initialisation a expir\U00E9. Demandez-en un nouveau depuis l\U2019\U00E9cran de connexion.";
+"login.resetPassword.successTitle" = "Mot de passe mis \U00E0 jour";
+"login.resetPassword.success" = "Votre mot de passe est d\U00E9fini. Connectez-vous avec le nouveau.";
+"login.resetPassword.signIn" = "Se connecter";
+"login.resetPassword.backToLogin" = "Retour \U00E0 la connexion";
+"login.resetPassword.showPassword" = "Afficher le mot de passe";
+"login.resetPassword.hidePassword" = "Masquer le mot de passe";
+
 /* ── Nouveau mot de passe ─────────────────────────────── */
 "newpw.title" = "D\U00E9finir un nouveau mot de passe";
 "newpw.forUser" = "Pour %@";
