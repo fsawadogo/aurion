@@ -195,23 +195,33 @@ struct AurionTests {
     }
 
     // MARK: - Stage 1 Retry Prompt Derivation
+    //
+    // Marie bug-bash (Bug A): the `.timedOut(elapsed:)` case was removed
+    // when Stage 1 delivery switched from a 30s wall-clock URLSession
+    // cap to a /ws/notes/{id} subscription. Failure copy is now
+    // localized + timeout-neutral so it covers any backend failure
+    // mode (provider error, 5xx, WS-fallback poll deadline).
 
     @Test func stage1Status_retryPrompt_idleStatesAreSilent() {
         #expect(Stage1Status.idle.retryPrompt == nil)
         #expect(Stage1Status.uploading.retryPrompt == nil)
         #expect(Stage1Status.generating.retryPrompt == nil)
+        #expect(Stage1Status.stillWorkingLong.retryPrompt == nil)
         #expect(Stage1Status.ready.retryPrompt == nil)
+        #expect(Stage1Status.queuedOffline.retryPrompt == nil)
     }
 
-    @Test func stage1Status_retryPrompt_surfacesTimeoutAndFailure() {
-        let timeout = Stage1Status.timedOut(elapsed: 31)
-        #expect(timeout.retryPrompt?.title == "Stage 1 timed out")
-        // Verify the elapsed payload is actually read (was orphaned before simplify).
-        #expect(timeout.retryPrompt?.detail.contains("31") == true)
-
+    @Test func stage1Status_retryPrompt_surfacesFailure() {
+        // `.failed` is now the only state that exposes a retry prompt.
+        // Copy comes from Localizable (`processing.stage1Failed.*`) so
+        // we assert non-empty rather than pinning exact wording — the
+        // strings are EN+FR parity-tested separately by Xcode's
+        // missing-key warnings, not the runtime tests.
         let failure = Stage1Status.failed(reason: "Network error")
-        #expect(failure.retryPrompt?.title == "Stage 1 failed")
-        #expect(failure.retryPrompt?.detail == "Network error")
+        let prompt = failure.retryPrompt
+        #expect(prompt != nil)
+        #expect((prompt?.title.isEmpty ?? true) == false)
+        #expect((prompt?.detail.isEmpty ?? true) == false)
     }
 
     /// Strings that are SAFE to leave on-screen and should not trigger
