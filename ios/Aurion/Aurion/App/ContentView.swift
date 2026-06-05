@@ -347,33 +347,22 @@ struct OfflineStatusBanner: View {
 
 // MARK: - Auth Container
 
-/// Holds the login/register toggle. Each child view gets a closure that
-/// flips the mode without leaking the mode enum into either subview.
+/// Auth container. Post-AUTH-PIVOT-IOS the backend's `/auth/register`
+/// endpoint is gone — admins create accounts through `/admin/users`,
+/// not through a self-serve UI — so this view always presents the
+/// login screen. The container is kept as the single sign-in entry
+/// point so the surrounding view hierarchy (ContentView's auth /
+/// onboarding / dashboard switch) doesn't need to change.
 struct AuthView: View {
-    @State private var mode: AuthMode = .login
-
-    private enum AuthMode { case login, register }
-
     var body: some View {
-        ZStack {
-            switch mode {
-            case .login:
-                LoginView(onSwitchToRegister: { mode = .register })
-                    .transition(.opacity)
-            case .register:
-                RegisterView(onSwitchToLogin: { mode = .login })
-                    .transition(.opacity)
-            }
-        }
-        .animation(AurionAnimation.smooth, value: mode)
+        LoginView()
+            .transition(.opacity)
     }
 }
 
 // MARK: - Premium Login
 
 struct LoginView: View {
-    let onSwitchToRegister: () -> Void
-
     @EnvironmentObject var appState: AppState
     @State private var email = ""
     @State private var password = ""
@@ -388,11 +377,16 @@ struct LoginView: View {
     @State private var rememberMe = KeychainHelper.shared.hasBiometricCredential()
     @State private var hasSavedLogin = KeychainHelper.shared.hasBiometricCredential()
     private let biometricsAvailable = BiometricAuth.isAvailable
-    /// Set when Cognito asks the user to replace their temp password
-    /// (first sign-in for every admin-provisioned account). Drives a
-    /// full-screen cover sheet rather than swapping the form so the
-    /// transition reads as "you got past the first gate, now do this."
-    @State private var newPasswordChallenge: (session: String, username: String)?
+    /// Set when the backend responds to `/auth/login` with `mfa_required`.
+    /// Drives a full-screen cover sheet with the TOTP challenge form. The
+    /// challenge token is a short-lived JWT (5-minute TTL) the backend
+    /// hands back; it's worthless without the user's authenticator code.
+    @State private var mfaChallenge: MfaChallenge?
+    /// Set when the user taps "Forgot password?". Drives a full-screen
+    /// cover with the email-link reset form. State lives here so the
+    /// dismiss callback can clean it up without leaking through the
+    /// LoginView render.
+    @State private var showingForgotPassword = false
     @FocusState private var focusedField: Field?
 
     enum Field { case email, password }
@@ -490,6 +484,17 @@ struct LoginView: View {
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
 
+                    Button {
+                        AurionHaptics.selection()
+                        showingForgotPassword = true
+                    } label: {
+                        Text(L("login.forgotPassword.linkText"))
+                            .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                            .foregroundColor(.aurionGold)
+                    }
+                    .disabled(isSigningIn || signInSucceeded)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
                     if hasSavedLogin {
                         biometricSignInSection
                     }
@@ -534,15 +539,16 @@ struct LoginView: View {
                 loginAppeared = true
             }
         }
-        .fullScreenCover(item: Binding(
-            get: { newPasswordChallenge.map { NewPasswordChallenge(session: $0.session, username: $0.username) } },
-            set: { _ in newPasswordChallenge = nil }
-        )) { challenge in
-            NewPasswordView(challenge: challenge) { outcome in
-                handleOutcome(outcome)
+        .fullScreenCover(item: $mfaChallenge) { challenge in
+            MfaChallengeView(challenge: challenge) { session in
+                handleAuthenticatedSession(session)
             } onCancel: {
-                newPasswordChallenge = nil
+                mfaChallenge = nil
+                isSigningIn = false
             }
+        }
+        .fullScreenCover(isPresented: $showingForgotPassword) {
+            ForgotPasswordView(onDismiss: { showingForgotPassword = false })
         }
     }
 
@@ -648,10 +654,11 @@ struct LoginView: View {
         isSigningIn = true
         loginError = nil
         do {
-            let outcome = try await CognitoNativeAuth.shared.refreshSession(
-                refreshToken: refreshToken
-            )
-            handleOutcome(outcome)
+            // Refresh tokens issued AFTER MFA enrollment carry the
+            // MFA claim — there's no second prompt on the biometric
+            // path, same property as the legacy Cognito flow had.
+            let session = try await AurionAuth.shared.refresh(refreshToken: refreshToken)
+            handleAuthenticatedSession(session)
         } catch {
             // Refresh token expired or revoked — drop the stale credential and
             // fall back to the password form.
@@ -681,7 +688,7 @@ struct LoginView: View {
         isSigningIn = true
         loginError = nil
         do {
-            let outcome = try await CognitoNativeAuth.shared.signIn(
+            let outcome = try await AurionAuth.shared.signIn(
                 email: email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased(),
                 password: password
             )
@@ -694,472 +701,48 @@ struct LoginView: View {
     }
 
     @MainActor
-    private func handleOutcome(_ outcome: CognitoNativeAuth.SignInOutcome) {
+    private func handleOutcome(_ outcome: AurionAuth.SignInOutcome) {
         switch outcome {
-        case .authenticated:
-            // Persist the biometric "remember me" credential when opted in.
-            // Skipped on the biometric sign-in path itself (the email field
-            // is empty there) — the credential already exists.
-            if rememberMe, !email.isEmpty,
-               let rt = KeychainHelper.shared.getRefreshToken(), !rt.isEmpty {
-                KeychainHelper.shared.saveBiometricCredential(
-                    refreshToken: rt,
-                    email: email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-                )
-            }
-            // Backend round trip — same shape as the hosted-UI path used
-            // to do, so AppState wiring downstream is unchanged.
-            Task {
-                do {
-                    let me = try await APIClient.shared.fetchCurrentUser()
-                    AurionHaptics.notification(.success)
-                    isSigningIn = false
-                    signInSucceeded = true
-                    newPasswordChallenge = nil
-                    try? await Task.sleep(nanoseconds: 600_000_000)
-                    appState.applyAuth(userId: me.userId, role: me.role)
-                } catch {
-                    isSigningIn = false
-                    loginError = L("login.backendLookupFailed", error.localizedDescription)
-                    AurionHaptics.notification(.error)
-                }
-            }
-        case .newPasswordRequired(let session, let username):
+        case .authenticated(let session):
+            handleAuthenticatedSession(session)
+        case .mfaRequired(let challengeToken, let userEmail):
             isSigningIn = false
-            newPasswordChallenge = (session: session, username: username)
-        case .mfaRequired:
-            isSigningIn = false
-            loginError = L("login.mfaUnsupported")
-            AurionHaptics.notification(.error)
-        }
-    }
-}
-
-// MARK: - New password challenge (first sign-in)
-
-/// Identifiable wrapper so the new-password screen can be presented via
-/// `.fullScreenCover(item:)` without ambiguity over the tuple.
-private struct NewPasswordChallenge: Identifiable {
-    let id = UUID()
-    let session: String
-    let username: String
-}
-
-private struct NewPasswordView: View {
-    let challenge: NewPasswordChallenge
-    let onSuccess: (CognitoNativeAuth.SignInOutcome) -> Void
-    let onCancel: () -> Void
-
-    @State private var newPassword = ""
-    @State private var confirm = ""
-    @State private var isSubmitting = false
-    @State private var error: String?
-    @FocusState private var focused: Field?
-
-    enum Field { case newPassword, confirm }
-
-    /// Cognito user pool policy mirrored from `infrastructure/cognito.tf`.
-    /// We surface the rules inline so the user sees what they're shooting
-    /// for before they hit submit, not after the failure roundtrip.
-    private var meetsPolicy: Bool {
-        newPassword.count >= 12 &&
-            newPassword.range(of: #"[a-z]"#, options: .regularExpression) != nil &&
-            newPassword.range(of: #"[A-Z]"#, options: .regularExpression) != nil &&
-            newPassword.range(of: #"\d"#, options: .regularExpression) != nil &&
-            newPassword.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil
-    }
-
-    private var canSubmit: Bool {
-        meetsPolicy && newPassword == confirm && !isSubmitting
-    }
-
-    var body: some View {
-        ZStack {
-            LinearGradient(
-                colors: [Color.aurionNavy, Color.aurionNavyDark],
-                startPoint: .top, endPoint: .bottom
-            ).ignoresSafeArea()
-
-            VStack(spacing: 0) {
-                HStack {
-                    Button {
-                        onCancel()
-                    } label: {
-                        HStack(spacing: 6) {
-                            Image(systemName: "chevron.left")
-                            Text(L("common.cancel"))
-                        }
-                        .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
-                        .foregroundColor(.white.opacity(0.8))
-                    }
-                    Spacer()
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 20)
-
-                Spacer()
-
-                VStack(spacing: 16) {
-                    VStack(alignment: .leading, spacing: 6) {
-                        Text(L("newpw.title"))
-                            .aurionFont(22, weight: .semibold, relativeTo: .title2)
-                            .foregroundColor(.white)
-                        Text(L("newpw.forUser", challenge.username))
-                            .aurionFont(13, relativeTo: .footnote)
-                            .foregroundColor(Color.aurionOnNavySecondary)
-                    }
-                    .frame(maxWidth: .infinity, alignment: .leading)
-
-                    field(L("newpw.newPassword"), text: $newPassword, field: .newPassword) {
-                        focused = .confirm
-                    }
-                    field(L("newpw.confirmPassword"), text: $confirm, field: .confirm) {
-                        if canSubmit { Task { await submit() } }
-                    }
-
-                    policyChecklist
-                        .padding(.top, 4)
-
-                    Button {
-                        AurionHaptics.impact(.medium)
-                        Task { await submit() }
-                    } label: {
-                        HStack(spacing: 10) {
-                            if isSubmitting {
-                                ProgressView().tint(.aurionNavy)
-                                Text(L("newpw.updating"))
-                            } else {
-                                Image(systemName: "checkmark.circle.fill")
-                                    .font(.system(size: 16, weight: .semibold))
-                                Text(L("newpw.update"))
-                            }
-                        }
-                        .frame(maxWidth: .infinity)
-                    }
-                    .buttonStyle(AurionPrimaryButtonStyle())
-                    .disabled(!canSubmit)
-
-                    if let error {
-                        Text(error)
-                            .aurionFont(12, relativeTo: .caption)
-                            .foregroundColor(Color.aurionOnNavyError)
-                            .multilineTextAlignment(.leading)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                    }
-                }
-                .padding(24)
-                .background(Color.white.opacity(0.06))
-                .cornerRadius(18)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                )
-                .padding(.horizontal, 24)
-
-                Spacer()
-            }
-        }
-        .onAppear { focused = .newPassword }
-    }
-
-    @ViewBuilder
-    private func field(
-        _ label: String,
-        text: Binding<String>,
-        field: Field,
-        onSubmit: @escaping () -> Void
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .aurionFont(11, weight: .semibold, relativeTo: .caption2)
-                .tracking(0.5)
-                .foregroundColor(Color.aurionOnNavyFootnote)
-            SecureField("", text: text)
-                .focused($focused, equals: field)
-                .submitLabel(field == .newPassword ? .next : .done)
-                .onSubmit(onSubmit)
-                .textInputAutocapitalization(.never)
-                .autocorrectionDisabled()
-                .textContentType(.newPassword)
-                .foregroundColor(.white)
-                .tint(.aurionGold)
-                .padding(.horizontal, 12)
-                .padding(.vertical, 11)
-                .background(Color.white.opacity(0.08))
-                .cornerRadius(10)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.white.opacity(focused == field ? 0.35 : 0.10), lineWidth: 1)
-                )
+            mfaChallenge = MfaChallenge(
+                challengeToken: challengeToken,
+                userEmail: userEmail
+            )
         }
     }
 
-    private var policyChecklist: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            policyRow(L("newpw.policy.length"), ok: newPassword.count >= 12)
-            policyRow(L("newpw.policy.upper"), ok: newPassword.range(of: #"[A-Z]"#, options: .regularExpression) != nil)
-            policyRow(L("newpw.policy.lower"), ok: newPassword.range(of: #"[a-z]"#, options: .regularExpression) != nil)
-            policyRow(L("newpw.policy.digit"), ok: newPassword.range(of: #"\d"#, options: .regularExpression) != nil)
-            policyRow(L("newpw.policy.symbol"), ok: newPassword.range(of: #"[^A-Za-z0-9]"#, options: .regularExpression) != nil)
-            policyRow(L("newpw.policy.match"), ok: !confirm.isEmpty && newPassword == confirm)
-        }
-    }
-
-    private func policyRow(_ text: String, ok: Bool) -> some View {
-        HStack(spacing: 6) {
-            Image(systemName: ok ? "checkmark.circle.fill" : "circle")
-                .aurionFont(11, relativeTo: .caption2)
-                .foregroundColor(ok ? Color.aurionGold : Color.aurionOnNavyFootnote)
-            Text(text)
-                .aurionFont(11, relativeTo: .caption2)
-                .foregroundColor(ok ? Color.aurionOnNavySecondary : Color.aurionOnNavyFootnote)
-        }
-    }
-
+    /// Shared tail of the password + biometric + MFA paths. Persists the
+    /// biometric "remember me" credential when opted in, then resolves
+    /// the canonical user identity via `/auth/me` so AppState wiring
+    /// downstream is unchanged from the legacy Cognito flow.
     @MainActor
-    private func submit() async {
-        isSubmitting = true
-        error = nil
-        do {
-            let outcome = try await CognitoNativeAuth.shared.completeNewPassword(
-                username: challenge.username,
-                newPassword: newPassword,
-                session: challenge.session
+    private func handleAuthenticatedSession(_ session: AuthSession) {
+        // Persist the biometric "remember me" credential when opted in.
+        // Skipped on the biometric sign-in path itself (the email field
+        // is empty there) — the credential already exists.
+        if rememberMe, !email.isEmpty, !session.refreshToken.isEmpty {
+            KeychainHelper.shared.saveBiometricCredential(
+                refreshToken: session.refreshToken,
+                email: email.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
             )
-            onSuccess(outcome)
-        } catch {
-            isSubmitting = false
-            self.error = error.localizedDescription
-            AurionHaptics.notification(.error)
         }
-    }
-}
-
-// MARK: - Register
-
-struct RegisterView: View {
-    let onSwitchToLogin: () -> Void
-
-    @EnvironmentObject var appState: AppState
-    @State private var fullName = ""
-    @State private var email = ""
-    @State private var password = ""
-    @State private var confirmPassword = ""
-    @State private var isSubmitting = false
-    @State private var registerError: String?
-    @FocusState private var focusedField: Field?
-
-    private enum Field { case name, email, password, confirm }
-
-    /// Min 8 chars, matching the backend's RegisterRequest validation.
-    private var canSubmit: Bool {
-        !fullName.trimmingCharacters(in: .whitespaces).isEmpty
-            && email.contains("@")
-            && password.count >= 8
-            && password == confirmPassword
-            && !isSubmitting
-    }
-
-    var body: some View {
-        ZStack {
-            // Reversed direction so the upper portion (where the logo
-            // lockup lands) is exactly `aurionNavy` (= Logo.png bg color).
-            // Bottom fades into a slightly darker navy for depth without
-            // letting the logo look like it's pasted on a separate panel.
-            LinearGradient(
-                colors: [Color.aurionNavy, Color.aurionNavyDark],
-                startPoint: .top, endPoint: .bottom
-            ).ignoresSafeArea()
-
-            ScrollView(showsIndicators: false) {
-                VStack(spacing: 0) {
-                    AurionLogoLockup(size: 1.0, dark: true)
-                        .padding(.top, 56)
-                        .padding(.bottom, 32)
-
-                    VStack(spacing: 14) {
-                        Text(L("register.title"))
-                            .aurionFont(18, weight: .semibold, relativeTo: .title3)
-                            .foregroundColor(.white)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .padding(.bottom, 4)
-
-                        labelledField(
-                            label: L("register.fullName"),
-                            placeholder: L("register.fullNamePlaceholder"),
-                            text: $fullName,
-                            secure: false,
-                            field: .name,
-                            contentType: .name,
-                            autocapitalize: true
-                        )
-
-                        labelledField(
-                            label: L("register.email"),
-                            placeholder: L("register.emailPlaceholder"),
-                            text: $email,
-                            secure: false,
-                            field: .email,
-                            contentType: .emailAddress,
-                            autocapitalize: false
-                        )
-
-                        labelledField(
-                            label: L("register.password"),
-                            placeholder: L("register.passwordPlaceholder"),
-                            text: $password,
-                            secure: true,
-                            field: .password,
-                            contentType: .newPassword,
-                            autocapitalize: false
-                        )
-
-                        labelledField(
-                            label: L("register.confirmPassword"),
-                            placeholder: L("register.confirmPlaceholder"),
-                            text: $confirmPassword,
-                            secure: true,
-                            field: .confirm,
-                            contentType: .newPassword,
-                            autocapitalize: false
-                        )
-
-                        if !confirmPassword.isEmpty && password != confirmPassword {
-                            Text(L("register.passwordMismatch"))
-                                .aurionFont(12, relativeTo: .caption)
-                                .foregroundColor(Color.aurionOnNavyError)
-                                .frame(maxWidth: .infinity, alignment: .leading)
-                        }
-
-                        Button {
-                            AurionHaptics.impact(.medium)
-                            Task { await submit() }
-                        } label: {
-                            HStack(spacing: 8) {
-                                if isSubmitting {
-                                    ProgressView().tint(.aurionNavy)
-                                }
-                                Text(L("register.createAccount"))
-                            }
-                            .frame(maxWidth: .infinity)
-                        }
-                        .buttonStyle(AurionPrimaryButtonStyle())
-                        .disabled(!canSubmit)
-                        .padding(.top, 4)
-
-                        if let registerError {
-                            Text(registerError)
-                                .aurionFont(12, relativeTo: .caption)
-                                .foregroundColor(Color.aurionOnNavyError)
-                                .multilineTextAlignment(.center)
-                        }
-
-                        HStack(spacing: 6) {
-                            Text(L("register.haveAccount"))
-                                .aurionFont(13, relativeTo: .footnote)
-                                .foregroundColor(Color.aurionOnNavySecondary)
-                            Button(L("login.signIn"), action: onSwitchToLogin)
-                                .aurionFont(13, weight: .semibold, relativeTo: .footnote)
-                                .foregroundColor(.aurionGold)
-                        }
-                        .padding(.top, 4)
-                    }
-                    .padding(24)
-                    .background(Color.white.opacity(0.06))
-                    .cornerRadius(18)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18)
-                            .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 24)
-
-                    Text(L("register.phiNotice"))
-                        .aurionFont(11, relativeTo: .caption2)
-                        .tracking(0.2)
-                        .foregroundColor(Color.aurionOnNavyFootnote)
-                        .multilineTextAlignment(.center)
-                        .padding(.horizontal, 32)
-                        .padding(.top, 24)
-                        .padding(.bottom, 32)
-                }
+        Task {
+            do {
+                let me = try await APIClient.shared.fetchCurrentUser()
+                AurionHaptics.notification(.success)
+                isSigningIn = false
+                signInSucceeded = true
+                mfaChallenge = nil
+                try? await Task.sleep(nanoseconds: 600_000_000)
+                appState.applyAuth(userId: me.userId, role: me.role)
+            } catch {
+                isSigningIn = false
+                loginError = L("login.backendLookupFailed", error.localizedDescription)
+                AurionHaptics.notification(.error)
             }
         }
-    }
-
-    @ViewBuilder
-    private func labelledField(
-        label: String,
-        placeholder: String,
-        text: Binding<String>,
-        secure: Bool,
-        field: Field,
-        contentType: UITextContentType,
-        autocapitalize: Bool
-    ) -> some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text(label)
-                .aurionFont(12, weight: .semibold, relativeTo: .caption)
-                .tracking(0.8)
-                .foregroundColor(Color.aurionOnNavySecondary)
-            Group {
-                if secure {
-                    SecureField(placeholder, text: text)
-                } else {
-                    TextField(placeholder, text: text)
-                        .autocapitalization(autocapitalize ? .words : .none)
-                }
-            }
-            .textFieldStyle(.plain)
-            .textContentType(contentType)
-            .foregroundColor(.white)
-            .padding(.horizontal, 14)
-            .padding(.vertical, 12)
-            .background(Color.white.opacity(0.08))
-            .cornerRadius(10)
-            .overlay(
-                RoundedRectangle(cornerRadius: 10)
-                    .stroke(focusedField == field ? Color.aurionGold : Color.white.opacity(0.16), lineWidth: 1)
-            )
-            .focused($focusedField, equals: field)
-        }
-    }
-
-    @MainActor
-    private func submit() async {
-        isSubmitting = true
-        registerError = nil
-        defer { isSubmitting = false }
-        do {
-            let resp = try await APIClient.shared.register(
-                email: email.trimmingCharacters(in: .whitespaces),
-                password: password,
-                fullName: fullName.trimmingCharacters(in: .whitespaces)
-            )
-            KeychainHelper.shared.saveAuthToken(
-                resp.accessToken,
-                userId: resp.userId,
-                role: resp.role,
-                name: resp.fullName
-            )
-            let role = UserRole(rawValue: resp.role) ?? .clinician
-            appState.applyAuth(userId: resp.userId, role: role)
-            AurionHaptics.notification(.success)
-        } catch APIError.conflict(let body) {
-            registerError = parseDetail(body) ?? L("register.errorExists")
-            AurionHaptics.notification(.error)
-        } catch {
-            registerError = L("register.errorGeneric", error.localizedDescription)
-            AurionHaptics.notification(.error)
-        }
-    }
-
-    /// FastAPI errors arrive as `{"detail": "..."}` — pull out the human-readable string.
-    private func parseDetail(_ body: String) -> String? {
-        guard let data = body.data(using: .utf8),
-              let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let detail = json["detail"] as? String else {
-            return nil
-        }
-        return detail
     }
 }
