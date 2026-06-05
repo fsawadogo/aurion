@@ -30,7 +30,6 @@ need a database round-trip to prove the contract holds.
 
 from __future__ import annotations
 
-import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -45,7 +44,6 @@ from app.modules.note_gen.service import (
     get_template,
     resolve_conflict,
 )
-
 
 # ── Helpers ───────────────────────────────────────────────────────────────
 

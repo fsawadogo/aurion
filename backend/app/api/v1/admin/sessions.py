@@ -25,9 +25,8 @@ from app.api.v1.admin._shared import (
 )
 from app.core.database import get_db
 from app.core.models import SessionModel
-from app.core.types import UserRole
+from app.core.types import Note, UserRole
 from app.modules.auth.service import CurrentUser, require_role
-from app.core.types import Note
 from app.modules.note_gen import repository as note_repo
 from app.modules.note_gen.service import compute_session_stats, get_template
 

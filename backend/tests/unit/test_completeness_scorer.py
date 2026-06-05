@@ -38,7 +38,6 @@ from app.modules.note_gen.service import (
     is_section_populated,
 )
 
-
 # ── Helpers ───────────────────────────────────────────────────────────────
 
 

@@ -37,7 +37,6 @@ from app.modules.note_gen.service import (
     generate_stage1_note,
 )
 
-
 # ── Fixtures ──────────────────────────────────────────────────────────────
 
 
