@@ -168,6 +168,43 @@
     "signedIn": "Signed in",
     "forgotPassword": "Forgot password?"
   },
+  "Auth": {
+    "forgotPassword": {
+      "title": "Forgot your password?",
+      "subtitle": "Enter the email tied to your Aurion account. We'll send a reset link.",
+      "emailLabel": "Email",
+      "emailPlaceholder": "you@aurionclinical.com",
+      "submit": "Send reset link",
+      "submitting": "Sending…",
+      "backToSignIn": "Back to sign in",
+      "confirmationTitle": "Check your inbox",
+      "confirmationBody": "If that email is on file, a reset link is on its way. Check your inbox in a few minutes.",
+      "transportError": "Couldn't reach Aurion right now. Check your network and try again."
+    },
+    "resetPassword": {
+      "title": "Set a new password",
+      "subtitle": "Choose a password you haven't used before. At least 8 characters.",
+      "newPasswordLabel": "New password",
+      "confirmPasswordLabel": "Confirm new password",
+      "submit": "Set new password",
+      "submitting": "Saving…",
+      "backToSignIn": "Back to sign in",
+      "missingTokenTitle": "Reset link incomplete",
+      "missingTokenBody": "This reset link is missing the token. Request a new one from the sign-in screen.",
+      "errors": {
+        "tooShort": "Password must be at least 8 characters.",
+        "tooLong": "Password can't be longer than 128 characters.",
+        "mismatch": "Passwords don't match.",
+        "expiredHint": "Your reset link may have expired. Request a new one from the sign-in screen.",
+        "usedHint": "This reset link has already been used. Request a new one from the sign-in screen.",
+        "invalidHint": "This reset link isn't valid. Double-check the link in the email, or request a new one.",
+        "transport": "Couldn't reach Aurion right now. Check your network and try again."
+      }
+    },
+    "loginToast": {
+      "resetSuccess": "Password reset. Sign in with your new password."
+    }
+  },
   "Common": {
     "loading": "Loading…",
     "retry": "Retry",

@@ -257,6 +257,44 @@ resource "aws_iam_role_policy" "api_task_policy" {
 }
 
 # -----------------------------------------------------------------------------
+# IAM — SES SendEmail (AUTH-EMAIL-RESET-WIRING)
+#
+# Sibling policy on the API task role so the password-reset email path
+# in backend/app/modules/auth/email.py can actually call ses:SendEmail.
+# Separate policy resource (not merged into api_task_policy) so this
+# can be removed independently when post-pilot email needs evolve.
+#
+# Resource scope: the verified domain identity ARN
+# (`identity/aurionclinical.com`) AND every per-mailbox identity under
+# that domain (`identity/*@aurionclinical.com`). This is strictly more
+# restrictive than `Resource = "*"` — if a future bug or attacker tries
+# to relay through SES with a different `From:` address, the call is
+# denied by IAM before SES sees it.
+# -----------------------------------------------------------------------------
+
+resource "aws_iam_role_policy" "api_task_ses" {
+  name = "aurion-api-task-ses-${var.environment}"
+  role = aws_iam_role.api_task.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ses:SendEmail",
+          "ses:SendRawEmail",
+        ]
+        Resource = [
+          "arn:aws:ses:${var.region}:${data.aws_caller_identity.current.account_id}:identity/aurionclinical.com",
+          "arn:aws:ses:${var.region}:${data.aws_caller_identity.current.account_id}:identity/*@aurionclinical.com",
+        ]
+      },
+    ]
+  })
+}
+
+# -----------------------------------------------------------------------------
 # Security Groups
 # -----------------------------------------------------------------------------
 
@@ -486,6 +524,18 @@ resource "aws_ecs_task_definition" "api" {
         # provider defaults to localhost:8001 (wrong host + wrong port) and
         # every Stage 1 fails with a connection error.
         { name = "WHISPER_API_URL", value = local.whisper_api_url },
+        # AUTH-EMAIL-RESET-WIRING — turn on real SES delivery for
+        # password-reset emails. Flipping AUTH_EMAIL_ENABLED to "true"
+        # routes the call through SES instead of the dev-only log line
+        # (see backend/app/modules/auth/email.py:84 — the false branch
+        # logs the reset link, the true branch hits SES). AUTH_EMAIL_FROM
+        # is the verified sender identity; AUTH_PASSWORD_RESET_URL_BASE
+        # is the URL the reset link points to — the backend appends
+        # `?token=<token>` to whatever this value is, so the user lands
+        # at portal.aurionclinical.com/reset-password?token=<token>.
+        { name = "AUTH_EMAIL_ENABLED", value = "true" },
+        { name = "AUTH_EMAIL_FROM", value = "noreply@aurionclinical.com" },
+        { name = "AUTH_PASSWORD_RESET_URL_BASE", value = "https://${var.web_portal_subdomain}/reset-password" },
       ]
 
       secrets = [

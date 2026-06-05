@@ -150,6 +150,70 @@ export async function getMe(): Promise<CurrentUser> {
   return res.json();
 }
 
+/** Kick off a password reset by emailing the user a link.
+ *
+ * The backend ALWAYS returns 204 regardless of whether the email
+ * matches an account (account-existence-neutral by design). Callers
+ * therefore should not branch on the response; just show the same
+ * "if that email is on file…" confirmation either way.
+ *
+ * No `fetchWithAuth` — this endpoint is public (no Bearer token).
+ *
+ * Throws only on transport-level errors (network down, CORS, 5xx).
+ * 4xx from the backend is exceptional for this route — schema
+ * validation only — and the page surfaces a generic "couldn't reach
+ * Aurion" without leaking detail.
+ */
+export async function requestPasswordReset(email: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/auth/forgot-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email }),
+  });
+  if (!res.ok) {
+    // 422 (bad email shape) leaks no account info — surface the
+    // generic transport error and let the caller show the
+    // existence-neutral confirmation anyway.
+    throw new Error(`Forgot-password request failed: ${res.status}`);
+  }
+}
+
+/** Consume a reset token + set the new password.
+ *
+ * Returns void on 204. Throws an Error whose `.message` carries the
+ * backend's `detail` field on 4xx — pages surface this verbatim to
+ * the user (the backend already crafts user-safe messages:
+ * "Invalid or expired reset token.").
+ *
+ * The raw token never reaches console, analytics, or logs from this
+ * helper — it goes straight from the function arg into the POST
+ * body, then the reference is dropped.
+ */
+export async function resetPassword(
+  token: string,
+  newPassword: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/v1/auth/reset-password`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ token, new_password: newPassword }),
+  });
+  if (res.status === 204) return;
+  if (!res.ok) {
+    // Backend wraps errors as { detail: "..." }. Surface the detail
+    // when present so users see "Invalid or expired reset token."
+    // instead of a generic API code.
+    let detail = `Reset failed (${res.status})`;
+    try {
+      const body = (await res.json()) as { detail?: string };
+      if (body.detail) detail = body.detail;
+    } catch {
+      // ignore — body wasn't JSON, use the generic message
+    }
+    throw new Error(detail);
+  }
+}
+
 /* ─── Users ──────────────────────────────────────────────────────────────── */
 
 export async function getUsers(): Promise<User[]> {
