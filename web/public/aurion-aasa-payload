@@ -1,0 +1,19 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["2W2Z75Q5ZA.com.aurionclinical.physician"],
+        "components": [
+          {
+            "/": "/reset-password",
+            "?": { "token": "?*" },
+            "comment": "Universal Links — open reset-password in the Aurion iOS app when the URL carries a reset token query param."
+          }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["2W2Z75Q5ZA.com.aurionclinical.physician"]
+  }
+}
