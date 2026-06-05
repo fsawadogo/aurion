@@ -4,6 +4,9 @@ import SwiftUI
 /// Uses SessionManager to bridge iOS ↔ backend for the full Journey 1 flow.
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
+    /// AUTH-UNIVERSAL-LINKS — published token from an inbound reset-
+    /// password Universal Link. Drives the full-screen cover below.
+    @EnvironmentObject var resetLinkPayload: ResetLinkPayload
     @StateObject private var sessionManager = SessionManager()
     @StateObject private var tour = TourCoordinator()
     @State private var showRecoveryAlert = false
@@ -96,6 +99,26 @@ struct ContentView: View {
                 if dontShowAgain { appState.hasSeenTour = true }
             }
         }
+        // AUTH-UNIVERSAL-LINKS — present the in-app reset screen when a
+        // Universal Link delivers a token. Hosted at the root (not on
+        // LoginView) so the cover survives any route switch the
+        // `ZStack` above might do in flight (splash → auth, etc.).
+        // Token clears on dismiss — single-use, never persisted.
+        //
+        // `.fullScreenCover(item:)` needs an Identifiable wrapper; the
+        // `ResetLinkToken` value below is just a transport vessel for
+        // the raw string with stable `Identifiable` semantics so the
+        // cover re-presents cleanly on a second tap.
+        .fullScreenCover(
+            item: Binding(
+                get: { resetLinkPayload.token.map(ResetLinkToken.init) },
+                set: { resetLinkPayload.token = $0?.token }
+            )
+        ) { wrapper in
+            ResetPasswordView(token: wrapper.token) {
+                resetLinkPayload.token = nil
+            }
+        }
         .alert(L("recovery.title"), isPresented: $showRecoveryAlert) {
             Button(L("recovery.recover")) {
                 guard let session = recoveredSession else { return }
@@ -127,6 +150,15 @@ struct ContentView: View {
             showRecoveryAlert = true
         }
     }
+}
+
+/// AUTH-UNIVERSAL-LINKS — Identifiable wrapper for the inbound reset
+/// token so `.fullScreenCover(item:)` can drive the reset cover off
+/// `ResetLinkPayload.token`. The token itself becomes the identity —
+/// two distinct tokens re-present the cover; the same token doesn't.
+private struct ResetLinkToken: Identifiable {
+    let token: String
+    var id: String { token }
 }
 
 // MARK: - Processing View (between stop and note delivery)

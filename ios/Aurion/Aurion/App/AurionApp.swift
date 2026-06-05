@@ -5,6 +5,11 @@ struct AurionApp: App {
     @StateObject private var appState = AppState()
     @StateObject private var remoteConfig = RemoteConfig.shared
     @StateObject private var appLock = AppLockManager()
+    /// AUTH-UNIVERSAL-LINKS — bus for an inbound reset-password token
+    /// extracted from a Universal Link. Written by the
+    /// `NSUserActivityTypeBrowsingWeb` handler below; read by
+    /// ``ContentView`` to drive the reset full-screen cover.
+    @StateObject private var resetLinkPayload = ResetLinkPayload()
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -13,6 +18,7 @@ struct AurionApp: App {
                 .environmentObject(appState)
                 .environmentObject(remoteConfig)
                 .environmentObject(appLock)
+                .environmentObject(resetLinkPayload)
                 // Biometric app lock over the whole authenticated surface.
                 // Never shown pre-sign-in (nothing to protect on the login
                 // screen); the lock view self-prompts on appear.
@@ -58,7 +64,34 @@ struct AurionApp: App {
                     AppNavigation.shared.requestTab(.sessions)
                     AppNavigation.shared.requestNote(sessionID: sessionID)
                 }
-                // Deep-link entry points:
+                // AUTH-UNIVERSAL-LINKS — Universal Link tap.
+                // iOS hands us the original `https://portal.aurionclinical.com/...`
+                // URL on a `NSUserActivityTypeBrowsingWeb` activity when
+                // the user taps a Universal-Link-matched URL (e.g. the
+                // reset-password email link) and the AASA file claims it.
+                //
+                // We defensively validate host + path + a non-empty
+                // `token` query param before extracting — random Safari
+                // URLs that happen to land here (e.g. a stale activity
+                // restored on cold launch) get rejected without
+                // surfacing UI. The single source of truth is the
+                // shared `resetLinkPayload`; `ContentView` watches it
+                // and presents the reset full-screen cover.
+                .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    guard
+                        let url = activity.webpageURL,
+                        url.host == "portal.aurionclinical.com",
+                        url.path == "/reset-password",
+                        let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+                        let token = components.queryItems?
+                            .first(where: { $0.name == "token" })?
+                            .value,
+                        !token.isEmpty
+                    else { return }
+                    // Set on the shared payload bus — never logged.
+                    resetLinkPayload.token = token
+                }
+                // Deep-link entry points (custom scheme):
                 //   aurion://start-session              ← home-screen widget
                 //   aurion://session/{uuid}             ← Live Activity tap
                 // Both flow into AppNavigation so the existing dashboard /
