@@ -149,6 +149,16 @@ class AuditEventType(StrEnum):
     PROVIDER_CHANGED = "provider_changed"
     PROVIDER_OVERRIDE_SET = "provider_override_set"
     PROVIDER_OVERRIDE_CLEARED = "provider_override_cleared"
+    # ADMIN flipped one or more card-visibility feature flags via the
+    # web portal's /admin/feature-flags endpoint
+    # (lane-full/card-visibility-flags). The kwarg whitelist below
+    # carries ONLY the names of the fields that changed plus the
+    # AppConfig hosted-version that the change produced — never the
+    # truthy/falsy values themselves. Field names are config metadata,
+    # not PHI; the values are not in the audit row by design (the
+    # AppConfig hosted version is the source of truth and is itself
+    # versioned in AWS).
+    FEATURE_FLAGS_UPDATED = "feature_flags_updated"
     # Per-session `visual_evidence_mode` override (dual-mode plan, P1-7).
     # Fires when a clinician/eval-team caller creates a session whose
     # `provider_overrides.visual_evidence_mode` is set — flips the Stage 2
@@ -517,6 +527,16 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.PROVIDER_OVERRIDE_CLEARED: frozenset(
         {"changed_by", "provider_type", "old_provider"}
+    ),
+    # Card-visibility feature flag update (lane-full/card-visibility-flags).
+    # ``changed_by`` is the ADMIN's UUID; ``changed_fields`` is a sorted
+    # list of the flag NAMES that flipped (e.g. ``["orders_card_enabled"]``);
+    # ``appconfig_version`` is the new hosted-version number returned by
+    # ``appconfig.create_hosted_configuration_version``. The flag VALUES
+    # are deliberately NOT in the audit row — they're config, not PHI, and
+    # AppConfig already versions them independently.
+    AuditEventType.FEATURE_FLAGS_UPDATED: frozenset(
+        {"changed_by", "changed_fields", "appconfig_version"}
     ),
     # Per-session visual_evidence_mode override (P1-7). Carries the actor
     # (clinician or eval-team UUID) + their role + the chosen mode. The

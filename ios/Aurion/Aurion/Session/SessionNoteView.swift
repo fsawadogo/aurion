@@ -159,6 +159,13 @@ struct SessionNoteView: View {
     @State private var isLoading = true
     @State private var showCopiedToast = false
     @State private var error: String?
+    // Live AppConfig snapshot — gates the four post-pilot cards below.
+    // When a card's flag is `false` we don't render it AT ALL: no
+    // placeholder, no spacer, no Retry button. Crucially the card's
+    // own `.onAppear` fetch is also never triggered because the view
+    // itself never enters the hierarchy. Defaults match the backend
+    // schema (all four `false`) so the pre-fetch state is also safe.
+    @EnvironmentObject private var remoteConfig: RemoteConfig
     // Share / export state. The format picker is a confirmation dialog
     // (HIG: "Action sheets present 2-4 short, related options"). The
     // bytes are rendered locally — see `Export/NotePDFRenderer.swift`
@@ -318,11 +325,18 @@ struct SessionNoteView: View {
                 // the top with per-row Confirm + Cancel. Prescription
                 // rows with unrecognized drug names surface the drug-
                 // catalog warning inline + at the top of the card.
-                OrdersCard(
-                    sessionId: session.id,
-                    sessionState: session.state
-                )
-                .padding(.horizontal, 24)
+                //
+                // Gated on `orders_card_enabled` (lane-full/card-
+                // visibility-flags). Hidden by default until an ADMIN
+                // flips the AppConfig flag via the web portal — when
+                // hidden the card's own .onAppear fetch never fires.
+                if remoteConfig.featureFlags.ordersCardEnabled {
+                    OrdersCard(
+                        sessionId: session.id,
+                        sessionState: session.state
+                    )
+                    .padding(.horizontal, 24)
+                }
 
                 // Coding & billing suggestions card (#69). Strategic
                 // SEPARATE inference surface — visually distinct from
@@ -330,22 +344,33 @@ struct SessionNoteView: View {
                 // shows an "Assistive — physician must confirm"
                 // disclaimer. Suggestions NEVER flow back into the
                 // clinical note's sections.
-                CodingSuggestionsCard(
-                    sessionId: session.id,
-                    sessionState: session.state
-                )
-                .padding(.horizontal, 24)
+                //
+                // Gated on `coding_card_enabled` (lane-full/card-
+                // visibility-flags). See OrdersCard above for the
+                // hidden-fetch-suppression contract.
+                if remoteConfig.featureFlags.codingCardEnabled {
+                    CodingSuggestionsCard(
+                        sessionId: session.id,
+                        sessionState: session.state
+                    )
+                    .padding(.horizontal, 24)
+                }
 
                 // Patient summary card (#59). Approval-gated
                 // internally — renders a locked notice for unsigned
                 // notes so the physician knows what unlocks it. Lives
                 // INSIDE the iPad reading clamp so it never visually
                 // outruns the note above it.
-                PatientSummaryCard(
-                    sessionId: session.id,
-                    sessionState: session.state
-                )
-                .padding(.horizontal, 24)
+                //
+                // Gated on `patient_summary_card_enabled` (lane-full/
+                // card-visibility-flags).
+                if remoteConfig.featureFlags.patientSummaryCardEnabled {
+                    PatientSummaryCard(
+                        sessionId: session.id,
+                        sessionState: session.state
+                    )
+                    .padding(.horizontal, 24)
+                }
 
                 // EMR write-back card (#57) — outbound terminal step.
                 // Approval-gated; surfaces a "Pilot mode" banner when
@@ -353,12 +378,22 @@ struct SessionNoteView: View {
                 // physician doesn't think the note actually went to
                 // a chart system. Per-row scheduled-retry / terminal-
                 // failure indicators mirror the portal.
-                EmrWriteBackCard(
-                    sessionId: session.id,
-                    sessionState: session.state
-                )
-                .padding(.horizontal, 24)
-                .padding(.bottom, 28)
+                //
+                // Gated on `emr_writeback_card_enabled` (lane-full/
+                // card-visibility-flags). The `.padding(.bottom, 28)`
+                // attaches to this card so when it's the last visible
+                // card it preserves the scroll-view tail spacing;
+                // when ALL four are hidden the layout collapses to
+                // just the document body + the EMR-coming-soon footer
+                // that already sits on NoteDocumentBody.
+                if remoteConfig.featureFlags.emrWritebackCardEnabled {
+                    EmrWriteBackCard(
+                        sessionId: session.id,
+                        sessionState: session.state
+                    )
+                    .padding(.horizontal, 24)
+                    .padding(.bottom, 28)
+                }
             }
             // iPad reading-measure clamp — applied to the inner
             // VStack so both the document body and the summary card

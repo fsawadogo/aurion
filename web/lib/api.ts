@@ -9,6 +9,7 @@ import type {
   EvalScoreSubmission,
   EvalSession,
   EvalSessionDetail,
+  FeatureFlags,
   MaskingReport,
   MetricFilters,
   MetricTimeseriesFilters,
@@ -19,6 +20,7 @@ import type {
   Session,
   SessionDetail,
   SessionFilters,
+  UpdateFeatureFlagsResponse,
   UpdateUserPayload,
   User,
 } from "@/types";
@@ -293,6 +295,30 @@ export async function getConfig(): Promise<ProviderConfig> {
 
 export async function getConfigHistory(): Promise<ConfigChangeEvent[]> {
   const res = await fetchWithAuth("/api/v1/admin/config/history");
+  return res.json();
+}
+
+/* ─── Feature Flags ──────────────────────────────────────────────────────── */
+//
+// ADMIN-only writer surface that backs the /portal/admin/feature-flags
+// page. GET returns the live AppConfig feature_flags block; POST pushes
+// a new AppConfig hosted-version and starts a deployment. See
+// backend/app/api/v1/admin/feature_flags.py — both helpers go through
+// the standard fetchWithAuth path so the bearer token + 401 retry
+// machinery applies.
+
+export async function getFeatureFlags(): Promise<FeatureFlags> {
+  const res = await fetchWithAuth("/api/v1/admin/feature-flags");
+  return res.json();
+}
+
+export async function updateFeatureFlags(
+  payload: FeatureFlags,
+): Promise<UpdateFeatureFlagsResponse> {
+  const res = await fetchWithAuth("/api/v1/admin/feature-flags", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
   return res.json();
 }
 

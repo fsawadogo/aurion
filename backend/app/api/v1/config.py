@@ -40,6 +40,15 @@ class FeatureFlagsResponse(BaseModel):
     session_pause_resume_enabled: bool
     per_session_provider_override: bool
     meta_wearables_enabled: bool
+    # ── Post-pilot card visibility (lane-full/card-visibility-flags) ──────
+    # Four post-pilot scaffolding cards on the iOS note-review screen.
+    # All default False on the schema; ADMIN flips per-card via the
+    # /admin/feature-flags endpoint and iOS gates each card render on
+    # the corresponding flag (and skips the card's own GET on hidden).
+    orders_card_enabled: bool
+    coding_card_enabled: bool
+    patient_summary_card_enabled: bool
+    emr_writeback_card_enabled: bool
 
 
 class ClientConfigResponse(BaseModel):
@@ -71,5 +80,9 @@ async def get_client_config(_: CurrentUser = Depends(get_current_user)):
             session_pause_resume_enabled=cfg.feature_flags.session_pause_resume_enabled,
             per_session_provider_override=cfg.feature_flags.per_session_provider_override,
             meta_wearables_enabled=cfg.feature_flags.meta_wearables_enabled,
+            orders_card_enabled=cfg.feature_flags.orders_card_enabled,
+            coding_card_enabled=cfg.feature_flags.coding_card_enabled,
+            patient_summary_card_enabled=cfg.feature_flags.patient_summary_card_enabled,
+            emr_writeback_card_enabled=cfg.feature_flags.emr_writeback_card_enabled,
         ),
     )

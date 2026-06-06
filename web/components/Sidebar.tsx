@@ -7,6 +7,7 @@ import {
   CircleUser,
   ClipboardList,
   FileText,
+  Flag,
   FlaskConical,
   Layers,
   LayoutGrid,
@@ -51,6 +52,11 @@ const navigation: {
   { tKey: "phiMasking", href: "/masking",   icon: ShieldCheck,   roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
   { tKey: "users",      href: "/users",     icon: Users,         roles: ["ADMIN"] },
   { tKey: "config",     href: "/config",    icon: Settings,      roles: ["COMPLIANCE_OFFICER", "ADMIN"] },
+  // Feature flags admin surface (lane-full/card-visibility-flags). ADMIN
+  // only — backend's POST /admin/feature-flags writes the AppConfig
+  // hosted-version, and the corresponding require_role gate rejects
+  // every other role.
+  { tKey: "featureFlags", href: "/portal/admin/feature-flags", icon: Flag, roles: ["ADMIN"] },
   { tKey: "eval",       href: "/eval",      icon: FlaskConical,  roles: ["EVAL_TEAM", "ADMIN"] },
   // ── Clinician portal surface (PR-C onward) ──
   // Admin can preview each portal page for support — backend still

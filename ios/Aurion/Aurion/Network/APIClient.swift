@@ -2015,6 +2015,21 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
     let sessionPauseResumeEnabled: Bool
     let perSessionProviderOverride: Bool
     let metaWearablesEnabled: Bool
+    // ── Post-pilot card visibility (lane-full/card-visibility-flags) ──────
+    // Four downstream-of-Stage-1 cards on the note-review screen — hidden
+    // by default for everyone; ADMIN flips per-card via the web portal.
+    // SessionNoteView gates each card's render on the corresponding flag,
+    // and because the flag check happens at the parent level the card's
+    // own `.onAppear` fetch is never triggered when hidden.
+    //
+    // Decoded with `decodeIfPresent` (see the custom init below) so the
+    // iOS client stays forward-compatible with older backends that haven't
+    // yet emitted these keys via GET /config — they fall back to `false`
+    // (hide the card) which is the safe default.
+    let ordersCardEnabled: Bool
+    let codingCardEnabled: Bool
+    let patientSummaryCardEnabled: Bool
+    let emrWritebackCardEnabled: Bool
 
     enum CodingKeys: String, CodingKey {
         case screenCaptureEnabled = "screen_capture_enabled"
@@ -2022,6 +2037,50 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         case sessionPauseResumeEnabled = "session_pause_resume_enabled"
         case perSessionProviderOverride = "per_session_provider_override"
         case metaWearablesEnabled = "meta_wearables_enabled"
+        case ordersCardEnabled = "orders_card_enabled"
+        case codingCardEnabled = "coding_card_enabled"
+        case patientSummaryCardEnabled = "patient_summary_card_enabled"
+        case emrWritebackCardEnabled = "emr_writeback_card_enabled"
+    }
+
+    // Memberwise init so RemoteConfig's `@Published` default can build
+    // a snapshot without going through the decoder.
+    init(
+        screenCaptureEnabled: Bool,
+        noteVersioningEnabled: Bool,
+        sessionPauseResumeEnabled: Bool,
+        perSessionProviderOverride: Bool,
+        metaWearablesEnabled: Bool,
+        ordersCardEnabled: Bool,
+        codingCardEnabled: Bool,
+        patientSummaryCardEnabled: Bool,
+        emrWritebackCardEnabled: Bool
+    ) {
+        self.screenCaptureEnabled = screenCaptureEnabled
+        self.noteVersioningEnabled = noteVersioningEnabled
+        self.sessionPauseResumeEnabled = sessionPauseResumeEnabled
+        self.perSessionProviderOverride = perSessionProviderOverride
+        self.metaWearablesEnabled = metaWearablesEnabled
+        self.ordersCardEnabled = ordersCardEnabled
+        self.codingCardEnabled = codingCardEnabled
+        self.patientSummaryCardEnabled = patientSummaryCardEnabled
+        self.emrWritebackCardEnabled = emrWritebackCardEnabled
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        screenCaptureEnabled = try c.decode(Bool.self, forKey: .screenCaptureEnabled)
+        noteVersioningEnabled = try c.decode(Bool.self, forKey: .noteVersioningEnabled)
+        sessionPauseResumeEnabled = try c.decode(Bool.self, forKey: .sessionPauseResumeEnabled)
+        perSessionProviderOverride = try c.decode(Bool.self, forKey: .perSessionProviderOverride)
+        metaWearablesEnabled = try c.decode(Bool.self, forKey: .metaWearablesEnabled)
+        // Card-visibility flags — `decodeIfPresent` keeps iOS forward-
+        // compatible with older backends. Hidden-by-default is the safe
+        // fallback (the cards are post-pilot scaffolding).
+        ordersCardEnabled = try c.decodeIfPresent(Bool.self, forKey: .ordersCardEnabled) ?? false
+        codingCardEnabled = try c.decodeIfPresent(Bool.self, forKey: .codingCardEnabled) ?? false
+        patientSummaryCardEnabled = try c.decodeIfPresent(Bool.self, forKey: .patientSummaryCardEnabled) ?? false
+        emrWritebackCardEnabled = try c.decodeIfPresent(Bool.self, forKey: .emrWritebackCardEnabled) ?? false
     }
 }
 

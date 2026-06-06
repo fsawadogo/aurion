@@ -165,6 +165,19 @@ resource "aws_appconfig_configuration_profile" "main" {
             # visual_evidence_mode override path (P1-7). False disables
             # the override even when the global mode is hybrid/clips_only.
             per_session_visual_evidence_mode_override = { type = "boolean" }
+            # Card-visibility flags (lane-full/card-visibility-flags).
+            # All four default `false` in the AppConfig hosted version
+            # the operator pushes after deploy — the post-pilot cards
+            # (Orders, Coding & Billing, Patient Summary, EMR Write-Back)
+            # stay hidden in iOS SessionNoteView until ADMIN flips the
+            # matching flag via the web portal's /portal/admin/feature-
+            # flags page. NOT in the `required` list above so an older
+            # AppConfig document without these keys still validates
+            # (backend Pydantic schema supplies the default).
+            orders_card_enabled          = { type = "boolean" }
+            coding_card_enabled          = { type = "boolean" }
+            patient_summary_card_enabled = { type = "boolean" }
+            emr_writeback_card_enabled   = { type = "boolean" }
           }
         }
       }

@@ -137,6 +137,17 @@ class FeatureFlagsConfig(BaseModel):
     # runs even when the pilot-wide default is `FRAMES_ONLY`. Mirrors the
     # `per_session_provider_override` pattern.
     per_session_visual_evidence_mode_override: bool = True
+    # ── Post-pilot card visibility (lane-full/card-visibility-flags) ──────
+    # Four downstream-of-Stage-1 cards (Orders, Coding & Billing, Patient
+    # Summary, EMR Write-Back) ship in the iOS note-review surface but are
+    # post-pilot scaffolding — their backends do not yet function. Hidden
+    # by default for everyone; ADMIN flips per-card via POST
+    # /admin/feature-flags. Defaults match the AppConfig hosted version
+    # the operator pushes after deploy (all four False).
+    orders_card_enabled: bool = False
+    coding_card_enabled: bool = False
+    patient_summary_card_enabled: bool = False
+    emr_writeback_card_enabled: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────

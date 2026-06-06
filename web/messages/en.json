@@ -15,7 +15,8 @@
       "templates": "Templates",
       "macros": "Macros",
       "myProfile": "My Profile",
-      "aiPrompts": "AI Prompts"
+      "aiPrompts": "AI Prompts",
+      "featureFlags": "Feature Flags"
     },
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
@@ -312,6 +313,37 @@
       "missingAnchorNoInterpret": "Your prompt must tell the AI NOT to interpret, diagnose, or infer. Add language like 'do not interpret findings', 'do not diagnose', or 'no interpretation'.",
       "empty": "Your prompt is empty. Either write a full prompt or use the system default.",
       "unknown": "Couldn't validate your prompt. Try again."
+    }
+  },
+  "FeatureFlags": {
+    "eyebrow": "Admin",
+    "title": "Feature flags",
+    "subtitle": "Toggle the post-pilot cards shown on the iOS note-review screen.",
+    "loadError": "Couldn't load feature flags.",
+    "saveError": "Couldn't save feature flags.",
+    "saveSuccess": "Saved. Hosted version {version} is rolling out.",
+    "save": "Save",
+    "reset": "Reset",
+    "loading": "Loading…",
+    "sectionCards": "Note-review cards (iOS)",
+    "sectionCardsHint": "These four cards appear under the SOAP note inside the iOS app. Each one is post-pilot scaffolding — leave hidden until the matching backend goes live. Changes apply within ~30 seconds across every iPhone.",
+    "flags": {
+      "orders_card_enabled": {
+        "name": "Orders",
+        "description": "Surfaces extracted prescriptions and orders below the SOAP note."
+      },
+      "coding_card_enabled": {
+        "name": "Coding & Billing",
+        "description": "Assistive ICD/CPT suggestions for billing — never flow back into the clinical note."
+      },
+      "patient_summary_card_enabled": {
+        "name": "Patient Summary",
+        "description": "One-paragraph plain-language summary of the encounter."
+      },
+      "emr_writeback_card_enabled": {
+        "name": "EMR Write-Back",
+        "description": "Outbound queue that sends the approved note to a chart system."
+      }
     }
   }
 }
