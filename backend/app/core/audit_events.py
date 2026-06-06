@@ -145,6 +145,15 @@ class AuditEventType(StrEnum):
     # DynamoDB. Same posture MACRO_CREATED takes with the macro body and
     # PROMPT_USER_PROMPT_SET takes with the prompt text.
     TEAM_MEMBERS_UPDATED = "team_members_updated"
+    # Consultation-types list changed via PUT /profile (#259). The list is
+    # a mix of canonical default keys ("new_patient", "follow_up", "pre_op",
+    # "post_op") and clinician-authored free-text labels (Marie: "LL new pt",
+    # Perry: "breast visit"). The free-text labels are user-authored and
+    # could in the worst case carry PHI even with the format gates; we
+    # therefore carry ONLY count deltas in the audit row, never the
+    # labels themselves. Same posture TEAM_MEMBERS_UPDATED (names),
+    # MACRO_CREATED (body), and PROMPT_USER_PROMPT_SET (text) take.
+    PROFILE_CONSULTATION_TYPES_UPDATED = "profile_consultation_types_updated"
 
     # ── Admin ────────────────────────────────────────────────────────────
     USER_CREATED = "user_created"
@@ -527,6 +536,22 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     # signal we want in the immutable row.
     AuditEventType.TEAM_MEMBERS_UPDATED: frozenset(
         {"actor_id", "members_count_before", "members_count_after"}
+    ),
+    # Profile (#259) — consultation-types list edit. NEVER include the
+    # type strings themselves. The deltas are split into
+    # defaults/customs so the post-pilot review can answer "did
+    # clinicians actually use the custom-types feature?" without
+    # surfacing any labels.
+    AuditEventType.PROFILE_CONSULTATION_TYPES_UPDATED: frozenset(
+        {
+            "actor_id",
+            "count_before",
+            "count_after",
+            "defaults_added",
+            "defaults_removed",
+            "customs_added",
+            "customs_removed",
+        }
     ),
     # Admin
     AuditEventType.USER_CREATED: frozenset(

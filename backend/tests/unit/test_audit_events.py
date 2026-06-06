@@ -98,6 +98,9 @@ EXPECTED_VALUES: dict[str, str] = {
     "ACCOUNT_DELETED": "account_deleted",
     # Profile (#260) — team list edit (count delta only, never names)
     "TEAM_MEMBERS_UPDATED": "team_members_updated",
+    # Profile (#259) — consultation-types list edit (count delta only,
+    # never the type labels themselves)
+    "PROFILE_CONSULTATION_TYPES_UPDATED": "profile_consultation_types_updated",
     # Admin
     "USER_CREATED": "user_created",
     "USER_UPDATED": "user_updated",

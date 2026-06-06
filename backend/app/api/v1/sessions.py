@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json as _json
 import logging
-import re
 import uuid
 from typing import Literal, Optional
 
@@ -24,6 +23,7 @@ from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.identifier_hash import hash_identifier
 from app.core.kms_encryption import decrypt_str, encrypt_str
+from app.core.text_validation import validate_user_text
 from app.core.types import SessionState
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.config.appconfig_client import get_config
@@ -144,8 +144,6 @@ class SessionResponse(BaseModel):
 # value itself (the value is itself sensitive — could be a full
 # patient name). The reason code is short and reason-only.
 
-_SSN_RAW_RE = re.compile(r"^\d{9}$")
-_SSN_DASHED_RE = re.compile(r"^\d{3}-\d{2}-\d{4}$")
 _MAX_IDENTIFIER_LEN = 64
 
 
@@ -153,29 +151,31 @@ def _check_identifier_format(value: str) -> None:
     """Raise ValueError if the value looks like PHI we shouldn't store
     encrypted as a patient identifier.
 
+    Thin wrapper around ``validate_user_text`` (``core.text_validation``)
+    which carries the actual regex + token-shape gates. The wrapper
+    exists because Pydantic surfaces the raised ``ValueError`` verbatim
+    as the 422 detail, and historic test fixtures + the iOS / portal
+    error catalogs assert against the noun "identifier" rather than
+    the generic "text". Rewriting the message preserves the existing
+    contract without re-implementing the gates.
+
     Pydantic catches ValueError and surfaces it as 422 unprocessable
     entity. The error string is short and reason-only — NEVER includes
-    the rejected value.
+    the rejected value. See ``ExternalReferenceIdRequest`` below for
+    the `hide_input_in_errors=True` belt that keeps it out of
+    `input_value` too.
     """
-    if len(value) > _MAX_IDENTIFIER_LEN:
-        raise ValueError(
-            f"identifier exceeds {_MAX_IDENTIFIER_LEN} character limit"
+    try:
+        validate_user_text(
+            value, max_length=_MAX_IDENTIFIER_LEN, reject_full_name=True
         )
-    if _SSN_RAW_RE.match(value) or _SSN_DASHED_RE.match(value):
-        raise ValueError("identifier looks like an SSN")
-    if "@" in value:
-        raise ValueError("identifier looks like an email address")
-    # Two-or-more whitespace-separated tokens with at least one
-    # alphabetic character per token → looks like a full name. We
-    # intentionally don't try to be clever about middle names /
-    # hyphens / titles — if the clinic identifier scheme legitimately
-    # contains a space, they can paste it without spaces or use a
-    # delimiter their downstream tooling expects.
-    tokens = [t for t in value.split() if t]
-    if len(tokens) >= 2 and all(
-        any(c.isalpha() for c in t) for t in tokens
-    ):
-        raise ValueError("identifier looks like a full name")
+    except ValueError as exc:
+        # Preserve the noun the patient-identifier catalogs were built
+        # against — the messages are otherwise identical to the shared
+        # helper. Keeps existing tests + the portal/iOS i18n strings
+        # untouched.
+        msg = str(exc).replace("text", "identifier", 1)
+        raise ValueError(msg) from None
 
 
 class ExternalReferenceIdRequest(BaseModel):
