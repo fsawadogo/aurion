@@ -203,6 +203,27 @@ struct PhysicianProfileSetupView: View {
     private var header: some View {
         VStack(spacing: 8) {
             HStack {
+                // Marie (2026-06-06): users needed a way to revise earlier
+                // choices without losing onboarding progress (Specialty
+                // tapped wrong, want to change templates, etc.). Back
+                // button hidden on Step 1 — no prior step to return to.
+                // Tap decrements `step` with the existing setup transition
+                // animation so the back/forward feel is symmetric.
+                if step > 0 {
+                    Button {
+                        AurionHaptics.selection()
+                        withAnimation(.aurionIOS) { step -= 1 }
+                    } label: {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text(L("setup.back"))
+                                .aurionFont(12, relativeTo: .caption)
+                        }
+                        .foregroundColor(.aurionTextSecondary)
+                    }
+                    .accessibilityLabel(L("setup.back"))
+                }
                 Text(L("setup.step", step + 1, totalSteps))
                     .aurionFont(12, relativeTo: .caption)
                     .foregroundColor(.aurionTextSecondary)

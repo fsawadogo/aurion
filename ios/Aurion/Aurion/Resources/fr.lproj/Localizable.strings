@@ -347,6 +347,7 @@
 "setup.recordingTitle" = "Pr\U00E9f\U00E9rences d\U2019enregistrement ?";
 "setup.getStarted" = "Commencer";
 "setup.skip" = "Passer";
+"setup.back" = "Retour";
 "setup.practice.clinic.sub" = "Pratique ambulatoire";
 "setup.practice.surgical.sub" = "\U00C9tablissement proc\U00E9dural";
 "setup.practice.hospital.sub" = "Milieu hospitalier";

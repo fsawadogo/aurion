@@ -356,6 +356,7 @@
 "setup.recordingTitle" = "Recording preferences?";
 "setup.getStarted" = "Get Started";
 "setup.skip" = "Skip";
+"setup.back" = "Back";
 "setup.practice.clinic.sub" = "Outpatient practice";
 "setup.practice.surgical.sub" = "Procedural facility";
 "setup.practice.hospital.sub" = "Inpatient setting";
