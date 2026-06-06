@@ -72,57 +72,86 @@ struct VoiceRecordingView: View {
     private let sentenceInterval: TimeInterval = 8.0
 
     var body: some View {
-        VStack(spacing: 24) {
-            Text(L("onboarding.voiceRec.instruction"))
-                .aurionFont(20, weight: .semibold, relativeTo: .title3)
-                .foregroundColor(.aurionTextPrimary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .aurionStagger(order: 0, baseDelay: 0.05)
+        // Marie (2026-06-06): at larger Dynamic Type sizes the previous
+        // single VStack overflowed the viewport — the instruction, 4
+        // sentence rows, audio bars, record button, status text, and
+        // Continue button all stacked vertically with `Spacer()` between,
+        // but Spacer() can't shrink content; once total height > screen
+        // height the Continue button falls off the bottom and the user
+        // is hard-stuck on onboarding.
+        //
+        // Two-zone layout fixes this for every Dynamic Type size:
+        //   1. Top content (instruction + sentence list + live audio
+        //      bars + status) lives in a ScrollView so it can grow
+        //      arbitrarily and stays reachable via scroll.
+        //   2. Actionable controls (record button + Continue button +
+        //      re-record link) ride in a .safeAreaInset(edge: .bottom)
+        //      footer so they're always tappable — even at AX5 / dyslexia
+        //      modes where the top content takes the entire viewport.
+        //
+        // Test matrix when retouching: Default / Larger / Largest /
+        // AX5 (Accessibility XL). All must keep Continue visible on
+        // an iPhone Mini.
+        ScrollView {
+            VStack(spacing: 24) {
+                Text(L("onboarding.voiceRec.instruction"))
+                    .aurionFont(20, weight: .semibold, relativeTo: .title3)
+                    .foregroundColor(.aurionTextPrimary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .aurionStagger(order: 0, baseDelay: 0.05)
 
-            sentenceList
-                .aurionStagger(order: 1)
+                sentenceList
+                    .aurionStagger(order: 1)
 
-            Spacer()
-
-            if recorder.isRecording {
-                VStack(spacing: 14) {
-                    AurionAudioBars(level: recorder.audioLevel)
-                        .padding(.horizontal, 40)
-                    Text(String(format: "%.0fs", recorder.duration))
-                        .aurionFont(22, weight: .regular, relativeTo: .title2)
-                        .monospacedDigit()
-                        .foregroundColor(.aurionTextPrimary)
+                if recorder.isRecording {
+                    VStack(spacing: 14) {
+                        AurionAudioBars(level: recorder.audioLevel)
+                            .padding(.horizontal, 40)
+                        Text(String(format: "%.0fs", recorder.duration))
+                            .aurionFont(22, weight: .regular, relativeTo: .title2)
+                            .monospacedDigit()
+                            .foregroundColor(.aurionTextPrimary)
+                    }
+                    .transition(.opacity)
                 }
-                .transition(.opacity)
+
+                Text(statusText)
+                    .aurionFont(12, relativeTo: .caption)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 20)
+                    .transition(.opacity)
+                    .id(statusText)
+                    .animation(.aurionIOS, value: statusText)
             }
-
-            recordButton
-                .padding(.top, 8)
-
-            Text(statusText)
-                .aurionFont(12, relativeTo: .caption)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.horizontal, 20)
-                .transition(.opacity)
-                .id(statusText)
-                .animation(.aurionIOS, value: statusText)
-
-            if canProceed, let url = recorder.lastRecordingURL {
-                AurionGoldButton(label: L("setup.continue"), full: true) { onComplete(url) }
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-            }
-
-            Button(L("onboarding.voiceRec.rerecord")) { resetRecording() }
-                .aurionFont(12, relativeTo: .caption)
-                .foregroundColor(.aurionTextPrimary)
-                .opacity(canProceed || qualityCheckFailed ? 1 : 0)
-
-            Spacer().frame(height: 20)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            // Bottom padding inside the ScrollView so the last content
+            // row doesn't kiss the inset footer's top edge when scrolled
+            // all the way down.
+            .padding(.bottom, 12)
         }
-        .padding(.horizontal, 20)
+        .safeAreaInset(edge: .bottom) {
+            VStack(spacing: 12) {
+                recordButton
+
+                if canProceed, let url = recorder.lastRecordingURL {
+                    AurionGoldButton(label: L("setup.continue"), full: true) { onComplete(url) }
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                }
+
+                Button(L("onboarding.voiceRec.rerecord")) { resetRecording() }
+                    .aurionFont(12, relativeTo: .caption)
+                    .foregroundColor(.aurionTextPrimary)
+                    .opacity(canProceed || qualityCheckFailed ? 1 : 0)
+            }
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 8)
+            .background(.ultraThinMaterial)
+        }
         .animation(.aurionIOS, value: recorder.isRecording)
         .animation(.aurionIOS, value: canProceed)
         .animation(.aurionIOS, value: qualityCheckFailed)
