@@ -323,7 +323,17 @@ struct DashboardView: View {
     }
 
     // MARK: - Pending Review (gold-accent card)
-
+    //
+    // Marie bug-bash (2026-06-05): this section previously used the SAME
+    // "Resume" pill label as `resumableSection` above, even though the
+    // tap action is completely different — pending-review navigates to
+    // `SessionNoteView` (a note-review screen), not back into recording.
+    // Marie tapped this card expecting to resume her paused encounter
+    // and landed on a blank review screen ("No content captured" per
+    // section, because her earlier audio-upload bug had stranded
+    // sessions in AWAITING_REVIEW with no note). Pill is now labelled
+    // "Review" (`sessions.review`) so the two cards are visually
+    // distinct from each other at the glance.
     private var pendingReviewSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: L("dashboard.pendingReview"))
@@ -340,7 +350,7 @@ struct DashboardView: View {
                                     .foregroundColor(.aurionTextSecondary)
                             }
                             Spacer()
-                            Text(L("sessions.resume"))
+                            Text(L("sessions.review"))
                                 .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                                 // Brand-navy on gold pill — fixed in both modes.
                                 .foregroundColor(.aurionNavy)
