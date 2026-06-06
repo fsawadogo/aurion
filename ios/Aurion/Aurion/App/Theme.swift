@@ -911,7 +911,7 @@ func sessionStateBadge(_ state: String) -> (text: String, color: Color) {
 
 /// Shared ISO date formatting with cached formatters.
 func formatISODate(_ iso: String) -> String {
-    guard let date = _parseISODate(iso) else { return iso }
+    guard let date = parseISODate(iso) else { return iso }
     _displayFormatter.locale = Localization.locale
     return _displayFormatter.string(from: date)
 }
