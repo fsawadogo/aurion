@@ -6,12 +6,15 @@ Endpoints are accessible to any authenticated user for their own profile.
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._helpers import write_audit
+from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.profile.service import (
@@ -21,6 +24,12 @@ from app.modules.profile.service import (
 )
 
 router = APIRouter(prefix="/profile", tags=["profile"])
+
+# Profile-scoped events aren't tied to a clinical session. Same synthetic
+# anchor that the auth / MFA / prompt-overlay paths use so the row stays
+# out of any real session's history while remaining queryable on
+# (event_type, actor_id).
+_PROFILE_AUDIT_SESSION = uuid.UUID("00000000-0000-0000-0000-000000000000")
 
 
 # ── Schemas ─────────────────────────────────────────────────────────────────
@@ -105,11 +114,42 @@ async def update_profile_route(
     db: AsyncSession = Depends(get_db),
 ):
     """Update current user's profile fields."""
-    # Ensure profile exists
-    await get_or_create_profile(db, clinician_id=user.user_id, display_name=user.email)
+    # Ensure profile exists. Snapshot the pre-update team list so the
+    # audit-row count delta below reflects the actual change, not the
+    # post-write state.
+    existing = await get_or_create_profile(
+        db, clinician_id=user.user_id, display_name=user.email
+    )
+    team_before_count: Optional[int] = None
+    if body.allied_health_team is not None:
+        try:
+            team_before_count = len(json.loads(existing.allied_health_team))
+        except (TypeError, ValueError):
+            # Defensive — the column is `NOT NULL DEFAULT "[]"` so this
+            # should never trip, but a bad legacy row shouldn't crash
+            # the update path. Fall back to "no signal" and skip the
+            # emit; the change still goes through.
+            team_before_count = None
 
     updates = body.model_dump(exclude_none=True)
     profile = await update_profile(db, clinician_id=user.user_id, updates=updates)
+
+    # GH-260 — emit TEAM_MEMBERS_UPDATED only when the count actually
+    # changed. Same-content edits (re-order, rename in place) skip the
+    # audit emit so the trail stays meaningful instead of noisy. Names
+    # are deliberately NOT in the kwargs; see the docstring on the enum
+    # member for the PHI rationale.
+    if body.allied_health_team is not None and team_before_count is not None:
+        team_after_count = len(body.allied_health_team)
+        if team_before_count != team_after_count:
+            await write_audit(
+                _PROFILE_AUDIT_SESSION,
+                AuditEventType.TEAM_MEMBERS_UPDATED,
+                actor_id=str(user.user_id),
+                members_count_before=team_before_count,
+                members_count_after=team_after_count,
+            )
+
     return _to_response(profile)
 
 

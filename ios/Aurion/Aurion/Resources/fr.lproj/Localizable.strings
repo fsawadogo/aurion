@@ -436,6 +436,22 @@
 "profile.sectionTeam" = "Membres de l\U2019\U00E9quipe";
 "profile.noTeam" = "Aucun membre d\U2019\U00E9quipe configur\U00E9";
 "profile.editTeam" = "Modifier les membres de l\U2019\U00E9quipe";
+// ── \U00C9diteur des membres de l\U2019\U00E9quipe (GH-260) ──────
+"profile.teamEditor.title" = "Membres de l\U2019\U00E9quipe";
+"profile.teamEditor.sectionMembers" = "Membres actuels";
+"profile.teamEditor.addMember" = "Ajouter un membre";
+"profile.teamEditor.cancelAdd" = "Annuler";
+"profile.teamEditor.confirmAdd" = "Ajouter";
+"profile.teamEditor.nameLabel" = "NOM";
+"profile.teamEditor.namePlaceholder" = "ex. Sarah Tremblay";
+"profile.teamEditor.roleLabel" = "R\U00D4LE";
+"profile.teamEditor.rolePlaceholder" = "ex. inf., scribe, r\U00E9sident";
+"profile.teamEditor.emailLabel" = "COURRIEL (OPTIONNEL)";
+"profile.teamEditor.emailPlaceholder" = "nom@exemple.com";
+"profile.teamEditor.done" = "Termin\U00E9";
+"profile.teamEditor.cancel" = "Annuler";
+"profile.teamEditor.footer" = "Voici les personnes qui travaillent habituellement avec vous pendant les visites \U2014 infirmi\U00E8res, scribes, r\U00E9sidents, secr\U00E9taires m\U00E9dicales. Aurion utilise cette liste pour attribuer les paroles non m\U00E9dicales dans vos transcriptions.";
+"profile.teamEditor.saveFailed" = "Impossible d\U2019enregistrer les membres. V\U00E9rifiez votre connexion et r\U00E9essayez.";
 "profile.signOut" = "Se d\U00E9connecter";
 "profile.practiceType" = "Type de pratique";
 "profile.primarySpecialty" = "Sp\U00E9cialit\U00E9 principale";

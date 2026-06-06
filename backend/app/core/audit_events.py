@@ -136,6 +136,16 @@ class AuditEventType(StrEnum):
     VOICE_ENROLLMENT_DELETED = "voice_enrollment_deleted"
     ACCOUNT_DELETED = "account_deleted"
 
+    # ── Profile (per-clinician preferences) ──────────────────────────────
+    # Allied-health team list changed via PUT /profile (#260). Names are
+    # workforce data — not PHI in the strict HIPAA sense, but unnecessary
+    # in an immutable audit row. We carry only the actor UUID and the
+    # before/after row counts so compliance can see "this clinician
+    # changed their team list at T" without any names ever landing in
+    # DynamoDB. Same posture MACRO_CREATED takes with the macro body and
+    # PROMPT_USER_PROMPT_SET takes with the prompt text.
+    TEAM_MEMBERS_UPDATED = "team_members_updated"
+
     # ── Admin ────────────────────────────────────────────────────────────
     USER_CREATED = "user_created"
     USER_UPDATED = "user_updated"
@@ -511,6 +521,12 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
             "deleted_s3_objects",
             "retention_note",
         }
+    ),
+    # Profile (#260) — team list edit. NEVER include the names
+    # themselves; the count delta is the only audit-trail-meaningful
+    # signal we want in the immutable row.
+    AuditEventType.TEAM_MEMBERS_UPDATED: frozenset(
+        {"actor_id", "members_count_before", "members_count_after"}
     ),
     # Admin
     AuditEventType.USER_CREATED: frozenset(

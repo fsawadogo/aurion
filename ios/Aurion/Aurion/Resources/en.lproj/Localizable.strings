@@ -446,6 +446,22 @@
 "profile.sectionTeam" = "Team Members";
 "profile.noTeam" = "No team members configured";
 "profile.editTeam" = "Edit Team Members";
+// ── Team-members editor sheet (GH-260) ───────────────────────────
+"profile.teamEditor.title" = "Team Members";
+"profile.teamEditor.sectionMembers" = "Current Members";
+"profile.teamEditor.addMember" = "Add team member";
+"profile.teamEditor.cancelAdd" = "Cancel";
+"profile.teamEditor.confirmAdd" = "Add";
+"profile.teamEditor.nameLabel" = "NAME";
+"profile.teamEditor.namePlaceholder" = "e.g. Sarah Chen";
+"profile.teamEditor.roleLabel" = "ROLE";
+"profile.teamEditor.rolePlaceholder" = "e.g. RN, scribe, resident";
+"profile.teamEditor.emailLabel" = "EMAIL (OPTIONAL)";
+"profile.teamEditor.emailPlaceholder" = "name@example.com";
+"profile.teamEditor.done" = "Done";
+"profile.teamEditor.cancel" = "Cancel";
+"profile.teamEditor.footer" = "These are the people who typically work alongside you during visits — nurses, scribes, residents, MOAs. Aurion uses this list to attribute non-physician speech in your transcripts.";
+"profile.teamEditor.saveFailed" = "Couldn't save team members. Check your connection and try again.";
 "profile.signOut" = "Sign Out";
 "profile.practiceType" = "Practice Type";
 "profile.primarySpecialty" = "Primary Specialty";

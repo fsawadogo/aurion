@@ -1662,9 +1662,47 @@ struct PatientSessionMatch: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
-struct AlliedHealthMember: Codable, Sendable, Equatable {
+struct AlliedHealthMember: Codable, Sendable, Equatable, Identifiable {
+    /// Local-only identifier so SwiftUI `ForEach` / `.onDelete` can
+    /// iterate stably even when two rows share the same name (e.g. two
+    /// scribes named "Sam" on a busy clinic day). Synthesized on decode
+    /// and on the `init(name:role:email:)` convenience init below; never
+    /// serialized to the backend (the JSON column shape stays
+    /// `[{name, role, email?}]`).
+    let id: UUID
     let name: String
     let role: String
+    /// Optional contact email. Backend persists the team list as a
+    /// `list[dict]` JSON column, so an extra key round-trips
+    /// transparently — pre-existing rows decode with `email = nil` and
+    /// stay forward-compatible.
+    let email: String?
+
+    enum CodingKeys: String, CodingKey {
+        case name, role, email
+    }
+
+    init(id: UUID = UUID(), name: String, role: String, email: String? = nil) {
+        self.id = id
+        self.name = name
+        self.role = role
+        self.email = email
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.id = UUID()
+        self.name = try c.decode(String.self, forKey: .name)
+        self.role = try c.decode(String.self, forKey: .role)
+        self.email = try c.decodeIfPresent(String.self, forKey: .email)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(name, forKey: .name)
+        try c.encode(role, forKey: .role)
+        try c.encodeIfPresent(email, forKey: .email)
+    }
 }
 
 struct PhysicianProfileResponse: Codable, Sendable {
