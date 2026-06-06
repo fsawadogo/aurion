@@ -5,6 +5,9 @@ import SwiftUI
 /// with counts, then a single rounded card containing every session row.
 /// "Resume" gold pill replaces the status badge for pending sessions.
 struct SessionsInboxView: View {
+    /// Needed to re-engage capture for resumable rows via `adoptSession`
+    /// — the same path the dashboard's "Continue Recording" card uses.
+    @EnvironmentObject private var sessionManager: SessionManager
     @State private var sessions: [SessionResponse] = []
     @State private var isLoading = true
     @State private var sortNewestFirst = true
@@ -103,6 +106,21 @@ struct SessionsInboxView: View {
 
     private func isPending(_ s: SessionResponse) -> Bool {
         ["AWAITING_REVIEW", "PROCESSING_STAGE1", "PROCESSING_STAGE2"].contains(s.state)
+    }
+
+    /// What the trailing control + row tap should do for a given state.
+    /// Decoupled from `isPending` (which drives the filter counts) so the
+    /// affordance matches the action: only genuinely-active capture states
+    /// resume into `CaptureView`; AWAITING_REVIEW reviews the note; every
+    /// processing/terminal state shows a non-actionable status pill (#276).
+    enum InboxRowAction: Equatable { case resume, review, status }
+
+    static func rowAction(for state: String) -> InboxRowAction {
+        switch state {
+        case "RECORDING", "PAUSED": return .resume
+        case "AWAITING_REVIEW": return .review
+        default: return .status  // PROCESSING_STAGE1/2, REVIEW_COMPLETE, EXPORTED, PURGED…
+        }
     }
 
     var body: some View {
@@ -266,10 +284,25 @@ struct SessionsInboxView: View {
             AurionCard(padding: 0) {
                 VStack(spacing: 0) {
                     ForEach(Array(filtered.enumerated()), id: \.element.id) { index, session in
-                        NavigationLink(value: session.id) {
-                            sessionRow(session)
+                        Group {
+                            if Self.rowAction(for: session.state) == .resume {
+                                // Resumable capture → re-engage CaptureView via
+                                // the same path the dashboard uses, NOT the note
+                                // view (#276).
+                                Button {
+                                    AurionHaptics.impact(.light)
+                                    Task { await sessionManager.adoptSession(session) }
+                                } label: {
+                                    sessionRow(session)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                NavigationLink(value: session.id) {
+                                    sessionRow(session)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                         .contextMenu {
                             Button(role: .destructive) {
                                 sessionToDiscard = session
@@ -326,6 +359,18 @@ struct SessionsInboxView: View {
         }
     }
 
+    /// Gold capsule (navy text, fixed in both modes) used for the
+    /// actionable Resume / Review affordances. Matches the dashboard pill.
+    private func goldPill(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(.aurionNavy)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.aurionGold)
+            .clipShape(Capsule())
+    }
+
     private func sessionRow(_ s: SessionResponse) -> some View {
         let icon: String = {
             switch s.specialty {
@@ -368,16 +413,12 @@ struct SessionsInboxView: View {
                     .lineLimit(1)
             }
             Spacer()
-            if isPending(s) {
-                Text(L("sessions.resume"))
-                    .font(.system(size: 12, weight: .semibold))
-                    // Brand-navy on gold pill — fixed in both modes.
-                    .foregroundColor(.aurionNavy)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.aurionGold)
-                    .clipShape(Capsule())
-            } else {
+            switch Self.rowAction(for: s.state) {
+            case .resume:
+                goldPill(L("sessions.resume"))
+            case .review:
+                goldPill(L("sessions.review"))
+            case .status:
                 AurionStatusPill(
                     kind: sessionStateKind(s.state),
                     labelOverride: sessionStateLabel(s.state)
