@@ -369,6 +369,17 @@
 "setup.freq.everySession" = "Every session";
 "setup.freq.daily" = "Daily";
 "setup.freq.weekly" = "Weekly";
+"setup.visit.custom.add" = "Add custom type";
+"setup.visit.custom.placeholder" = "e.g. LL new pt, breast visit";
+"setup.visit.custom.commit" = "Add";
+"setup.visit.custom.cancel" = "Cancel";
+"setup.visit.custom.delete" = "Remove \"%@\"";
+"setup.visit.custom.limit" = "20 custom types maximum.";
+"setup.visit.custom.error.tooLong" = "Keep it under 60 characters.";
+"setup.visit.custom.error.ssn" = "That looks like a Social Security number.";
+"setup.visit.custom.error.email" = "That looks like an email address.";
+"setup.visit.custom.error.name" = "Avoid patient names \U2014 use a short label like \"LL fu\".";
+"setup.visit.custom.error.duplicate" = "Already on the list.";
 
 /* ── Onboarding ───────────────────────────────────────── */
 "onboarding.getStarted" = "Get Started";
