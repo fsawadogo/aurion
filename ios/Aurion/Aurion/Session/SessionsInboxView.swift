@@ -318,6 +318,9 @@ struct SessionsInboxView: View {
         sessionToDiscard = nil
         do {
             try await APIClient.shared.discardSession(sessionId: s.id)
+            // Purge the local staged WAV too — discarding server-side must
+            // not leave raw audio on the device (#282).
+            LocalDataPurger.purgeStagedAudio(sessionId: s.id)
             withAnimation { sessions.removeAll { $0.id == s.id } }
             AurionHaptics.notification(.success)
         } catch {
