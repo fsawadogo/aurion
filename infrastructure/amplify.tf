@@ -150,19 +150,28 @@ resource "aws_amplify_app" "web_portal" {
   # then applies its own trailing-slash redirect. Undocumented but
   # reproducible on 2026-06-05.
   #
-  # Workaround: ship the same payload at a NON-HIDDEN path
-  # (`out/aurion-aasa-payload`, copied from `public/aurion-aasa-payload`
-  # by Next.js' standard static-export behaviour) and rewrite the
-  # canonical Apple URL to it with status 200. Amplify honors rewrites
-  # whose target is non-hidden, so the literal file ships under the
-  # URL Apple expects. Header block below still matches on the SOURCE
-  # URL, so Content-Type: application/json applies untouched. The
-  # hidden-path copy at `out/.well-known/...` is intentionally kept
-  # as a belt-and-suspenders fallback until the pilot confirms
-  # Universal Links resolve end-to-end.
+  # Workaround: ship the same payload at a NON-HIDDEN path with an
+  # EXPLICIT FILE EXTENSION (`out/aurion-aasa-payload.json`, copied from
+  # `public/aurion-aasa-payload.json` by Next.js' standard static-export
+  # behaviour) and rewrite the canonical Apple URL to it with status 200.
+  #
+  # PR #246 first tried the non-hidden path WITHOUT an extension
+  # (`/aurion-aasa-payload`). Amplify still 301'd that to
+  # `/aurion-aasa-payload/` because its CDN treats every extensionless
+  # URL as a directory-style route (driven by Next.js' `trailingSlash:
+  # true` config) and auto-adds the trailing slash BEFORE evaluating
+  # custom_rules. Adding `.json` makes Amplify recognise the URL as a
+  # static file and skip the trailing-slash redirect.
+  #
+  # Header block below still matches on the SOURCE URL
+  # (`/.well-known/apple-app-site-association`), so
+  # Content-Type: application/json applies untouched even though the
+  # backing file already has `.json`. The hidden-path copy at
+  # `out/.well-known/...` is intentionally kept as a belt-and-suspenders
+  # fallback until the pilot confirms Universal Links resolve end-to-end.
   custom_rule {
     source = "/.well-known/apple-app-site-association"
-    target = "/aurion-aasa-payload"
+    target = "/aurion-aasa-payload.json"
     status = "200"
   }
 
