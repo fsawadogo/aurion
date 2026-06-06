@@ -387,6 +387,30 @@ export interface ConfigChangeEvent {
   appconfig_version: number;
 }
 
+/* ─── Feature Flags ──────────────────────────────────────────────────────── */
+// Mirrors backend/app/api/v1/admin/feature_flags.py:FeatureFlagsResponse.
+// The four `*_card_enabled` flags gate the post-pilot cards on the iOS
+// note-review screen (lane-full/card-visibility-flags). ADMIN-only —
+// the Feature Flags page in the portal is the only writer.
+export interface FeatureFlags {
+  screen_capture_enabled: boolean;
+  note_versioning_enabled: boolean;
+  session_pause_resume_enabled: boolean;
+  per_session_provider_override: boolean;
+  meta_wearables_enabled: boolean;
+  per_session_visual_evidence_mode_override: boolean;
+  orders_card_enabled: boolean;
+  coding_card_enabled: boolean;
+  patient_summary_card_enabled: boolean;
+  emr_writeback_card_enabled: boolean;
+}
+
+export interface UpdateFeatureFlagsResponse {
+  feature_flags: FeatureFlags;
+  appconfig_version: number;
+  changed_fields: string[];
+}
+
 /* ─── Pilot Metrics ──────────────────────────────────────────────────────── */
 
 export interface PilotMetric {

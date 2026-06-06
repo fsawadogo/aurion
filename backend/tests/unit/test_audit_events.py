@@ -108,6 +108,8 @@ EXPECTED_VALUES: dict[str, str] = {
     "PROVIDER_CHANGED": "provider_changed",
     "PROVIDER_OVERRIDE_SET": "provider_override_set",
     "PROVIDER_OVERRIDE_CLEARED": "provider_override_cleared",
+    # Card-visibility feature flag update (lane-full/card-visibility-flags).
+    "FEATURE_FLAGS_UPDATED": "feature_flags_updated",
     "VISUAL_EVIDENCE_MODE_OVERRIDE_SET": "visual_evidence_mode_override_set",
     # Operator probes (P1-FU-GEMINI-PROBE)
     "VISION_CLIP_PROBED": "vision_clip_probed",

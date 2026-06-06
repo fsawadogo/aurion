@@ -15,7 +15,8 @@
       "templates": "Modèles",
       "macros": "Macros",
       "myProfile": "Mon profil",
-      "aiPrompts": "Invites IA"
+      "aiPrompts": "Invites IA",
+      "featureFlags": "Indicateurs"
     },
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
@@ -312,6 +313,37 @@
       "missingAnchorNoInterpret": "Votre invite doit demander à l’IA de NE PAS interpréter, diagnostiquer ou inférer. Ajoutez une formulation comme « ne pas interpréter les observations », « ne pas diagnostiquer » ou « aucune interprétation ».",
       "empty": "Votre invite est vide. Écrivez une invite complète ou utilisez l’invite par défaut.",
       "unknown": "Impossible de valider votre invite. Réessayez."
+    }
+  },
+  "FeatureFlags": {
+    "eyebrow": "Admin",
+    "title": "Indicateurs de fonctionnalités",
+    "subtitle": "Activez ou désactivez les fiches post-pilote sur l’écran de révision de note iOS.",
+    "loadError": "Impossible de charger les indicateurs.",
+    "saveError": "Impossible d’enregistrer les indicateurs.",
+    "saveSuccess": "Enregistré. La version {version} est en cours de déploiement.",
+    "save": "Enregistrer",
+    "reset": "Réinitialiser",
+    "loading": "Chargement…",
+    "sectionCards": "Fiches de révision de note (iOS)",
+    "sectionCardsHint": "Ces quatre fiches apparaissent sous la note SOAP dans l’application iOS. Chacune est une fonctionnalité post-pilote — gardez-la masquée tant que le backend correspondant n’est pas en service. Les changements sont appliqués dans ~30 secondes sur tous les iPhones.",
+    "flags": {
+      "orders_card_enabled": {
+        "name": "Ordonnances",
+        "description": "Affiche les prescriptions et ordonnances extraites sous la note SOAP."
+      },
+      "coding_card_enabled": {
+        "name": "Codes & facturation",
+        "description": "Suggestions assistives CIM/CCAM pour la facturation — ne reviennent jamais dans la note clinique."
+      },
+      "patient_summary_card_enabled": {
+        "name": "Résumé patient",
+        "description": "Résumé d’un paragraphe en langage clair de la consultation."
+      },
+      "emr_writeback_card_enabled": {
+        "name": "Renvoi vers le DPI",
+        "description": "File d’attente sortante qui envoie la note approuvée vers un système de dossier médical."
+      }
     }
   }
 }

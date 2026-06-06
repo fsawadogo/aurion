@@ -215,7 +215,7 @@ resource "aws_iam_role_policy" "api_task_policy" {
         ]
         Resource = [aws_kms_key.main.arn]
       },
-      # AppConfig — read runtime configuration
+      # AppConfig — read runtime configuration on every poll.
       {
         Effect = "Allow"
         Action = [
@@ -223,6 +223,38 @@ resource "aws_iam_role_policy" "api_task_policy" {
           "appconfig:StartConfigurationSession"
         ]
         Resource = ["*"]
+      },
+      # AppConfig writes — ADMIN-only POST /admin/feature-flags pushes a
+      # new hosted-configuration-version and starts a deployment against
+      # the existing deployment strategy (lane-full/card-visibility-flags).
+      # Scoped to the Terraform-managed application, configuration profile,
+      # environment, and deployment strategy ARNs — no wildcard reach into
+      # a prod app even if Terraform later manages multiple AppConfig
+      # applications in the same account.
+      {
+        Effect = "Allow"
+        Action = [
+          "appconfig:CreateHostedConfigurationVersion",
+          "appconfig:GetHostedConfigurationVersion",
+          "appconfig:ListHostedConfigurationVersions",
+        ]
+        Resource = [
+          aws_appconfig_application.main.arn,
+          "${aws_appconfig_application.main.arn}/configurationprofile/${aws_appconfig_configuration_profile.main.configuration_profile_id}",
+          "${aws_appconfig_application.main.arn}/configurationprofile/${aws_appconfig_configuration_profile.main.configuration_profile_id}/hostedconfigurationversion/*",
+        ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "appconfig:StartDeployment",
+        ]
+        Resource = [
+          aws_appconfig_application.main.arn,
+          "${aws_appconfig_application.main.arn}/environment/${aws_appconfig_environment.main.environment_id}",
+          "${aws_appconfig_application.main.arn}/environment/${aws_appconfig_environment.main.environment_id}/deployment/*",
+          aws_appconfig_deployment_strategy.all_at_once.arn,
+        ]
       },
       # Secrets Manager — read AI provider API keys
       {
@@ -506,6 +538,12 @@ resource "aws_ecs_task_definition" "api" {
         { name = "APPCONFIG_APP_ID", value = aws_appconfig_application.main.id },
         { name = "APPCONFIG_ENV_ID", value = aws_appconfig_environment.main.environment_id },
         { name = "APPCONFIG_PROFILE_ID", value = aws_appconfig_configuration_profile.main.configuration_profile_id },
+        # Deployment strategy id needed by the ADMIN POST /admin/feature-
+        # flags endpoint (lane-full/card-visibility-flags) — the endpoint
+        # calls boto3 appconfig.start_deployment() against this strategy.
+        # Reading the IAM policy above explains why the strategy ARN is
+        # in the policy; this env wire is how the Python code finds it.
+        { name = "APPCONFIG_DEPLOYMENT_STRATEGY_ID", value = aws_appconfig_deployment_strategy.all_at_once.id },
         # DB connection metadata — host / port / db-name are NOT secrets,
         # only the password is. The app reads these alongside the JSON
         # credential secret injected below and constructs the SQLAlchemy URL.

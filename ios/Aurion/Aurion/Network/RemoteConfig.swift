@@ -37,7 +37,15 @@ final class RemoteConfig: ObservableObject {
         noteVersioningEnabled: true,
         sessionPauseResumeEnabled: true,
         perSessionProviderOverride: true,
-        metaWearablesEnabled: false
+        metaWearablesEnabled: false,
+        // Card-visibility flags default to `false` so the four post-pilot
+        // cards on SessionNoteView stay hidden until an ADMIN flips them
+        // via the web portal. Matches the backend FeatureFlagsConfig
+        // defaults and the operator's AppConfig v7 push.
+        ordersCardEnabled: false,
+        codingCardEnabled: false,
+        patientSummaryCardEnabled: false,
+        emrWritebackCardEnabled: false
     )
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var lastError: String?
