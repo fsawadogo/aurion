@@ -53,6 +53,7 @@ from app.core.kms_encryption import decrypt_str, encrypt_str
 from app.core.models import RefreshTokenModel, UserModel
 from app.core.types import UserRole
 from app.modules.auth import lockout, password_reset, totp
+from app.modules.auth.device_hint import device_hint_from_user_agent
 from app.modules.auth.email import send_password_reset_email
 from app.modules.auth.jwt_tokens import (
     REFRESH_TOKEN_TTL_SECONDS,
@@ -360,7 +361,10 @@ async def mfa_verify_login(
         )
 
     lockout.record_success(user)
-    user.last_login_at = utcnow()
+    now = utcnow()
+    user.last_login_at = now
+    # Surface the most recent MFA verification on the portal MFA card.
+    user.mfa_last_verified_at = now
     return await _issue_tokens_and_persist(db, user, request)
 
 
@@ -391,9 +395,10 @@ async def refresh(
     previous_token_id = str(row.id)
 
     new_row, raw_refresh = await _persist_new_refresh_row(db, user, request, now=now)
-    access_token, expires_in = mint_access_token(
+    access_token, expires_in, jti = mint_access_token(
         user_id=user.id, role=user.role, email=user.email
     )
+    new_row.access_token_jti = jti
 
     await write_audit(
         _AUTH_AUDIT_SESSION,
@@ -700,6 +705,12 @@ async def _persist_new_refresh_row(
     The raw token is returned exactly once to the caller (the issuing
     /login or /refresh handler). The row is added to the session;
     commit is the route's job.
+
+    Carries the new portal-sessions metadata (#163) — ``device_hint``
+    derived from the UA via ``device_hint_from_user_agent`` and
+    ``last_used_at`` seeded to ``now`` so the portal sessions card
+    can render every row consistently. ``access_token_jti`` is set
+    by the caller after ``mint_access_token`` returns it.
     """
     raw, token_hash = mint_refresh_token()
     now = now or utcnow()
@@ -712,6 +723,8 @@ async def _persist_new_refresh_row(
         expires_at=now + _refresh_token_ttl(),
         issued_user_agent=ua or None,
         issued_ip_hash=hash_ip(client_ip) if client_ip else None,
+        device_hint=device_hint_from_user_agent(ua) if ua else None,
+        last_used_at=now,
     )
     db.add(row)
     await db.flush()
@@ -735,9 +748,10 @@ async def _issue_tokens_and_persist(
     LOGIN_SUCCESS + REFRESH_TOKEN_ISSUED, flushes (route commits).
     """
     new_row, raw_refresh = await _persist_new_refresh_row(db, user, request)
-    access_token, expires_in = mint_access_token(
+    access_token, expires_in, jti = mint_access_token(
         user_id=user.id, role=user.role, email=user.email
     )
+    new_row.access_token_jti = jti
 
     await write_audit(
         _AUTH_AUDIT_SESSION,

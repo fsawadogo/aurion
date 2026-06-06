@@ -197,6 +197,18 @@ class AuditEventType(StrEnum):
     LOGOUT = "logout"
     MFA_ENROLLED = "mfa_enrolled"
     MFA_RESET = "mfa_reset"
+    # Self-serve MFA disable from /me/mfa (#163). Distinct from MFA_RESET
+    # (admin-initiated) so the post-pilot security review can tell the
+    # two apart in the trail.
+    MFA_DISABLED = "mfa_disabled"
+    # Per-row + bulk refresh-token revocation from the portal sessions
+    # card (#163). SESSION_REVOKED carries the row id of the killed
+    # token; SESSIONS_REVOKED_ALL carries the count of rows killed.
+    # Distinct from REFRESH_TOKEN_REVOKED (which is the /auth/logout
+    # path, single-token, by-token-presented) so the user-initiated
+    # "sign out everywhere" gesture is queryable on its own.
+    SESSION_REVOKED = "session_revoked"
+    SESSIONS_REVOKED_ALL = "sessions_revoked_all"
     PASSWORD_RESET_REQUESTED = "password_reset_requested"
     PASSWORD_CHANGED = "password_changed"
     ADMIN_PASSWORD_RESET_ISSUED = "admin_password_reset_issued"
@@ -604,6 +616,9 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.LOGOUT: frozenset({"actor_id"}),
     AuditEventType.MFA_ENROLLED: frozenset({"actor_id"}),
     AuditEventType.MFA_RESET: frozenset({"actor_id", "target_user_id"}),
+    AuditEventType.MFA_DISABLED: frozenset({"actor_id"}),
+    AuditEventType.SESSION_REVOKED: frozenset({"actor_id", "token_id"}),
+    AuditEventType.SESSIONS_REVOKED_ALL: frozenset({"actor_id", "count"}),
     AuditEventType.PASSWORD_RESET_REQUESTED: frozenset({"target_user_id"}),
     AuditEventType.PASSWORD_CHANGED: frozenset({"actor_id", "via"}),
     AuditEventType.ADMIN_PASSWORD_RESET_ISSUED: frozenset(
