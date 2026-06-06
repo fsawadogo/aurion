@@ -50,7 +50,9 @@ async def test_only_returns_own(app_client, db_session) -> None:
     # Alice has two sessions (re-login produces a second refresh row),
     # Bob has one.
     alice_a = await _login(app_client, alice_email)
-    alice_b = await _login(app_client, alice_email)
+    # alice_b is deliberately spawned to bump the refresh_tokens count for
+    # this user; the access token itself isn't used below.
+    _alice_b = await _login(app_client, alice_email)
     _bob = await _login(app_client, bob_email)
 
     list_resp = await app_client.get(

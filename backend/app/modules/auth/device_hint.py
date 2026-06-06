@@ -28,6 +28,8 @@ lifecycle.
 
 from __future__ import annotations
 
+import ipaddress
+
 # Order matters — Edge contains "Chrome" in its UA, Chrome contains
 # "Safari", Safari is the fallback among WebKit browsers. We probe the
 # most specific signal first.
@@ -96,9 +98,6 @@ def _first_match(
         if needle in haystack:
             return label
     return None
-
-
-import ipaddress
 
 
 def ip_class(raw_ip: str | None) -> str:

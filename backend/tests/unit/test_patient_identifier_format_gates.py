@@ -28,7 +28,6 @@ from app.api.v1.sessions import (
     _check_identifier_format,
 )
 
-
 # ── Deny patterns ──────────────────────────────────────────────────────────
 
 
