@@ -1,6 +1,7 @@
 "use client";
 
 import { Check } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Button from "@/components/ui/Button";
@@ -38,6 +39,7 @@ export default function NewTemplatePage() {
 }
 
 function NewTemplateInner() {
+  const t = useTranslations("TemplateNew");
   const search = useSearchParams();
   const resumeId = search.get("session");
 
@@ -58,11 +60,11 @@ function NewTemplateInner() {
         : await startTemplateAuthoring();
       setAuthSession(s);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Could not start a session.");
+      setError(e instanceof Error ? e.message : t("loadError"));
     } finally {
       setBootstrapping(false);
     }
-  }, [resumeId]);
+  }, [resumeId, t]);
 
   useEffect(() => {
     void bootstrap();
@@ -83,7 +85,7 @@ function NewTemplateInner() {
       const updated = await continueTemplateAuthoring(authSession.id, message);
       setAuthSession(updated);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Reply failed.");
+      setError(e instanceof Error ? e.message : t("replyError"));
       // Roll back the optimistic message so the user can retry.
       void getTemplateAuthoring(authSession.id).then(setAuthSession).catch(() => {});
     } finally {
@@ -102,7 +104,7 @@ function NewTemplateInner() {
       // web/lib/use-route-segment.ts.
       window.location.assign(`/portal/templates/${custom.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed.");
+      setError(e instanceof Error ? e.message : t("saveError"));
       setFinalizing(false);
     }
   }
@@ -111,12 +113,12 @@ function NewTemplateInner() {
     <div className="aurion-page-padded aurion-container">
       <PageHeader
         breadcrumb={[
-          { label: "Templates", href: "/portal/templates" },
-          { label: "New" },
+          { label: t("breadcrumbTemplates"), href: "/portal/templates" },
+          { label: t("breadcrumbNew") },
         ]}
-        eyebrow="Conversational builder"
-        title="New template"
-        description="Chat with the builder to design a custom note template. When you're happy with the preview, click Save."
+        eyebrow={t("eyebrow")}
+        title={t("title")}
+        description={t("description")}
       />
 
       {bootstrapping ? (
@@ -127,14 +129,14 @@ function NewTemplateInner() {
         <Card>
           <p className="text-sm text-red-600">{error}</p>
           <Button variant="secondary" className="mt-3" onClick={() => void bootstrap()}>
-            Retry
+            {t("retry")}
           </Button>
         </Card>
       ) : authSession ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="h-[calc(100vh-220px)] min-h-[480px]">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
-              Conversation
+              {t("conversationLabel")}
             </h2>
             <TemplateChat
               messages={authSession.messages}
@@ -144,7 +146,7 @@ function NewTemplateInner() {
           </div>
           <div className="space-y-3">
             <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-0">
-              Draft preview
+              {t("draftPreviewLabel")}
             </h2>
             {error && (
               <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
@@ -162,15 +164,13 @@ function NewTemplateInner() {
                   fullWidth
                 >
                   <Check className="h-4 w-4 mr-1" />
-                  Save this template
+                  {t("saveTemplate")}
                 </Button>
               </>
             ) : (
               <Card>
                 <p className="text-sm text-gray-500 italic">
-                  The builder will draft your template here once you&apos;ve
-                  confirmed the specialty, sections, and which are
-                  required.
+                  {t("draftPlaceholder")}
                 </p>
               </Card>
             )}

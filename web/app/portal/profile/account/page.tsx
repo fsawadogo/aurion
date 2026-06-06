@@ -1,10 +1,12 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import LocaleSwitcher from "@/components/portal/LocaleSwitcher";
 import PageHeader from "@/components/portal/PageHeader";
 import { getMe, logout } from "@/lib/api";
 import { getMyProfile, updateMyProfile } from "@/lib/portal-api";
@@ -13,18 +15,29 @@ import type { CurrentUser, PhysicianProfile } from "@/types";
 /**
  * Account settings for the clinician portal.
  *
- * Today this is intentionally narrow: identity (read-only), output
- * language, sign-out. MFA setup + active-session listing land in a
- * follow-up dedicated PR — both depend on backend endpoints that
- * don't ship in PR-A/B.
+ * Today this is intentionally narrow: identity (read-only), generated
+ * note language, portal UI language, sign-out. MFA setup + active-
+ * session listing land in a follow-up dedicated PR — both depend on
+ * backend endpoints that don't ship in PR-A/B.
  *
- * The output_language toggle lives here (not on the main profile
- * page) because it's a personal-account preference, not a practice-
- * configuration one. The web portal locale itself is not yet i18n'd
- * — that's the next-intl PR — so the toggle today only changes the
- * language of generated notes, not the UI chrome.
+ * Two language toggles live here side-by-side:
+ *   * Generated note language (`output_language`) — the language the
+ *     LLM writes the SOAP note in.
+ *   * Portal interface language (`ui_language` / cookie) — the locale
+ *     used for menus, buttons, and labels in this portal. Handled by
+ *     <LocaleSwitcher /> which writes the cookie + syncs to backend.
+ *
+ * They're deliberately separate fields per CLAUDE.md memory — a
+ * physician might prefer FR chrome but EN-generated notes (or vice
+ * versa) so we don't conflate them.
  */
 export default function PortalAccountPage() {
+  const t = useTranslations("Account");
+  const tIdentity = useTranslations("Account.identity");
+  const tNote = useTranslations("Account.noteLanguage");
+  const tUi = useTranslations("Account.uiLanguage");
+  const tSecurity = useTranslations("Account.security");
+  const tRoles = useTranslations("Roles");
   const [me, setMe] = useState<CurrentUser | null>(null);
   const [profile, setProfile] = useState<PhysicianProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -39,11 +52,11 @@ export default function PortalAccountPage() {
       setMe(u);
       setProfile(p);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load account.");
+      setError(e instanceof Error ? e.message : t("loadError"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -57,7 +70,7 @@ export default function PortalAccountPage() {
       const updated = await updateMyProfile({ output_language: lang });
       setProfile(updated);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to update language.");
+      setError(e instanceof Error ? e.message : t("saveLanguageError"));
     } finally {
       setSavingLanguage(false);
     }
@@ -67,12 +80,12 @@ export default function PortalAccountPage() {
     <div className="aurion-page-padded aurion-container-form">
       <PageHeader
         breadcrumb={[
-          { label: "My Profile", href: "/portal/profile" },
-          { label: "Account" },
+          { label: t("breadcrumbProfile"), href: "/portal/profile" },
+          { label: t("breadcrumbAccount") },
         ]}
-        eyebrow="Clinician portal"
-        title="Account settings"
-        description="Identity, language preferences, and sign-out."
+        eyebrow={t("eyebrow")}
+        title={t("title")}
+        description={t("description")}
       />
 
       {loading ? (
@@ -83,7 +96,7 @@ export default function PortalAccountPage() {
         <Card>
           <p className="text-sm text-red-600">{error}</p>
           <Button variant="secondary" className="mt-3" onClick={() => void load()}>
-            Retry
+            {t("retry")}
           </Button>
         </Card>
       ) : me && profile ? (
@@ -94,30 +107,37 @@ export default function PortalAccountPage() {
             </div>
           )}
 
-          <Card title="Identity">
+          <Card title={tIdentity("title")}>
             <dl className="space-y-3 text-sm">
-              <Row label="Name">{me.full_name || "—"}</Row>
-              <Row label="Email">{me.email}</Row>
-              <Row label="Role">{me.role}</Row>
+              <Row label={tIdentity("name")}>{me.full_name || tIdentity("missing")}</Row>
+              <Row label={tIdentity("email")}>{me.email}</Row>
+              <Row label={tIdentity("role")}>{tRoles(me.role)}</Row>
             </dl>
           </Card>
 
-          <Card title="Generated note language">
-            <p className="text-sm text-gray-600 mb-3">
-              The language Aurion uses when generating notes from your
-              transcripts. Independent of the portal interface language.
-            </p>
+          <Card title={tUi("title")}>
+            <p className="text-sm text-gray-600 mb-3">{tUi("description")}</p>
+            {/* LocaleSwitcher writes the aurion-locale cookie + syncs
+                to backend `ui_language`; router.refresh() re-renders
+                the chrome with the new catalog. */}
+            <LocaleSwitcher variant="inline" />
+          </Card>
+
+          <Card title={tNote("title")}>
+            <p className="text-sm text-gray-600 mb-3">{tNote("description")}</p>
             <div className="flex gap-2">
               <LanguageButton
                 code="en"
-                label="English"
+                label={tNote("english")}
+                ariaLabel={tNote("setAria", { label: tNote("english") })}
                 active={profile.output_language === "en"}
                 disabled={savingLanguage}
                 onClick={() => void setLanguage("en")}
               />
               <LanguageButton
                 code="fr"
-                label="Français"
+                label={tNote("french")}
+                ariaLabel={tNote("setAria", { label: tNote("french") })}
                 active={profile.output_language === "fr"}
                 disabled={savingLanguage}
                 onClick={() => void setLanguage("fr")}
@@ -125,19 +145,15 @@ export default function PortalAccountPage() {
             </div>
           </Card>
 
-          <Card title="Security">
-            <p className="text-sm text-gray-600 mb-3">
-              Multi-factor authentication and active-session management
-              are coming in a follow-up. For now you can sign out below
-              — your session ends immediately on this device.
-            </p>
+          <Card title={tSecurity("title")}>
+            <p className="text-sm text-gray-600 mb-3">{tSecurity("description")}</p>
             <Button
               variant="secondary"
               onClick={() => {
                 void logout();
               }}
             >
-              Sign out
+              {tSecurity("signOut")}
             </Button>
           </Card>
         </div>
@@ -166,12 +182,14 @@ function Row({
 function LanguageButton({
   code,
   label,
+  ariaLabel,
   active,
   disabled,
   onClick,
 }: {
   code: string;
   label: string;
+  ariaLabel: string;
   active: boolean;
   disabled: boolean;
   onClick: () => void;
@@ -188,7 +206,7 @@ function LanguageButton({
           : "border-gray-200 text-gray-700 hover:border-gray-300 disabled:opacity-50")
       }
       aria-pressed={active}
-      aria-label={`Set generated note language to ${label}`}
+      aria-label={ariaLabel}
     >
       <span className="font-mono text-[10px] uppercase mr-1.5 text-gray-500">
         {code}

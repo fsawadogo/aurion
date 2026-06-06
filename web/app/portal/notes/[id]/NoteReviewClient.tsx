@@ -1,9 +1,9 @@
 "use client";
 
 import { AlertTriangle, BadgeCheck, Download } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouteSegment } from "@/lib/use-route-segment";
-import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
@@ -51,6 +51,8 @@ import type { Claim, NoteDetail, PhysicianMacro, Session as SessionRow } from "@
  * unresolved (iOS NoteReviewView lines 714-715).
  */
 export default function NoteReviewPage() {
+  const t = useTranslations("NoteReview");
+  const tActions = useTranslations("NoteReview.actions");
   // Static-export gotcha — see web/lib/use-route-segment.ts. `useParams()`
   // returns the build-time "_" sentinel under `output: "export"`; the
   // hook reads from `usePathname()` so the real URL wins at runtime.
@@ -105,7 +107,7 @@ export default function NoteReviewPage() {
       if (d.status === "fulfilled") {
         setDetail(d.value);
       } else {
-        const msg = d.reason instanceof Error ? d.reason.message : "Failed to load note.";
+        const msg = d.reason instanceof Error ? d.reason.message : t("loadError");
         // /detail 404s when the session exists but has no note yet —
         // typical for CONSENT_PENDING / RECORDING / freshly-discarded
         // sessions. Surface a friendly empty state instead of a raw
@@ -122,7 +124,7 @@ export default function NoteReviewPage() {
     } finally {
       setLoading(false);
     }
-  }, [sessionId]);
+  }, [sessionId, t]);
 
   useEffect(() => {
     void load();
@@ -157,7 +159,7 @@ export default function NoteReviewPage() {
       await approveAll(sessionId);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Approval failed.");
+      setError(e instanceof Error ? e.message : t("approvalError"));
     } finally {
       setApproving(false);
     }
@@ -179,7 +181,7 @@ export default function NoteReviewPage() {
       URL.revokeObjectURL(url);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Export failed.");
+      setError(e instanceof Error ? e.message : t("exportError"));
     } finally {
       setExporting(false);
     }
@@ -189,17 +191,17 @@ export default function NoteReviewPage() {
     <div className="aurion-page-padded aurion-container">
       <PageHeader
         breadcrumb={[
-          { label: "My Notes", href: "/portal/notes" },
-          { label: detail ? humanSpecialty(detail.note.specialty) : "Review" },
+          { label: t("breadcrumbNotes"), href: "/portal/notes" },
+          { label: detail ? humanSpecialty(detail.note.specialty) : t("breadcrumbFallback") },
         ]}
-        eyebrow="Note review"
-        title={detail ? humanSpecialty(detail.note.specialty) : "Review"}
+        eyebrow={t("eyebrow")}
+        title={detail ? humanSpecialty(detail.note.specialty) : t("breadcrumbFallback")}
         description={
           detail
             ? <>
-                Stage <span className="font-semibold text-navy-700">{detail.note.stage}</span>
-                {" · "}v<span className="font-semibold text-navy-700">{detail.note.version}</span>
-                {" · "}Provider <span className="font-semibold text-navy-700">{detail.note.provider_used}</span>
+                {t("stageMetaPrefix")} <span className="font-semibold text-navy-700">{detail.note.stage}</span>
+                {" · "}{t("stageVersion")}<span className="font-semibold text-navy-700">{detail.note.version}</span>
+                {" · "}{t("stageProvider")} <span className="font-semibold text-navy-700">{detail.note.provider_used}</span>
               </>
             : undefined
         }
@@ -245,12 +247,10 @@ export default function NoteReviewPage() {
           <Card>
             <div className="text-center py-10">
               <p className="aurion-headline text-navy-700 mb-1.5">
-                No note yet
+                {t("noNoteTitle")}
               </p>
               <p className="aurion-callout text-navy-500 max-w-md mx-auto">
-                This session is still in capture or hasn&apos;t reached
-                the review stage. Once recording stops and Stage 1
-                generation completes, the note will appear here.
+                {t("noNoteHint")}
               </p>
               <Button
                 variant="secondary"
@@ -258,7 +258,7 @@ export default function NoteReviewPage() {
                 className="mt-5"
                 onClick={() => void load()}
               >
-                Check again
+                {t("checkAgain")}
               </Button>
             </div>
           </Card>
@@ -267,7 +267,7 @@ export default function NoteReviewPage() {
         <Card>
           <p className="aurion-callout text-red-600">{error}</p>
           <Button variant="secondary" className="mt-3" onClick={() => void load()}>
-            Retry
+            {t("retry")}
           </Button>
         </Card>
       ) : detail ? (
@@ -299,10 +299,12 @@ export default function NoteReviewPage() {
             <div className="lg:sticky lg:top-4 h-[70vh] lg:h-[calc(100vh-200px)]">
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Transcript
+                  {t("transcriptLabel")}
                 </h2>
                 <span className="text-[11px] text-gray-400">
-                  {Object.keys(detail.citations).length} cited segments
+                  {t("transcriptCount", {
+                    count: Object.keys(detail.citations).length,
+                  })}
                 </span>
               </div>
               <TranscriptPane
@@ -314,7 +316,7 @@ export default function NoteReviewPage() {
             <div>
               <div className="mb-2 flex items-center justify-between">
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  Note
+                  {t("noteLabel")}
                 </h2>
                 <CompletenessRing sections={detail.note.sections} />
               </div>
@@ -409,6 +411,7 @@ function ConflictsBanner({
   count: number;
   firstSectionId: string | undefined;
 }) {
+  const t = useTranslations("NoteReview.conflicts");
   return (
     <div
       className="flex items-center gap-3 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900"
@@ -416,17 +419,15 @@ function ConflictsBanner({
     >
       <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
       <div className="flex-1">
-        <span className="font-medium">
-          {count} unresolved conflict{count === 1 ? "" : "s"}.
-        </span>{" "}
-        Approval is blocked until every conflict is resolved.
+        <span className="font-medium">{t("summary", { count })}</span>{" "}
+        {t("blockedHint")}
       </div>
       {firstSectionId && (
         <a
           href={`#section-${firstSectionId}`}
           className="rounded-md border border-amber-400 px-2 py-1 text-xs font-medium text-amber-900 hover:bg-amber-100 transition-colors"
         >
-          Show first
+          {t("showFirst")}
         </a>
       )}
     </div>
@@ -446,6 +447,7 @@ function ActionBar({
   onApprove: () => void;
   onExport: () => void;
 }) {
+  const t = useTranslations("NoteReview.actions");
   const isApproved = detail.export_metadata.is_approved;
   const canExport = detail.export_metadata.can_export;
   const state = detail.export_metadata.session_state;
@@ -459,8 +461,7 @@ function ActionBar({
       {isApproved ? (
         <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700">
           <BadgeCheck className="h-5 w-5" />
-          Approved ·{" "}
-          {state === "EXPORTED" ? "exported" : "ready to export"}
+          {state === "EXPORTED" ? t("approvedExported") : t("approvedReady")}
         </span>
       ) : (
         <Button
@@ -469,7 +470,7 @@ function ActionBar({
           loading={approving}
           disabled={approving || blocked}
         >
-          {blocked ? "Resolve conflicts to approve" : "Approve & sign"}
+          {blocked ? t("resolveToApprove") : t("approveAndSign")}
         </Button>
       )}
 
@@ -480,13 +481,12 @@ function ActionBar({
         disabled={exporting || !canExport}
       >
         <Download className="h-4 w-4 mr-1" />
-        Export DOCX
+        {t("exportDocx")}
       </Button>
 
       <span className="ml-auto text-xs text-gray-500">
-        State: <span className="font-medium">{state}</span>
+        {t("stateLabel", { state })}
       </span>
     </div>
   );
 }
-

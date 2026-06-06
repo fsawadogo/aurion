@@ -1,6 +1,7 @@
 "use client";
 
 import { Code2, Download, LayoutGrid } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useRouteSegment } from "@/lib/use-route-segment";
@@ -30,6 +31,7 @@ import type { CustomTemplate, TemplateDefinition } from "@/types";
  * physician wants to share the JSON with a colleague offline.
  */
 export default function TemplateDetailPage() {
+  const t = useTranslations("TemplateDetail");
   const router = useRouter();
   // Static-export gotcha — see web/lib/use-route-segment.ts. `useParams()`
   // returns the build-time "_" sentinel under `output: "export"`; the hook
@@ -52,19 +54,19 @@ export default function TemplateDetailPage() {
       // pilot scale; a follow-up PR could add a dedicated endpoint
       // if the list grows beyond a few hundred templates.
       const xs = await listMyCustomTemplates();
-      const found = xs.find((t) => t.id === templateId);
+      const found = xs.find((x) => x.id === templateId);
       if (!found) {
-        setError("Template not found.");
+        setError(t("notFound"));
         return;
       }
       setRow(found);
       setDraftJson(JSON.stringify(found.template, null, 2));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load template.");
+      setError(e instanceof Error ? e.message : t("loadError"));
     } finally {
       setLoading(false);
     }
-  }, [templateId]);
+  }, [templateId, t]);
 
   useEffect(() => {
     void load();
@@ -76,7 +78,9 @@ export default function TemplateDetailPage() {
     try {
       parsed = JSON.parse(draftJson);
     } catch (e) {
-      setError("JSON didn't parse: " + (e instanceof Error ? e.message : ""));
+      setError(
+        t("invalidJson", { error: e instanceof Error ? e.message : "" }),
+      );
       return;
     }
     setSaving(true);
@@ -87,7 +91,7 @@ export default function TemplateDetailPage() {
       setDraftJson(JSON.stringify(updated.template, null, 2));
       setMode("preview");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed.");
+      setError(e instanceof Error ? e.message : t("saveError"));
     } finally {
       setSaving(false);
     }
@@ -95,13 +99,13 @@ export default function TemplateDetailPage() {
 
   async function onDelete() {
     if (!row) return;
-    if (!confirm(`Delete custom template "${row.display_name}"?`)) return;
+    if (!confirm(t("deleteConfirm", { name: row.display_name }))) return;
     setDeleting(true);
     try {
       await deleteMyCustomTemplate(row.id);
       router.push("/portal/templates");
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed.");
+      setError(e instanceof Error ? e.message : t("deleteError"));
       setDeleting(false);
     }
   }
@@ -125,14 +129,14 @@ export default function TemplateDetailPage() {
     <div className="aurion-page-padded aurion-container-narrow">
       <PageHeader
         breadcrumb={[
-          { label: "Templates", href: "/portal/templates" },
-          { label: row?.display_name ?? "Template" },
+          { label: t("breadcrumbTemplates"), href: "/portal/templates" },
+          { label: row?.display_name ?? t("breadcrumbFallback") },
         ]}
-        eyebrow="Custom template"
-        title={row?.display_name ?? "Template"}
+        eyebrow={t("eyebrow")}
+        title={row?.display_name ?? t("fallbackTitle")}
         description={
           row
-            ? <><span className="font-mono">{row.key}</span> · v{row.version} · {row.template.sections.length} section{row.template.sections.length === 1 ? "" : "s"}</>
+            ? <><span className="font-mono">{row.key}</span> · {t("metadata", { version: row.version, sections: t("sectionCount", { count: row.template.sections.length }) })}</>
             : undefined
         }
       />
@@ -145,7 +149,7 @@ export default function TemplateDetailPage() {
         <Card>
           <p className="text-sm text-red-600">{error}</p>
           <Button variant="secondary" className="mt-3" onClick={() => void load()}>
-            Retry
+            {t("retry")}
           </Button>
         </Card>
       ) : row ? (
@@ -156,19 +160,19 @@ export default function TemplateDetailPage() {
                 active={mode === "preview"}
                 onClick={() => setMode("preview")}
                 icon={<LayoutGrid className="h-4 w-4" />}
-                label="Preview"
+                label={t("modePreview")}
               />
               <ModeButton
                 active={mode === "json"}
                 onClick={() => setMode("json")}
                 icon={<Code2 className="h-4 w-4" />}
-                label="JSON"
+                label={t("modeJson")}
               />
             </div>
             <div className="flex items-center gap-2">
               <Button variant="secondary" size="sm" onClick={onExportJson}>
                 <Download className="h-4 w-4 mr-1" />
-                Export
+                {t("exportButton")}
               </Button>
               <Button
                 variant="secondary"
@@ -177,7 +181,7 @@ export default function TemplateDetailPage() {
                 loading={deleting}
                 disabled={deleting}
               >
-                Delete
+                {t("deleteButton")}
               </Button>
             </div>
           </div>
@@ -192,10 +196,7 @@ export default function TemplateDetailPage() {
             <TemplateDraftPreview template={row.template} />
           ) : (
             <Card>
-              <p className="text-xs text-gray-500 mb-2">
-                Edit the template JSON directly. Save validates against
-                the schema; an invalid shape surfaces inline.
-              </p>
+              <p className="text-xs text-gray-500 mb-2">{t("jsonHint")}</p>
               <textarea
                 className="form-input w-full h-[60vh] font-mono text-xs leading-snug resize-y"
                 value={draftJson}
@@ -210,7 +211,7 @@ export default function TemplateDetailPage() {
                   disabled={saving}
                   onClick={() => void onSave()}
                 >
-                  Save changes
+                  {t("saveChanges")}
                 </Button>
                 <Button
                   variant="secondary"
@@ -220,7 +221,7 @@ export default function TemplateDetailPage() {
                     setDraftJson(JSON.stringify(row.template, null, 2))
                   }
                 >
-                  Reset to saved
+                  {t("resetToSaved")}
                 </Button>
               </div>
             </Card>

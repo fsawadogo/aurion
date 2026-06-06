@@ -380,7 +380,7 @@ export default function Sidebar() {
         type="button"
         className="fixed left-4 top-4 z-50 rounded-lg bg-navy p-2 text-gray-300 shadow-lg ring-1 ring-white/10 lg:hidden"
         onClick={() => setMobileOpen(!mobileOpen)}
-        aria-label={mobileOpen ? "Close menu" : "Open menu"}
+        aria-label={mobileOpen ? t("mobileMenu.close") : t("mobileMenu.open")}
       >
         {mobileOpen ? (
           <X className="h-5 w-5" />

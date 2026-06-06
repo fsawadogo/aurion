@@ -1,8 +1,8 @@
 "use client";
 
 import { ArrowRight, Download, Search } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -35,6 +35,9 @@ const PENDING_STATES: ReadonlySet<SessionState> = new Set<SessionState>([
 ]);
 
 export default function PortalSessionsInboxPage() {
+  const t = useTranslations("NotesList");
+  const tFilters = useTranslations("NotesList.filters");
+  const tSelection = useTranslations("NotesList.selection");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,11 +59,11 @@ export default function PortalSessionsInboxPage() {
       list.sort((a, b) => b.created_at.localeCompare(a.created_at));
       setSessions(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load sessions.");
+      setError(e instanceof Error ? e.message : t("loadError"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -116,9 +119,7 @@ export default function PortalSessionsInboxPage() {
       URL.revokeObjectURL(url);
       clearSelected();
     } catch (e) {
-      setExportError(
-        e instanceof Error ? e.message : "Bulk export failed.",
-      );
+      setExportError(e instanceof Error ? e.message : t("exportError"));
     } finally {
       setExporting(false);
     }
@@ -127,12 +128,12 @@ export default function PortalSessionsInboxPage() {
   return (
     <div className="aurion-page-padded aurion-container">
       <PageHeader
-        eyebrow="Clinician portal"
-        title="My Notes"
-        description="Sessions you've recorded, with their generated notes."
+        eyebrow={t("eyebrow")}
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button variant="secondary" size="sm" onClick={() => void load()}>
-            Refresh
+            {t("refresh")}
           </Button>
         }
       />
@@ -140,22 +141,22 @@ export default function PortalSessionsInboxPage() {
       <Card>
         <div className="flex flex-wrap gap-3 items-center mb-4">
           <StatusChip
-            label={`All (${counts.all})`}
+            label={tFilters("all", { count: counts.all })}
             active={statusFilter === "all"}
             onClick={() => setStatusFilter("all")}
           />
           <StatusChip
-            label={`Pending (${counts.pending})`}
+            label={tFilters("pending", { count: counts.pending })}
             active={statusFilter === "pending"}
             onClick={() => setStatusFilter("pending")}
           />
           <StatusChip
-            label={`Completed (${counts.completed})`}
+            label={tFilters("completed", { count: counts.completed })}
             active={statusFilter === "completed"}
             onClick={() => setStatusFilter("completed")}
           />
           <StatusChip
-            label={`Exported (${counts.exported})`}
+            label={tFilters("exported", { count: counts.exported })}
             active={statusFilter === "exported"}
             onClick={() => setStatusFilter("exported")}
           />
@@ -164,21 +165,21 @@ export default function PortalSessionsInboxPage() {
               className="form-select w-36"
               value={dateFilter}
               onChange={(e) => setDateFilter(e.target.value as DateFilter)}
-              aria-label="Date range"
+              aria-label={tFilters("dateRangeAria")}
             >
-              <option value="all">All time</option>
-              <option value="today">Today</option>
-              <option value="7d">Last 7 days</option>
-              <option value="30d">Last 30 days</option>
+              <option value="all">{tFilters("dateAll")}</option>
+              <option value="today">{tFilters("dateToday")}</option>
+              <option value="7d">{tFilters("date7d")}</option>
+              <option value="30d">{tFilters("date30d")}</option>
             </select>
             <div className="relative">
               <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
               <input
                 className="form-input pl-8 w-56"
-                placeholder="Search…"
+                placeholder={tFilters("searchPlaceholder")}
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                aria-label="Search sessions"
+                aria-label={tFilters("searchAria")}
               />
             </div>
           </div>
@@ -186,14 +187,14 @@ export default function PortalSessionsInboxPage() {
 
         {exportable.length > 0 && (
           <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-gray-100 bg-gray-50/50 px-3 py-2 text-xs text-gray-600">
-            <span>{selected.size} selected</span>
+            <span>{tSelection("count", { count: selected.size })}</span>
             {selected.size > 0 ? (
               <button
                 type="button"
                 onClick={clearSelected}
                 className="underline hover:text-navy-700"
               >
-                Clear
+                {tSelection("clear")}
               </button>
             ) : (
               <button
@@ -201,7 +202,7 @@ export default function PortalSessionsInboxPage() {
                 onClick={selectAllExportable}
                 className="underline hover:text-navy-700"
               >
-                Select all approved ({exportable.length})
+                {tSelection("selectAll", { count: exportable.length })}
               </button>
             )}
             {exportError && (
@@ -216,7 +217,9 @@ export default function PortalSessionsInboxPage() {
               loading={exporting}
             >
               <Download className="h-4 w-4 mr-1" />
-              Export {selected.size > 0 ? `(${selected.size})` : "selected"}
+              {selected.size > 0
+                ? tSelection("exportN", { count: selected.size })
+                : tSelection("exportSelected")}
             </Button>
           </div>
         )}
@@ -227,7 +230,7 @@ export default function PortalSessionsInboxPage() {
           <div className="text-sm text-red-600">{error}</div>
         ) : filtered.length === 0 ? (
           <div className="text-center text-sm text-gray-500 py-8">
-            No sessions match these filters.
+            {t("noMatches")}
           </div>
         ) : (
           <ul className="divide-y divide-gray-100">
@@ -242,7 +245,7 @@ export default function PortalSessionsInboxPage() {
                     className="ml-1 h-4 w-4 rounded border-gray-300 text-gold-500 focus:ring-gold-400"
                     checked={isChecked}
                     onChange={() => toggleSelected(s.id)}
-                    aria-label={`Select session ${s.id.slice(0, 8)} for bulk export`}
+                    aria-label={tSelection("selectAria", { id: s.id.slice(0, 8) })}
                   />
                 )}
                 {!isSelectable && <span className="w-6 shrink-0" aria-hidden />}
@@ -313,20 +316,21 @@ function StatusChip({
 }
 
 function StateBadge({ state }: { state: SessionState }) {
-  if (state === "RECORDING" || state === "PAUSED")
-    return <Badge variant="info" dot>{state}</Badge>;
+  const t = useTranslations("NotesList.stateBadge");
+  if (state === "RECORDING") return <Badge variant="info" dot>{t("recording")}</Badge>;
+  if (state === "PAUSED") return <Badge variant="info" dot>{t("paused")}</Badge>;
   if (
     state === "PROCESSING_STAGE1" ||
     state === "PROCESSING_STAGE2"
   )
-    return <Badge variant="info" dot>Processing</Badge>;
+    return <Badge variant="info" dot>{t("processing")}</Badge>;
   if (state === "AWAITING_REVIEW")
-    return <Badge variant="warning" dot>Review</Badge>;
+    return <Badge variant="warning" dot>{t("review")}</Badge>;
   if (state === "REVIEW_COMPLETE")
-    return <Badge variant="success" dot>Approved</Badge>;
-  if (state === "EXPORTED") return <Badge variant="success">Exported</Badge>;
-  if (state === "PURGED") return <Badge variant="neutral">Purged</Badge>;
-  if (state === "FAILED") return <Badge variant="error" dot>Failed</Badge>;
+    return <Badge variant="success" dot>{t("approved")}</Badge>;
+  if (state === "EXPORTED") return <Badge variant="success">{t("exported")}</Badge>;
+  if (state === "PURGED") return <Badge variant="neutral">{t("purged")}</Badge>;
+  if (state === "FAILED") return <Badge variant="error" dot>{t("failed")}</Badge>;
   return <Badge variant="neutral">{state}</Badge>;
 }
 
@@ -394,4 +398,3 @@ function dateCutoff(d: DateFilter): number | null {
       return null;
   }
 }
-
