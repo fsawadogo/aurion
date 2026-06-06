@@ -47,6 +47,12 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Need history to synthesize the TestFlight "What to Test"
+          # changelog from recent `feat:`/`fix:` commit headlines (see
+          # fastlane/Fastfile build_changelog_from_git). Default depth
+          # of 1 would leave the helper at the static-fallback path.
+          fetch-depth: 0
 
       - name: Select Xcode (newest installed)
         # Aurion's pbxproj uses IPHONEOS_DEPLOYMENT_TARGET = 26.0 + APIs

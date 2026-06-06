@@ -33,6 +33,75 @@ def asc_api_key
   )
 end
 
+# -----------------------------------------------------------------------------
+# Build the TestFlight "What to Test" changelog from recent git history.
+#
+# Why this exists: previously the changelog was the static string
+# "Latest Aurion build from main HEAD." which gave Marie + the Pilot
+# Physicians group zero context on what each new build actually fixed.
+# Now we synthesise a bulleted list from the most recent `feat:` /
+# `fix:` Conventional Commits headlines on main and prepend a build
+# number header.
+#
+# How it picks the range:
+#   1. Prefer the SHA of the previous TestFlight build (passed via
+#      ENV["PREV_TESTFLIGHT_SHA"] from the GitHub Actions workflow).
+#   2. Fall back to "last 10 commits on the current branch" if no
+#      prior SHA is available — covers the very first run and
+#      historical-rerun cases.
+#
+# Constraints:
+#   • Apple's "What to Test" field hard-caps at 4000 chars; we cap at
+#     3500 to leave room for the build header.
+#   • Filter to feat:/fix:/perf: — chore/style/refactor noise stays
+#     out of the user-visible changelog.
+#   • Strip the trailing "(#NNN)" GitHub squash-merge marker — clutter
+#     the user doesn't need.
+#   • CI checkouts can be shallow (depth=1); we degrade gracefully to
+#     the prior static string instead of crashing the upload.
+# -----------------------------------------------------------------------------
+def build_changelog_from_git(build_number:)
+  range =
+    if ENV["PREV_TESTFLIGHT_SHA"] && !ENV["PREV_TESTFLIGHT_SHA"].empty?
+      "#{ENV['PREV_TESTFLIGHT_SHA']}..HEAD"
+    else
+      "HEAD~10..HEAD"
+    end
+
+  log_output = `git log #{range} --pretty=format:%s 2>/dev/null`
+  if $?.exitstatus != 0 || log_output.strip.empty?
+    UI.message "Changelog: no git history reachable (range=#{range}); falling back to static text"
+    return "Aurion build #{build_number}"
+  end
+
+  bullets =
+    log_output
+      .each_line
+      .map(&:strip)
+      .reject(&:empty?)
+      # Strip GitHub squash-merge "(#NNN)" trailer.
+      .map { |line| line.sub(/\s*\(#\d+\)\s*$/, "") }
+      # User-visible categories only.
+      .select { |line| line =~ /^(feat|fix|perf)(\([^)]+\))?:/ }
+      .map { |line| "• #{line}" }
+      .uniq
+
+  if bullets.empty?
+    UI.message "Changelog: no feat/fix/perf commits in range #{range}"
+    return "Aurion build #{build_number}"
+  end
+
+  header = "Aurion build #{build_number} — what's new:\n\n"
+  joined = bullets.join("\n")
+
+  body = header + joined
+  cap  = 3500
+  if body.length > cap
+    body = body[0, cap - 1] + "…"
+  end
+  body
+end
+
 default_platform(:ios)
 
 platform :ios do
@@ -276,9 +345,19 @@ platform :ios do
     # processing reaches VALID (just happened above).
     UI.success "Internal testers (App Store Connect team members) auto-receive build #{build_number} immediately."
 
-    # ── Distribute to external (submits for Beta App Review) ──────
+    # ── Build the "What to Test" changelog from recent commits ────
+    # Previously hard-coded to "Latest Aurion build from main HEAD."
+    # which gave Marie + the Pilot Physicians group zero context on
+    # what actually shipped between builds. Now we synthesise a short
+    # bulleted list from the last few `feat:` / `fix:` headlines on
+    # main, capped well under Apple's 4000-char "What to Test" limit.
+    # If git isn't reachable (e.g. shallow CI checkout that loses
+    # history), we fall back to the prior static string rather than
+    # block the dispatch.
+    changelog_text = build_changelog_from_git(build_number: build_number)
     unless external_group_name.empty?
       UI.message "Distributing to external group: '#{external_group_name}'"
+      UI.message "Changelog (first 200 chars): #{changelog_text[0, 200]}#{'…' if changelog_text.length > 200}"
       upload_to_testflight(
         api_key:                  api_key,
         app_identifier:           "com.aurionclinical.physician",
@@ -289,7 +368,7 @@ platform :ios do
         distribute_external:      true,
         groups:                   [external_group_name],
         notify_external_testers:  true,
-        changelog:                "Latest Aurion build from main HEAD.",
+        changelog:                changelog_text,
       )
     end
 
