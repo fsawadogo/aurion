@@ -459,6 +459,16 @@ struct ProfileView: View {
                 ShareSheet(items: [data])
             }
         }
+        // GH-260 — the "Edit Team Members" button at line ~200 was
+        // flipping `showTeamMemberEditor` but nothing was observing
+        // it. The editor sheet reads + persists the allied-health
+        // team list via the existing `PUT /profile` endpoint;
+        // persistence happens on the sheet's own "Done" button so a
+        // swipe-dismiss is a true no-op (no audit row).
+        .sheet(isPresented: $showTeamMemberEditor) {
+            TeamMemberEditorView()
+                .environmentObject(appState)
+        }
         .overlay {
             if isLoadingData {
                 ZStack {
