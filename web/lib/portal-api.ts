@@ -675,3 +675,101 @@ export async function deleteMyUserPrompt(
   );
   return r.json();
 }
+
+/* ─── Security: MFA + active sessions (#163) ─────────────────────────────── */
+
+/** Body of GET /api/v1/me/mfa/status. */
+export interface MfaStatus {
+  enrolled: boolean;
+  last_verified_at: string | null;
+}
+
+/** Body of POST /api/v1/me/mfa/enroll. The plaintext `recovery_codes`
+ * are returned ONCE — surface them in the modal, never refetch them.
+ */
+export interface MfaEnrollResponse {
+  qr_uri: string;
+  secret: string;
+  recovery_codes: string[];
+  setup_token: string;
+}
+
+/** One row of GET /api/v1/me/sessions. `is_current` is set on the row
+ * that corresponds to the access token of the request issuing this
+ * call, so the UI can label it as "this device" instead of "another
+ * device that I should probably revoke". */
+export interface ActiveSession {
+  id: string;
+  device_hint: string;
+  ip_class: string;
+  created_at: string;
+  last_used_at: string | null;
+  is_current: boolean;
+}
+
+/** GET /api/v1/me/mfa/status. Cheap probe — caller renders an MFA
+ * status pill from this alone. */
+export async function getMfaStatus(): Promise<MfaStatus> {
+  const r = await fetchWithAuth("/api/v1/me/mfa/status");
+  return r.json();
+}
+
+/** POST /api/v1/me/mfa/enroll. Returns the QR URI + plaintext recovery
+ * codes + a 5-minute setup token. Nothing is persisted yet — the
+ * caller MUST follow up with `verifyMfaEnroll` or the candidate
+ * secret never reaches the DB.
+ */
+export async function enrollMfa(): Promise<MfaEnrollResponse> {
+  const r = await fetchWithAuth("/api/v1/me/mfa/enroll", {
+    method: "POST",
+  });
+  return r.json();
+}
+
+/** POST /api/v1/me/mfa/verify-enroll. Finalizes enrollment — server
+ * persists the secret + hashed codes only after this call succeeds.
+ */
+export async function verifyMfaEnroll(
+  setupToken: string,
+  code: string,
+): Promise<void> {
+  await fetchWithAuth("/api/v1/me/mfa/verify-enroll", {
+    method: "POST",
+    body: JSON.stringify({ setup_token: setupToken, code }),
+  });
+}
+
+/** DELETE /api/v1/me/mfa. Requires a fresh TOTP code to confirm the
+ * caller is the authenticator-holder, not just a session hijacker.
+ */
+export async function disableMfa(currentCode: string): Promise<void> {
+  await fetchWithAuth("/api/v1/me/mfa", {
+    method: "DELETE",
+    body: JSON.stringify({ current_code: currentCode }),
+  });
+}
+
+/** GET /api/v1/me/sessions. Lists the caller's own active refresh-
+ * token rows, most recently used first. */
+export async function listSessions(): Promise<ActiveSession[]> {
+  const r = await fetchWithAuth("/api/v1/me/sessions");
+  return r.json();
+}
+
+/** POST /api/v1/me/sessions/{id}/revoke. Hard-kills the named row;
+ * any access token still in flight from that refresh row will fail
+ * on its next refresh attempt. */
+export async function revokeSession(sessionId: string): Promise<void> {
+  await fetchWithAuth(
+    `/api/v1/me/sessions/${encodeURIComponent(sessionId)}/revoke`,
+    { method: "POST" },
+  );
+}
+
+/** POST /api/v1/me/sessions/revoke-all. Kills every active row for
+ * the caller EXCEPT the one used to make this call. */
+export async function revokeAllSessions(): Promise<void> {
+  await fetchWithAuth("/api/v1/me/sessions/revoke-all", {
+    method: "POST",
+  });
+}

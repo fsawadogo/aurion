@@ -505,9 +505,74 @@
       "setAria": "Set portal interface language to {label}"
     },
     "security": {
-      "title": "Security",
-      "description": "Multi-factor authentication and active-session management are coming in a follow-up. For now you can sign out below — your session ends immediately on this device.",
+      "title": "Sign out",
+      "description": "End your session on this device. Your other devices remain signed in — use the Active sessions card above to revoke them.",
       "signOut": "Sign out"
+    },
+    "mfa": {
+      "title": "Multi-factor authentication",
+      "description": "Add a second factor to protect your account. We support any TOTP authenticator app (Apple Passwords, 1Password, Google Authenticator).",
+      "loadError": "Could not load MFA status.",
+      "retry": "Try again",
+      "statusEnrolled": "Enabled",
+      "statusEnrolledAria": "MFA is enabled on this account",
+      "statusNotEnrolled": "Not enabled",
+      "statusNotEnrolledAria": "MFA is not enabled on this account",
+      "enableCta": "Enable MFA",
+      "disableCta": "Disable MFA",
+      "lastVerified": "Last verified {at}",
+      "enroll": {
+        "title": "Enable multi-factor authentication",
+        "starting": "Generating your enrollment…",
+        "startError": "Could not start MFA enrollment.",
+        "scanDescription": "Scan this QR code with your authenticator app. If you cannot scan, enter the secret manually.",
+        "qrAria": "Authenticator QR code",
+        "manualEntry": "Can't scan? Enter manually",
+        "recoveryCodesTitle": "Recovery codes",
+        "recoveryCodesDescription": "Save these one-time codes somewhere safe. You will not see them again. Each code can be used once if you lose access to your authenticator.",
+        "recoveryCodesAria": "Recovery codes",
+        "nextCta": "I've saved them, continue",
+        "verifyDescription": "Enter the 6-digit code from your authenticator to finish enrollment.",
+        "codeLabel": "Verification code",
+        "codeAria": "6-digit verification code",
+        "verifyCta": "Verify and enable",
+        "verifying": "Verifying…",
+        "verifyError": "Could not verify the code. Try again.",
+        "backCta": "Back"
+      },
+      "disable": {
+        "title": "Disable multi-factor authentication",
+        "description": "Enter a current code from your authenticator to confirm. Disabling MFA reduces the security of your account.",
+        "codeLabel": "Verification code",
+        "codeAria": "6-digit verification code",
+        "cancelCta": "Cancel",
+        "confirmCta": "Disable MFA",
+        "submitting": "Disabling…",
+        "error": "Could not disable MFA. Check the code and try again."
+      }
+    },
+    "sessions": {
+      "title": "Active sessions",
+      "description": "Devices and browsers signed in to your account. Revoke any session you don't recognize.",
+      "loadError": "Could not load active sessions.",
+      "retry": "Try again",
+      "empty": "No active sessions on file.",
+      "currentBadge": "This device",
+      "rowMeta": "{ip} · last used {lastUsed}",
+      "ipClass": {
+        "local": "Local",
+        "private": "Private network",
+        "internet": "Internet",
+        "unknown": "Unknown"
+      },
+      "neverUsed": "never",
+      "revokeCta": "Revoke",
+      "revokingAll": "Signing out everywhere else…",
+      "revoking": "Revoking…",
+      "revokeAllCta": "Sign out everywhere else",
+      "revokeError": "Could not revoke that session.",
+      "revokeAllError": "Could not sign out everywhere.",
+      "revokeRowAria": "Revoke session on {device}"
     }
   },
   "TemplatesList": {

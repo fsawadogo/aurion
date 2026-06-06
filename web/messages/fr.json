@@ -505,9 +505,74 @@
       "setAria": "Définir la langue de l’interface du portail à {label}"
     },
     "security": {
-      "title": "Sécurité",
-      "description": "L’authentification multifacteur et la gestion des sessions actives arrivent prochainement. Pour l’instant, vous pouvez vous déconnecter ci-dessous — votre session se termine immédiatement sur cet appareil.",
+      "title": "Se déconnecter",
+      "description": "Termine votre session sur cet appareil. Vos autres appareils restent connectés — utilisez la carte Sessions actives ci-dessus pour les révoquer.",
       "signOut": "Se déconnecter"
+    },
+    "mfa": {
+      "title": "Authentification à deux facteurs",
+      "description": "Ajoutez un second facteur pour protéger votre compte. Toute application d’authentification TOTP fonctionne (Mots de passe d’Apple, 1Password, Google Authenticator).",
+      "loadError": "Impossible de charger l’état de l’authentification à deux facteurs.",
+      "retry": "Réessayer",
+      "statusEnrolled": "Activée",
+      "statusEnrolledAria": "L’authentification à deux facteurs est activée sur ce compte",
+      "statusNotEnrolled": "Non activée",
+      "statusNotEnrolledAria": "L’authentification à deux facteurs n’est pas activée sur ce compte",
+      "enableCta": "Activer l’authentification à deux facteurs",
+      "disableCta": "Désactiver l’authentification à deux facteurs",
+      "lastVerified": "Dernière vérification {at}",
+      "enroll": {
+        "title": "Activer l’authentification à deux facteurs",
+        "starting": "Préparation de l’inscription…",
+        "startError": "Impossible de démarrer l’inscription.",
+        "scanDescription": "Numérisez ce code QR avec votre application d’authentification. Si vous ne pouvez pas le numériser, saisissez la clé manuellement.",
+        "qrAria": "Code QR d’authentification",
+        "manualEntry": "Impossible de numériser ? Saisir manuellement",
+        "recoveryCodesTitle": "Codes de récupération",
+        "recoveryCodesDescription": "Conservez ces codes à usage unique dans un endroit sûr. Vous ne les reverrez plus. Chaque code peut être utilisé une seule fois si vous perdez l’accès à votre application.",
+        "recoveryCodesAria": "Codes de récupération",
+        "nextCta": "Je les ai enregistrés, continuer",
+        "verifyDescription": "Saisissez le code à 6 chiffres affiché par votre application pour terminer l’inscription.",
+        "codeLabel": "Code de vérification",
+        "codeAria": "Code de vérification à 6 chiffres",
+        "verifyCta": "Vérifier et activer",
+        "verifying": "Vérification…",
+        "verifyError": "Impossible de vérifier le code. Réessayez.",
+        "backCta": "Retour"
+      },
+      "disable": {
+        "title": "Désactiver l’authentification à deux facteurs",
+        "description": "Saisissez un code actuel de votre application pour confirmer. Désactiver l’authentification à deux facteurs réduit la sécurité de votre compte.",
+        "codeLabel": "Code de vérification",
+        "codeAria": "Code de vérification à 6 chiffres",
+        "cancelCta": "Annuler",
+        "confirmCta": "Désactiver",
+        "submitting": "Désactivation…",
+        "error": "Impossible de désactiver. Vérifiez le code et réessayez."
+      }
+    },
+    "sessions": {
+      "title": "Sessions actives",
+      "description": "Appareils et navigateurs connectés à votre compte. Révoquez toute session que vous ne reconnaissez pas.",
+      "loadError": "Impossible de charger les sessions actives.",
+      "retry": "Réessayer",
+      "empty": "Aucune session active.",
+      "currentBadge": "Cet appareil",
+      "rowMeta": "{ip} · dernière utilisation {lastUsed}",
+      "ipClass": {
+        "local": "Local",
+        "private": "Réseau privé",
+        "internet": "Internet",
+        "unknown": "Inconnu"
+      },
+      "neverUsed": "jamais",
+      "revokeCta": "Révoquer",
+      "revokingAll": "Déconnexion ailleurs…",
+      "revoking": "Révocation…",
+      "revokeAllCta": "Se déconnecter de tous les autres appareils",
+      "revokeError": "Impossible de révoquer cette session.",
+      "revokeAllError": "Impossible de se déconnecter partout.",
+      "revokeRowAria": "Révoquer la session sur {device}"
     }
   },
   "TemplatesList": {

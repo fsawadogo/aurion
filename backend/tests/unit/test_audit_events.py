@@ -127,6 +127,11 @@ EXPECTED_VALUES: dict[str, str] = {
     "LOGOUT": "logout",
     "MFA_ENROLLED": "mfa_enrolled",
     "MFA_RESET": "mfa_reset",
+    # Portal MFA + sessions (#163) — self-serve disable + per-row /
+    # bulk refresh-token revocation.
+    "MFA_DISABLED": "mfa_disabled",
+    "SESSION_REVOKED": "session_revoked",
+    "SESSIONS_REVOKED_ALL": "sessions_revoked_all",
     "PASSWORD_RESET_REQUESTED": "password_reset_requested",
     "PASSWORD_CHANGED": "password_changed",
     "ADMIN_PASSWORD_RESET_ISSUED": "admin_password_reset_issued",

@@ -67,13 +67,22 @@ MFA_CHALLENGE_TTL_SECONDS = 5 * 60          # 5 minutes
 @dataclass(frozen=True, slots=True)
 class AccessTokenPayload:
     """The verified decoded contents of an access token. No methods —
-    callers pull fields directly. ``user_id`` is already a UUID."""
+    callers pull fields directly. ``user_id`` is already a UUID.
+
+    ``jti`` is a per-token UUID minted on issuance. It links the access
+    token back to the refresh-token row it was minted from — the
+    /me/sessions endpoint reads ``access_token_jti`` on each refresh row
+    and flags ``is_current=True`` on the row whose JTI matches the
+    bearer-token JTI of the caller. ``None`` for legacy access tokens
+    minted before #163.
+    """
 
     user_id: uuid.UUID
     role: UserRole
     email: str
     issued_at: int   # epoch seconds
     expires_at: int  # epoch seconds
+    jti: uuid.UUID | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -95,14 +104,18 @@ def mint_access_token(
     role: UserRole,
     email: str,
     ttl_seconds: int = ACCESS_TOKEN_TTL_SECONDS,
-) -> tuple[str, int]:
+    jti: uuid.UUID | None = None,
+) -> tuple[str, int, uuid.UUID]:
     """Mint a signed access token for ``user_id`` / ``role`` / ``email``.
 
-    Returns ``(token, expires_in_seconds)``. The expires_in matches the
-    /auth/login response shape one-for-one.
+    Returns ``(token, expires_in_seconds, jti)``. The JTI is a UUID
+    minted here unless the caller supplies one — the caller persists
+    it onto the refresh-token row so /me/sessions can flag the
+    "current" session.
     """
     now = int(utcnow().timestamp())
     expires_at = now + ttl_seconds
+    token_jti = jti or uuid.uuid4()
     claims = {
         "sub": str(user_id),
         "role": role.value,
@@ -112,9 +125,10 @@ def mint_access_token(
         "iss": _JWT_ISSUER,
         "aud": _JWT_AUDIENCE,
         "type": "access",
+        "jti": str(token_jti),
     }
     token = jwt.encode(claims, _SIGNING_KEY, algorithm=_JWT_ALGORITHM)
-    return token, ttl_seconds
+    return token, ttl_seconds, token_jti
 
 
 def verify_access_token(token: str) -> AccessTokenPayload | None:
@@ -145,12 +159,19 @@ def verify_access_token(token: str) -> AccessTokenPayload | None:
     except (KeyError, ValueError):
         return None
 
+    jti_raw = claims.get("jti")
+    try:
+        jti = uuid.UUID(jti_raw) if jti_raw else None
+    except (ValueError, TypeError):
+        jti = None
+
     return AccessTokenPayload(
         user_id=user_id,
         role=role,
         email=claims.get("email", ""),
         issued_at=int(claims.get("iat", 0)),
         expires_at=int(claims.get("exp", 0)),
+        jti=jti,
     )
 
 

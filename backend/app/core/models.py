@@ -81,6 +81,19 @@ class UserModel(Base):
     mfa_enrolled_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+    # Per-portal-MFA-card (#163): list[str] of bcrypt-hashed recovery
+    # codes. Plaintext codes are returned to the user EXACTLY ONCE at
+    # enrollment time and never re-fetchable. NULL until enrolled.
+    mfa_recovery_codes_hashed: Mapped[list[str] | None] = mapped_column(
+        JSONB, nullable=True
+    )
+    # Last successful TOTP verification — surfaced on the portal MFA
+    # card so the clinician can confirm their authenticator is
+    # actively in use. Updated by /auth/mfa/verify-login,
+    # /me/mfa/verify-enroll, and DELETE /me/mfa (final verify).
+    mfa_last_verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     failed_login_count: Mapped[int] = mapped_column(
         Integer, nullable=False, default=0
     )
@@ -1182,6 +1195,24 @@ class RefreshTokenModel(Base):
     )
     issued_ip_hash: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True
+    )
+    # Per-portal-sessions-card (#163): the three columns below back the
+    # portal "Active sessions" view. ``device_hint`` is a derived UA
+    # fingerprint (e.g. ``"Safari · macOS"``) at most 64 chars; never the
+    # raw UA, never PHI. ``last_used_at`` is updated on every
+    # /auth/refresh rotation so the card can sort by recency.
+    # ``access_token_jti`` is the JTI of the most recently issued access
+    # token for this refresh row — it lets /me/sessions flag
+    # ``is_current=True`` on the row whose JTI matches the bearer token
+    # of the caller.
+    device_hint: Mapped[str | None] = mapped_column(
+        String(64), nullable=True
+    )
+    last_used_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    access_token_jti: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
     )
 
 

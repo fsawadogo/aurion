@@ -71,12 +71,26 @@ _JWKS_CACHE_TTL_SECONDS = 86400  # 24 hours
 
 
 class CurrentUser:
-    """Represents the authenticated user extracted from JWT."""
+    """Represents the authenticated user extracted from JWT.
 
-    def __init__(self, user_id: uuid.UUID, role: UserRole, email: str = ""):
+    ``access_token_jti`` is the JTI claim from the bearer token (set
+    for backend-issued HS256 tokens since #163). It links the request
+    back to the refresh-token row it was minted from so /me/sessions
+    can flag the row as "current". ``None`` for dev tokens and
+    legacy Cognito tokens that don't carry the claim.
+    """
+
+    def __init__(
+        self,
+        user_id: uuid.UUID,
+        role: UserRole,
+        email: str = "",
+        access_token_jti: uuid.UUID | None = None,
+    ):
         self.user_id = user_id
         self.role = role
         self.email = email
+        self.access_token_jti = access_token_jti
 
 
 async def get_current_user(
@@ -105,6 +119,7 @@ async def get_current_user(
                 user_id=backend_payload.user_id,
                 role=backend_payload.role,
                 email=backend_payload.email,
+                access_token_jti=backend_payload.jti,
             )
             await _ensure_active(db, user.user_id)
             return user
@@ -117,6 +132,7 @@ async def get_current_user(
             user_id=payload.user_id,
             role=payload.role,
             email=payload.email,
+            access_token_jti=payload.jti,
         )
         await _ensure_active(db, user.user_id)
         return user
