@@ -15,7 +15,24 @@ struct ContentView: View {
 
     var body: some View {
         ZStack {
-            if showSplash {
+            // AUTH-UNIVERSAL-LINKS — preempt every other route when a
+            // reset token is on the bus. Previously we relied on a
+            // `.fullScreenCover(item:)` lower in this view, but the
+            // cover never appeared on cold-launch deep-link taps (Faical
+            // 2026-06-06): the cover modifier was applied to the ZStack
+            // *after* SwiftUI had already laid out the Auth route, and
+            // the binding-derived `item` apparently didn't trigger a
+            // re-present in time. Treating the reset screen as the ROOT
+            // when a token is present is cheaper to reason about,
+            // bypasses every SwiftUI cover-stacking gotcha, and the
+            // token-clears-on-dismiss closure walks the user back to
+            // the original Sign In route automatically.
+            if let token = resetLinkPayload.token {
+                ResetPasswordView(token: token) {
+                    resetLinkPayload.token = nil
+                }
+                .transition(.opacity)
+            } else if showSplash {
                 SplashView(isVisible: $showSplash)
                     .transition(.opacity)
             } else if !appState.isAuthenticated {
@@ -99,26 +116,10 @@ struct ContentView: View {
                 if dontShowAgain { appState.hasSeenTour = true }
             }
         }
-        // AUTH-UNIVERSAL-LINKS — present the in-app reset screen when a
-        // Universal Link delivers a token. Hosted at the root (not on
-        // LoginView) so the cover survives any route switch the
-        // `ZStack` above might do in flight (splash → auth, etc.).
-        // Token clears on dismiss — single-use, never persisted.
-        //
-        // `.fullScreenCover(item:)` needs an Identifiable wrapper; the
-        // `ResetLinkToken` value below is just a transport vessel for
-        // the raw string with stable `Identifiable` semantics so the
-        // cover re-presents cleanly on a second tap.
-        .fullScreenCover(
-            item: Binding(
-                get: { resetLinkPayload.token.map(ResetLinkToken.init) },
-                set: { resetLinkPayload.token = $0?.token }
-            )
-        ) { wrapper in
-            ResetPasswordView(token: wrapper.token) {
-                resetLinkPayload.token = nil
-            }
-        }
+        // (Previously a `.fullScreenCover(item:)` lived here as the
+        // primary surface for reset taps. Moved to the ROOT route in
+        // the ZStack above after the cover failed to present on cold
+        // launches — see the comment up there.)
         .alert(L("recovery.title"), isPresented: $showRecoveryAlert) {
             Button(L("recovery.recover")) {
                 guard let session = recoveredSession else { return }
@@ -419,6 +420,13 @@ struct LoginView: View {
     /// dismiss callback can clean it up without leaking through the
     /// LoginView render.
     @State private var showingForgotPassword = false
+    // AUTH-UNIVERSAL-LINKS — manual reset-link paste fallback. The user
+    // taps "Have a reset link?" → alert → pastes the email URL or token
+    // → ResetLinkExtractor parses it → the bus drives the reset surface.
+    @State private var showingResetCodePaste = false
+    @State private var pastedResetLink = ""
+    @State private var pastedResetLinkError: String?
+    @EnvironmentObject private var resetLinkPayload: ResetLinkPayload
     @FocusState private var focusedField: Field?
 
     enum Field { case email, password }
@@ -527,6 +535,27 @@ struct LoginView: View {
                     .disabled(isSigningIn || signInSucceeded)
                     .frame(maxWidth: .infinity, alignment: .leading)
 
+                    // AUTH-UNIVERSAL-LINKS — manual fallback for the
+                    // case where the email-tapped Universal Link doesn't
+                    // route the user to ``ResetPasswordView`` (Gmail iOS
+                    // in-app browser, mis-cached AASA, etc.). Tapping
+                    // here surfaces an alert with a TextField; the user
+                    // pastes the full reset URL OR just the token, the
+                    // extractor parses both shapes, and the reset view
+                    // takes over via the same ``ResetLinkPayload`` bus.
+                    Button {
+                        AurionHaptics.selection()
+                        pastedResetLink = ""
+                        showingResetCodePaste = true
+                    } label: {
+                        Text(L("login.resetCode.linkText"))
+                            .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                            .foregroundColor(.aurionGold)
+                            .underline()
+                    }
+                    .disabled(isSigningIn || signInSucceeded)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+
                     if hasSavedLogin {
                         biometricSignInSection
                     }
@@ -582,6 +611,37 @@ struct LoginView: View {
         .fullScreenCover(isPresented: $showingForgotPassword) {
             ForgotPasswordView(onDismiss: { showingForgotPassword = false })
         }
+        // AUTH-UNIVERSAL-LINKS — manual reset-link paste.
+        // Accepts the full URL ``https://portal.aurionclinical.com/reset-password?token=…``
+        // OR just the bare token. Synthesises a URL when the user pastes
+        // a bare token so ``ResetLinkExtractor`` can run unchanged.
+        .alert(
+            L("login.resetCode.title"),
+            isPresented: $showingResetCodePaste,
+            actions: {
+                TextField(L("login.resetCode.placeholder"), text: $pastedResetLink)
+                    .textInputAutocapitalization(.never)
+                    .autocorrectionDisabled()
+                Button(L("login.resetCode.submit")) {
+                    let trimmed = pastedResetLink.trimmingCharacters(in: .whitespacesAndNewlines)
+                    if let url = URL(string: trimmed), let token = ResetLinkExtractor.token(from: url) {
+                        resetLinkPayload.token = token
+                    } else if !trimmed.isEmpty,
+                              let synthesised = URL(
+                                  string: "https://portal.aurionclinical.com/reset-password?token=\(trimmed)"
+                              ),
+                              let token = ResetLinkExtractor.token(from: synthesised) {
+                        resetLinkPayload.token = token
+                    } else {
+                        pastedResetLinkError = L("login.resetCode.invalid")
+                    }
+                }
+                Button(L("common.cancel"), role: .cancel) {}
+            },
+            message: {
+                Text(pastedResetLinkError ?? L("login.resetCode.message"))
+            }
+        )
     }
 
     @ViewBuilder

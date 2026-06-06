@@ -545,6 +545,12 @@
 
 /* ── Forgot password (email-link reset) ──────────────── */
 "login.forgotPassword.linkText" = "Forgot password?";
+"login.resetCode.linkText" = "Have a reset link?";
+"login.resetCode.title" = "Paste reset link";
+"login.resetCode.message" = "Paste the reset URL from your email, or just the token if the link won't open the app.";
+"login.resetCode.placeholder" = "Paste link or token";
+"login.resetCode.submit" = "Open reset";
+"login.resetCode.invalid" = "That doesn't look like a valid reset link or token.";
 "login.forgotPassword.title" = "Reset your password";
 "login.forgotPassword.subtitle" = "Enter the email tied to your Aurion account. We\U2019ll send a reset link if it matches an active account.";
 "login.forgotPassword.emailLabel" = "Email";
