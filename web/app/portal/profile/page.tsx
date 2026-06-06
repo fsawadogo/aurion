@@ -1,6 +1,7 @@
 "use client";
 
 import { Settings } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import Button from "@/components/ui/Button";
@@ -23,41 +24,42 @@ import type { PhysicianProfile } from "@/types";
  * page (it's a personal-account concern, not a practice-config one).
  */
 
-/* ── Constants — should stay aligned with iOS `PhysicianProfileSetupView` ── */
+/* ── Option keys — labels resolve via the i18n catalogs so they stay
+ *  in lockstep with iOS `PhysicianProfileSetupView`. ──────────────── */
 
-const PRACTICE_TYPES: { key: string; label: string }[] = [
-  { key: "clinic", label: "Clinic" },
-  { key: "surgical_center", label: "Surgical Center" },
-  { key: "hospital", label: "Hospital" },
-];
+const PRACTICE_TYPE_KEYS = ["clinic", "surgical_center", "hospital"] as const;
 
-const SPECIALTIES: { key: string; label: string }[] = [
-  { key: "orthopedic_surgery", label: "Orthopedic Surgery" },
-  { key: "plastic_surgery", label: "Plastic Surgery" },
-  { key: "musculoskeletal", label: "Musculoskeletal" },
-  { key: "emergency_medicine", label: "Emergency Medicine" },
-  { key: "general", label: "General" },
-];
+const SPECIALTY_KEYS = [
+  "orthopedic_surgery",
+  "plastic_surgery",
+  "musculoskeletal",
+  "emergency_medicine",
+  "general",
+] as const;
 
-const CONSULTATION_TYPES: { key: string; label: string }[] = [
-  { key: "new_patient", label: "New Patient" },
-  { key: "follow_up", label: "Follow-up" },
-  { key: "pre_op", label: "Pre-op" },
-  { key: "post_op", label: "Post-op" },
-];
+const CONSULTATION_TYPE_KEYS = [
+  "new_patient",
+  "follow_up",
+  "pre_op",
+  "post_op",
+] as const;
 
-const CONSENT_REPROMPT: {
-  key: PhysicianProfile["consent_reprompt"];
-  label: string;
-}[] = [
-  { key: "every_session", label: "Every session" },
-  { key: "daily", label: "Daily" },
-  { key: "weekly", label: "Weekly" },
+const CONSENT_REPROMPT_KEYS: PhysicianProfile["consent_reprompt"][] = [
+  "every_session",
+  "daily",
+  "weekly",
 ];
 
 /* ── Page ──────────────────────────────────────────────────────────────── */
 
 export default function PortalProfilePage() {
+  const t = useTranslations("Profile");
+  const tIdentity = useTranslations("Profile.identity");
+  const tPractice = useTranslations("Profile.practice");
+  const tRecording = useTranslations("Profile.recording");
+  const tPracticeTypes = useTranslations("Profile.practiceTypes");
+  const tConsultation = useTranslations("Profile.consultationTypes");
+  const tSpecialties = useTranslations("Specialties");
   const [profile, setProfile] = useState<PhysicianProfile | null>(null);
   const [draft, setDraft] = useState<PhysicianProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -73,11 +75,11 @@ export default function PortalProfilePage() {
       setProfile(p);
       setDraft(p);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load profile.");
+      setError(e instanceof Error ? e.message : t("loadError"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
@@ -108,7 +110,7 @@ export default function PortalProfilePage() {
       // belt + suspenders.
       window.setTimeout(() => setSavedNotice(false), 2500);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed.");
+      setError(e instanceof Error ? e.message : t("saveError"));
     } finally {
       setSaving(false);
     }
@@ -119,19 +121,41 @@ export default function PortalProfilePage() {
     setSavedNotice(false);
   }
 
+  const practiceTypeOptions = PRACTICE_TYPE_KEYS.map((key) => ({
+    key,
+    label: tPracticeTypes(key),
+  }));
+  const specialtyOptions = SPECIALTY_KEYS.map((key) => ({
+    key,
+    label: tSpecialties(key),
+  }));
+  const consultationOptions = CONSULTATION_TYPE_KEYS.map((key) => ({
+    key,
+    label: tConsultation(key),
+  }));
+  const consentRepromptOptions = CONSENT_REPROMPT_KEYS.map((key) => ({
+    key,
+    label:
+      key === "every_session"
+        ? tRecording("consentEverySession")
+        : key === "daily"
+          ? tRecording("consentDaily")
+          : tRecording("consentWeekly"),
+  }));
+
   return (
     <div className="aurion-page-padded aurion-container-narrow">
       <PageHeader
-        eyebrow="Clinician portal"
-        title="My Profile"
-        description="How Aurion configures recordings + note generation for you."
+        eyebrow={t("eyebrow")}
+        title={t("title")}
+        description={t("description")}
         actions={
           <Link
             href="/portal/profile/account"
             className="inline-flex items-center gap-1.5 rounded-aurion-md px-3 py-2 text-aurion-callout text-navy-600 hover:bg-canvas hover:text-navy-800 transition-colors duration-short"
           >
             <Settings className="h-4 w-4" />
-            Account settings
+            {t("accountSettings")}
           </Link>
         }
       />
@@ -144,14 +168,14 @@ export default function PortalProfilePage() {
         <Card>
           <p className="text-sm text-red-600">{error}</p>
           <Button variant="secondary" className="mt-3" onClick={() => void load()}>
-            Retry
+            {t("retry")}
           </Button>
         </Card>
       ) : profile && draft ? (
         <div className="space-y-6">
           {savedNotice && (
             <div className="rounded-md bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-700">
-              Profile saved.
+              {t("savedNotice")}
             </div>
           )}
           {error && (
@@ -160,9 +184,9 @@ export default function PortalProfilePage() {
             </div>
           )}
 
-          <Card title="Identity">
+          <Card title={tIdentity("title")}>
             <div className="space-y-4">
-              <Field label="Display name">
+              <Field label={tIdentity("displayName")}>
                 <input
                   className="form-input"
                   type="text"
@@ -176,11 +200,11 @@ export default function PortalProfilePage() {
             </div>
           </Card>
 
-          <Card title="Practice">
+          <Card title={tPractice("title")}>
             <div className="space-y-5">
               <MultiSelect
-                label="Practice settings"
-                options={PRACTICE_TYPES}
+                label={tPractice("practiceSettings")}
+                options={practiceTypeOptions}
                 selected={parsePracticeType(draft.practice_type)}
                 onChange={(set) =>
                   setDraft({
@@ -190,14 +214,14 @@ export default function PortalProfilePage() {
                 }
               />
               <SingleSelect
-                label="Primary specialty"
-                options={SPECIALTIES}
+                label={tPractice("primarySpecialty")}
+                options={specialtyOptions}
                 value={draft.primary_specialty}
                 onChange={(v) => setDraft({ ...draft, primary_specialty: v })}
               />
               <MultiSelect
-                label="Consultation types"
-                options={CONSULTATION_TYPES}
+                label={tPractice("consultationTypes")}
+                options={consultationOptions}
                 selected={new Set(draft.consultation_types)}
                 onChange={(set) =>
                   setDraft({ ...draft, consultation_types: Array.from(set) })
@@ -206,9 +230,9 @@ export default function PortalProfilePage() {
             </div>
           </Card>
 
-          <Card title="Recording preferences">
+          <Card title={tRecording("title")}>
             <div className="space-y-5">
-              <Field label="Local retention window (days)">
+              <Field label={tRecording("retentionLabel")}>
                 <input
                   className="form-input w-32"
                   type="number"
@@ -223,19 +247,18 @@ export default function PortalProfilePage() {
                   }}
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  How long recordings are kept on the device after export
-                  before automatic purge. Range 1–30 days.
+                  {tRecording("retentionHint")}
                 </p>
               </Field>
               <Toggle
-                label="Auto-upload on stop"
-                description="Upload audio immediately when you stop a session, rather than waiting for explicit confirmation."
+                label={tRecording("autoUploadLabel")}
+                description={tRecording("autoUploadHint")}
                 value={draft.auto_upload}
                 onChange={(v) => setDraft({ ...draft, auto_upload: v })}
               />
               <SingleSelect
-                label="Consent re-prompt cadence"
-                options={CONSENT_REPROMPT}
+                label={tRecording("consentRepromptLabel")}
+                options={consentRepromptOptions}
                 value={draft.consent_reprompt}
                 onChange={(v) =>
                   setDraft({
@@ -254,13 +277,13 @@ export default function PortalProfilePage() {
               disabled={!dirty || saving}
               loading={saving}
             >
-              Save changes
+              {t("saveChanges")}
             </Button>
             <Button variant="secondary" onClick={onCancel} disabled={!dirty || saving}>
-              Discard
+              {t("discard")}
             </Button>
             <span className="text-xs text-gray-500 ml-auto">
-              {dirty ? "Unsaved changes" : "All changes saved"}
+              {dirty ? t("unsaved") : t("allSaved")}
             </span>
           </div>
         </div>

@@ -1,6 +1,7 @@
 "use client";
 
 import { Pencil, Plus, Trash2, X, Zap } from "lucide-react";
+import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -25,14 +26,18 @@ import type { PhysicianMacro } from "@/types";
  * a textarea, so the value is the saved keystrokes, not styling.
  */
 
-const SPECIALTIES = [
-  { key: "", label: "All specialties" },
-  { key: "orthopedic_surgery", label: "Orthopedic Surgery" },
-  { key: "plastic_surgery", label: "Plastic Surgery" },
-  { key: "musculoskeletal", label: "Musculoskeletal" },
-  { key: "emergency_medicine", label: "Emergency Medicine" },
-  { key: "general", label: "General" },
-];
+/* Specialty option keys — labels resolve via the shared `Specialties`
+ * catalog so the dropdown stays in lockstep with the rest of the
+ * portal (templates list, profile picker, etc.). Empty key = no
+ * specialty scope. */
+const SPECIALTY_KEYS = [
+  "",
+  "orthopedic_surgery",
+  "plastic_surgery",
+  "musculoskeletal",
+  "emergency_medicine",
+  "general",
+] as const;
 
 interface MacroDraft {
   shortcut: string;
@@ -43,6 +48,8 @@ interface MacroDraft {
 const EMPTY_DRAFT: MacroDraft = { shortcut: "/", body: "", specialty: "" };
 
 export default function PortalMacrosPage() {
+  const t = useTranslations("Macros");
+  const tSpecialties = useTranslations("Specialties");
   const [list, setList] = useState<PhysicianMacro[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -56,37 +63,32 @@ export default function PortalMacrosPage() {
       xs.sort((a, b) => a.shortcut.localeCompare(b.shortcut));
       setList(xs);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load macros.");
+      setError(e instanceof Error ? e.message : t("loadError"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void load();
   }, [load]);
 
   async function onDelete(m: PhysicianMacro) {
-    if (
-      !confirm(
-        `Delete macro "${m.shortcut}"? This can't be undone (the audit log keeps a record).`,
-      )
-    )
-      return;
+    if (!confirm(t("deleteConfirm", { shortcut: m.shortcut }))) return;
     try {
       await deleteMyMacro(m.id);
       setList(list.filter((x) => x.id !== m.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Delete failed.");
+      setError(e instanceof Error ? e.message : t("deleteError"));
     }
   }
 
   return (
     <div className="aurion-page-padded aurion-container-narrow">
       <PageHeader
-        eyebrow="Clinician portal"
-        title="Macros"
-        description="Type a shortcut like /ros-cv during a note edit and it expands to the full phrase. Saves the boilerplate-typing tax."
+        eyebrow={t("eyebrow")}
+        title={t("title")}
+        description={t("description")}
         actions={
           <Button
             variant="primary"
@@ -94,7 +96,7 @@ export default function PortalMacrosPage() {
             onClick={() => setEditing("new")}
           >
             <Plus className="h-4 w-4 mr-1" />
-            New macro
+            {t("newMacro")}
           </Button>
         }
       />
@@ -112,15 +114,14 @@ export default function PortalMacrosPage() {
           <div className="py-8 text-center">
             <Zap className="mx-auto h-10 w-10 text-gold-300 mb-2" />
             <p className="aurion-callout text-navy-500 mb-3">
-              No macros yet. Add a few of your most-typed phrases to save
-              real time during note review.
+              {t("emptyTitle")}
             </p>
             <Button
               variant="primary"
               size="sm"
               onClick={() => setEditing("new")}
             >
-              Add your first macro
+              {t("addFirst")}
             </Button>
           </div>
         ) : (
@@ -139,7 +140,7 @@ export default function PortalMacrosPage() {
                   </p>
                   {m.specialty && (
                     <Badge variant="info" className="mt-1.5">
-                      {prettySpecialty(m.specialty)}
+                      {tSpecialties(m.specialty as Parameters<typeof tSpecialties>[0])}
                     </Badge>
                   )}
                 </div>
@@ -148,7 +149,7 @@ export default function PortalMacrosPage() {
                     type="button"
                     onClick={() => setEditing(m)}
                     className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-canvas hover:text-navy-700"
-                    aria-label="Edit"
+                    aria-label={t("editAria")}
                   >
                     <Pencil className="h-4 w-4" />
                   </button>
@@ -156,7 +157,7 @@ export default function PortalMacrosPage() {
                     type="button"
                     onClick={() => void onDelete(m)}
                     className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-red-50 hover:text-red-600"
-                    aria-label="Delete"
+                    aria-label={t("deleteAria")}
                   >
                     <Trash2 className="h-4 w-4" />
                   </button>
@@ -201,6 +202,9 @@ function MacroEditor({
   onClose: () => void;
   onSaved: (m: PhysicianMacro) => void;
 }) {
+  const t = useTranslations("Macros");
+  const tEditor = useTranslations("Macros.editor");
+  const tSpecialties = useTranslations("Specialties");
   const [draft, setDraft] = useState<MacroDraft>(initial);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -222,7 +226,7 @@ function MacroEditor({
         : await createMyMacro(payload);
       onSaved(saved);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : "Save failed";
+      const msg = e instanceof Error ? e.message : tEditor("saveError");
       // Surface the backend's 409 message verbatim — it's already
       // friendly ("Macro with shortcut '/ros' already exists").
       setError(msg.replace(/^API \d+:\s*/, "").replace(/^.*"detail":"?/, "").replace(/"?\}.*$/, ""));
@@ -243,14 +247,14 @@ function MacroEditor({
       <div className="w-full max-w-lg rounded-aurion-xl bg-surface shadow-card-hover ring-1 ring-hairline animate-aurion-scale-in">
         <div className="flex items-center justify-between border-b border-hairline px-5 py-3.5">
           <h3 className="aurion-headline">
-            {editingId ? "Edit macro" : "New macro"}
+            {editingId ? tEditor("editTitle") : tEditor("newTitle")}
           </h3>
           <button
             type="button"
             onClick={() => !saving && onClose()}
             disabled={saving}
             className="rounded-aurion-xs p-1 text-navy-400 hover:bg-canvas hover:text-navy-700"
-            aria-label="Close"
+            aria-label={tEditor("closeAria")}
           >
             <X className="h-4 w-4" />
           </button>
@@ -258,38 +262,33 @@ function MacroEditor({
 
         <div className="px-5 py-4 space-y-4">
           <div>
-            <label className="block aurion-micro mb-1.5">Shortcut</label>
+            <label className="block aurion-micro mb-1.5">{tEditor("shortcutLabel")}</label>
             <input
               className="form-input font-mono"
               value={draft.shortcut}
               onChange={(e) => setDraft({ ...draft, shortcut: e.target.value })}
               disabled={saving}
               autoFocus
-              placeholder="/ros-cv"
-              aria-label="Shortcut"
+              placeholder={tEditor("shortcutPlaceholder")}
+              aria-label={tEditor("shortcutAria")}
             />
-            <p className="aurion-caption mt-1">
-              Starts with <code>/</code>; letters, digits, dashes, and
-              underscores only (max 32 chars after the slash).
-            </p>
+            <p className="aurion-caption mt-1">{tEditor("shortcutHint")}</p>
           </div>
           <div>
-            <label className="block aurion-micro mb-1.5">Expansion</label>
+            <label className="block aurion-micro mb-1.5">{tEditor("bodyLabel")}</label>
             <textarea
               className="form-input min-h-[140px] leading-relaxed resize-y"
               value={draft.body}
               onChange={(e) => setDraft({ ...draft, body: e.target.value })}
               disabled={saving}
-              placeholder="The full phrase this shortcut expands to…"
-              aria-label="Macro body"
+              placeholder={tEditor("bodyPlaceholder")}
+              aria-label={tEditor("bodyAria")}
             />
-            <p className="aurion-caption mt-1">
-              Plain text. Max 4096 characters.
-            </p>
+            <p className="aurion-caption mt-1">{tEditor("bodyHint")}</p>
           </div>
           <div>
             <label className="block aurion-micro mb-1.5">
-              Specialty scope (optional)
+              {tEditor("specialtyLabel")}
             </label>
             <select
               className="form-select"
@@ -298,18 +297,15 @@ function MacroEditor({
                 setDraft({ ...draft, specialty: e.target.value })
               }
               disabled={saving}
-              aria-label="Specialty scope"
+              aria-label={tEditor("specialtyAria")}
             >
-              {SPECIALTIES.map((s) => (
-                <option key={s.key} value={s.key}>
-                  {s.label}
+              {SPECIALTY_KEYS.map((key) => (
+                <option key={key || "all"} value={key}>
+                  {key === "" ? tSpecialties("all") : tSpecialties(key)}
                 </option>
               ))}
             </select>
-            <p className="aurion-caption mt-1">
-              Leave on &quot;All specialties&quot; to expand the macro in
-              every kind of note. Pick one to restrict it.
-            </p>
+            <p className="aurion-caption mt-1">{tEditor("specialtyHint")}</p>
           </div>
           {error && (
             <p className="aurion-caption text-red-600">{error}</p>
@@ -324,7 +320,7 @@ function MacroEditor({
             disabled={saving}
             onClick={onClose}
           >
-            Cancel
+            {tEditor("cancel")}
           </Button>
           <Button
             size="sm"
@@ -333,7 +329,7 @@ function MacroEditor({
             disabled={saving || !draft.shortcut.trim() || !draft.body.trim()}
             onClick={() => void save()}
           >
-            Save
+            {tEditor("save")}
           </Button>
         </div>
       </div>
@@ -347,11 +343,4 @@ function draftFromMacro(m: PhysicianMacro): MacroDraft {
     body: m.body,
     specialty: m.specialty ?? "",
   };
-}
-
-function prettySpecialty(key: string): string {
-  return key
-    .split("_")
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(" ");
 }
