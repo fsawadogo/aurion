@@ -14,6 +14,17 @@ struct PhysicianProfileSetupView: View {
     @State private var practiceTypes: Set<String> = ["clinic"]
     @State private var primarySpecialty = "orthopedic_surgery"
     @State private var consultationTypes: Set<String> = ["new_patient", "follow_up"]
+    // GH-259 — clinician-authored consultation types, e.g. Marie's
+    // "LL new pt" / "LL fu" or Perry's "breast visit". Stored in
+    // insertion order so the UI shows the most-recent at the bottom
+    // of the list (matches the "add to end" mental model). On save
+    // they're merged with `consultationTypes` and shipped to the
+    // backend as a single list[str] (the column has always accepted
+    // arbitrary strings; the validation widens server-side).
+    @State private var customConsultationTypes: [String] = []
+    @State private var customTypeDraft: String = ""
+    @State private var customTypeDraftError: String?
+    @State private var isAddingCustomType = false
     @State private var preferredTemplates: Set<String> = []
     @State private var outputLanguage = "en"
     // Step 5 — recording preferences. Stored locally (UserDefaults) since
@@ -48,6 +59,80 @@ struct PhysicianProfileSetupView: View {
         "pre_op",
         "post_op",
     ]
+    /// Canonical default visit-type keys — mirrors
+    /// ``_DEFAULT_CONSULTATION_TYPES`` in ``backend/app/api/v1/profile.py``.
+    /// Used to partition the wire-format ``consultation_types`` list
+    /// into "checkbox" defaults and clinician-authored customs on
+    /// re-entry into the setup flow (Profile → Edit Practice).
+    /// `internal` visibility so the AurionTests target can assert
+    /// parity with the backend.
+    static let defaultVisitTypeKeys: Set<String> = [
+        "new_patient",
+        "follow_up",
+        "pre_op",
+        "post_op",
+    ]
+
+    /// Soft cap on custom consultation types — mirrors
+    /// ``_MAX_CUSTOM_CONSULTATION_TYPES`` (20) in
+    /// ``backend/app/api/v1/profile.py``.
+    static let maxCustomTypes = 20
+
+    /// Cheap PHI-shape gate that mirrors the backend ``validate_user_text``
+    /// helper used by ``_validate_consultation_type``. Returns ``nil`` when
+    /// the candidate passes, otherwise a localized error string. `internal`
+    /// so ``CustomVisitTypeTests`` can exercise the same gate the UI uses.
+    static func validateCustomVisitType(
+        _ raw: String,
+        existing: [String]
+    ) -> String? {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if trimmed.isEmpty {
+            // Empty draft is a "not yet typed" state — the caller (the
+            // Add button's disabled binding) handles it. Returning nil
+            // keeps the visual error chrome quiet until the user has
+            // actually typed something invalid.
+            return nil
+        }
+        if trimmed.count > 60 {
+            return L("setup.visit.custom.error.tooLong")
+        }
+        if (try? Self.ssnRawRE.wholeMatch(in: trimmed)) != nil
+            || (try? Self.ssnDashedRE.wholeMatch(in: trimmed)) != nil
+        {
+            return L("setup.visit.custom.error.ssn")
+        }
+        if trimmed.contains("@") {
+            return L("setup.visit.custom.error.email")
+        }
+        // Two-token proper-noun shape — catches "Jane Doe" / "Marie
+        // Gdalevitch" without rejecting legitimate clinician shorthand
+        // like "LL fu" / "Breast visit". Mirrors the backend
+        // `_looks_like_proper_noun_pair` heuristic exactly.
+        let tokens = trimmed.split(whereSeparator: \.isWhitespace)
+        if tokens.count >= 2,
+           tokens.allSatisfy({ tok in
+               guard let first = tok.first, first.isUppercase else {
+                   return false
+               }
+               return tok.allSatisfy { c in
+                   c.isLetter || c == "'" || c == "-" || c == "\u{2019}"
+               }
+           })
+        {
+            return L("setup.visit.custom.error.name")
+        }
+        // De-dup against existing customs + defaults.
+        if existing.contains(trimmed)
+            || Self.defaultVisitTypeKeys.contains(trimmed)
+        {
+            return L("setup.visit.custom.error.duplicate")
+        }
+        return nil
+    }
+
+    static let ssnRawRE = /^\d{9}$/
+    static let ssnDashedRE = /^\d{3}-\d{2}-\d{4}$/
 
     private let languages: [(id: String, label: String, sub: String, flag: String)] = [
         ("en", "English", "United States", "🇺🇸"),
@@ -81,6 +166,36 @@ struct PhysicianProfileSetupView: View {
             footer
         }
         .background(Color.aurionBackground)
+        .onAppear(perform: seedFromExistingProfile)
+    }
+
+    /// Populate the multi-select sets / custom-types list from
+    /// `appState.physicianProfile` so re-entering the setup flow from
+    /// Profile → "Edit Practice" carries the clinician's current
+    /// choices instead of resetting to defaults. Idempotent — guarded
+    /// by `didSeedFromProfile`.
+    @State private var didSeedFromProfile = false
+    private func seedFromExistingProfile() {
+        guard !didSeedFromProfile, let p = appState.physicianProfile else { return }
+        didSeedFromProfile = true
+        if let pt = p.practiceType, !pt.isEmpty {
+            let parts = pt.split(separator: ",").map {
+                $0.trimmingCharacters(in: .whitespaces)
+            }
+            if !parts.isEmpty {
+                practiceTypes = Set(parts)
+            }
+        }
+        primarySpecialty = p.primarySpecialty
+        let allTypes = p.consultationTypes
+        let defaults = Set(allTypes.filter { Self.defaultVisitTypeKeys.contains($0) })
+        let customs = allTypes.filter { !Self.defaultVisitTypeKeys.contains($0) }
+        if !defaults.isEmpty || !customs.isEmpty {
+            consultationTypes = defaults
+            customConsultationTypes = customs
+        }
+        preferredTemplates = Set(p.preferredTemplates)
+        outputLanguage = p.outputLanguage
     }
 
     // MARK: - Header
@@ -189,6 +304,7 @@ struct PhysicianProfileSetupView: View {
 
     private var visitTypesStep: some View {
         VStack(spacing: 8) {
+            // ── Defaults ──────────────────────────────────────────────
             ForEach(visitTypes, id: \.self) { id in
                 checkboxRow(label: localizedConsultationType(id), on: consultationTypes.contains(id)) {
                     if consultationTypes.contains(id) {
@@ -198,7 +314,173 @@ struct PhysicianProfileSetupView: View {
                     }
                 }
             }
+
+            // ── Custom types ──────────────────────────────────────────
+            // Each row mirrors the checkbox visual (checked, since custom
+            // types are inherently selected when present) with a trash
+            // affordance for delete. Matches the inline-add pattern
+            // (HIG: avoid modal sheets for short list additions).
+            ForEach(customConsultationTypes, id: \.self) { name in
+                customTypeRow(name)
+            }
+
+            // ── Add affordance ────────────────────────────────────────
+            if isAddingCustomType {
+                customTypeAddInline
+            } else if customConsultationTypes.count >= Self.maxCustomTypes {
+                Text(L("setup.visit.custom.limit"))
+                    .aurionFont(13, relativeTo: .footnote)
+                    .foregroundColor(.aurionTextSecondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 16)
+                    .padding(.top, 4)
+            } else {
+                addCustomTypeButton
+            }
         }
+    }
+
+    private func customTypeRow(_ name: String) -> some View {
+        HStack(spacing: 12) {
+            ZStack {
+                RoundedRectangle(cornerRadius: AurionRadius.xs)
+                    .fill(Color.aurionGold)
+                    .frame(width: 22, height: 22)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AurionRadius.xs)
+                            .stroke(Color.aurionGold, lineWidth: 2)
+                    )
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.aurionTextPrimary)
+            }
+            Text(name)
+                .aurionFont(16, relativeTo: .body)
+                .foregroundColor(.aurionTextPrimary)
+            Spacer(minLength: 0)
+            Button {
+                AurionHaptics.selection()
+                customConsultationTypes.removeAll { $0 == name }
+            } label: {
+                Image(systemName: "trash")
+                    .font(.system(size: 16, weight: .medium))
+                    .foregroundColor(.aurionTextSecondary)
+                    .padding(8)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel(L("setup.visit.custom.delete", name))
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 14)
+        .background(Color.aurionCardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: AurionRadius.md)
+                .stroke(Color.aurionGold, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
+    }
+
+    private var addCustomTypeButton: some View {
+        Button {
+            AurionHaptics.selection()
+            customTypeDraft = ""
+            customTypeDraftError = nil
+            withAnimation(.aurionIOS) { isAddingCustomType = true }
+        } label: {
+            HStack(spacing: 10) {
+                Image(systemName: "plus.circle.fill")
+                    .font(.system(size: 20))
+                    .foregroundColor(.aurionGold)
+                Text(L("setup.visit.custom.add"))
+                    .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                    .foregroundColor(.aurionTextPrimary)
+                Spacer(minLength: 0)
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 14)
+            .background(Color.aurionCardBackground)
+            .overlay(
+                RoundedRectangle(cornerRadius: AurionRadius.md)
+                    .stroke(Color.aurionBorder, lineWidth: 1)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private var customTypeAddInline: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            TextField(
+                L("setup.visit.custom.placeholder"),
+                text: $customTypeDraft
+            )
+            .aurionFont(16, relativeTo: .body)
+            .autocorrectionDisabled()
+            .submitLabel(.done)
+            .onChange(of: customTypeDraft) { _, newValue in
+                customTypeDraftError = Self.validateCustomVisitType(
+                    newValue,
+                    existing: customConsultationTypes
+                )
+            }
+            .onSubmit { commitCustomType() }
+
+            if let err = customTypeDraftError, !customTypeDraft.isEmpty {
+                Text(err)
+                    .aurionFont(12, relativeTo: .caption)
+                    .foregroundColor(.aurionRed)
+            }
+
+            HStack(spacing: 12) {
+                Spacer()
+                Button(L("setup.visit.custom.cancel")) {
+                    withAnimation(.aurionIOS) {
+                        isAddingCustomType = false
+                        customTypeDraft = ""
+                        customTypeDraftError = nil
+                    }
+                }
+                .aurionFont(15, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextSecondary)
+
+                Button(L("setup.visit.custom.commit")) {
+                    commitCustomType()
+                }
+                .disabled(!canCommitCustomType)
+                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                .foregroundColor(canCommitCustomType ? .aurionGold : .aurionTextSecondary)
+            }
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 12)
+        .background(Color.aurionCardBackground)
+        .overlay(
+            RoundedRectangle(cornerRadius: AurionRadius.md)
+                .stroke(Color.aurionBorder, lineWidth: 1)
+        )
+        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
+    }
+
+    private var canCommitCustomType: Bool {
+        let trimmed = customTypeDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        return !trimmed.isEmpty && customTypeDraftError == nil
+    }
+
+    private func commitCustomType() {
+        let trimmed = customTypeDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty,
+              Self.validateCustomVisitType(trimmed, existing: customConsultationTypes) == nil
+        else {
+            return
+        }
+        withAnimation(.aurionIOS) {
+            customConsultationTypes.append(trimmed)
+            customTypeDraft = ""
+            customTypeDraftError = nil
+            isAddingCustomType = false
+        }
+        AurionHaptics.notification(.success)
     }
 
     private var templatesStep: some View {
@@ -487,11 +769,17 @@ struct PhysicianProfileSetupView: View {
         do {
             // Comma-joined values keep the wire shape (single string) compatible
             // with the existing backend column while supporting multi-select.
+            // GH-259 — defaults (sorted for stable wire form) + customs
+            // in insertion order. Backend de-dups and validates each
+            // custom entry; the iOS side has already run the same
+            // gates client-side so the user got immediate feedback.
+            let defaultsSorted = Array(consultationTypes).sorted()
+            let mergedConsultationTypes = defaultsSorted + customConsultationTypes
             let updates: [String: Any] = [
                 "practice_type": practiceTypes.sorted().joined(separator: ","),
                 "primary_specialty": primarySpecialty,
                 "preferred_templates": Array(preferredTemplates),
-                "consultation_types": Array(consultationTypes),
+                "consultation_types": mergedConsultationTypes,
                 "output_language": outputLanguage,
                 "auto_upload": recordingPrefs.autoUpload,
                 "retention_days": recordingPrefs.retentionDays,

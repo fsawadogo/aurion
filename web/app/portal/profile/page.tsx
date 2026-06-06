@@ -7,6 +7,7 @@ import Link from "next/link";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import ConsultationTypesEditor from "@/components/portal/ConsultationTypesEditor";
 import PageHeader from "@/components/portal/PageHeader";
 import { getMyProfile, updateMyProfile } from "@/lib/portal-api";
 import type { PhysicianProfile } from "@/types";
@@ -37,12 +38,9 @@ const SPECIALTY_KEYS = [
   "general",
 ] as const;
 
-const CONSULTATION_TYPE_KEYS = [
-  "new_patient",
-  "follow_up",
-  "pre_op",
-  "post_op",
-] as const;
+// CONSULTATION_TYPE_KEYS used to live here; #259 moved both the
+// default key list and the rendering into `ConsultationTypesEditor`
+// so the page only owns the wire-format value.
 
 const CONSENT_REPROMPT_KEYS: PhysicianProfile["consent_reprompt"][] = [
   "every_session",
@@ -58,7 +56,6 @@ export default function PortalProfilePage() {
   const tPractice = useTranslations("Profile.practice");
   const tRecording = useTranslations("Profile.recording");
   const tPracticeTypes = useTranslations("Profile.practiceTypes");
-  const tConsultation = useTranslations("Profile.consultationTypes");
   const tSpecialties = useTranslations("Specialties");
   const [profile, setProfile] = useState<PhysicianProfile | null>(null);
   const [draft, setDraft] = useState<PhysicianProfile | null>(null);
@@ -128,10 +125,6 @@ export default function PortalProfilePage() {
   const specialtyOptions = SPECIALTY_KEYS.map((key) => ({
     key,
     label: tSpecialties(key),
-  }));
-  const consultationOptions = CONSULTATION_TYPE_KEYS.map((key) => ({
-    key,
-    label: tConsultation(key),
   }));
   const consentRepromptOptions = CONSENT_REPROMPT_KEYS.map((key) => ({
     key,
@@ -219,12 +212,10 @@ export default function PortalProfilePage() {
                 value={draft.primary_specialty}
                 onChange={(v) => setDraft({ ...draft, primary_specialty: v })}
               />
-              <MultiSelect
-                label={tPractice("consultationTypes")}
-                options={consultationOptions}
-                selected={new Set(draft.consultation_types)}
-                onChange={(set) =>
-                  setDraft({ ...draft, consultation_types: Array.from(set) })
+              <ConsultationTypesEditor
+                value={draft.consultation_types}
+                onChange={(next) =>
+                  setDraft({ ...draft, consultation_types: next })
                 }
               />
             </div>

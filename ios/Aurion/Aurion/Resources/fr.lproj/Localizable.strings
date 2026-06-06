@@ -360,6 +360,17 @@
 "setup.freq.everySession" = "Chaque session";
 "setup.freq.daily" = "Quotidien";
 "setup.freq.weekly" = "Hebdomadaire";
+"setup.visit.custom.add" = "Ajouter un type personnalis\U00E9";
+"setup.visit.custom.placeholder" = "ex. nouv. MI, visite sein";
+"setup.visit.custom.commit" = "Ajouter";
+"setup.visit.custom.cancel" = "Annuler";
+"setup.visit.custom.delete" = "Supprimer \U00AB %@ \U00BB";
+"setup.visit.custom.limit" = "Maximum 20 types personnalis\U00E9s.";
+"setup.visit.custom.error.tooLong" = "Limite de 60 caract\U00E8res.";
+"setup.visit.custom.error.ssn" = "Cela ressemble \U00E0 un num\U00E9ro d\U2019assurance sociale.";
+"setup.visit.custom.error.email" = "Cela ressemble \U00E0 une adresse courriel.";
+"setup.visit.custom.error.name" = "\U00C9vitez les noms de patients \U2014 utilisez une \U00E9tiquette courte (ex. \U00AB suivi MI \U00BB).";
+"setup.visit.custom.error.duplicate" = "D\U00E9j\U00E0 dans la liste.";
 
 /* ── Int\U00E9gration (onboarding) ─────────────────────── */
 "onboarding.getStarted" = "Commencer";

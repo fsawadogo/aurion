@@ -531,10 +531,28 @@
       "hospital": "Hôpital"
     },
     "consultationTypes": {
+      "label": "Types de consultation",
       "new_patient": "Nouveau patient",
       "follow_up": "Suivi",
       "pre_op": "Préopératoire",
-      "post_op": "Postopératoire"
+      "post_op": "Postopératoire",
+      "custom": {
+        "addCustom": "Ajouter un type personnalisé",
+        "add": "Ajouter",
+        "cancel": "Annuler",
+        "placeholder": "ex. nouv. MI, visite sein",
+        "inputLabel": "Nom du type de consultation personnalisé",
+        "delete": "Supprimer « {name} »",
+        "limit": "Maximum 20 types personnalisés.",
+        "validation": {
+          "empty": "Saisissez d’abord une étiquette.",
+          "tooLong": "Limite de 60 caractères.",
+          "ssn": "Cela ressemble à un numéro d’assurance sociale.",
+          "email": "Cela ressemble à une adresse courriel.",
+          "name": "Évitez les noms de patients — utilisez une étiquette courte (ex. « suivi MI »).",
+          "duplicate": "Déjà dans la liste."
+        }
+      }
     },
     "saveChanges": "Enregistrer les modifications",
     "discard": "Annuler",
