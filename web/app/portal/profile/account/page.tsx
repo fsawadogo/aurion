@@ -7,7 +7,9 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import LocaleSwitcher from "@/components/portal/LocaleSwitcher";
+import MfaCard from "@/components/portal/MfaCard";
 import PageHeader from "@/components/portal/PageHeader";
+import SessionsCard from "@/components/portal/SessionsCard";
 import { getMe, logout } from "@/lib/api";
 import { getMyProfile, updateMyProfile } from "@/lib/portal-api";
 import type { CurrentUser, PhysicianProfile } from "@/types";
@@ -144,6 +146,10 @@ export default function PortalAccountPage() {
               />
             </div>
           </Card>
+
+          <MfaCard />
+
+          <SessionsCard />
 
           <Card title={tSecurity("title")}>
             <p className="text-sm text-gray-600 mb-3">{tSecurity("description")}</p>
