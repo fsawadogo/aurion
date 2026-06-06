@@ -10,8 +10,10 @@ import logging
 import uuid
 from typing import Literal, Optional
 
+import re
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import (
@@ -125,17 +127,94 @@ class SessionResponse(BaseModel):
     model_config = {"from_attributes": True}
 
 
+# ── Patient identifier format gates ───────────────────────────────────────
+#
+# AC-4 of issue #161 — refuse to encrypt values that obviously aren't
+# clinic identifiers. The intent is fail-closed against the most common
+# foot-guns (a clinician pastes the patient's full name, email, or
+# SSN into the chip) without trying to validate every imaginable MRN
+# scheme. Four explicit deny patterns + a length cap is the design.
+#
+# These rules are mirrored client-side in
+# `web/components/portal/PatientIdentifierEditor.tsx::validateIdentifier`
+# so the portal surfaces the failure before the round trip. The
+# server-side enforcement is the source of truth — never trust the
+# client to gate PHI.
+#
+# Importantly, the rejection error string NEVER carries the rejected
+# value itself (the value is itself sensitive — could be a full
+# patient name). The reason code is short and reason-only.
+
+_SSN_RAW_RE = re.compile(r"^\d{9}$")
+_SSN_DASHED_RE = re.compile(r"^\d{3}-\d{2}-\d{4}$")
+_MAX_IDENTIFIER_LEN = 64
+
+
+def _check_identifier_format(value: str) -> None:
+    """Raise ValueError if the value looks like PHI we shouldn't store
+    encrypted as a patient identifier.
+
+    Pydantic catches ValueError and surfaces it as 422 unprocessable
+    entity. The error string is short and reason-only — NEVER includes
+    the rejected value.
+    """
+    if len(value) > _MAX_IDENTIFIER_LEN:
+        raise ValueError(
+            f"identifier exceeds {_MAX_IDENTIFIER_LEN} character limit"
+        )
+    if _SSN_RAW_RE.match(value) or _SSN_DASHED_RE.match(value):
+        raise ValueError("identifier looks like an SSN")
+    if "@" in value:
+        raise ValueError("identifier looks like an email address")
+    # Two-or-more whitespace-separated tokens with at least one
+    # alphabetic character per token → looks like a full name. We
+    # intentionally don't try to be clever about middle names /
+    # hyphens / titles — if the clinic identifier scheme legitimately
+    # contains a space, they can paste it without spaces or use a
+    # delimiter their downstream tooling expects.
+    tokens = [t for t in value.split() if t]
+    if len(tokens) >= 2 and all(
+        any(c.isalpha() for c in t) for t in tokens
+    ):
+        raise ValueError("identifier looks like a full name")
+
+
 class ExternalReferenceIdRequest(BaseModel):
     """Patch body for setting / clearing the patient identifier.
 
     Empty string or null clears the column; any other string is encrypted
-    via KMS and stored as bytea. Format validation is intentionally
-    permissive at the API boundary — different clinics use different
-    schemes (MRN, encounter id, free text); the canonical validation
-    happens in the EMR write-back integration (#57).
+    via KMS and stored as bytea.
+
+    Format validation is fail-closed against four explicit deny
+    patterns — raw SSN, dashed SSN, email, full-name shape — plus a
+    64-char cap. Clinics use a lot of different MRN schemes; we
+    don't try to validate every one, only the obvious foot-guns.
+    See `_check_identifier_format` above.
+
+    `hide_input_in_errors=True` is load-bearing: it keeps the
+    rejected value out of Pydantic's `ValidationError` string +
+    `input_value` field. Without it, a 422 response (and any
+    FastAPI/Sentry serialization of the error) would echo the raw
+    identifier back, which lands PHI in observability surfaces we
+    don't want it on.
     """
 
+    model_config = ConfigDict(hide_input_in_errors=True)
+
     external_reference_id: Optional[str] = None
+
+    @field_validator("external_reference_id")
+    @classmethod
+    def _validate_format(cls, v: Optional[str]) -> Optional[str]:
+        # Null / blank clears the column — no format checks apply on
+        # the empty path. The route handler does the strip-and-clear.
+        if v is None:
+            return None
+        stripped = v.strip()
+        if not stripped:
+            return v
+        _check_identifier_format(stripped)
+        return v
 
 
 # ── Routes ────────────────────────────────────────────────────────────────
