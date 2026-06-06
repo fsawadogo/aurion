@@ -91,17 +91,38 @@ final class AudioUploadCoordinator: NSObject, @unchecked Sendable {
     /// cap (vs. `timeoutIntervalForRequest` which resets every byte).
     static let resourceTimeoutSeconds: TimeInterval = 300
 
+    /// Marie (2026-06-06): the original implementation used a BACKGROUND
+    /// URLSession (`URLSessionConfiguration.background(withIdentifier:)`)
+    /// for the theoretical benefit of surviving the user putting Aurion
+    /// into the background mid-upload. Apple's API explicitly forbids
+    /// calling `uploadTask(with:fromFile:completionHandler:)` on a
+    /// background session — the method raises an uncaught ObjC
+    /// `NSGenericException` ("Completion handler blocks are not
+    /// supported in background sessions") inside
+    /// `-[__NSURLBackgroundSession validateSerializabilityForRequest:]`,
+    /// which propagates as `EXC_CRASH (SIGABRT)`. Marie's TestFlight
+    /// crash log (build 237) confirmed it crashes on the FIRST upload
+    /// attempt every time — meaning no user has ever successfully
+    /// uploaded audio through this coordinator since #247 shipped.
+    ///
+    /// We switch to a `.default` configuration here. We lose the
+    /// "survives backgrounding" property, but in practice it was never
+    /// realised — the coordinator crashed before any upload could even
+    /// start. iOS gives apps ~30s of background runtime; combined with
+    /// the retry-with-backoff in `upload(...)` and the on-disk staging
+    /// of the recorded audio, an app backgrounded mid-upload still
+    /// completes when it returns to foreground.
+    ///
+    /// If we ever genuinely need background uploads (e.g. very large
+    /// post-pilot recordings), the proper fix is the delegate-based
+    /// pattern: `uploadTask(with:fromFile:)` WITHOUT a completion
+    /// handler + `URLSessionDataDelegate.urlSession(_:dataTask:didReceive:)`
+    /// to accumulate response data + completion handling in
+    /// `urlSession(_:task:didCompleteWithError:)`. That's a substantial
+    /// refactor — out of scope for the pilot.
     private lazy var session: URLSession = {
-        let config = URLSessionConfiguration.background(
-            withIdentifier: Self.backgroundSessionIdentifier
-        )
+        let config = URLSessionConfiguration.default
         config.timeoutIntervalForResource = Self.resourceTimeoutSeconds
-        // `sessionSendsLaunchEvents = true` lets iOS wake the app to
-        // hand back upload-finished callbacks; combined with
-        // `isDiscretionary = false` it keeps the POST on cellular when
-        // the physician is between Wi-Fi networks.
-        config.sessionSendsLaunchEvents = true
-        config.isDiscretionary = false
         config.allowsCellularAccess = true
         return URLSession(
             configuration: config,
