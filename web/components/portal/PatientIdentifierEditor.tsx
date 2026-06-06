@@ -1,7 +1,8 @@
 "use client";
 
 import { IdCard, Pencil, Trash2, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Button from "@/components/ui/Button";
 import {
   listMySessionsByPatientIdentifier,
@@ -19,7 +20,7 @@ import type { PatientSessionMatch } from "@/types";
  *   - **Unset**: shows a "Add identifier" ghost button that opens the
  *     same modal pre-focused on the input.
  *
- * Stays PHI-aware:
+ * PHI-aware:
  *   - The displayed text comes from the parent's decrypted Session
  *     payload — never logged.
  *   - The previous-encounters count is calculated locally from the
@@ -27,6 +28,12 @@ import type { PatientSessionMatch } from "@/types";
  *     server-side).
  *   - Empty / whitespace input clears the identifier (backend handles
  *     this contract).
+ *
+ * Localized via the `NoteReview.identifier` next-intl namespace (EN +
+ * FR per #257). Client-side format gates mirror the backend
+ * `_check_identifier_format` rules from `app/api/v1/sessions.py` so
+ * users see the rejection before the round trip; the server is the
+ * source of truth.
  */
 interface PatientIdentifierEditorProps {
   sessionId: string;
@@ -37,11 +44,39 @@ interface PatientIdentifierEditorProps {
   onChange: (next: string | null) => void;
 }
 
+const MAX_IDENTIFIER_LEN = 64;
+const SSN_RAW = /^\d{9}$/;
+const SSN_DASHED = /^\d{3}-\d{2}-\d{4}$/;
+
+/**
+ * Mirror of `backend/app/api/v1/sessions.py::_check_identifier_format`.
+ * Returns `null` when the value passes, otherwise a translation key
+ * suffix under `NoteReview.identifier.validation.*`.
+ */
+function validateIdentifier(
+  raw: string,
+): "ssn" | "email" | "name" | "tooLong" | null {
+  const value = raw.trim();
+  if (value === "") return null; // blank is a "clear" — backend allows it
+  if (value.length > MAX_IDENTIFIER_LEN) return "tooLong";
+  if (SSN_RAW.test(value) || SSN_DASHED.test(value)) return "ssn";
+  if (value.includes("@")) return "email";
+  const tokens = value.split(/\s+/).filter(Boolean);
+  if (
+    tokens.length >= 2 &&
+    tokens.every((t) => /[A-Za-zÀ-ÿ]/.test(t))
+  ) {
+    return "name";
+  }
+  return null;
+}
+
 export default function PatientIdentifierEditor({
   sessionId,
   currentIdentifier,
   onChange,
 }: PatientIdentifierEditorProps) {
+  const t = useTranslations("NoteReview.identifier");
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState(currentIdentifier ?? "");
   const [saving, setSaving] = useState(false);
@@ -81,16 +116,44 @@ export default function PatientIdentifierEditor({
   // Auto-focus the input when the modal opens.
   useEffect(() => {
     if (open) {
-      const t = window.setTimeout(() => inputRef.current?.focus(), 50);
-      return () => window.clearTimeout(t);
+      const handle = window.setTimeout(() => inputRef.current?.focus(), 50);
+      return () => window.clearTimeout(handle);
     }
   }, [open]);
 
-  async function save() {
+  // Document-level Escape so the modal closes even if focus is on a
+  // button rather than the input. Mirrors the keyboard shortcut on
+  // the input's onKeyDown handler.
+  useEffect(() => {
+    if (!open) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape" && !saving) setOpen(false);
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [open, saving]);
+
+  // Recompute the client-side gate every render — cheap, deterministic,
+  // matches the Save-disabled state.
+  const validationReason = useMemo(() => validateIdentifier(draft), [draft]);
+  const validationMessage = validationReason
+    ? t(`validation.${validationReason}`)
+    : null;
+
+  async function save(overrideValue?: string) {
+    // overrideValue lets the Clear button bypass the closure-captured
+    // `draft` state (which is still the prior value at click time
+    // because setDraft is async). The Save button passes nothing and
+    // we use the current draft.
+    const valueToSend = overrideValue !== undefined ? overrideValue : draft;
+    const cleaned = valueToSend.trim();
+    // Re-run the gate against the value we're actually sending so a
+    // Clear bypass can't smuggle an invalid value past the Save guard.
+    const gateFailure = validateIdentifier(valueToSend);
+    if (gateFailure) return;
     setSaving(true);
     setError(null);
     try {
-      const cleaned = draft.trim();
       const result = await setSessionExternalReferenceId(
         sessionId,
         cleaned || null,
@@ -98,11 +161,20 @@ export default function PatientIdentifierEditor({
       onChange(result.external_reference_id ?? null);
       setOpen(false);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Save failed");
+      // Never echo `draft` into the error string — it may be PHI.
+      // Surface the server's message (which uses reason-only strings
+      // via hide_input_in_errors) or a localized fallback.
+      setError(e instanceof Error ? e.message : t("saveError"));
     } finally {
       setSaving(false);
     }
   }
+
+  // Save is enabled when:
+  //   - the draft is structurally valid
+  //   - AND the draft differs from the current value (no-op blocker)
+  const draftDiffers = draft.trim() !== (currentIdentifier?.trim() ?? "");
+  const canSave = !saving && draftDiffers && validationReason === null;
 
   return (
     <>
@@ -111,7 +183,7 @@ export default function PatientIdentifierEditor({
           type="button"
           onClick={() => setOpen(true)}
           className="inline-flex items-center gap-1.5 rounded-full bg-gold-50 px-3 py-1 text-[12.5px] font-medium text-navy-700 ring-1 ring-inset ring-gold-600/20 hover:bg-gold-100 hover:ring-gold-600/30 transition-colors duration-short"
-          aria-label="Edit patient identifier"
+          aria-label={t("editAria")}
         >
           <IdCard className="h-3.5 w-3.5 text-gold-600" />
           <span className="font-mono">{currentIdentifier}</span>
@@ -129,7 +201,7 @@ export default function PatientIdentifierEditor({
           className="inline-flex items-center gap-1.5 rounded-aurion-md px-2.5 py-1.5 text-[12.5px] text-navy-500 hover:bg-canvas hover:text-navy-700 transition-colors duration-short"
         >
           <IdCard className="h-4 w-4" />
-          Add patient identifier
+          {t("addCta")}
         </button>
       )}
 
@@ -149,13 +221,13 @@ export default function PatientIdentifierEditor({
                 id="identifier-modal-title"
                 className="aurion-headline"
               >
-                Patient identifier
+                {t("modalTitle")}
               </h3>
               <button
                 type="button"
                 onClick={() => !saving && setOpen(false)}
                 className="rounded-aurion-xs p-1 text-navy-400 hover:bg-canvas hover:text-navy-700"
-                aria-label="Close"
+                aria-label={t("closeAria")}
                 disabled={saving}
               >
                 <X className="h-4 w-4" />
@@ -163,31 +235,44 @@ export default function PatientIdentifierEditor({
             </div>
             <div className="px-5 py-4 space-y-3">
               <p className="aurion-caption text-navy-500">
-                Stored encrypted at rest, decrypted only for you. Use
-                whatever scheme your clinic uses — MRN, encounter id,
-                free text — so you can link this session back to the
-                patient&apos;s prior visits.
+                {t("hint")}
               </p>
               <input
                 ref={inputRef}
                 className="form-input font-mono"
-                placeholder="e.g. MRN_1042 or 2026-06-01-AB"
+                placeholder={t("placeholder")}
                 value={draft}
+                maxLength={MAX_IDENTIFIER_LEN}
                 onChange={(e) => setDraft(e.target.value)}
                 onKeyDown={(e) => {
-                  if (e.key === "Enter") void save();
+                  if (e.key === "Enter" && canSave) void save();
                   if (e.key === "Escape" && !saving) setOpen(false);
                 }}
                 disabled={saving}
-                aria-label="Patient identifier"
+                aria-label={t("inputAria")}
+                aria-invalid={validationReason !== null}
+                aria-describedby={
+                  validationMessage ? "identifier-validation" : undefined
+                }
               />
+              {validationMessage && (
+                <p
+                  id="identifier-validation"
+                  className="aurion-caption text-amber-700"
+                  role="alert"
+                >
+                  {validationMessage}
+                </p>
+              )}
               {error && (
                 <p className="aurion-caption text-red-600">{error}</p>
               )}
               {encounters.length > 0 && (
                 <div className="rounded-aurion-md bg-canvas px-3 py-2.5">
                   <p className="aurion-micro mb-1.5">
-                    Previous encounters ({encounters.length})
+                    {t("previousEncounters.title", {
+                      count: encounters.length,
+                    })}
                   </p>
                   <ul className="space-y-0.5">
                     {encounters.slice(0, 5).map((m) => (
@@ -205,7 +290,9 @@ export default function PatientIdentifierEditor({
                     ))}
                     {encounters.length > 5 && (
                       <li className="aurion-caption text-navy-400 italic">
-                        … and {encounters.length - 5} more
+                        {t("previousEncounters.more", {
+                          count: encounters.length - 5,
+                        })}
                       </li>
                     )}
                   </ul>
@@ -220,11 +307,13 @@ export default function PatientIdentifierEditor({
                   disabled={saving}
                   onClick={() => {
                     setDraft("");
-                    void save();
+                    // Pass "" explicitly — setDraft is async and
+                    // save()'s closure still sees the prior draft.
+                    void save("");
                   }}
                 >
                   <Trash2 className="h-4 w-4 mr-1" />
-                  Clear
+                  {t("clear")}
                 </Button>
               )}
               <div className="flex-1" />
@@ -234,16 +323,16 @@ export default function PatientIdentifierEditor({
                 disabled={saving}
                 onClick={() => setOpen(false)}
               >
-                Cancel
+                {t("cancel")}
               </Button>
               <Button
                 size="sm"
                 variant="primary"
                 loading={saving}
-                disabled={saving || draft === (currentIdentifier ?? "")}
+                disabled={!canSave}
                 onClick={() => void save()}
               >
-                Save
+                {t("save")}
               </Button>
             </div>
           </div>
@@ -269,3 +358,6 @@ function prettyDate(iso: string): string {
     year: "numeric",
   });
 }
+
+// Exported for the test module — pure function, deterministic.
+export { validateIdentifier };

@@ -659,6 +659,29 @@
       "resolveToApprove": "Résolvez les conflits pour approuver",
       "exportDocx": "Exporter DOCX",
       "stateLabel": "État : {state}"
+    },
+    "identifier": {
+      "addCta": "Ajouter un identifiant patient",
+      "editAria": "Modifier l’identifiant patient",
+      "closeAria": "Fermer",
+      "inputAria": "Valeur de l’identifiant patient",
+      "modalTitle": "Identifiant patient",
+      "hint": "Stocké chiffré au repos, déchiffré uniquement pour vous. Utilisez le format de votre clinique — NAM, numéro de dossier, identifiant de visite, texte libre — afin de relier cette session aux visites antérieures du même patient.",
+      "placeholder": "ex. NAM_1042 ou 2026-06-01-AB",
+      "save": "Enregistrer",
+      "cancel": "Annuler",
+      "clear": "Effacer",
+      "saveError": "L’enregistrement a échoué.",
+      "validation": {
+        "ssn": "Ceci ressemble à un numéro d’assurance sociale. Utilisez plutôt un identifiant de clinique (NAM, numéro de visite).",
+        "email": "Ceci ressemble à une adresse courriel. Utilisez plutôt un identifiant de clinique (NAM, numéro de visite).",
+        "name": "Ceci ressemble à un nom de patient. Utilisez plutôt un identifiant de clinique (NAM, numéro de visite).",
+        "tooLong": "L’identifiant doit comporter au plus 64 caractères."
+      },
+      "previousEncounters": {
+        "title": "Visites antérieures ({count})",
+        "more": "… et {count} de plus"
+      }
     }
   }
 }

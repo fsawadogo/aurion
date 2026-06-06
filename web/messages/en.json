@@ -659,6 +659,29 @@
       "resolveToApprove": "Resolve conflicts to approve",
       "exportDocx": "Export DOCX",
       "stateLabel": "State: {state}"
+    },
+    "identifier": {
+      "addCta": "Add patient identifier",
+      "editAria": "Edit patient identifier",
+      "closeAria": "Close",
+      "inputAria": "Patient identifier value",
+      "modalTitle": "Patient identifier",
+      "hint": "Stored encrypted at rest, decrypted only for you. Use whatever scheme your clinic uses — MRN, encounter id, free text — so you can link this session back to the patient's prior visits.",
+      "placeholder": "e.g. MRN_1042 or 2026-06-01-AB",
+      "save": "Save",
+      "cancel": "Cancel",
+      "clear": "Clear",
+      "saveError": "Save failed.",
+      "validation": {
+        "ssn": "This looks like a social security number. Use a clinic identifier (MRN, encounter id) instead.",
+        "email": "This looks like an email address. Use a clinic identifier (MRN, encounter id) instead.",
+        "name": "This looks like a patient name. Use a clinic identifier (MRN, encounter id) instead.",
+        "tooLong": "Identifier must be 64 characters or fewer."
+      },
+      "previousEncounters": {
+        "title": "Previous encounters ({count})",
+        "more": "… and {count} more"
+      }
     }
   }
 }
