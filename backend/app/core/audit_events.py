@@ -93,6 +93,12 @@ class AuditEventType(StrEnum):
     # alongside STAGE1_FAILED in compliance reports.
     STAGE1_SKIPPED_NO_TRANSCRIPT = "stage1_skipped_no_transcript"
     STAGE1_SKIPPED_LOW_TRANSCRIPT = "stage1_skipped_low_transcript"
+    # Stage 1 produced a structurally-valid but EMPTY note (zero populated
+    # required sections) — delivered, not failed, but no longer a silent
+    # "success". Makes the empty-note rate visible + CloudWatch-alarmable
+    # (#280: 7/16 recent notes were completeness=0.00 with no signal).
+    # PHI-free payload: counts + score only, never transcript/claim text.
+    STAGE1_EMPTY_NOTE = "stage1_empty_note"
     # Debug-tier event emitted when the live session-stats recompute
     # helper actually changed at least one downstream count. Carries
     # the new completeness numerator + denominator (PHI-free) so the
@@ -273,6 +279,9 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.SESSION_PAUSED: frozenset(),
     AuditEventType.STAGE1_STARTED: frozenset(),
     AuditEventType.STAGE1_DELIVERED: frozenset({"stage1_latency_ms"}),
+    AuditEventType.STAGE1_EMPTY_NOTE: frozenset(
+        {"segment_count", "transcript_char_count", "completeness"}
+    ),
     AuditEventType.STAGE2_STARTED: frozenset({"job_id"}),
     AuditEventType.FULL_NOTE_DELIVERED: frozenset(
         {"version", "provider_used", "completeness_score"}
