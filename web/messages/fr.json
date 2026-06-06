@@ -21,7 +21,11 @@
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
     "search": "Rechercher…",
-    "searchTooltip": "Rechercher (⌘K)"
+    "searchTooltip": "Rechercher (⌘K)",
+    "mobileMenu": {
+      "open": "Ouvrir le menu",
+      "close": "Fermer le menu"
+    }
   },
   "Theme": {
     "label": "Thème",
@@ -344,6 +348,252 @@
         "name": "Renvoi vers le DPI",
         "description": "File d’attente sortante qui envoie la note approuvée vers un système de dossier médical."
       }
+    }
+  },
+  "Specialties": {
+    "orthopedic_surgery": "Chirurgie orthopédique",
+    "plastic_surgery": "Chirurgie plastique",
+    "musculoskeletal": "Musculosquelettique",
+    "emergency_medicine": "Médecine d’urgence",
+    "general": "Général",
+    "all": "Toutes les spécialités"
+  },
+  "Macros": {
+    "eyebrow": "Portail du clinicien",
+    "title": "Macros",
+    "description": "Tapez un raccourci comme /ros-cv pendant l’édition d’une note et il se déploie en phrase complète. Élimine la corvée de réécrire les phrases courantes.",
+    "newMacro": "Nouvelle macro",
+    "loadError": "Impossible de charger les macros.",
+    "deleteError": "Suppression échouée.",
+    "deleteConfirm": "Supprimer la macro « {shortcut} »? Cette action est irréversible (le journal d’audit en conserve la trace).",
+    "emptyTitle": "Aucune macro pour l’instant. Ajoutez quelques-unes de vos phrases les plus utilisées pour gagner du temps lors de la révision.",
+    "addFirst": "Ajouter votre première macro",
+    "editAria": "Modifier",
+    "deleteAria": "Supprimer",
+    "editor": {
+      "newTitle": "Nouvelle macro",
+      "editTitle": "Modifier la macro",
+      "closeAria": "Fermer",
+      "shortcutLabel": "Raccourci",
+      "shortcutPlaceholder": "/ros-cv",
+      "shortcutAria": "Raccourci",
+      "shortcutHint": "Commence par /; lettres, chiffres, tirets et soulignés seulement (max. 32 caractères après la barre oblique).",
+      "bodyLabel": "Texte de remplacement",
+      "bodyPlaceholder": "La phrase complète vers laquelle ce raccourci se déploie…",
+      "bodyAria": "Corps de la macro",
+      "bodyHint": "Texte brut. Maximum 4096 caractères.",
+      "specialtyLabel": "Portée par spécialité (optionnel)",
+      "specialtyAria": "Portée par spécialité",
+      "specialtyHint": "Laissez sur « Toutes les spécialités » pour déployer la macro dans tous les types de notes. Choisissez-en une pour la restreindre.",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "saveError": "Échec de l’enregistrement"
+    }
+  },
+  "NotesList": {
+    "eyebrow": "Portail du clinicien",
+    "title": "Mes notes",
+    "description": "Les sessions que vous avez enregistrées, avec leurs notes générées.",
+    "refresh": "Actualiser",
+    "loadError": "Impossible de charger les sessions.",
+    "exportError": "L’exportation groupée a échoué.",
+    "filters": {
+      "all": "Toutes ({count})",
+      "pending": "En attente ({count})",
+      "completed": "Terminées ({count})",
+      "exported": "Exportées ({count})",
+      "dateRangeAria": "Période",
+      "dateAll": "Toutes les dates",
+      "dateToday": "Aujourd’hui",
+      "date7d": "7 derniers jours",
+      "date30d": "30 derniers jours",
+      "searchPlaceholder": "Rechercher…",
+      "searchAria": "Rechercher dans les sessions"
+    },
+    "selection": {
+      "count": "{count} sélectionnée(s)",
+      "clear": "Effacer",
+      "selectAll": "Tout sélectionner ({count})",
+      "exportSelected": "Exporter la sélection",
+      "exportN": "Exporter ({count})",
+      "selectAria": "Sélectionner la session {id} pour l’exportation groupée"
+    },
+    "noMatches": "Aucune session ne correspond à ces filtres.",
+    "stateBadge": {
+      "review": "À réviser",
+      "processing": "En traitement",
+      "approved": "Approuvée",
+      "exported": "Exportée",
+      "purged": "Purgée",
+      "failed": "Échec",
+      "recording": "Enregistrement",
+      "paused": "Pause"
+    }
+  },
+  "Profile": {
+    "eyebrow": "Portail du clinicien",
+    "title": "Mon profil",
+    "description": "Comment Aurion configure les enregistrements et la génération de notes pour vous.",
+    "accountSettings": "Paramètres du compte",
+    "loadError": "Impossible de charger le profil.",
+    "saveError": "Échec de l’enregistrement.",
+    "savedNotice": "Profil enregistré.",
+    "retry": "Réessayer",
+    "identity": {
+      "title": "Identité",
+      "displayName": "Nom d’affichage"
+    },
+    "practice": {
+      "title": "Pratique",
+      "practiceSettings": "Cadres de pratique",
+      "primarySpecialty": "Spécialité principale",
+      "consultationTypes": "Types de consultation"
+    },
+    "recording": {
+      "title": "Préférences d’enregistrement",
+      "retentionLabel": "Rétention locale (jours)",
+      "retentionHint": "Durée pendant laquelle les enregistrements sont conservés sur l’appareil après l’exportation avant la purge automatique. Plage de 1 à 30 jours.",
+      "autoUploadLabel": "Téléversement automatique à l’arrêt",
+      "autoUploadHint": "Téléverser l’audio immédiatement à l’arrêt d’une session, plutôt que d’attendre une confirmation explicite.",
+      "consentRepromptLabel": "Cadence de redemande du consentement",
+      "consentEverySession": "Chaque session",
+      "consentDaily": "Quotidienne",
+      "consentWeekly": "Hebdomadaire"
+    },
+    "practiceTypes": {
+      "clinic": "Clinique",
+      "surgical_center": "Centre chirurgical",
+      "hospital": "Hôpital"
+    },
+    "consultationTypes": {
+      "new_patient": "Nouveau patient",
+      "follow_up": "Suivi",
+      "pre_op": "Préopératoire",
+      "post_op": "Postopératoire"
+    },
+    "saveChanges": "Enregistrer les modifications",
+    "discard": "Annuler",
+    "unsaved": "Modifications non enregistrées",
+    "allSaved": "Toutes les modifications sont enregistrées"
+  },
+  "Account": {
+    "breadcrumbProfile": "Mon profil",
+    "breadcrumbAccount": "Compte",
+    "eyebrow": "Portail du clinicien",
+    "title": "Paramètres du compte",
+    "description": "Identité, préférences linguistiques et déconnexion.",
+    "loadError": "Impossible de charger le compte.",
+    "saveLanguageError": "Impossible de mettre à jour la langue.",
+    "retry": "Réessayer",
+    "identity": {
+      "title": "Identité",
+      "name": "Nom",
+      "email": "Courriel",
+      "role": "Rôle",
+      "missing": "—"
+    },
+    "noteLanguage": {
+      "title": "Langue des notes générées",
+      "description": "La langue qu’Aurion utilise pour générer les notes à partir de vos transcriptions. Indépendante de la langue de l’interface du portail.",
+      "setAria": "Définir la langue des notes générées à {label}",
+      "english": "Anglais",
+      "french": "Français"
+    },
+    "uiLanguage": {
+      "title": "Langue de l’interface du portail",
+      "description": "La langue utilisée pour l’interface du portail — menus, boutons et libellés. Indépendante de la langue utilisée pour générer les notes.",
+      "setAria": "Définir la langue de l’interface du portail à {label}"
+    },
+    "security": {
+      "title": "Sécurité",
+      "description": "L’authentification multifacteur et la gestion des sessions actives arrivent prochainement. Pour l’instant, vous pouvez vous déconnecter ci-dessous — votre session se termine immédiatement sur cet appareil.",
+      "signOut": "Se déconnecter"
+    }
+  },
+  "TemplatesList": {
+    "eyebrow": "Portail du clinicien",
+    "title": "Modèles",
+    "description": "Vos modèles de notes personnalisés. Construisez-en un nouveau avec le concepteur conversationnel, ou téléversez un modèle existant pour qu’il soit extrait automatiquement.",
+    "upload": "Téléverser",
+    "newTemplate": "Nouveau modèle",
+    "loadError": "Impossible de charger les modèles.",
+    "uploadError": "Échec du téléversement.",
+    "deleteError": "Suppression échouée.",
+    "deleteConfirm": "Supprimer le modèle personnalisé « {name} »?",
+    "emptyTitle": "Aucun modèle personnalisé pour l’instant. Construisez-en un en quelques minutes avec le concepteur conversationnel.",
+    "startBuilding": "Commencer",
+    "sharedBadge": "Partagé",
+    "sectionCount": "{count, plural, one {# section} other {# sections}}",
+    "metadata": "v{version} · {sections} · mis à jour {updated}",
+    "open": "Ouvrir",
+    "deleteAria": "Supprimer {name}"
+  },
+  "TemplateNew": {
+    "breadcrumbTemplates": "Modèles",
+    "breadcrumbNew": "Nouveau",
+    "eyebrow": "Concepteur conversationnel",
+    "title": "Nouveau modèle",
+    "description": "Discutez avec le concepteur pour créer un modèle de note personnalisé. Lorsque l’aperçu vous convient, cliquez sur Enregistrer.",
+    "loadError": "Impossible de démarrer une session.",
+    "replyError": "La réponse a échoué.",
+    "saveError": "Échec de l’enregistrement.",
+    "retry": "Réessayer",
+    "conversationLabel": "Conversation",
+    "draftPreviewLabel": "Aperçu du brouillon",
+    "saveTemplate": "Enregistrer ce modèle",
+    "draftPlaceholder": "Le concepteur rédigera votre modèle ici une fois que vous aurez confirmé la spécialité, les sections et celles qui sont obligatoires."
+  },
+  "TemplateDetail": {
+    "breadcrumbTemplates": "Modèles",
+    "breadcrumbFallback": "Modèle",
+    "eyebrow": "Modèle personnalisé",
+    "fallbackTitle": "Modèle",
+    "loadError": "Impossible de charger le modèle.",
+    "notFound": "Modèle introuvable.",
+    "saveError": "Échec de l’enregistrement.",
+    "deleteError": "Suppression échouée.",
+    "deleteConfirm": "Supprimer le modèle personnalisé « {name} »?",
+    "invalidJson": "Le JSON n’a pas pu être analysé : {error}",
+    "retry": "Réessayer",
+    "modePreview": "Aperçu",
+    "modeJson": "JSON",
+    "exportButton": "Exporter",
+    "deleteButton": "Supprimer",
+    "jsonHint": "Modifiez directement le JSON du modèle. L’enregistrement valide le schéma; une structure invalide apparaît en ligne.",
+    "saveChanges": "Enregistrer les modifications",
+    "resetToSaved": "Revenir à la version enregistrée",
+    "metadata": "v{version} · {sections}",
+    "sectionCount": "{count, plural, one {# section} other {# sections}}"
+  },
+  "NoteReview": {
+    "breadcrumbNotes": "Mes notes",
+    "breadcrumbFallback": "Révision",
+    "eyebrow": "Révision de la note",
+    "stageMetaPrefix": "Étape",
+    "stageVersion": "v",
+    "stageProvider": "Fournisseur",
+    "loadError": "Impossible de charger la note.",
+    "noNoteTitle": "Aucune note pour l’instant",
+    "noNoteHint": "Cette session est encore en captation ou n’a pas atteint l’étape de révision. Une fois l’enregistrement arrêté et l’étape 1 complétée, la note apparaîtra ici.",
+    "checkAgain": "Vérifier à nouveau",
+    "retry": "Réessayer",
+    "approvalError": "L’approbation a échoué.",
+    "exportError": "L’exportation a échoué.",
+    "transcriptLabel": "Transcription",
+    "transcriptCount": "{count} segments cités",
+    "noteLabel": "Note",
+    "conflicts": {
+      "summary": "{count, plural, one {# conflit non résolu.} other {# conflits non résolus.}}",
+      "blockedHint": "L’approbation est bloquée tant que chaque conflit n’est pas résolu.",
+      "showFirst": "Afficher le premier"
+    },
+    "actions": {
+      "approvedExported": "Approuvée · exportée",
+      "approvedReady": "Approuvée · prête à exporter",
+      "approveAndSign": "Approuver et signer",
+      "resolveToApprove": "Résolvez les conflits pour approuver",
+      "exportDocx": "Exporter DOCX",
+      "stateLabel": "État : {state}"
     }
   }
 }

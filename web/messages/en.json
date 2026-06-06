@@ -21,7 +21,11 @@
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
     "search": "Search…",
-    "searchTooltip": "Search (⌘K)"
+    "searchTooltip": "Search (⌘K)",
+    "mobileMenu": {
+      "open": "Open menu",
+      "close": "Close menu"
+    }
   },
   "Theme": {
     "label": "Theme",
@@ -344,6 +348,252 @@
         "name": "EMR Write-Back",
         "description": "Outbound queue that sends the approved note to a chart system."
       }
+    }
+  },
+  "Specialties": {
+    "orthopedic_surgery": "Orthopedic Surgery",
+    "plastic_surgery": "Plastic Surgery",
+    "musculoskeletal": "Musculoskeletal",
+    "emergency_medicine": "Emergency Medicine",
+    "general": "General",
+    "all": "All specialties"
+  },
+  "Macros": {
+    "eyebrow": "Clinician portal",
+    "title": "Macros",
+    "description": "Type a shortcut like /ros-cv during a note edit and it expands to the full phrase. Saves the boilerplate-typing tax.",
+    "newMacro": "New macro",
+    "loadError": "Failed to load macros.",
+    "deleteError": "Delete failed.",
+    "deleteConfirm": "Delete macro \"{shortcut}\"? This can't be undone (the audit log keeps a record).",
+    "emptyTitle": "No macros yet. Add a few of your most-typed phrases to save real time during note review.",
+    "addFirst": "Add your first macro",
+    "editAria": "Edit",
+    "deleteAria": "Delete",
+    "editor": {
+      "newTitle": "New macro",
+      "editTitle": "Edit macro",
+      "closeAria": "Close",
+      "shortcutLabel": "Shortcut",
+      "shortcutPlaceholder": "/ros-cv",
+      "shortcutAria": "Shortcut",
+      "shortcutHint": "Starts with /; letters, digits, dashes, and underscores only (max 32 chars after the slash).",
+      "bodyLabel": "Expansion",
+      "bodyPlaceholder": "The full phrase this shortcut expands to…",
+      "bodyAria": "Macro body",
+      "bodyHint": "Plain text. Max 4096 characters.",
+      "specialtyLabel": "Specialty scope (optional)",
+      "specialtyAria": "Specialty scope",
+      "specialtyHint": "Leave on \"All specialties\" to expand the macro in every kind of note. Pick one to restrict it.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saveError": "Save failed"
+    }
+  },
+  "NotesList": {
+    "eyebrow": "Clinician portal",
+    "title": "My Notes",
+    "description": "Sessions you've recorded, with their generated notes.",
+    "refresh": "Refresh",
+    "loadError": "Failed to load sessions.",
+    "exportError": "Bulk export failed.",
+    "filters": {
+      "all": "All ({count})",
+      "pending": "Pending ({count})",
+      "completed": "Completed ({count})",
+      "exported": "Exported ({count})",
+      "dateRangeAria": "Date range",
+      "dateAll": "All time",
+      "dateToday": "Today",
+      "date7d": "Last 7 days",
+      "date30d": "Last 30 days",
+      "searchPlaceholder": "Search…",
+      "searchAria": "Search sessions"
+    },
+    "selection": {
+      "count": "{count} selected",
+      "clear": "Clear",
+      "selectAll": "Select all approved ({count})",
+      "exportSelected": "Export selected",
+      "exportN": "Export ({count})",
+      "selectAria": "Select session {id} for bulk export"
+    },
+    "noMatches": "No sessions match these filters.",
+    "stateBadge": {
+      "review": "Review",
+      "processing": "Processing",
+      "approved": "Approved",
+      "exported": "Exported",
+      "purged": "Purged",
+      "failed": "Failed",
+      "recording": "Recording",
+      "paused": "Paused"
+    }
+  },
+  "Profile": {
+    "eyebrow": "Clinician portal",
+    "title": "My Profile",
+    "description": "How Aurion configures recordings + note generation for you.",
+    "accountSettings": "Account settings",
+    "loadError": "Failed to load profile.",
+    "saveError": "Save failed.",
+    "savedNotice": "Profile saved.",
+    "retry": "Retry",
+    "identity": {
+      "title": "Identity",
+      "displayName": "Display name"
+    },
+    "practice": {
+      "title": "Practice",
+      "practiceSettings": "Practice settings",
+      "primarySpecialty": "Primary specialty",
+      "consultationTypes": "Consultation types"
+    },
+    "recording": {
+      "title": "Recording preferences",
+      "retentionLabel": "Local retention window (days)",
+      "retentionHint": "How long recordings are kept on the device after export before automatic purge. Range 1–30 days.",
+      "autoUploadLabel": "Auto-upload on stop",
+      "autoUploadHint": "Upload audio immediately when you stop a session, rather than waiting for explicit confirmation.",
+      "consentRepromptLabel": "Consent re-prompt cadence",
+      "consentEverySession": "Every session",
+      "consentDaily": "Daily",
+      "consentWeekly": "Weekly"
+    },
+    "practiceTypes": {
+      "clinic": "Clinic",
+      "surgical_center": "Surgical Center",
+      "hospital": "Hospital"
+    },
+    "consultationTypes": {
+      "new_patient": "New Patient",
+      "follow_up": "Follow-up",
+      "pre_op": "Pre-op",
+      "post_op": "Post-op"
+    },
+    "saveChanges": "Save changes",
+    "discard": "Discard",
+    "unsaved": "Unsaved changes",
+    "allSaved": "All changes saved"
+  },
+  "Account": {
+    "breadcrumbProfile": "My Profile",
+    "breadcrumbAccount": "Account",
+    "eyebrow": "Clinician portal",
+    "title": "Account settings",
+    "description": "Identity, language preferences, and sign-out.",
+    "loadError": "Failed to load account.",
+    "saveLanguageError": "Failed to update language.",
+    "retry": "Retry",
+    "identity": {
+      "title": "Identity",
+      "name": "Name",
+      "email": "Email",
+      "role": "Role",
+      "missing": "—"
+    },
+    "noteLanguage": {
+      "title": "Generated note language",
+      "description": "The language Aurion uses when generating notes from your transcripts. Independent of the portal interface language.",
+      "setAria": "Set generated note language to {label}",
+      "english": "English",
+      "french": "Français"
+    },
+    "uiLanguage": {
+      "title": "Portal interface language",
+      "description": "The language used for the portal UI chrome — menus, buttons, and labels. Independent of the language used when generating notes.",
+      "setAria": "Set portal interface language to {label}"
+    },
+    "security": {
+      "title": "Security",
+      "description": "Multi-factor authentication and active-session management are coming in a follow-up. For now you can sign out below — your session ends immediately on this device.",
+      "signOut": "Sign out"
+    }
+  },
+  "TemplatesList": {
+    "eyebrow": "Clinician portal",
+    "title": "Templates",
+    "description": "Your custom note templates. Build a new one with the chat-style builder, or upload an existing template to have it extracted automatically.",
+    "upload": "Upload",
+    "newTemplate": "New template",
+    "loadError": "Failed to load templates.",
+    "uploadError": "Upload failed.",
+    "deleteError": "Delete failed.",
+    "deleteConfirm": "Delete custom template \"{name}\"?",
+    "emptyTitle": "No custom templates yet. Build one in a few minutes with the conversational builder.",
+    "startBuilding": "Start building",
+    "sharedBadge": "Shared",
+    "sectionCount": "{count, plural, one {# section} other {# sections}}",
+    "metadata": "v{version} · {sections} · updated {updated}",
+    "open": "Open",
+    "deleteAria": "Delete {name}"
+  },
+  "TemplateNew": {
+    "breadcrumbTemplates": "Templates",
+    "breadcrumbNew": "New",
+    "eyebrow": "Conversational builder",
+    "title": "New template",
+    "description": "Chat with the builder to design a custom note template. When you're happy with the preview, click Save.",
+    "loadError": "Could not start a session.",
+    "replyError": "Reply failed.",
+    "saveError": "Save failed.",
+    "retry": "Retry",
+    "conversationLabel": "Conversation",
+    "draftPreviewLabel": "Draft preview",
+    "saveTemplate": "Save this template",
+    "draftPlaceholder": "The builder will draft your template here once you've confirmed the specialty, sections, and which are required."
+  },
+  "TemplateDetail": {
+    "breadcrumbTemplates": "Templates",
+    "breadcrumbFallback": "Template",
+    "eyebrow": "Custom template",
+    "fallbackTitle": "Template",
+    "loadError": "Failed to load template.",
+    "notFound": "Template not found.",
+    "saveError": "Save failed.",
+    "deleteError": "Delete failed.",
+    "deleteConfirm": "Delete custom template \"{name}\"?",
+    "invalidJson": "JSON didn't parse: {error}",
+    "retry": "Retry",
+    "modePreview": "Preview",
+    "modeJson": "JSON",
+    "exportButton": "Export",
+    "deleteButton": "Delete",
+    "jsonHint": "Edit the template JSON directly. Save validates against the schema; an invalid shape surfaces inline.",
+    "saveChanges": "Save changes",
+    "resetToSaved": "Reset to saved",
+    "metadata": "v{version} · {sections}",
+    "sectionCount": "{count, plural, one {# section} other {# sections}}"
+  },
+  "NoteReview": {
+    "breadcrumbNotes": "My Notes",
+    "breadcrumbFallback": "Review",
+    "eyebrow": "Note review",
+    "stageMetaPrefix": "Stage",
+    "stageVersion": "v",
+    "stageProvider": "Provider",
+    "loadError": "Failed to load note.",
+    "noNoteTitle": "No note yet",
+    "noNoteHint": "This session is still in capture or hasn't reached the review stage. Once recording stops and Stage 1 generation completes, the note will appear here.",
+    "checkAgain": "Check again",
+    "retry": "Retry",
+    "approvalError": "Approval failed.",
+    "exportError": "Export failed.",
+    "transcriptLabel": "Transcript",
+    "transcriptCount": "{count} cited segments",
+    "noteLabel": "Note",
+    "conflicts": {
+      "summary": "{count, plural, one {# unresolved conflict.} other {# unresolved conflicts.}}",
+      "blockedHint": "Approval is blocked until every conflict is resolved.",
+      "showFirst": "Show first"
+    },
+    "actions": {
+      "approvedExported": "Approved · exported",
+      "approvedReady": "Approved · ready to export",
+      "approveAndSign": "Approve & sign",
+      "resolveToApprove": "Resolve conflicts to approve",
+      "exportDocx": "Export DOCX",
+      "stateLabel": "State: {state}"
     }
   }
 }
