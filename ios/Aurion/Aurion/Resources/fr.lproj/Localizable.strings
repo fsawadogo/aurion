@@ -535,6 +535,12 @@
 
 /* ── Mot de passe oubli\U00E9 (r\U00E9initialisation par e-mail) ──── */
 "login.forgotPassword.linkText" = "Mot de passe oubli\U00E9\U00A0?";
+"login.resetCode.linkText" = "Vous avez un lien de r\U00E9initialisation\U00A0?";
+"login.resetCode.title" = "Coller le lien de r\U00E9initialisation";
+"login.resetCode.message" = "Collez l\U2019URL de r\U00E9initialisation re\U00E7ue par courriel, ou simplement le jeton si le lien n\U2019ouvre pas l\U2019app.";
+"login.resetCode.placeholder" = "Coller le lien ou le jeton";
+"login.resetCode.submit" = "Ouvrir la r\U00E9initialisation";
+"login.resetCode.invalid" = "Ceci ne ressemble pas \U00E0 un lien ou un jeton valide.";
 "login.forgotPassword.title" = "R\U00E9initialiser votre mot de passe";
 "login.forgotPassword.subtitle" = "Entrez l\U2019adresse e-mail associ\U00E9e \U00E0 votre compte Aurion. Nous enverrons un lien de r\U00E9initialisation si elle correspond \U00E0 un compte actif.";
 "login.forgotPassword.emailLabel" = "E-mail";
