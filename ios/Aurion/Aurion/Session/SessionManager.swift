@@ -8,14 +8,20 @@ import UIKit
 /// phase so the clinician knows whether to wait, retry, or fall back to
 /// dictation.
 ///
-/// Marie bug-bash (Bug A): the prior `.timedOut` case was driven by a
-/// hard 30-second wall-clock cap that fired spuriously on long
-/// sessions (Marie's 3:30min encounter). Stage 1 delivery is now
-/// signalled out-of-band via `/ws/notes/{id}` and the only "timeout"
-/// the client surfaces is the WebSocket fallback poll deadline (5
-/// minutes — see `AppConfig.stage1WSFallbackPollTimeoutSeconds`).
-/// `.failed(reason:)` covers both real backend failures AND the
-/// fallback-poll deadline expiry.
+/// Marie bug-bash (Bug A) + follow-up: the prior `.timedOut` case was
+/// driven by a hard 30-second wall-clock cap that fired spuriously on
+/// long sessions (Marie's 3:30min encounter). PR #245 lifted that 30s
+/// wall and added a 5-min polling-fallback deadline as a "safety net";
+/// the user pushed back — that re-introduced the same class of bug at
+/// a higher water mark (a slow LLM cold start or AssemblyAI queue
+/// spike on a legitimate recording would still false-fail). The
+/// fallback deadline is now removed entirely. Stage 1 delivery is
+/// signalled out-of-band via `/ws/notes/{id}`; if the WS drops we
+/// poll `GET /notes/{id}/stage1` indefinitely until either the note
+/// arrives or the user cancels the session (Task cancellation
+/// propagates from the parent flow). `.failed(reason:)` is reached
+/// only on explicit backend failure events, never on iOS-side
+/// wall-clock expiry.
 enum Stage1Status: Equatable {
     case idle
     case uploading
@@ -23,7 +29,7 @@ enum Stage1Status: Equatable {
     /// Stage 1 is taking a while (≥`stage1LongRunStatusFlipSeconds`).
     /// Same UI as `.generating` but with a reassurance label — no retry
     /// prompt yet. The ring stays parked at 95% until either the WS
-    /// event lands or the fallback poll trips its 5-min deadline.
+    /// event lands or the user cancels.
     case stillWorkingLong
     case ready
     case failed(reason: String)
@@ -1403,12 +1409,16 @@ final class SessionManager: ObservableObject {
             }
 
             // ── Step 3: wait for the WS push, or fall back to polling
-            // with the 5-min deadline if the channel drops. Either way
-            // we then `fetchNote()` over REST — the WS payload carries
-            // the note inline, but the existing iOS plumbing assumes
-            // the canonical store comes from `GET /notes/{id}/stage1`,
-            // so we stay consistent and re-read it. Cheap enough.
-            try await awaitStage1Ready(
+            // (unbounded) if the channel drops. Either way we then
+            // `fetchNote()` over REST — the WS payload carries the note
+            // inline, but the existing iOS plumbing assumes the
+            // canonical store comes from `GET /notes/{id}/stage1`, so
+            // we stay consistent and re-read it. Cheap enough.
+            //
+            // No wall-clock deadline here (intentionally): the helper
+            // polls until the note arrives or the parent Task is
+            // cancelled. See awaitStage1Ready docstring for why.
+            await awaitStage1Ready(
                 subscription: stage1Ready,
                 sessionId: captureSessionId
             )
@@ -1435,22 +1445,6 @@ final class SessionManager: ObservableObject {
                 sessionId: captureSessionId,
                 isDemoFallback: false,
                 specialty: captureSpecialty
-            )
-        } catch Stage1WaitError.fallbackPollDeadlineExceeded {
-            // WS channel never delivered AND the 5-min fallback poll
-            // gave up. The audit trail already carries the
-            // `stage1_ws_fallback_to_poll` event from awaitStage1Ready
-            // — surface as a generic failure with the retry prompt so
-            // the clinician can re-fire (audio is still in memory).
-            let elapsed = Date().timeIntervalSince(stage1Start)
-            stage1Status = .failed(reason: L("processing.stage1Failed.detail"))
-            AuditLogger.log(
-                event: .stage1Failed,
-                sessionId: captureSessionId,
-                extra: [
-                    "reason": "ws_fallback_poll_deadline_exceeded",
-                    "elapsed_ms": "\(Int(elapsed * 1000))",
-                ]
             )
         } catch {
             // P0-03: NEVER fabricate clinical content in production. The demo
@@ -1683,17 +1677,24 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Stage 1 wait helpers (Bug A)
 
-    /// Errors surfaced by the WS-or-poll wait helper. Distinct type so
-    /// `submitAudio`'s catch ladder can route the fallback-deadline case
-    /// without conflating it with real backend errors.
-    private enum Stage1WaitError: Error {
-        case fallbackPollDeadlineExceeded
-    }
-
     /// Wait for Stage 1 to actually land. Prefers the WebSocket push
     /// (zero polling, no jitter); if that channel dies before the event
-    /// arrives we fall back to polling `GET /notes/{id}/stage1` with a
-    /// 5-minute wall-clock cap (`stage1WSFallbackPollTimeoutSeconds`).
+    /// arrives we fall back to polling `GET /notes/{id}/stage1`.
+    ///
+    /// **No wall-clock cap.** PR #245 originally shipped a 5-minute
+    /// fallback deadline as a "safety net." That deadline was the same
+    /// bug class as the original 30s wall — a slow LLM cold start or
+    /// AssemblyAI queue spike on a legitimate recording would still
+    /// false-fail. The deadline is removed entirely: the loop polls
+    /// until either the note arrives or the surrounding Task is
+    /// cancelled (user backs out of the processing screen, app is
+    /// killed, etc.). The `try? await Task.sleep` already cooperates
+    /// with cancellation; the explicit `Task.isCancelled` check exits
+    /// the loop the moment a cancellation fires.
+    ///
+    /// Backend-side explicit `stage1_failed` events are surfaced through
+    /// the WS subscriber's separate code path (when added) and would
+    /// route to `.failed(reason:)` directly — never through this helper.
     ///
     /// Fallback path emits `stage1_ws_fallback_to_poll` so the audit
     /// trail records WHY the iOS client paid the polling tax — useful
@@ -1701,26 +1702,26 @@ final class SessionManager: ObservableObject {
     private func awaitStage1Ready(
         subscription: Stage1WSSubscriber,
         sessionId: String
-    ) async throws {
-        // Happy path — WS fires inside the deadline.
+    ) async {
+        // Happy path — WS fires.
         if await subscription.waitForReady() {
             return
         }
 
         // WS task ended without seeing the event (disconnect or never
-        // connected). Fall back to polling with a hard deadline.
+        // connected). Fall back to polling, unbounded.
         AuditLogger.logRaw(
             eventType: "stage1_ws_fallback_to_poll",
             sessionId: sessionId,
-            extra: ["fallback_deadline_ms": "\(Int(AppConfig.stage1WSFallbackPollTimeoutSeconds * 1000))"]
+            extra: [:]
         )
 
-        let deadline = Date().addingTimeInterval(AppConfig.stage1WSFallbackPollTimeoutSeconds)
-        while Date() < deadline {
+        while !Task.isCancelled {
             // 2s cadence — same order of magnitude as Stage 2's
             // existing poller. Faster polls just shove load at the
             // backend without speeding up the actual generation.
             try? await Task.sleep(nanoseconds: 2 * 1_000_000_000)
+            if Task.isCancelled { return }
             do {
                 _ = try await api.getStage1Note(sessionId: sessionId)
                 return
@@ -1728,13 +1729,12 @@ final class SessionManager: ObservableObject {
                 // Note not generated yet — keep polling.
                 continue
             } catch {
-                // Any other error — keep polling until the deadline;
-                // we don't want a single hiccup to fail the whole
-                // wait when the WS already failed.
+                // Any other error — keep polling. We don't want a
+                // single network hiccup to fail the whole wait when
+                // the WS has already failed.
                 continue
             }
         }
-        throw Stage1WaitError.fallbackPollDeadlineExceeded
     }
 
     /// Flip `processingStatus` to a reassurance string after

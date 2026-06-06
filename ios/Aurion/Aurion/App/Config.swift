@@ -42,14 +42,6 @@ enum AppConfig {
     /// the HTTP request itself.
     static let stage1UploadTimeoutSeconds: TimeInterval = 300
 
-    /// If the `/ws/notes/{id}` channel goes down (disconnect, never
-    /// connected, or the event never lands), we fall back to polling
-    /// `GET /notes/{id}/stage1` and give it up to 5 minutes. The MVP
-    /// success criteria (CLAUDE.md) target <30s end-to-end, but on rare
-    /// long sessions Stage 1 generation can exceed a minute — a 5-min
-    /// poll deadline is a safety net, not a typical case.
-    static let stage1WSFallbackPollTimeoutSeconds: TimeInterval = 300
-
     /// After this many seconds with no Stage 1 result we swap the
     /// processing-screen label to "Still working — long sessions take
     /// longer" to reassure the clinician the app isn't frozen. The
