@@ -1,18 +1,28 @@
 name: iOS — TestFlight
 
-# Compiles the iOS app on every push to main / PR that touches iOS code
-# (the green-check gate). The TestFlight UPLOAD runs ONLY on a manual
-# trigger (workflow_dispatch) — NOT on every merge — so a burst of merges
-# doesn't blow App Store Connect's daily build-upload quota (error 90382:
-# "Upload limit reached. Please wait 1 day").
+# Two jobs:
+#   • build      — runs on every PR + every push to main. Compiles +
+#                  tests on the iPhone 17 + iPad Pro simulators. This
+#                  is the green-check gate on PRs.
+#   • testflight — runs on every push to main + manual dispatch.
+#                  Archives, signs Distribution, uploads via altool,
+#                  distributes to the external "Pilot Physicians" group
+#                  via fastlane (internal team members auto-receive
+#                  whenever Apple processing flips to VALID).
 #
-# To ship a build to testers: GitHub → Actions → "iOS — TestFlight" →
-# Run workflow, or `gh workflow run "iOS — TestFlight"`. It builds + uploads
-# main HEAD, so one dispatch carries every change merged since the last upload.
+# Why testflight auto-runs on main: pre-2026-06-06 it was
+# workflow_dispatch-only with the rationale "Apple's daily build-upload
+# quota (error 90382)." In practice that quota is ~90 builds/day per
+# app — orders of magnitude above pilot cadence — and the manual gate
+# silently dropped fixes onto the floor between dispatches. The Marie
+# bug-bash on 2026-06-05 shipped six iOS PRs to main while Marie's
+# TestFlight stayed on a 7-hour-old build, with no one realising
+# until the bug bash was done.
 #
-# Gated on the App Store Connect API key secret being present. Until
-# the Apple Developer Program membership processes (~48h) and you've
-# generated the key, the upload step is skipped automatically.
+# Gated on the App Store Connect API key secret being present (the
+# `gate` step in the testflight job). Until the Apple Developer Program
+# membership processes (~48h) and you've generated the key, the upload
+# step is skipped automatically.
 
 on:
   push:
@@ -131,12 +141,25 @@ jobs:
                      -configuration Debug | xcpretty --test --color
 
   testflight:
-    # Manual-only (workflow_dispatch) so routine merges don't auto-upload
-    # and exhaust Apple's daily build-upload limit. Still gated on the App
-    # Store Connect API key secret — a graceful no-op until the key is wired.
+    # Auto-dispatches on every push to main + remains manually triggerable
+    # via workflow_dispatch. Pre-policy this job ran on workflow_dispatch
+    # ONLY, the rationale being Apple's daily upload quota (error 90382).
+    # In practice the quota is ~90 builds/day per app — orders of magnitude
+    # above any realistic pilot-period cadence — and the manual gate kept
+    # silently dropping fixes onto the floor between dispatches. On
+    # 2026-06-05 the Marie bug-bash shipped six iOS PRs to main while
+    # Marie's TestFlight stayed on a 7-hour-old build, with no one
+    # realising until the bug bash was done.
+    #
+    # Policy now: any push to main with iOS path changes → automatic
+    # TestFlight upload + distribution. Still gated on the App Store
+    # Connect API key secret (the `gate` step below) so a missing secret
+    # is a graceful no-op rather than a hard CI failure.
     runs-on: macos-26
     needs: build
-    if: github.event_name == 'workflow_dispatch'
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'push' && github.ref == 'refs/heads/main')
     env:
       APP_STORE_CONNECT_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
       APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
