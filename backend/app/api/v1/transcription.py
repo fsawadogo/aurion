@@ -28,6 +28,7 @@ from app.core.types import SessionState
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.note_gen.service import EmptyTranscriptError, generate_stage1_note
+from app.api.v1.websocket import notify_stage1_delivered
 from app.modules.phi_audit.service import scan_transcript_for_phi
 from app.modules.session.service import (
     InvalidTransitionError,
@@ -159,7 +160,7 @@ async def submit_transcription(
     # empty-transcript guard branch, which is a terminal failure (no audio
     # ever reached the backend; re-uploading wouldn't help).
     try:
-        await generate_stage1_note(
+        stage1_note = await generate_stage1_note(
             transcript=transcript,
             specialty=session.specialty,
             session_id=str(session_id),
@@ -231,6 +232,12 @@ async def submit_transcription(
         AuditEventType.STAGE1_DELIVERED,
         stage1_latency_ms=stage1_latency_ms,
     )
+
+    # Push the note to any connected WebSocket client so the iOS processing
+    # screen advances past 95% (#277). The pipeline is synchronous, so this
+    # fires right before the 200; notify_stage1_delivered self-swallows so a
+    # WS hiccup can never turn a delivered note into a failed request.
+    await notify_stage1_delivered(str(session_id), stage1_note)
 
     return TranscriptResponse(
         session_id=transcript.session_id,
