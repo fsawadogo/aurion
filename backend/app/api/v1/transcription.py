@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import get_owned_session_or_404, require_state, write_audit
+from app.api.v1.websocket import notify_stage1_delivered
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import PilotMetricsModel, TranscriptModel
@@ -28,7 +29,6 @@ from app.core.types import SessionState
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.note_gen.service import EmptyTranscriptError, generate_stage1_note
-from app.api.v1.websocket import notify_stage1_delivered
 from app.modules.phi_audit.service import scan_transcript_for_phi
 from app.modules.session.service import (
     InvalidTransitionError,
