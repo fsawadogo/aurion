@@ -159,7 +159,10 @@ export default function ActivityFeed() {
 /* ── Row ────────────────────────────────────────────────────────────────── */
 
 function ActivityRow({ event }: { event: AuditEvent }) {
-  const t = useTranslations("Dashboard.activity.event");
+  // Event display strings live in the shared `AuditEvents.*` namespace
+  // so /portal/audit (the full self-audit page) and this dashboard
+  // feed render the same human label for any given event type.
+  const t = useTranslations("AuditEvents");
   const tBtn = useTranslations("Dashboard.activity");
   const meta = visualFor(event.event_type);
 

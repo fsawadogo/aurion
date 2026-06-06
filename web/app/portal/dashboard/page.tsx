@@ -12,6 +12,7 @@ import ActivityFeed from "@/components/portal/ActivityFeed";
 import EmptyPanelState from "@/components/portal/EmptyPanelState";
 import PageHeader from "@/components/portal/PageHeader";
 import QuickActions from "@/components/portal/QuickActions";
+import RecentActivityTile from "@/components/portal/RecentActivityTile";
 import { listMySessions, listMyCustomTemplates } from "@/lib/portal-api";
 import {
   badgeVariantFor,
@@ -120,8 +121,11 @@ export default function PortalDashboardPage() {
             entry; bulk export + new template ride along. ── */}
       <QuickActions />
 
-      {/* ── Headline tiles — staggered slide-up on first paint. ── */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6 aurion-stagger">
+      {/* ── Headline tiles — staggered slide-up on first paint.
+            Fifth column on `lg+` is the self-audit "Recent activity"
+            tile (#162) — fetches /me/audit independently of the
+            session list above, so it owns its own loading state. ── */}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3 mb-6 aurion-stagger">
         <StatTile
           icon={<Clock className="h-5 w-5 text-amber-600" />}
           label={t("stats.awaitingReview")}
@@ -150,6 +154,7 @@ export default function PortalDashboardPage() {
           href="/portal/templates"
           loading={loading}
         />
+        <RecentActivityTile />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">

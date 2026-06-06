@@ -15,6 +15,7 @@
       "templates": "Templates",
       "macros": "Macros",
       "myProfile": "My Profile",
+      "myActivity": "My Activity",
       "aiPrompts": "AI Prompts",
       "featureFlags": "Feature Flags"
     },
@@ -98,22 +99,7 @@
       "retry": "Retry",
       "allCaughtUp": "All caught up",
       "allCaughtUpHint": "New activity will appear here as it happens.",
-      "loadFailed": "Couldn't load activity right now.",
-      "event": {
-        "stage1Delivered": "Stage 1 ready for review",
-        "stage1Failed": "Stage 1 generation failed",
-        "stage2Complete": "Visual enrichment complete",
-        "stage2Failed": "Visual enrichment failed",
-        "stage1Approved": "Approved Stage 1",
-        "noteExported": "Note exported",
-        "bulkNoteExport": "Bulk export delivered",
-        "conflictResolved": "Conflict resolved",
-        "emrSent": "EMR write-back delivered",
-        "emrFailed": "EMR write-back failed — needs retry",
-        "sessionPurged": "Session purged",
-        "sessionDiscarded": "Session discarded",
-        "generic": "Session updated"
-      }
+      "loadFailed": "Couldn't load activity right now."
     },
     "stateBadge": {
       "AWAITING_REVIEW": "Review",
@@ -129,6 +115,85 @@
     },
     "failedBanner": "{count, plural, one {# session failed to process and needs attention.} other {# sessions failed to process and need attention.}}",
     "seeList": "See list"
+  },
+  "AuditEvents": {
+    "stage1Delivered": "Stage 1 ready for review",
+    "stage1Failed": "Stage 1 generation failed",
+    "stage1Approved": "Approved Stage 1",
+    "stage2Complete": "Visual enrichment complete",
+    "stage2Failed": "Visual enrichment failed",
+    "noteExported": "Note exported",
+    "bulkNoteExport": "Bulk export delivered",
+    "conflictResolved": "Conflict resolved",
+    "emrSent": "EMR write-back delivered",
+    "emrFailed": "EMR write-back failed — needs retry",
+    "sessionPurged": "Session purged",
+    "sessionDiscarded": "Session discarded",
+    "sessionCreated": "Session created",
+    "consentConfirmed": "Consent confirmed",
+    "recordingStarted": "Recording started",
+    "sessionPaused": "Session paused",
+    "stage1Started": "Stage 1 started",
+    "stage2Started": "Stage 2 started",
+    "fullNoteDelivered": "Full note delivered",
+    "maskingConfirmed": "Masking confirmed",
+    "configChanged": "Config changed",
+    "macroCreated": "Macro created",
+    "macroUpdated": "Macro updated",
+    "macroDeleted": "Macro deleted",
+    "patientSummaryGenerated": "Patient summary generated",
+    "patientSummaryEdited": "Patient summary edited",
+    "ordersExtracted": "Orders extracted",
+    "orderConfirmed": "Order confirmed",
+    "orderEdited": "Order edited",
+    "orderCancelled": "Order cancelled",
+    "codingSuggestionsExtracted": "Coding suggestions extracted",
+    "codingSuggestionConfirmed": "Coding suggestion confirmed",
+    "codingSuggestionRejected": "Coding suggestion rejected",
+    "codingSuggestionEdited": "Coding suggestion edited",
+    "externalReferenceIdSet": "Patient identifier set",
+    "livePreviewGenerated": "Live preview generated",
+    "generic": "Session updated"
+  },
+  "Audit": {
+    "eyebrow": "Clinician portal",
+    "title": "My Activity",
+    "description": "Audit-trail entries the system has recorded for your sessions. Filter and export to review what happened, when.",
+    "refresh": "Refresh",
+    "exportCsv": "Export CSV",
+    "exporting": "Preparing…",
+    "loadError": "Couldn't load your audit log right now.",
+    "noMatches": "No audit events match the current filters.",
+    "noMatchesHint": "Try widening the date range or clearing the event-type filter.",
+    "filters": {
+      "label": "Filters",
+      "sessionId": "Session",
+      "sessionIdPlaceholder": "Session ID…",
+      "dateFrom": "From",
+      "dateTo": "To",
+      "eventType": "Event type",
+      "allEvents": "All events",
+      "clear": "Clear",
+      "clearAria": "Clear all filters"
+    },
+    "table": {
+      "timestamp": "When",
+      "session": "Session",
+      "event": "Event",
+      "details": "Details",
+      "openSession": "Open session"
+    },
+    "pagination": {
+      "summary": "Page {page} of {totalPages} · {total} events",
+      "previous": "Previous",
+      "next": "Next"
+    },
+    "noDetails": "—"
+  },
+  "MyActivity": {
+    "tileLabel": "Recent activity",
+    "tileHint": "{count, plural, one {# event} other {# events}} in the last 7 days",
+    "tileEmpty": "No recent activity"
   },
   "Notifications": {
     "ariaLabel": "Notifications ({count} unread)",
