@@ -86,9 +86,11 @@ struct DashboardView: View {
 
     private var todayCount: Int {
         let calendar = Calendar.current
-        let formatter = ISO8601DateFormatter()
+        // Shared fractional-tolerant parser (Theme.parseISODate). A bare
+        // ISO8601DateFormatter rejects the backend's fractional-seconds
+        // timestamps, which made this count always 0 (#279).
         return recentSessions.filter { s in
-            guard let d = formatter.date(from: s.createdAt) else { return false }
+            guard let d = parseISODate(s.createdAt) else { return false }
             return calendar.isDateInToday(d)
         }.count
     }

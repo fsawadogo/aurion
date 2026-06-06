@@ -28,8 +28,12 @@ Files: `ios/Aurion/Aurion/App/Theme.swift`, `App/DashboardView.swift`, `Session/
 - **iOS UI tasks only — mobile-ios-design**: n/a (no UI/layout change; pure data-parse fix).
 
 ## Out of scope
-- Auditing every `ISO8601DateFormatter()` in the codebase beyond these three sites (note any others found as a follow-up, don't fix here).
+- `LivePreviewOverlay.swift` and `EmrWriteBackCard.swift` each carry their own *correct* fractional+plain dual-formatter pair — not broken, so left as a deferred DRY cleanup (collapse onto `parseISODate`) rather than a risk-refactor here.
+- `AuditLogger*.swift` use `ISO8601DateFormatter().string(from:)` to *write* timestamps (Date→string), not parse — not the bug class.
 - Changing the backend timestamp format.
+
+## Scope note (updated during implement)
+Grep for `ISO8601DateFormatter()` surfaced a 4th genuine instance of the same bug: `SessionNoteView.displayDate` parses `session.createdAt` with a bare formatter (note-detail header falls back to the raw ISO string on fractional timestamps). Same one-line fix → included in this PR.
 
 ## Test plan (executable)
 1. `xcodebuild test -scheme Aurion -only-testing:AurionTests/ParseISODateTests` (CI runs the full matrix).

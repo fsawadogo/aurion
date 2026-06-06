@@ -411,8 +411,10 @@ struct SessionNoteView: View {
     }
 
     private var displayDate: String {
-        let formatter = ISO8601DateFormatter()
-        if let date = formatter.date(from: session.createdAt) {
+        // Shared fractional-tolerant parser (Theme.parseISODate); a bare
+        // ISO8601DateFormatter would reject the backend's fractional-seconds
+        // timestamps and fall back to the raw ISO string (#279).
+        if let date = parseISODate(session.createdAt) {
             let display = DateFormatter()
             display.dateStyle = .medium
             display.timeStyle = .short

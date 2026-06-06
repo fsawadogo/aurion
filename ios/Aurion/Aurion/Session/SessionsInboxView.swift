@@ -53,21 +53,12 @@ struct SessionsInboxView: View {
         }
     }
 
-    // ISO-8601 parsers — some `created_at` values carry fractional seconds
-    // (e.g. "...:02.75Z"), which the default formatter rejects, so try the
-    // fractional variant first and fall back to plain.
-    private static let isoFractional: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-    private static let isoPlain = ISO8601DateFormatter()
-
     private func inDateRange(_ s: SessionResponse) -> Bool {
         guard let since = dateRange.since else { return true }
-        // Unparseable timestamp → don't hide the row.
-        guard let created = Self.isoFractional.date(from: s.createdAt)
-            ?? Self.isoPlain.date(from: s.createdAt) else { return true }
+        // Unparseable timestamp → don't hide the row. Uses the shared
+        // fractional-tolerant parser (Theme.parseISODate) — same logic the
+        // dashboard count and relative-time formatter share (#279).
+        guard let created = parseISODate(s.createdAt) else { return true }
         return created >= since
     }
 

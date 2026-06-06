@@ -931,7 +931,7 @@ func formatISODate(_ iso: String) -> String {
 /// language, not necessarily the device's) on every call so the in-app
 /// language picker takes effect immediately.
 func formatRelativeTime(_ iso: String) -> String {
-    guard let date = _parseISODate(iso) else { return iso }
+    guard let date = parseISODate(iso) else { return iso }
     let elapsed = Date().timeIntervalSince(date)
     // The ~minute window where "Just now" reads more naturally than
     // "Today at 2:26 AM" for a moment that just happened.
@@ -944,7 +944,13 @@ func formatRelativeTime(_ iso: String) -> String {
 /// the LLM-intelligence batch — timestamps now look like
 /// `2026-05-31T02:26:51.629Z`), then fall back to the plain parser
 /// for legacy entries. Returns nil if neither matches.
-private func _parseISODate(_ iso: String) -> Date? {
+///
+/// Module-internal so every screen that parses a backend `created_at`
+/// shares one fractional-tolerant implementation. A bare
+/// `ISO8601DateFormatter()` rejects fractional seconds and silently
+/// drops every modern timestamp (the bug behind #279) — always route
+/// backend ISO strings through here.
+func parseISODate(_ iso: String) -> Date? {
     if let d = _isoFractionalFormatter.date(from: iso) { return d }
     return _isoPlainFormatter.date(from: iso)
 }
