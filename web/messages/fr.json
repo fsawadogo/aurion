@@ -15,6 +15,7 @@
       "templates": "Modèles",
       "macros": "Macros",
       "myProfile": "Mon profil",
+      "myActivity": "Mon activité",
       "aiPrompts": "Invites IA",
       "featureFlags": "Indicateurs"
     },
@@ -98,22 +99,7 @@
       "retry": "Réessayer",
       "allCaughtUp": "Tout est à jour",
       "allCaughtUpHint": "Les nouvelles activités apparaîtront ici en temps réel.",
-      "loadFailed": "Impossible de charger l’activité pour le moment.",
-      "event": {
-        "stage1Delivered": "Étape 1 prête à réviser",
-        "stage1Failed": "Échec de la génération à l’étape 1",
-        "stage2Complete": "Enrichissement visuel terminé",
-        "stage2Failed": "Échec de l’enrichissement visuel",
-        "stage1Approved": "Étape 1 approuvée",
-        "noteExported": "Note exportée",
-        "bulkNoteExport": "Exportation groupée livrée",
-        "conflictResolved": "Conflit résolu",
-        "emrSent": "Écriture EMR livrée",
-        "emrFailed": "Échec de l’écriture EMR — à réessayer",
-        "sessionPurged": "Session purgée",
-        "sessionDiscarded": "Session supprimée",
-        "generic": "Session mise à jour"
-      }
+      "loadFailed": "Impossible de charger l’activité pour le moment."
     },
     "stateBadge": {
       "AWAITING_REVIEW": "À réviser",
@@ -129,6 +115,85 @@
     },
     "failedBanner": "{count, plural, one {# session a échoué et nécessite votre attention.} other {# sessions ont échoué et nécessitent votre attention.}}",
     "seeList": "Voir la liste"
+  },
+  "AuditEvents": {
+    "stage1Delivered": "Étape 1 prête à réviser",
+    "stage1Failed": "Échec de la génération à l’étape 1",
+    "stage1Approved": "Étape 1 approuvée",
+    "stage2Complete": "Enrichissement visuel terminé",
+    "stage2Failed": "Échec de l’enrichissement visuel",
+    "noteExported": "Note exportée",
+    "bulkNoteExport": "Exportation groupée livrée",
+    "conflictResolved": "Conflit résolu",
+    "emrSent": "Écriture EMR livrée",
+    "emrFailed": "Échec de l’écriture EMR — à réessayer",
+    "sessionPurged": "Session purgée",
+    "sessionDiscarded": "Session supprimée",
+    "sessionCreated": "Session créée",
+    "consentConfirmed": "Consentement confirmé",
+    "recordingStarted": "Enregistrement démarré",
+    "sessionPaused": "Session mise en pause",
+    "stage1Started": "Étape 1 démarrée",
+    "stage2Started": "Étape 2 démarrée",
+    "fullNoteDelivered": "Note complète livrée",
+    "maskingConfirmed": "Masquage confirmé",
+    "configChanged": "Configuration modifiée",
+    "macroCreated": "Macro créée",
+    "macroUpdated": "Macro modifiée",
+    "macroDeleted": "Macro supprimée",
+    "patientSummaryGenerated": "Sommaire patient généré",
+    "patientSummaryEdited": "Sommaire patient modifié",
+    "ordersExtracted": "Ordonnances extraites",
+    "orderConfirmed": "Ordonnance confirmée",
+    "orderEdited": "Ordonnance modifiée",
+    "orderCancelled": "Ordonnance annulée",
+    "codingSuggestionsExtracted": "Suggestions de codes extraites",
+    "codingSuggestionConfirmed": "Suggestion de code confirmée",
+    "codingSuggestionRejected": "Suggestion de code rejetée",
+    "codingSuggestionEdited": "Suggestion de code modifiée",
+    "externalReferenceIdSet": "Identifiant patient défini",
+    "livePreviewGenerated": "Aperçu en direct généré",
+    "generic": "Session mise à jour"
+  },
+  "Audit": {
+    "eyebrow": "Portail clinicien",
+    "title": "Mon activité",
+    "description": "Entrées du journal d’audit que le système a enregistrées pour vos sessions. Filtrez et exportez pour vérifier ce qui s’est passé et quand.",
+    "refresh": "Actualiser",
+    "exportCsv": "Exporter CSV",
+    "exporting": "Préparation…",
+    "loadError": "Impossible de charger votre journal d’audit pour le moment.",
+    "noMatches": "Aucun événement d’audit ne correspond aux filtres actuels.",
+    "noMatchesHint": "Essayez d’élargir la plage de dates ou de retirer le filtre de type d’événement.",
+    "filters": {
+      "label": "Filtres",
+      "sessionId": "Session",
+      "sessionIdPlaceholder": "ID de session…",
+      "dateFrom": "Du",
+      "dateTo": "Au",
+      "eventType": "Type d’événement",
+      "allEvents": "Tous les événements",
+      "clear": "Effacer",
+      "clearAria": "Effacer tous les filtres"
+    },
+    "table": {
+      "timestamp": "Quand",
+      "session": "Session",
+      "event": "Événement",
+      "details": "Détails",
+      "openSession": "Ouvrir la session"
+    },
+    "pagination": {
+      "summary": "Page {page} sur {totalPages} · {total} événements",
+      "previous": "Précédent",
+      "next": "Suivant"
+    },
+    "noDetails": "—"
+  },
+  "MyActivity": {
+    "tileLabel": "Activité récente",
+    "tileHint": "{count, plural, one {# événement} other {# événements}} au cours des 7 derniers jours",
+    "tileEmpty": "Aucune activité récente"
   },
   "Notifications": {
     "ariaLabel": "Notifications ({count} non lues)",

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  Activity,
   BarChart3,
   ChevronLeft,
   ChevronRight,
@@ -67,6 +68,12 @@ const navigation: {
   { tKey: "templates",  href: "/portal/templates",  icon: LayoutGrid, roles: ["CLINICIAN", "ADMIN"] },
   { tKey: "macros",     href: "/portal/macros",     icon: Zap,       roles: ["CLINICIAN", "ADMIN"] },
   { tKey: "myProfile",  href: "/portal/profile",    icon: CircleUser, roles: ["CLINICIAN", "ADMIN"] },
+  // Self-audit log (#162) — clinician-side mirror of /audit. Sits
+  // next to My Profile because both are personal-account surfaces.
+  // ADMIN previews the page but the backend /me/audit endpoint
+  // 403s admin (CLINICIAN-only at the dependency layer), so admins
+  // see an empty state — the canonical full audit is /audit.
+  { tKey: "myActivity", href: "/portal/audit",      icon: Activity,  roles: ["CLINICIAN", "ADMIN"] },
   // AI Prompts Transparency — read-only catalog of every LLM system
   // prompt the encounter pipeline uses. Sits at the bottom of the
   // clinician nav because it's a reference / audit surface, not part
