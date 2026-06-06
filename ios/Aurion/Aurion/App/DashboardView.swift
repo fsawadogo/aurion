@@ -112,9 +112,27 @@ struct DashboardView: View {
     }
 
     private var quickStartCards: [(specialty: String, type: String, label: String, icon: String)] {
-        let profile = appState.physicianProfile
-        let specialty = profile?.primarySpecialty ?? "general"
-        let types = profile?.consultationTypes ?? ["new_patient", "follow_up"]
+        Self.quickStartCards(for: appState.physicianProfile)
+    }
+
+    /// Derive the Quick Start cards from the physician profile.
+    ///
+    /// Returns `[]` when `profile` is nil — the caller renders a skeleton
+    /// instead of fabricating GENERAL defaults that would start a
+    /// "general"-template session for the wrong specialty (#278). When a
+    /// profile exists but its `consultationTypes` are empty, fall back to
+    /// the two default *types* but keep the profile's real specialty —
+    /// never "general".
+    ///
+    /// Pure + static so it's unit-testable without hosting the view.
+    static func quickStartCards(
+        for profile: PhysicianProfileResponse?
+    ) -> [(specialty: String, type: String, label: String, icon: String)] {
+        guard let profile else { return [] }
+        let specialty = profile.primarySpecialty
+        let types = profile.consultationTypes.isEmpty
+            ? ["new_patient", "follow_up"]
+            : profile.consultationTypes
         let icon: String = {
             switch specialty {
             case "orthopedic_surgery": return "figure.walk"
@@ -175,8 +193,8 @@ struct DashboardView: View {
             .contentMargins(.bottom, 24, for: .scrollContent)
             .background(Color.aurionBackground)
             .navigationBarHidden(true)
-            .task { await loadRecentSessions() }
-            .refreshable { await loadRecentSessions() }
+            .task { await loadDashboardData() }
+            .refreshable { await loadDashboardData() }
             .onAppear {
                 // Defer the staircase trigger one runloop so the initial
                 // paint is the pre-reveal state — gives the springs a delta.
@@ -391,6 +409,13 @@ struct DashboardView: View {
     private var quickStartSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: L("dashboard.quickStart"))
+            // While the profile is still loading (nil), show shimmer
+            // placeholders rather than GENERAL fallback cards — tapping a
+            // wrong-specialty card would start a "general"-template session
+            // for an ortho/plastics surgeon (#278).
+            if appState.physicianProfile == nil {
+                quickStartSkeleton
+            } else {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 ForEach(Array(quickStartCards.enumerated()), id: \.element.type) { idx, card in
                     Button {
@@ -437,10 +462,33 @@ struct DashboardView: View {
                     .accessibilityHint(L("a11y.startEncounterHint"))
                 }
             }
+            }
             if let error = sessionManager.error {
                 ErrorBanner(error, onDismiss: { sessionManager.error = nil })
             }
         }
+    }
+
+    /// Shimmer placeholder shown while the physician profile is loading
+    /// (nil). Mirrors the 2-up Quick Start grid so the layout doesn't jump
+    /// when the real cards replace it. Renders no GENERAL fallback (#278).
+    private var quickStartSkeleton: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            ForEach(0..<2, id: \.self) { _ in
+                AurionCard(padding: 14) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        AurionSkeleton(cornerRadius: AurionRadius.sm)
+                            .frame(width: 36, height: 36)
+                        Spacer(minLength: 0)
+                        AurionSkeleton().frame(width: 70, height: 10)
+                        AurionSkeleton().frame(width: 110, height: 14)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
+                }
+            }
+        }
+        .accessibilityLabel(L("dashboard.quickStart"))
+        .accessibilityHint(L("common.loading"))
     }
 
     // MARK: - Recent Sessions (compact list inside one card)
@@ -846,6 +894,17 @@ struct DashboardView: View {
             captureMode: selectedCaptureMode
         )
         Task { await sessionManager.startNewSession(request) }
+    }
+
+    /// Dashboard appear / pull-to-refresh entry point. Self-heals a missing
+    /// profile (e.g. if the launch-time fetch in `AurionApp` failed) so the
+    /// Quick Start grid recovers its real specialty + visit types instead of
+    /// staying on the skeleton/GENERAL fallback (#278), then loads sessions.
+    private func loadDashboardData() async {
+        if appState.physicianProfile == nil {
+            appState.physicianProfile = try? await APIClient.shared.getProfile()
+        }
+        await loadRecentSessions()
     }
 
     private func loadRecentSessions() async {

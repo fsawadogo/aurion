@@ -536,6 +536,7 @@
 "common.done" = "Done";
 "common.cancel" = "Cancel";
 "common.retry" = "Retry";
+"common.loading" = "Loading\U2026";
 "common.dismiss" = "Dismiss";
 "common.skip" = "Skip";
 
