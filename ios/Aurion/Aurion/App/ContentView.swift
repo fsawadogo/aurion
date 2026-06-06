@@ -482,12 +482,27 @@ struct LoginView: View {
                     }
 
                     if biometricsAvailable {
-                        Toggle(isOn: $rememberMe) {
+                        // Marie (2026-06-06): at larger Dynamic Type sizes
+                        // the SwiftUI `Toggle` truncated the label to
+                        // "Remember me wit…" because the trailing switch
+                        // control has a fixed intrinsic width and the
+                        // label only got whatever was left. Splitting
+                        // into an explicit HStack with the label allowed
+                        // to wrap vertically (`fixedSize(vertical:true)`)
+                        // lets the full "Remember me with Face ID"
+                        // string stay visible at any Text Size setting,
+                        // including AX5. Pattern mirrors PR #268's
+                        // voice-enrollment fix.
+                        HStack(alignment: .center, spacing: 12) {
                             Text(L("login.rememberMeWith", BiometricAuth.typeLabel))
                                 .aurionFont(13, relativeTo: .footnote)
                                 .foregroundColor(.white.opacity(0.85))
+                                .fixedSize(horizontal: false, vertical: true)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                            Toggle("", isOn: $rememberMe)
+                                .labelsHidden()
+                                .tint(.aurionGold)
                         }
-                        .tint(.aurionGold)
                     }
 
                     Button {
