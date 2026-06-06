@@ -14,12 +14,18 @@
  * under `.well-known/` and hands them straight to S3 (which then
  * 301s on extensionless paths to add a trailing slash, breaking
  * Apple's swcd), we ALSO ship the identical payload at a non-hidden
- * path:
- *   web/public/aurion-aasa-payload
+ * path WITH AN EXPLICIT `.json` EXTENSION:
+ *   web/public/aurion-aasa-payload.json
  * An Amplify custom_rule rewrites
- *   /.well-known/apple-app-site-association  →  /aurion-aasa-payload
- * with status 200. Header rules still match on the source URL, so
- * Content-Type: application/json applies untouched. See
+ *   /.well-known/apple-app-site-association  →  /aurion-aasa-payload.json
+ * with status 200. PR #246 first tried the non-hidden path WITHOUT
+ * the extension; Amplify still 301'd it because its CDN treats every
+ * extensionless URL as a directory-style route (Next.js' trailingSlash:
+ * true) and adds the trailing slash BEFORE evaluating custom_rules.
+ * Adding `.json` makes Amplify recognise the URL as a static file and
+ * skip the trailing-slash redirect. Header rules still match on the
+ * source URL, so Content-Type: application/json applies untouched
+ * (and the backing file already ends in .json anyway). See
  * infrastructure/amplify.tf for the full chain-of-evidence comment.
  *
  * iOS' swcd daemon validates the file's structure during the
@@ -43,7 +49,7 @@ const AASA_PATH = join(
 const NON_HIDDEN_AASA_PATH = join(
   process.cwd(),
   "public",
-  "aurion-aasa-payload",
+  "aurion-aasa-payload.json",
 );
 
 const EXPECTED_APP_ID = "2W2Z75Q5ZA.com.aurionclinical.physician";
