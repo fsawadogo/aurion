@@ -260,9 +260,14 @@ struct PhysicianProfileSetupView: View {
                 Text(title)
                     .aurionFont(16, weight: .semibold, relativeTo: .body)
                     .foregroundColor(.aurionTextPrimary)
+                // .fixedSize(vertical) lets the subtitle wrap to as many
+                // lines as it needs instead of collapsing to a 1-char
+                // column when the toggle's intrinsic width grows under
+                // Dynamic Type. Matches the prefsStepperRow fix.
                 Text(subtitle)
                     .aurionFont(13, relativeTo: .footnote)
                     .foregroundColor(.aurionTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
             }
             Spacer(minLength: 8)
             Toggle("", isOn: on)
@@ -278,34 +283,49 @@ struct PhysicianProfileSetupView: View {
         .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
     }
 
+    /// Stepper row — VStack so the control gets its own line below
+    /// the title/subtitle (same shape as ``prefsPickerRow``). Earlier
+    /// versions inlined the SwiftUI ``Stepper`` next to a `Spacer` in
+    /// the HStack with ``.fixedSize()``; under Dynamic Type at larger
+    /// sizes (`.aurionFont` is Dynamic-Type-aware) the stepper grew
+    /// horizontally, squeezed the subtitle's frame to a near-zero
+    /// column, and the text wrapped one character per line — Marie
+    /// reported it on the Step 6/6 onboarding screen on 2026-06-05.
+    /// Two-row layout makes the subtitle responsive to whatever
+    /// width remains after the icon, with no horizontal competition
+    /// against the stepper control.
     private func prefsStepperRow(icon: String, title: String, subtitle: String, value: Binding<Int>, range: ClosedRange<Int>, unit: String) -> some View {
-        HStack(spacing: 14) {
-            Image(systemName: icon)
-                .font(.system(size: 18, weight: .medium))
-                .foregroundColor(.aurionGoldDark)
-                .frame(width: 28)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(title)
-                    .aurionFont(16, weight: .semibold, relativeTo: .body)
-                    .foregroundColor(.aurionTextPrimary)
-                Text(subtitle)
-                    .aurionFont(13, relativeTo: .footnote)
-                    .foregroundColor(.aurionTextSecondary)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 14) {
+                Image(systemName: icon)
+                    .font(.system(size: 18, weight: .medium))
+                    .foregroundColor(.aurionGoldDark)
+                    .frame(width: 28)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(title)
+                        .aurionFont(16, weight: .semibold, relativeTo: .body)
+                        .foregroundColor(.aurionTextPrimary)
+                    Text(subtitle)
+                        .aurionFont(13, relativeTo: .footnote)
+                        .foregroundColor(.aurionTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 0)
             }
-            Spacer(minLength: 8)
-            Stepper(value: value, in: range) {
+            HStack {
                 Text("\(value.wrappedValue) \(unit)")
-                    .aurionFont(15, weight: .medium, relativeTo: .subheadline)
+                    .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextPrimary)
                     .monospacedDigit()
+                Spacer()
+                Stepper(value: value, in: range) {
+                    Text("\(value.wrappedValue) \(unit)")
+                        .aurionFont(15, weight: .medium, relativeTo: .subheadline)
+                        .foregroundColor(.aurionTextPrimary)
+                        .monospacedDigit()
+                }
+                .labelsHidden()
             }
-            .labelsHidden()
-            .fixedSize()
-            Text("\(value.wrappedValue) \(unit)")
-                .aurionFont(14, weight: .medium, relativeTo: .subheadline)
-                .foregroundColor(.aurionTextSecondary)
-                .monospacedDigit()
-                .frame(minWidth: 60, alignment: .trailing)
         }
         .padding(16)
         .background(Color.aurionCardBackground)
