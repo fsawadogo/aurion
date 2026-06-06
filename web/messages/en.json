@@ -531,10 +531,28 @@
       "hospital": "Hospital"
     },
     "consultationTypes": {
+      "label": "Consultation types",
       "new_patient": "New Patient",
       "follow_up": "Follow-up",
       "pre_op": "Pre-op",
-      "post_op": "Post-op"
+      "post_op": "Post-op",
+      "custom": {
+        "addCustom": "Add custom type",
+        "add": "Add",
+        "cancel": "Cancel",
+        "placeholder": "e.g. LL new pt, breast visit",
+        "inputLabel": "Custom consultation type name",
+        "delete": "Remove \"{name}\"",
+        "limit": "20 custom types maximum.",
+        "validation": {
+          "empty": "Type a label first.",
+          "tooLong": "Keep it under 60 characters.",
+          "ssn": "That looks like a Social Security number.",
+          "email": "That looks like an email address.",
+          "name": "Avoid patient names — use a short label like \"LL fu\".",
+          "duplicate": "Already on the list."
+        }
+      }
     },
     "saveChanges": "Save changes",
     "discard": "Discard",
