@@ -30,6 +30,27 @@ enum AuditEvent: String {
     case appCrashDetected = "app_crash_detected"
     case audioQueuedOffline = "audio_queued_offline"
     case offlineUploadSynced = "offline_upload_synced"
+    // MARK: - Audio upload chain (lane-ios/audio-upload-resilience)
+    //
+    // Granular events so we can tell *where* an upload failed from the
+    // backend audit trail alone. Before this lane, a failed upload showed
+    // up as "session_created → consent_confirmed → recording_started"
+    // and then silence — we couldn't distinguish "recorder buffer wasn't
+    // finalized" from "network blip mid-POST" from "401". The new events
+    // (and their `error_category` payload) make each failure mode legible
+    // server-side.
+    //
+    // PHI-safety: only session_id, byte counts, attempt numbers, elapsed
+    // ms, and a fixed-set `error_category` enum string cross the wire.
+    // NEVER `error.localizedDescription` — URLError messages can echo
+    // the request URL, which carries the session id.
+    case recordingStopInitiated = "recording_stop_initiated"
+    case recordingFileFinalized = "recording_file_finalized"
+    case recordingFinalizationFailed = "recording_finalization_failed"
+    case audioUploadStarted = "audio_upload_started"
+    case audioUploadProgress = "audio_upload_progress"
+    case audioUploadSucceeded = "audio_upload_succeeded"
+    case audioUploadFailed = "audio_upload_failed"
 }
 
 struct AuditLogger {

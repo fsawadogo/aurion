@@ -299,11 +299,30 @@
    spuriously on long sessions. Keep timeout-neutral. */
 "processing.stillWorkingLong" = "Still working \U2014 long sessions take longer\U2026";
 "processing.noteReady" = "Note ready for review";
+/* lane-ios/audio-upload-resilience — shown while the audio bytes are
+   in flight to the backend (post-finalize, pre-Stage 1 generation).
+   Pre-#243 the status flipped straight to "Generating note\U2026" which
+   hid network failures behind a misleading label. */
+"processing.uploadingAudio" = "Uploading audio\U2026";
 /* Retry prompt copy when Stage 1 actually fails on the backend
    (provider error, server 5xx). The 30s wall-clock case no longer
    exists — wording stays generic so it covers any backend failure. */
 "processing.stage1Failed.title" = "Couldn\U2019t generate the note";
 "processing.stage1Failed.detail" = "The Stage 1 pipeline didn\U2019t complete. Tap Retry to try again \U2014 your recording is still in memory.";
+/* ── Audio upload failure detail strings (lane-ios/audio-upload-resilience).
+   Surfaced as the `detail` on the Stage1RetryPrompt when the upload chain
+   itself fails (vs. backend Stage 1 generation failing). The title stays
+   `processing.stage1Failed.title` — clinicians don\U2019t need to know
+   whether the bytes never left the phone or the server rejected them,
+   only how to recover. Wording mirrors the AudioUploadFailureKind cases. */
+"audio_upload_failed_network" = "Audio upload failed \U2014 check connection and retry";
+"audio_upload_failed_file" = "Audio file couldn\U2019t be saved \U2014 please retry";
+"audio_upload_failed_too_short" = "Recording was too short to process";
+"audio_upload_failed_server" = "Server error \U2014 your recording is safe. Retry?";
+/* Terminal state: the on-disk WAV that the retry path would have re-uploaded
+   has vanished (force-quit + OS sandbox cleanup). No upload is possible \U2014
+   the user has to start a new recording. */
+"audio_upload_recording_lost" = "Recording lost \U2014 please re-record.";
 
 /* ── Login ─────────────────────────────────────────────── */
 "login.appName" = "Aurion";

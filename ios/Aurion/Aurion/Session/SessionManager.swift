@@ -37,13 +37,22 @@ enum Stage1Status: Equatable {
     /// Post-Bug-A: copy is timeout-neutral so it covers any backend
     /// failure mode (provider error, 5xx, fallback-poll deadline).
     /// Pulled from Localizable so EN/FR parity is enforced.
+    ///
+    /// lane-ios/audio-upload-resilience: the `reason` payload on
+    /// `.failed` now carries a pre-localized detail string (one of the
+    /// `audio_upload_failed_*` keys from Localizable). Callers used to
+    /// drop it in favour of the generic stage1Failed.detail; we surface
+    /// it directly so "couldn't reach the server" and "audio file
+    /// couldn't be saved" land different copy on the same retry
+    /// prompt. Empty reason falls back to the generic message — keeps
+    /// the existing "Stage 1 backend failed" path intact.
     var retryPrompt: (title: String, detail: String)? {
         switch self {
-        case .failed:
-            return (
-                L("processing.stage1Failed.title"),
-                L("processing.stage1Failed.detail")
-            )
+        case .failed(let reason):
+            let detail = reason.isEmpty
+                ? L("processing.stage1Failed.detail")
+                : reason
+            return (L("processing.stage1Failed.title"), detail)
         case .idle, .uploading, .generating, .stillWorkingLong, .ready, .queuedOffline:
             return nil
         }
@@ -54,15 +63,21 @@ enum Stage1Status: Equatable {
 /// for the backend's `stage1_delivered` push and signals via `waitForReady`.
 ///
 /// Why a private helper instead of reusing `WebSocketClient`:
-///   * `WebSocketClient` tries to decode every inbound frame as a bare
-///     `NoteResponse`, but Stage 1 / Stage 2 frames arrive wrapped in
-///     a `{"event": ..., "session_id": ..., "note": {...}}` envelope.
-///     Decoding the whole envelope as `NoteResponse` silently fails, so
-///     the client's `latestNote` never publishes a Stage 1 result.
-///   * NoteReviewView already pulls from REST after Stage 2 lands, so
-///     `WebSocketClient`'s broken-on-Stage1 path is currently unused
-///     in practice. Fixing it lives outside this lane's file scope
-///     (Network/ is owned by the audio-upload-resilience lane).
+///   * Stage 1 needs a one-shot AWAIT semantic — open the channel
+///     BEFORE the upload POST so the push can't race, suspend on the
+///     event, return a Bool the caller can use to fall back to polling.
+///     `WebSocketClient` is a longer-lived `@StateObject` driving SwiftUI
+///     state on `NoteReviewView`; its `latestNote` publishing model
+///     doesn't fit a one-shot await without contortions.
+///   * Keeping the wait helper local also means a future WS schema
+///     change can be absorbed in one place without coordinating with
+///     the broader Network/ surface.
+///
+/// lane-ios/audio-upload-resilience (PR #243) introduced
+/// `WebSocketEvent` in `WebSocketClient.swift` — the broken-on-Stage1
+/// path on `WebSocketClient.latestNote` is fixed there. This helper
+/// continues to do its own envelope read for the one-shot semantic;
+/// the two paths share the same backend payload shape.
 ///
 /// This subscriber decodes the envelope, checks for `event ==
 /// "stage1_delivered"`, and resolves a continuation so the SessionManager
@@ -255,6 +270,36 @@ final class SessionManager: ObservableObject {
     /// buffer (warm-up is typically ~500ms but can exceed 1s on cold
     /// AVAudioSession activation). Reset on stop.
     @Published private(set) var recordingStartedAt: Date?
+
+    /// On-disk WAV for the current session, persisted from the
+    /// CaptureManager's in-memory PCM at the top of `submitAudio` so the
+    /// upload chain (`AudioUploadCoordinator`) has a stable byte source
+    /// it can retry from across:
+    ///
+    ///   * coordinator-internal exponential backoff (3 attempts inside
+    ///     one `submitAudio` call), and
+    ///   * the clinician-driven Retry button (`retryStage1` re-runs the
+    ///     upload from the SAME file — Bug 2: previously Retry no-op'd
+    ///     because the upload had never reached the backend and there
+    ///     was no on-disk source to replay from).
+    ///
+    /// Lifecycle:
+    ///   1. Set inside `submitAudio` after `persistRecordedAudio` lands
+    ///      bytes to disk and emits `recording_file_finalized`.
+    ///   2. Read by both the initial upload and any Retry attempts.
+    ///   3. Cleared + file deleted by `clearRecordedAudioFile` once the
+    ///      backend ACKs the upload (the transcription endpoint returns
+    ///      202 after the bytes are in S3; the backend's cleanup module
+    ///      owns the post-transcription deletion).
+    ///   4. ALSO cleared by `endSession` / `clearCapturedArtifacts` so a
+    ///      torn-down session doesn't leak its raw audio across boots.
+    ///
+    /// Note this URL lives under Application Support (NOT the temporary
+    /// directory) so an iOS sandbox cleanup doesn't yank it out from
+    /// under the retry path. The OfflineUploadQueue uses the same
+    /// directory for the same reason — both audio paths share the
+    /// "raw clinical bytes never under iOS's discretionary sweep" rule.
+    private var recordedAudioFileURL: URL?
 
     /// Frames whose on-device masking failed during `submitFrames` /
     /// `submitScreenFrames`. Per CLAUDE.md the pipeline is fail-closed: these
@@ -498,6 +543,14 @@ final class SessionManager: ObservableObject {
 
     func stopRecording() async {
         guard let session else { return }
+        // Granular audit (lane-ios/audio-upload-resilience). Fires the
+        // instant the clinician taps Stop, BEFORE we touch the capture
+        // sources. Pairs with `recording_file_finalized` later — the
+        // delta between the two is "how long did the in-memory PCM take
+        // to settle." Before this event, Marie's 3:30min session went
+        // silent between `recording_started` and `stage1_started` and
+        // we couldn't tell whether the stop intent landed or not.
+        AuditLogger.log(event: .recordingStopInitiated, sessionId: session.id)
         // Clear the start timestamp so a future Resume → Stop pair re-arms
         // the minimum-duration guard from scratch.
         recordingStartedAt = nil
@@ -561,14 +614,29 @@ final class SessionManager: ObservableObject {
     /// Persist the recorded audio to the on-device upload queue for deferred
     /// sync. Called when there's no connectivity at submit time, or when the
     /// interactive upload fails offline mid-flight. Frees the in-memory PCM
-    /// once the WAV is safely on disk.
+    /// (and any upload-staging WAV) once the offline queue has accepted the
+    /// bytes.
+    ///
+    /// lane-ios/audio-upload-resilience: prefer the on-disk staged WAV
+    /// when present — the upload chain may have already persisted bytes
+    /// and discarded the in-memory PCM by the time we land here on a
+    /// "went offline mid-upload" failure path.
     private func queueAudioOffline() async {
         guard let session else { return }
-        guard let audio = audioSource.getRecordedAudioData(), !audio.isEmpty else {
-            // No captured audio (too-short recording). Nothing to queue —
-            // surface the same guidance as the online path.
-            self.error = "Recording was too short. Speak for at least a few seconds before stopping."
-            stage1Status = .failed(reason: "Recording too short")
+        let audio: Data
+        if let stagedURL = recordedAudioFileURL,
+           FileManager.default.fileExists(atPath: stagedURL.path),
+           let stagedBytes = try? Data(contentsOf: stagedURL),
+           !stagedBytes.isEmpty {
+            audio = stagedBytes
+        } else if let liveBytes = audioSource.getRecordedAudioData(), !liveBytes.isEmpty {
+            audio = liveBytes
+        } else {
+            // No bytes anywhere (staged file gone AND in-memory PCM
+            // empty) — almost always a too-short recording. Same
+            // surface as the online path.
+            self.error = L("audio_upload_failed_too_short")
+            stage1Status = .failed(reason: L("audio_upload_failed_too_short"))
             return
         }
         do {
@@ -578,6 +646,10 @@ final class SessionManager: ObservableObject {
                 audio: audio
             )
             audioSource.discardRecordedAudio()
+            // The bytes now live in the OfflineUploadQueue's own
+            // directory — drop the staged copy so we don't have two
+            // copies of the raw audio on disk.
+            clearRecordedAudioFile()
             stage1Status = .queuedOffline
             processingStatus = ""
             AuditLogger.log(
@@ -586,8 +658,15 @@ final class SessionManager: ObservableObject {
                 extra: ["bytes": "\(audio.count)"]
             )
         } catch {
-            self.error = "Couldn't save the encounter for later: \(error.localizedDescription)"
-            stage1Status = .failed(reason: error.localizedDescription)
+            // OfflineUploadQueue.enqueue couldn't land the WAV (disk
+            // full / sandbox issue / etc.). Surface with the file-
+            // failure copy — same root cause as a primary write
+            // failure. PHI-clean: no `error.localizedDescription` —
+            // it can echo file paths under .applicationSupportDirectory
+            // that aren't PHI per se but are noisier than this layer
+            // needs.
+            self.error = L("audio_upload_failed_file")
+            stage1Status = .failed(reason: L("audio_upload_failed_file"))
         }
     }
 
@@ -1084,48 +1163,116 @@ final class SessionManager: ObservableObject {
     //     the ring stays parked at 95%. No hard timeout — only failure
     //     paths are "backend said failed", "fallback poll deadline", or
     //     a real URLSession error.
+    //
+    // lane-ios/audio-upload-resilience adds a layer below Bug A: the
+    // POST itself now goes through `AudioUploadCoordinator` — a
+    // background-configured URLSession with retry-with-backoff (3
+    // attempts), progress callbacks at 25/50/75%, and a classified
+    // failure category that we can route to a specific localized
+    // user-facing message. The previous fire-and-forget URLSession
+    // call lost Marie's session at the upload boundary: backend audit
+    // showed `recording_started → stage1_started` and then silence
+    // because the POST was suspended when she backgrounded the app
+    // and the foreground ephemeral session silently dropped it.
+    //
+    // The audio bytes are persisted to disk in
+    // `persistRecordedAudio` BEFORE the upload starts, so:
+    //  * the coordinator's per-attempt retry loop reads from the
+    //    same on-disk WAV (eliminates the in-memory PCM as a single
+    //    point of failure mid-upload), and
+    //  * Bug 2: the clinician-facing Retry button (`retryStage1`)
+    //    re-runs the upload from the same file rather than no-op'ing
+    //    against an upload that never happened.
 
     private func submitAudio() async {
         guard let session else { return }
-        guard let url = URL(string: "\(AppConfig.baseAPIPath)/transcription/\(session.id)") else {
-            self.error = "Invalid API URL"
-            return
-        }
         uiState = .processing
 
-        let captured = audioSource.getRecordedAudioData()
-        let audioPayload: Data
-        let isDemoFallback: Bool
-        if let captured, !captured.isEmpty {
-            audioPayload = captured
-            isDemoFallback = false
-        } else if DemoMode.isEnabled {
-            // Simulator dev path — substitute silence so the pipeline runs
-            // end-to-end without a microphone. NEVER reachable in pilot or
-            // production builds (P0-03).
-            audioPayload = WAVBuilder.silence()
-            isDemoFallback = true
-        } else {
-            // Empty audioPCMData means the AVAudioSession delegate never
-            // delivered a buffer. In practice this is almost always a
-            // too-short recording — the stop-button guard below the start
-            // timestamp should catch most of these, but on first-launch
-            // mic warmup or a backgrounded session it's still possible.
-            // Phrasing avoids implying the mic / system is broken.
-            self.error = "Recording was too short. Speak for at least a few seconds before stopping."
-            stage1Status = .failed(reason: "Recording too short")
-            // Stay on ProcessingView so the retry prompt is reachable.
+        let captureSessionId = session.id
+        let captureSpecialty = session.specialty
+
+        // ── Step 0: lock the audio bytes onto disk so the upload chain
+        // has a stable source. If a previous `submitAudio` already
+        // persisted the WAV (Retry path), reuse it instead of round-
+        // tripping through the in-memory accumulator — `discardRecordedAudio`
+        // wipes the PCM after persist, so on retry the accumulator is
+        // empty and we'd otherwise misclassify a real recording as
+        // too-short.
+        let persistedFile: PersistedAudio
+        do {
+            persistedFile = try persistRecordedAudioIfNeeded(
+                sessionId: captureSessionId
+            )
+        } catch let error as PersistError {
+            // Distinct branches by why persist failed:
+            //  * `.empty` → almost always too-short recording.
+            //  * `.writeFailed` → disk full, sandbox issue.
+            //  * `.recordingLost` → retry path, file vanished.
+            switch error {
+            case .empty:
+                // Empty audioPCMData means the AVAudioSession delegate never
+                // delivered a buffer. In practice this is almost always a
+                // too-short recording — the stop-button guard below the start
+                // timestamp should catch most of these, but on first-launch
+                // mic warmup or a backgrounded session it's still possible.
+                self.error = L("audio_upload_failed_too_short")
+                stage1Status = .failed(reason: L("audio_upload_failed_too_short"))
+                AuditLogger.log(
+                    event: .recordingFinalizationFailed,
+                    sessionId: captureSessionId,
+                    extra: ["reason": "empty_buffer"]
+                )
+                return
+            case .writeFailed:
+                self.error = L("audio_upload_failed_file")
+                stage1Status = .failed(reason: L("audio_upload_failed_file"))
+                AuditLogger.log(
+                    event: .recordingFinalizationFailed,
+                    sessionId: captureSessionId,
+                    extra: ["reason": "disk_write_failed"]
+                )
+                return
+            case .recordingLost:
+                self.error = L("audio_upload_recording_lost")
+                stage1Status = .failed(reason: L("audio_upload_recording_lost"))
+                AuditLogger.log(
+                    event: .recordingFinalizationFailed,
+                    sessionId: captureSessionId,
+                    extra: ["reason": "file_missing_on_retry"]
+                )
+                return
+            }
+        } catch {
+            // Unreachable in practice — persistRecordedAudioIfNeeded
+            // only throws `PersistError`. Belt-and-suspenders so a
+            // future helper extension doesn't slip through.
+            self.error = L("audio_upload_failed_file")
+            stage1Status = .failed(reason: L("audio_upload_failed_file"))
             return
         }
 
+        // Audit only on the first persist (not on retry re-uploads from
+        // the same on-disk file) — `recording_file_finalized` is the
+        // "finalization landed bytes on disk" event, NOT "we're starting
+        // an upload" (that's `audio_upload_started` below).
+        if persistedFile.wasFreshlyWritten {
+            AuditLogger.log(
+                event: .recordingFileFinalized,
+                sessionId: captureSessionId,
+                extra: ["file_bytes": "\(persistedFile.bytes)"]
+            )
+        }
+
+        // From here on the in-memory PCM is no longer the source of
+        // truth — the on-disk WAV is. The accumulator is freed on the
+        // happy path by `clearRecordedAudioFile` after the backend
+        // ACKs the upload (HTTP 2xx).
+        let fileURL = persistedFile.url
+        let bytes = persistedFile.bytes
+
         stage1Status = .uploading
-        processingStatus = "Uploading audio…"
+        processingStatus = L("processing.uploadingAudio")
         let stage1Start = Date()
-        // Stash the capture session's id BEFORE the URLSession shadow
-        // below — the inner `let session = URLSession(...)` masks the
-        // outer CaptureSession, and our WS subscriber + audit calls
-        // need the backend session id, not the URLSession instance.
-        let captureSessionId = session.id
 
         // ── Step 1: open the push channel BEFORE the upload POST. The
         // backend fires `stage1_delivered` the instant the note lands;
@@ -1145,36 +1292,109 @@ final class SessionManager: ObservableObject {
             longRunFlipTask?.cancel()
         }
 
+        // ── Step 2: drive the upload through AudioUploadCoordinator.
+        // The coordinator owns:
+        //   * a background-configured URLSession (survives backgrounding
+        //     mid-upload — was the proximate cause of Marie's
+        //     silent-after-recording_started failure mode), and
+        //   * a 3-attempt retry loop with exponential backoff for
+        //     classify-as-retryable URLErrors and 5xx responses.
+        //
+        // We forward each attempt boundary into the audit trail so the
+        // backend dashboards can chart "fail on first try" vs "fail
+        // after every retry."
+        AuditLogger.log(
+            event: .audioUploadStarted,
+            sessionId: captureSessionId,
+            extra: ["file_bytes": "\(bytes)"]
+        )
+
+        let token = KeychainHelper.shared.bearerToken()
+        let uploadStart = Date()
+
         do {
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            // Upload-only cap. Stage 1 latency is decoupled: the WS
-            // subscription above (and its fallback poll) own the
-            // "when did the note land" signal. This timeout is just
-            // "how long do we let the bytes climb the wire."
-            request.timeoutInterval = AppConfig.stage1UploadTimeoutSeconds
-            let config = URLSessionConfiguration.ephemeral
-            config.timeoutIntervalForRequest = AppConfig.stage1UploadTimeoutSeconds
-            config.timeoutIntervalForResource = AppConfig.stage1UploadTimeoutSeconds
-            let session = URLSession(configuration: config)
+            // `stage1Status` stays `.uploading` until the coordinator
+            // returns 2xx — at that point the bytes are server-side and
+            // we're waiting on Stage 1 generation, which is the
+            // `.generating` semantic. Flipping pre-emptively (the
+            // pre-PR-#243 code did) showed the clinician "generating"
+            // before the bytes even left the phone, hiding network
+            // failures behind a misleading status.
+            let data = try await AudioUploadCoordinator.shared.upload(
+                fileURL: fileURL,
+                sessionId: captureSessionId,
+                bearerToken: token,
+                bytes: bytes,
+                maxAttempts: 3,
+                onAttemptStart: { _ in
+                    // Per-attempt audit not emitted today — `audio_upload_started`
+                    // covers the chain, and per-attempt-failure is logged
+                    // below. We have onAttemptStart wired so future
+                    // observability work can plug in without re-shaping
+                    // the coordinator API.
+                },
+                onAttemptFailure: { attempt, category in
+                    // Each non-final attempt failure is its own audit
+                    // event so we can tell "failed once, retried,
+                    // succeeded" from "failed three times, gave up."
+                    // The terminal failure also emits `audio_upload_failed`
+                    // below; this is the per-attempt slice.
+                    Task { @MainActor in
+                        AuditLogger.log(
+                            event: .audioUploadFailed,
+                            sessionId: captureSessionId,
+                            extra: [
+                                "attempt": "\(attempt)",
+                                "error_category": category.rawValue,
+                                "terminal": "false",
+                            ]
+                        )
+                    }
+                },
+                onProgress: { bytesSent, bytesTotal in
+                    // The coordinator only fires onProgress at the
+                    // 25/50/75 thresholds — pre-filtered there, so we
+                    // can just emit one audit event per callback.
+                    let percent = bytesTotal > 0
+                        ? Int((Double(bytesSent) / Double(bytesTotal)) * 100)
+                        : 0
+                    Task { @MainActor in
+                        AuditLogger.log(
+                            event: .audioUploadProgress,
+                            sessionId: captureSessionId,
+                            extra: [
+                                "bytes_sent": "\(bytesSent)",
+                                "bytes_total": "\(bytesTotal)",
+                                "percent": "\(percent)",
+                            ]
+                        )
+                    }
+                }
+            )
 
-            let boundary = UUID().uuidString
-            request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-            if let token = KeychainHelper.shared.bearerToken() {
-                request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-            }
+            let uploadElapsedMs = Int(Date().timeIntervalSince(uploadStart) * 1000)
+            AuditLogger.log(
+                event: .audioUploadSucceeded,
+                sessionId: captureSessionId,
+                extra: [
+                    "elapsed_ms": "\(uploadElapsedMs)",
+                    "file_bytes": "\(bytes)",
+                ]
+            )
 
-            var builder = MultipartBuilder(boundary: boundary)
-            builder.appendFile("audio_file", filename: "recording.wav", mime: "audio/wav", data: audioPayload)
-            request.httpBody = builder.finish()
-
+            // Bytes are server-side now — flip the status so the
+            // processing UI flips from "uploading" copy to "generating
+            // note…" while we await Stage 1 over WS/poll.
             stage1Status = .generating
             processingStatus = L("processing.generatingNote")
-            let (data, response) = try await session.data(for: request)
 
-            guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
-                throw APIError.serverError((response as? HTTPURLResponse)?.statusCode ?? -1)
-            }
+            // Backend ACK'd the bytes (HTTP 2xx). Drop the on-disk WAV
+            // and the in-memory PCM — both have been replaced by the
+            // backend-side S3 object the cleanup module will purge per
+            // its TTL. Keeping the WAV around past this point would
+            // leak raw clinical audio across the next session boundary.
+            clearRecordedAudioFile()
+            audioSource.discardRecordedAudio()
 
             // Speaker tagging is best-effort; the voice embedding stays in
             // Keychain. Failure here doesn't block note generation.
@@ -1182,7 +1402,7 @@ final class SessionManager: ObservableObject {
                 await applySpeakerTags(transcript: transcript)
             }
 
-            // ── Step 2: wait for the WS push, or fall back to polling
+            // ── Step 3: wait for the WS push, or fall back to polling
             // with the 5-min deadline if the channel drops. Either way
             // we then `fetchNote()` over REST — the WS payload carries
             // the note inline, but the existing iOS plumbing assumes
@@ -1197,12 +1417,25 @@ final class SessionManager: ObservableObject {
             stage1Status = .ready
             processingStatus = L("processing.noteReady")
             uiState = .noteReady
-        } catch let urlError as URLError where Self.offlineURLErrorCodes.contains(urlError.code) {
-            // Connectivity dropped mid-upload — persist for deferred sync
-            // instead of failing. (submitProcessing already routes a known-
-            // offline submit straight to the queue; this catches the race
-            // where the network died after the request started.)
-            await queueAudioOffline()
+        } catch let uploadError as AudioUploadError {
+            // Terminal failure after the coordinator's retry budget.
+            // The per-attempt slices already audited above; this is
+            // the final state.
+            AuditLogger.log(
+                event: .audioUploadFailed,
+                sessionId: captureSessionId,
+                extra: [
+                    "attempt": "\(uploadError.attempt)",
+                    "error_category": uploadError.category.rawValue,
+                    "terminal": "true",
+                ]
+            )
+            handleUploadFailure(
+                category: uploadError.category,
+                sessionId: captureSessionId,
+                isDemoFallback: false,
+                specialty: captureSpecialty
+            )
         } catch Stage1WaitError.fallbackPollDeadlineExceeded {
             // WS channel never delivered AND the 5-min fallback poll
             // gave up. The audit trail already carries the
@@ -1210,7 +1443,7 @@ final class SessionManager: ObservableObject {
             // — surface as a generic failure with the retry prompt so
             // the clinician can re-fire (audio is still in memory).
             let elapsed = Date().timeIntervalSince(stage1Start)
-            stage1Status = .failed(reason: "Stage 1 did not complete")
+            stage1Status = .failed(reason: L("processing.stage1Failed.detail"))
             AuditLogger.log(
                 event: .stage1Failed,
                 sessionId: captureSessionId,
@@ -1226,24 +1459,226 @@ final class SessionManager: ObservableObject {
             // scope outside Debug builds.
             #if DEBUG
             if DemoMode.isEnabled {
-                self.error = isDemoFallback
-                    ? "Simulator has no audio. Showing demo note."
-                    : "Transcription failed: \(error.localizedDescription)"
+                // The DEBUG path was used by the in-Simulator demo flow
+                // (no real mic). The new file-on-disk path means we don't
+                // reach here for "no audio" — that's caught upstream as
+                // PersistError.empty. This branch now only covers a
+                // genuine post-upload failure (speaker tags failed, note
+                // fetch failed, etc.) under DemoMode.
+                self.error = "Transcription failed (demo): \(L("processing.stage1Failed.detail"))"
                 stage1Status = .ready
-                note = createDemoNote(sessionId: captureSessionId, specialty: session.specialty)
+                note = createDemoNote(sessionId: captureSessionId, specialty: captureSpecialty)
                 uiState = .noteReady
                 return
             }
             #endif
-            self.error = "Transcription failed: \(error.localizedDescription)"
-            stage1Status = .failed(reason: error.localizedDescription)
+            // Any non-coordinator non-Stage1Wait error: fetchNote() /
+            // applySpeakerTags / decoder failure. Surface generically;
+            // the upload itself succeeded so retrying makes sense.
+            self.error = L("processing.stage1Failed.detail")
+            stage1Status = .failed(reason: L("processing.stage1Failed.detail"))
             AuditLogger.log(
                 event: .stage1Failed,
                 sessionId: captureSessionId,
-                extra: ["reason": String(error.localizedDescription.prefix(200))]
+                // `error.localizedDescription` can echo a request URL
+                // (which carries the session id) — strip it before audit.
+                // Per the lane's PHI-safety rule we send only a fixed-
+                // shape reason here.
+                extra: ["reason": "post_upload_processing_error"]
             )
             // Stay in uiState == .processing so the retry prompt remains reachable.
         }
+    }
+
+    // MARK: - Audio persistence (lane-ios/audio-upload-resilience)
+
+    /// Result of writing the recorded audio to disk in preparation for
+    /// upload. The URL is the file the AudioUploadCoordinator will read
+    /// from on each attempt; `bytes` is what we put in the
+    /// `recording_file_finalized` audit so backend dashboards can
+    /// correlate audio size with upload latency.
+    private struct PersistedAudio {
+        let url: URL
+        let bytes: Int64
+        /// True iff this call wrote a NEW file (vs. reusing an existing
+        /// one from a prior submitAudio attempt). Lets the caller emit
+        /// `recording_file_finalized` exactly once per actual finalize
+        /// — Retry doesn't re-emit since the bytes haven't been
+        /// re-finalized.
+        let wasFreshlyWritten: Bool
+    }
+
+    /// Failure modes for `persistRecordedAudioIfNeeded`. Distinct cases
+    /// so `submitAudio` can route each to a different localized message
+    /// + audit `reason` payload.
+    private enum PersistError: Error {
+        /// No PCM in the buffer AND no on-disk file from a previous
+        /// attempt. Almost always a too-short recording.
+        case empty
+        /// PCM was present but couldn't land on disk (sandbox full,
+        /// permission lost, etc.).
+        case writeFailed
+        /// Retry path: a file was expected (recordedAudioFileURL was
+        /// non-nil) but vanished from disk. iOS sandbox cleanup or a
+        /// force-quit + restart sequence. Terminal — no bytes to retry
+        /// from.
+        case recordingLost
+    }
+
+    /// Return the on-disk WAV that the upload chain should POST,
+    /// writing one if we don't have one yet for this session.
+    ///
+    /// Branches:
+    ///   * `recordedAudioFileURL` already points at a file on disk →
+    ///     reuse it (retry path). Don't touch the audio source.
+    ///   * `recordedAudioFileURL` was set but the file is gone →
+    ///     throw `.recordingLost`. iOS sandbox cleanup OR an external
+    ///     `clearRecordedAudioFile` call. Caller surfaces re-record.
+    ///   * No URL set → pull the WAV out of the audio source. If the
+    ///     buffer is empty, throw `.empty`. Otherwise write to disk
+    ///     with `.completeFileProtection` (same protection class as
+    ///     `OfflineUploadQueue` — raw clinical bytes never readable
+    ///     while the device is locked).
+    private func persistRecordedAudioIfNeeded(
+        sessionId: String
+    ) throws -> PersistedAudio {
+        let fm = FileManager.default
+
+        if let existing = recordedAudioFileURL {
+            if fm.fileExists(atPath: existing.path) {
+                let bytes = (try? fm.attributesOfItem(atPath: existing.path)[.size] as? Int64)
+                    ?? Int64((try? Data(contentsOf: existing).count) ?? 0)
+                return PersistedAudio(
+                    url: existing,
+                    bytes: bytes,
+                    wasFreshlyWritten: false
+                )
+            }
+            // Had a URL, file is gone — terminal for retry. Clear the
+            // stale URL so a future startNewSession isn't fooled into
+            // thinking there's still a file.
+            recordedAudioFileURL = nil
+            throw PersistError.recordingLost
+        }
+
+        // No file yet — pull bytes out of the audio source and write.
+        let captured = audioSource.getRecordedAudioData()
+        guard let bytes = captured, !bytes.isEmpty else {
+            throw PersistError.empty
+        }
+
+        let directory = audioUploadStagingDirectory()
+        do {
+            try fm.createDirectory(
+                at: directory,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            throw PersistError.writeFailed
+        }
+
+        // One file per session — collisions don't happen because
+        // session ids are UUIDs, and a retry hits the existing-file
+        // branch above. Filename matches OfflineUploadQueue's pattern
+        // so a future "promote-to-offline-queue" path can adopt it.
+        let url = directory.appendingPathComponent("\(sessionId).wav")
+        do {
+            try bytes.write(to: url, options: [.atomic, .completeFileProtection])
+        } catch {
+            throw PersistError.writeFailed
+        }
+        recordedAudioFileURL = url
+        return PersistedAudio(
+            url: url,
+            bytes: Int64(bytes.count),
+            wasFreshlyWritten: true
+        )
+    }
+
+    /// Staging directory for the active upload's WAV. Lives under
+    /// Application Support (not the OS temp dir) so a discretionary
+    /// sandbox sweep doesn't yank the bytes between `submitAudio` and
+    /// a Retry. Excluded from iCloud backup is the OfflineUploadQueue's
+    /// responsibility, not ours — this directory holds only the
+    /// currently-uploading session's WAV, which is short-lived.
+    private func audioUploadStagingDirectory() -> URL {
+        let fm = FileManager.default
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        return base.appendingPathComponent("AudioUploadStaging", isDirectory: true)
+    }
+
+    /// Delete the on-disk WAV from the upload-staging directory and
+    /// clear the stored URL. Called on:
+    ///   * successful upload (backend ACK'd the bytes), and
+    ///   * session teardown / save-for-later (raw bytes shouldn't
+    ///     outlive the session).
+    private func clearRecordedAudioFile() {
+        guard let url = recordedAudioFileURL else { return }
+        try? FileManager.default.removeItem(at: url)
+        recordedAudioFileURL = nil
+    }
+
+    /// Map an `AudioUploadErrorCategory` onto a localized user-facing
+    /// string and an audit `reason`, surface to the UI, and (for
+    /// network failures only) try the offline-queue fallback path.
+    ///
+    /// Pulled out so the `catch AudioUploadError` arm of `submitAudio`
+    /// stays narrative. The `specialty` argument is only used by the
+    /// offline-queue fallback (the queue stamps it for the sync banner).
+    private func handleUploadFailure(
+        category: AudioUploadErrorCategory,
+        sessionId: String,
+        isDemoFallback: Bool,
+        specialty: String
+    ) {
+        // Network failures: try the offline queue first. If we can
+        // park the WAV there, the encounter is safe and will sync on
+        // reconnect — same UX as the pre-coordinator offline path.
+        // (The submitProcessing pre-check already handles "known
+        // offline at start"; this catches "went offline mid-upload"
+        // and the coordinator's classified-as-network errors.)
+        if category == .network {
+            Task { @MainActor [weak self] in
+                await self?.queueAudioOffline()
+            }
+            return
+        }
+
+        let detail: String
+        switch category {
+        case .fileMissing:
+            // The on-disk WAV vanished between attempts. Terminal —
+            // there's nothing left to retry from.
+            detail = L("audio_upload_recording_lost")
+            // Clear the (stale) URL so a clinician-driven Retry surfaces
+            // the same `recording_lost` instead of a `file_missing`
+            // loop.
+            recordedAudioFileURL = nil
+        case .server4xx:
+            // 4xx is "bad request" — retrying the same bytes won't
+            // help. Phrasing nudges the clinician toward "the bytes
+            // are safe, but something on the server rejected this
+            // request." Same copy as 5xx for the clinician (they
+            // don't need to know which arm of the server rejected
+            // it); the audit trail carries the granular category.
+            detail = L("audio_upload_failed_server")
+        case .server5xx:
+            detail = L("audio_upload_failed_server")
+        case .network:
+            // Unreachable — guarded above.
+            detail = L("audio_upload_failed_network")
+        case .unknown:
+            // Generic — use the server copy since "something went
+            // wrong, the recording is safe" matches the user need.
+            detail = L("audio_upload_failed_server")
+        }
+
+        self.error = detail
+        stage1Status = .failed(reason: detail)
+        // Stay in uiState == .processing so the retry prompt remains reachable.
+        _ = isDemoFallback // reserved for a future demo-mode path
+        _ = specialty
+        _ = sessionId
     }
 
     // MARK: - Stage 1 wait helpers (Bug A)
@@ -1327,8 +1762,19 @@ final class SessionManager: ObservableObject {
         }
     }
 
-    /// Re-fire the Stage 1 pipeline after a timeout/failure. Recorded
-    /// audio is still in memory because the session hasn't been torn down.
+    /// Re-fire the Stage 1 pipeline after a timeout/failure. The on-
+    /// disk WAV persists across the Stage 1 failure (cleared only on
+    /// a successful backend ACK), so this re-runs the upload from the
+    /// same bytes — Bug 2: previously Retry was a no-op against an
+    /// upload that had never reached the backend in the first place,
+    /// because the in-memory PCM accumulator had been wiped and there
+    /// was no on-disk source to replay from.
+    ///
+    /// If the on-disk file ALSO vanished (force-quit + iOS sandbox
+    /// sweep), `submitAudio` catches that via `PersistError.recordingLost`
+    /// and surfaces the "Recording lost — please re-record" terminal
+    /// state. We don't pre-check here because `submitAudio` owns the
+    /// localized-message lookup; pre-checking would duplicate it.
     func retryStage1() async {
         guard let session else { return }
         AuditLogger.log(event: .stage1Retried, sessionId: session.id)
@@ -1402,6 +1848,11 @@ final class SessionManager: ObservableObject {
         AurionHaptics.notification(.success)
         teardownLiveTranscriber()
         stopScreenCaptureIfRunning()
+        // Tear down the on-disk WAV used by the upload chain — if Stage 1
+        // succeeded the file is already gone (clearRecordedAudioFile fired
+        // after the 2xx); if the user is bailing mid-flight we don't want
+        // raw clinical bytes lingering across "Save for later."
+        clearRecordedAudioFile()
         session?.clearPersistence()
         session = nil
         note = nil
@@ -1446,6 +1897,10 @@ final class SessionManager: ObservableObject {
         }
         screenCapture.capturedScreenFrames = []
         audioSource.discardRecordedAudio()
+        // Also drop the on-disk WAV that the upload chain uses — the
+        // PCM purge above only clears the in-memory accumulator, so
+        // we'd otherwise leak the persisted bytes across purges.
+        clearRecordedAudioFile()
         maskingFailedFrames = []
     }
 
@@ -1456,6 +1911,8 @@ final class SessionManager: ObservableObject {
         // already ends it on the normal path; covers the abort cases
         // (review dismissed, crash recovery discard, etc.).
         liveActivity.end()
+        // Drop the on-disk WAV — same reasoning as `saveForLater`.
+        clearRecordedAudioFile()
         session?.clearPersistence()
         session = nil
         note = nil

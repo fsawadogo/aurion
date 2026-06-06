@@ -358,4 +358,128 @@ struct AurionTests {
         }
         #expect(hasEocd)
     }
+
+    // MARK: - WebSocketEvent envelope decoding (lane-ios/audio-upload-resilience)
+    //
+    // Pre-#243 WebSocketClient tried to decode every inbound frame as a
+    // bare NoteResponse and silently dropped Stage 1 / Stage 2 push
+    // events because the backend wraps notes in
+    // `{"event": "...", "session_id": "...", "note": {...}}`. These
+    // tests pin the envelope decoder to the actual backend payload
+    // shape from `backend/app/api/v1/websocket.py`.
+
+    @Test func webSocketEvent_decodesStage1NoteReady() throws {
+        let payload = """
+        {
+          "event": "stage1_delivered",
+          "session_id": "sess-ws-1",
+          "note": {
+            "session_id": "sess-ws-1",
+            "stage": 1,
+            "version": 1,
+            "provider_used": "anthropic",
+            "specialty": "general",
+            "completeness_score": 0.8,
+            "sections": []
+          }
+        }
+        """
+        let data = Data(payload.utf8)
+        let event = try JSONDecoder().decode(WebSocketEvent.self, from: data)
+        guard case let .stage1NoteReady(sessionId, note) = event else {
+            Issue.record("Expected .stage1NoteReady, got \(event)")
+            return
+        }
+        #expect(sessionId == "sess-ws-1")
+        #expect(note?.sessionId == "sess-ws-1")
+        #expect(note?.stage == 1)
+    }
+
+    @Test func webSocketEvent_decodesStage2NoteReady() throws {
+        let payload = """
+        {
+          "event": "stage2_delivered",
+          "session_id": "sess-ws-2",
+          "note": {
+            "session_id": "sess-ws-2",
+            "stage": 2,
+            "version": 3,
+            "provider_used": "openai",
+            "specialty": "orthopedic_surgery",
+            "completeness_score": 0.95,
+            "sections": []
+          }
+        }
+        """
+        let data = Data(payload.utf8)
+        let event = try JSONDecoder().decode(WebSocketEvent.self, from: data)
+        guard case let .stage2NoteReady(sessionId, note) = event else {
+            Issue.record("Expected .stage2NoteReady, got \(event)")
+            return
+        }
+        #expect(sessionId == "sess-ws-2")
+        #expect(note?.stage == 2)
+        #expect(note?.version == 3)
+    }
+
+    @Test func webSocketEvent_decodesStage2Progress() throws {
+        let payload = """
+        {
+          "event": "stage2_progress",
+          "session_id": "sess-ws-3",
+          "frames_processed": 4,
+          "frames_total": 12
+        }
+        """
+        let data = Data(payload.utf8)
+        let event = try JSONDecoder().decode(WebSocketEvent.self, from: data)
+        guard case let .stage2Progress(sessionId, processed, total) = event else {
+            Issue.record("Expected .stage2Progress, got \(event)")
+            return
+        }
+        #expect(sessionId == "sess-ws-3")
+        #expect(processed == 4)
+        #expect(total == 12)
+    }
+
+    @Test func webSocketEvent_unknownEvent_doesNotThrow() throws {
+        // Forward-compat: a future backend that emits a new event
+        // shape must not tear down the WS receive loop. We expect a
+        // graceful `.unknown` carrying the raw event name so logs /
+        // dashboards can still identify what we ignored.
+        let payload = """
+        {
+          "event": "some_future_event",
+          "session_id": "sess-ws-4"
+        }
+        """
+        let data = Data(payload.utf8)
+        let event = try JSONDecoder().decode(WebSocketEvent.self, from: data)
+        guard case let .unknown(eventType) = event else {
+            Issue.record("Expected .unknown, got \(event)")
+            return
+        }
+        #expect(eventType == "some_future_event")
+    }
+
+    @Test func webSocketEvent_stage1Delivered_missingNote_decodesWithNilNote() throws {
+        // Defensive: if a backend mid-rollout drops the `note` field on
+        // a delivered event, we still decode the envelope and surface
+        // a nil note. Subscribers that need the bytes can fall back to
+        // `GET /notes/{id}/stage1`.
+        let payload = """
+        {
+          "event": "stage1_delivered",
+          "session_id": "sess-ws-5"
+        }
+        """
+        let data = Data(payload.utf8)
+        let event = try JSONDecoder().decode(WebSocketEvent.self, from: data)
+        guard case let .stage1NoteReady(sessionId, note) = event else {
+            Issue.record("Expected .stage1NoteReady, got \(event)")
+            return
+        }
+        #expect(sessionId == "sess-ws-5")
+        #expect(note == nil)
+    }
 }
