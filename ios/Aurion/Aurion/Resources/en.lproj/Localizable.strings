@@ -38,6 +38,7 @@
 "sessions.tryFilter" = "Try a different filter";
 "sessions.pendingReview" = "Pending Review";
 "sessions.resume" = "Resume";
+"sessions.review" = "Review";
 "sessions.completed" = "Completed";
 "sessions.filter.all" = "All";
 "sessions.filter.pending" = "Pending";

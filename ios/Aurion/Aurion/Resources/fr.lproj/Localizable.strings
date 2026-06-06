@@ -38,6 +38,7 @@
 "sessions.tryFilter" = "Essayez un autre filtre";
 "sessions.pendingReview" = "En attente de r\U00E9vision";
 "sessions.resume" = "Reprendre";
+"sessions.review" = "R\U00E9viser";
 "sessions.completed" = "Termin\U00E9es";
 "sessions.filter.all" = "Toutes";
 "sessions.filter.pending" = "En attente";
