@@ -1,15 +1,63 @@
 import SwiftUI
+import UIKit
+
+/// AUTH-UNIVERSAL-LINKS — UIKit bridge for cold-launch Universal Links.
+///
+/// On a COLD launch (Aurion not in memory, user taps the reset-password
+/// link in Mail/Messages), SwiftUI's `.onContinueUserActivity(...)`
+/// modifier fires before the `ContentView` hierarchy is fully attached,
+/// and the activity is silently dropped — every pilot user's first
+/// encounter with the reset flow lands them on the Sign In screen with
+/// no way to actually enter a new password. Confirmed on Faical's
+/// 2026-06-06 ~22:11 EDT smoke test.
+///
+/// `application(_:continue:restorationHandler:)` runs even before the
+/// SwiftUI hierarchy exists, so we capture the activity here and write
+/// the token straight onto the shared `ResetLinkPayload.shared`
+/// instance that `AurionApp.init` aliases the `@StateObject` to. The
+/// SwiftUI view picks it up the moment its `.fullScreenCover(item:)`
+/// modifier becomes active.
+///
+/// Defensive note: the delegate is the SOLE entry point for cold
+/// launches. The warm-path `.onContinueUserActivity` handler in
+/// `AurionApp.body` covers the background→foreground case where the
+/// app is already alive and SwiftUI is ready.
+final class AurionAppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        continue userActivity: NSUserActivity,
+        restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
+    ) -> Bool {
+        guard
+            userActivity.activityType == NSUserActivityTypeBrowsingWeb,
+            let url = userActivity.webpageURL
+        else { return false }
+        // Same extractor the warm path uses — single source of truth.
+        guard let token = MainActor.assumeIsolated({ ResetLinkExtractor.token(from: url) }) else {
+            return false
+        }
+        MainActor.assumeIsolated {
+            ResetLinkPayload.shared.token = token
+        }
+        return true
+    }
+}
 
 @main
 struct AurionApp: App {
+    @UIApplicationDelegateAdaptor(AurionAppDelegate.self) private var appDelegate
     @StateObject private var appState = AppState()
     @StateObject private var remoteConfig = RemoteConfig.shared
     @StateObject private var appLock = AppLockManager()
     /// AUTH-UNIVERSAL-LINKS — bus for an inbound reset-password token
-    /// extracted from a Universal Link. Written by the
-    /// `NSUserActivityTypeBrowsingWeb` handler below; read by
-    /// ``ContentView`` to drive the reset full-screen cover.
-    @StateObject private var resetLinkPayload = ResetLinkPayload()
+    /// extracted from a Universal Link. Written by EITHER the cold-
+    /// launch ``AurionAppDelegate`` (the only path that fires when
+    /// Aurion isn't already running — every pilot user's first reset
+    /// tap) OR the warm-path ``.onContinueUserActivity`` handler in
+    /// `body` below. Both write to the same singleton-aliased instance
+    /// so ``ContentView``'s reset-cover binding always observes the
+    /// token regardless of which path delivered it.
+    @StateObject private var resetLinkPayload: ResetLinkPayload = ResetLinkPayload.shared
     @Environment(\.scenePhase) private var scenePhase
 
     var body: some Scene {
@@ -78,15 +126,13 @@ struct AurionApp: App {
                 // shared `resetLinkPayload`; `ContentView` watches it
                 // and presents the reset full-screen cover.
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
+                    // Warm-path Universal Link tap (Aurion already alive).
+                    // Cold-launch path goes through AurionAppDelegate.
+                    // Both call ResetLinkExtractor so validation rules
+                    // stay in lockstep across the two entry points.
                     guard
                         let url = activity.webpageURL,
-                        url.host == "portal.aurionclinical.com",
-                        url.path == "/reset-password",
-                        let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
-                        let token = components.queryItems?
-                            .first(where: { $0.name == "token" })?
-                            .value,
-                        !token.isEmpty
+                        let token = ResetLinkExtractor.token(from: url)
                     else { return }
                     // Set on the shared payload bus — never logged.
                     resetLinkPayload.token = token

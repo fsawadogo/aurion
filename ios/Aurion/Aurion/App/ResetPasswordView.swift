@@ -350,5 +350,44 @@ struct ResetPasswordView: View {
 final class ResetLinkPayload: ObservableObject {
     @Published var token: String?
 
+    /// Shared sink the cold-launch ``AppDelegate`` writes into.
+    /// `AurionApp` overwrites this on `init` so the delegate can
+    /// hand off the activity that fired before the SwiftUI view
+    /// hierarchy was alive. Defaults to a throwaway instance so any
+    /// pre-app code paths don't crash on nil unwrap.
+    static var shared: ResetLinkPayload = ResetLinkPayload()
+
     init() {}
+}
+
+/// AUTH-UNIVERSAL-LINKS — extract a non-empty `?token=` from an
+/// inbound reset-password Universal Link, or return nil if the URL
+/// doesn't claim the reset surface. Tolerates the optional trailing
+/// slash that Next.js' `trailingSlash: true` config sometimes leaves
+/// on URLs before iOS' swcd normalisation (`/reset-password/?token=…`
+/// — same path semantics, just a different surface form).
+///
+/// Pulled out of ``AurionApp.body`` so both the warm-path
+/// ``.onContinueUserActivity`` handler AND the cold-launch
+/// ``AurionAppDelegate.application(_:continue:restorationHandler:)``
+/// can share the exact same validation rule. Otherwise the two paths
+/// would silently drift — and the cold path is the one that fires
+/// when the user taps a reset link from a fresh app launch (every
+/// pilot user's first encounter with this flow).
+@MainActor
+enum ResetLinkExtractor {
+    static func token(from url: URL) -> String? {
+        guard url.host == "portal.aurionclinical.com" else { return nil }
+        // Tolerate the trailing-slash variant — see docstring.
+        let path = url.path
+        guard path == "/reset-password" || path == "/reset-password/" else { return nil }
+        guard
+            let components = URLComponents(url: url, resolvingAgainstBaseURL: false),
+            let token = components.queryItems?
+                .first(where: { $0.name == "token" })?
+                .value,
+            !token.isEmpty
+        else { return nil }
+        return token
+    }
 }
