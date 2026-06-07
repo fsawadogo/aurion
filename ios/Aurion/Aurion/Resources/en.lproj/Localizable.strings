@@ -951,3 +951,9 @@
 "deviceStatus.scanning" = "Scanning";
 "deviceStatus.recovering" = "Recovering";
 "deviceStatus.unavailable" = "Unavailable";
+
+/* -- #288 full-screen camera -- */
+"capture.a11yHideTranscription" = "Hide live transcription";
+"capture.a11yShowTranscription" = "Show live transcription";
+"capture.maskingReassurance" = "Faces are masked on this device before any video is uploaded.";
+"capture.consentBadgeA11y" = "Consent confirmed";

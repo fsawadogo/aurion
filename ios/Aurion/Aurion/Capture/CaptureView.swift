@@ -20,6 +20,11 @@ struct CaptureView: View {
     /// recording" — pocket / patient-not-on-camera scenarios — and the
     /// choice sticks for the next session.
     @AppStorage("aurion.show_camera_preview") private var showCameraPreview = true
+    /// Persisted toggle for the on-screen live transcription UI (caption strip
+    /// + draft-note preview). Default = true. Hiding it keeps the canonical
+    /// Whisper batch transcription on stop fully intact — it only declutters
+    /// the recording screen (useful over the immersive camera).
+    @AppStorage("aurion.show_live_transcription") private var showLiveTranscription = true
     /// Per-session dismissal of the "captions unavailable" hint. Reset each
     /// time the view recomposes (i.e. each capture session) so the hint
     /// resurfaces if the cause persists; per-launch persistence would hide
@@ -27,6 +32,333 @@ struct CaptureView: View {
     @State private var captionsHintDismissed = false
 
     var body: some View {
+        ZStack {
+            // Two presentations of the same live session:
+            //   • Immersive — full-bleed camera (iPhone Camera-app feel) with
+            //     floating controls over scrims. Active only when video is
+            //     being captured, the preview is toggled on, the session is
+            //     live, and the AVCaptureSession has finished coming up.
+            //   • Standard — the navy-gradient + big-timer layout. Audio-only,
+            //     "background recording" (preview off), the pre-ready window,
+            //     and the pre-consent gate all live here.
+            if isImmersiveCamera {
+                immersiveLayout
+                    .transition(.opacity)
+            } else {
+                standardLayout
+                    .transition(.opacity)
+            }
+        }
+        .animation(AurionAnimation.smooth, value: isImmersiveCamera)
+        .onChange(of: session.state) { _, newState in
+            switch newState {
+            case .recording:
+                startTimer()
+                AurionHaptics.impact(.heavy)
+                withAnimation(AurionAnimation.pulse) {
+                    isPulsing = true
+                    recBadgePulsing = true
+                }
+            case .paused:
+                stopTimer()
+                isPulsing = false
+                recBadgePulsing = false
+            case .processingStage1:
+                stopTimer()
+                isPulsing = false
+                recBadgePulsing = false
+                AurionHaptics.notification(.success)
+            default:
+                break
+            }
+        }
+        .onAppear {
+            if !session.isConsentConfirmed {
+                AurionHaptics.notification(.warning)
+            }
+        }
+        .sheet(isPresented: $showingFrameGallery) {
+            FrameGalleryView(source: builtInSource)
+        }
+    }
+
+    /// True when the full-bleed camera presentation should take over. Gated on
+    /// the same `isReadyForPreview` flag the old inset card used — attaching a
+    /// preview layer before the AVCaptureSession finishes its async
+    /// configure+startRunning caused EXC_BAD_ACCESS on the render thread. The
+    /// @ObservedObject `builtInSource` invalidates the view when that flag
+    /// flips, so this recomputes the moment the pipeline is ready.
+    private var isImmersiveCamera: Bool {
+        session.captureMode.includesVideo
+            && showCameraPreview
+            && (session.state == .recording || session.state == .paused)
+            && (CaptureSourceRegistry.shared.activeVideoSource as? BuiltInCaptureSource)?
+                .isReadyForPreview == true
+    }
+
+    // MARK: - Immersive Layout (full-bleed camera)
+
+    /// iPhone Camera-app style presentation: the live preview fills the whole
+    /// screen and controls float over translucent scrims. Used on both iPhone
+    /// and iPad. All text/icons here are FIXED-LIGHT — they sit over live
+    /// camera, so adaptive / navy foregrounds would be illegible.
+    private var immersiveLayout: some View {
+        ZStack {
+            // Solid backdrop so the brief preview-mount window never flashes
+            // through to whatever is behind the capture screen.
+            Color.black.ignoresSafeArea()
+
+            immersiveCameraPreview
+                .ignoresSafeArea()
+
+            // Stage 1 spinner stays centered over the camera through the
+            // hand-off out of immersive mode.
+            if session.state == .processingStage1 {
+                processingIndicator
+                    .transition(.opacity)
+            }
+
+            VStack(spacing: 0) {
+                immersiveTopBar
+                Spacer(minLength: 0)
+                immersiveBottomCluster
+            }
+        }
+        .animation(AurionAnimation.smooth, value: session.isConsentConfirmed)
+        .animation(AurionAnimation.smooth, value: session.state)
+    }
+
+    /// Full-bleed live preview. Keeps its own `isReadyForPreview` gate even
+    /// though `isImmersiveCamera` already checked it — belt-and-suspenders
+    /// against the render-thread EXC_BAD_ACCESS. `CameraPreviewLayer` already
+    /// applies `.resizeAspectFill`, so it crops to fill the screen.
+    @ViewBuilder
+    private var immersiveCameraPreview: some View {
+        let registry = CaptureSourceRegistry.shared
+        if let builtIn = registry.activeVideoSource as? BuiltInCaptureSource,
+           builtIn.isReadyForPreview {
+            CameraPreviewLayer(session: registry.builtIn.previewSession)
+        }
+    }
+
+    /// Floating top bar over a top scrim. Content respects the safe area
+    /// (clears the notch / Dynamic Island); the scrim bleeds up underneath so
+    /// controls stay legible over any camera content.
+    private var immersiveTopBar: some View {
+        HStack {
+            specialtyBadge
+
+            Spacer()
+
+            // Compact status replaces the big 88pt timer in this layout.
+            HStack(spacing: 8) {
+                if session.state == .recording {
+                    recBadge
+                        .transition(AurionTransition.scaleIn)
+                }
+                Text(formatTime(elapsedTime))
+                    .font(.system(size: 17, weight: .semibold, design: .monospaced))
+                    .monospacedDigit()
+                    .foregroundColor(.white)
+                    .contentTransition(.numericText())
+                    .animation(AurionAnimation.smooth, value: elapsedTime)
+                    .accessibilityLabel(L("capture.a11yElapsed"))
+                    .accessibilityValue(accessibleElapsedTime)
+            }
+
+            Spacer()
+
+            HStack(spacing: 6) {
+                streamIndicators
+                maskingShield
+                consentBadge
+            }
+        }
+        .padding(.horizontal, AurionSpacing.lg)
+        .padding(.top, AurionSpacing.sm)
+        .padding(.bottom, AurionSpacing.md)
+        .background(
+            LinearGradient(
+                colors: [Color.black.opacity(0.55), Color.black.opacity(0)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .top)
+        )
+    }
+
+    /// Floating bottom cluster over a bottom scrim: waveform, gated live
+    /// transcription, and the transport controls. Content respects the home
+    /// indicator; the scrim bleeds down underneath.
+    private var immersiveBottomCluster: some View {
+        VStack(spacing: AurionSpacing.md) {
+            if session.state == .recording {
+                audioWaveform
+            }
+
+            liveTranscriptionSection
+
+            if !session.isConsentConfirmed {
+                consentOverlay
+                    .transition(AurionTransition.scaleIn)
+            } else {
+                controlBar
+            }
+        }
+        .padding(.top, AurionSpacing.lg)
+        .background(
+            LinearGradient(
+                colors: [Color.black.opacity(0), Color.black.opacity(0.55)],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+            .ignoresSafeArea(edges: .bottom)
+        )
+    }
+
+    // MARK: - Stream Indicators (top-bar right cluster)
+
+    /// A/V/S stream dots plus the preview (eye) and frames shortcuts. Shared by
+    /// both layouts; the immersive top bar appends the masking shield.
+    private var streamIndicators: some View {
+        HStack(spacing: 6) {
+            streamCircle("A")
+            if session.captureMode.includesVideo {
+                streamCircle("V")
+            }
+            if sessionManager.screenCapture.isRecording {
+                streamCircle("S")
+            }
+            if session.captureMode.includesVideo {
+                previewToggleButton
+                framesButton
+            }
+        }
+    }
+
+    // MARK: - Live Transcription Section
+
+    /// Live captions + draft-note preview, gated on the persisted
+    /// `showLiveTranscription` toggle. Identical in both layouts so it lives in
+    /// one place; the container owns the surrounding spacing. The Whisper batch
+    /// transcription on stop is unaffected — this only hides the live UI.
+    @ViewBuilder
+    private var liveTranscriptionSection: some View {
+        if showLiveTranscription,
+           let live = sessionManager.liveTranscriber,
+           session.state == .recording || session.state == .paused {
+            VStack(spacing: 14) {
+                if live.isAvailable, !live.transcript.isEmpty {
+                    liveCaptionStrip(text: live.transcript)
+                } else if !live.isAvailable,
+                          let reason = live.unavailableReason,
+                          !captionsHintDismissed {
+                    liveCaptionsUnavailableChip(reason: reason)
+                }
+
+                if live.isAvailable {
+                    LivePreviewOverlay(
+                        sessionId: session.id,
+                        partialTranscript: live.transcript,
+                        outputLanguage: sessionManager.sessionLanguageForLivePreview
+                    )
+                }
+            }
+            .padding(.horizontal, 24)
+            .transition(.opacity)
+        }
+    }
+
+    // MARK: - Live Transcription Toggle
+
+    /// Captions toggle — flips the persisted `showLiveTranscription` flag so the
+    /// physician can hide the live caption strip + draft preview (e.g. to keep
+    /// the camera view clean) without touching the canonical batch
+    /// transcription on stop. Gold-on-translucent like the eye toggle, 44pt hit
+    /// target.
+    private var transcriptionToggleButton: some View {
+        Button {
+            AurionHaptics.impact(.light)
+            withAnimation(AurionAnimation.smooth) {
+                showLiveTranscription.toggle()
+            }
+        } label: {
+            Image(systemName: showLiveTranscription ? "captions.bubble.fill" : "captions.bubble")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.aurionGold)
+                .frame(width: 24, height: 24)
+                .background(Color.white.opacity(0.10))
+                .clipShape(Circle())
+        }
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            showLiveTranscription ? L("capture.a11yHideTranscription")
+                                  : L("capture.a11yShowTranscription")
+        )
+    }
+
+    // MARK: - Masking Reassurance Shield
+
+    /// Privacy reassurance over the live camera. Faces are masked on-device
+    /// BEFORE any frame is uploaded (masking runs after record-stop — there is
+    /// no real-time masking), so this is a quiet trust signal, not a live
+    /// status. Non-interactive; meaning is carried by the VoiceOver label.
+    private var maskingShield: some View {
+        Image(systemName: "shield.lefthalf.filled")
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundColor(.aurionGold)
+            .frame(width: 24, height: 24)
+            .background(Color.white.opacity(0.10))
+            .clipShape(Circle())
+            .accessibilityLabel(L("capture.maskingReassurance"))
+    }
+
+    // MARK: - Consent Reassurance Badge
+
+    /// Compact consent indicator for the immersive (full-screen camera) layout,
+    /// which has no room for the standard consent chip. Appears once consent is
+    /// confirmed — a quiet trust signal that the session was opened with patient
+    /// consent. Until then the bottom cluster shows the full consent prompt, so
+    /// a "pending" badge here would be redundant. Deliberately GREEN (not the
+    /// cluster's gold accent): green reads as "confirmed/safe" and keeps consent
+    /// visually distinct from the adjacent gold masking shield. Fixed green —
+    /// not an adaptive status token — because this always sits over the camera's
+    /// dark scrim. Non-interactive; method + time are carried by the VoiceOver
+    /// value. Animates in via the `isConsentConfirmed` animation on the layout
+    /// (same `.transition` pattern as `recBadge`).
+    @ViewBuilder private var consentBadge: some View {
+        if session.isConsentConfirmed {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.aurionGreen)
+                .frame(width: 24, height: 24)
+                .background(Color.white.opacity(0.10))
+                .clipShape(Circle())
+                .transition(AurionTransition.scaleIn)
+                .accessibilityLabel(L("capture.consentBadgeA11y"))
+                .accessibilityValue(consentBadgeA11yValue)
+        }
+    }
+
+    /// Method + time for the consent badge's VoiceOver value, mirroring the
+    /// standard consent chip. Empty when consent details are unavailable.
+    private var consentBadgeA11yValue: String {
+        guard let method = session.consentMethod,
+              let at = session.consentConfirmedAt else { return "" }
+        return L("capture.consentChip", method.displayName,
+                 Self.consentTimeFormatter.string(from: at))
+    }
+
+    // MARK: - Standard Layout (navy gradient + big timer)
+
+    /// The original capture presentation. The camera is intentionally hidden
+    /// here (audio-only, preview toggled off for "background recording", the
+    /// not-yet-ready window, or pre-consent) — the full-screen camera lives in
+    /// the immersive layout, reachable via the eye toggle once the pipeline is
+    /// up.
+    private var standardLayout: some View {
         ZStack {
             AurionGradients.captureBackground.ignoresSafeArea()
 
@@ -47,31 +379,14 @@ struct CaptureView: View {
                     // Stream indicators reflect what SessionManager actually
                     // orchestrated — audio-only modes keep the V pill and
                     // camera preview hidden because the camera is never lit.
-                    HStack(spacing: 6) {
-                        streamCircle("A")
-                        if session.captureMode.includesVideo {
-                            streamCircle("V")
-                        }
-                        if sessionManager.screenCapture.isRecording {
-                            streamCircle("S")
-                        }
-                        if session.captureMode.includesVideo {
-                            previewToggleButton
-                            framesButton
-                        }
-                    }
+                    streamIndicators
                 }
                 .padding(.horizontal, AurionSpacing.lg)
                 .padding(.top, AurionSpacing.sm)
 
-                if session.captureMode.includesVideo
-                    && showCameraPreview
-                    && (session.state == .recording || session.state == .paused) {
-                    cameraPreviewCard
-                        .padding(.top, AurionSpacing.md)
-                        .padding(.horizontal, AurionSpacing.lg)
-                        .transition(.opacity.combined(with: .scale(scale: 0.95)))
-                }
+                // The camera is shown full-screen via the immersive layout
+                // (eye toggle) — in this navy layout it stays hidden by design
+                // ("background recording").
 
                 Spacer()
 
@@ -124,49 +439,11 @@ struct CaptureView: View {
                             .padding(.top, 28)
                     }
 
-                    // Live captions — on-device, runs alongside the canonical
-                    // Whisper batch transcription. When the device or locale
-                    // lacks an on-device speech model we show a small
-                    // dismissable hint instead of silently rendering nothing;
-                    // otherwise the feature feels broken when it's just gated
-                    // on a system toggle.
-                    if let live = sessionManager.liveTranscriber,
-                       session.state == .recording || session.state == .paused {
-                        if live.isAvailable, !live.transcript.isEmpty {
-                            liveCaptionStrip(text: live.transcript)
-                                .padding(.top, 28)
-                                .padding(.horizontal, 24)
-                                .transition(.opacity)
-                        } else if !live.isAvailable,
-                                  let reason = live.unavailableReason,
-                                  !captionsHintDismissed {
-                            liveCaptionsUnavailableChip(reason: reason)
-                                .padding(.top, 28)
-                                .padding(.horizontal, 24)
-                                .transition(.opacity)
-                        }
-
-                        // Live preview overlay (#64) — surfaces the
-                        // draft note as it assembles. Tick cadence
-                        // owned by the overlay; reads the partial
-                        // transcript via `live.transcript`. Only
-                        // mounts when the on-device transcriber is
-                        // available (otherwise we'd be POSTing
-                        // empty strings every 30s); the overlay
-                        // itself gates on a minimum transcript-
-                        // length threshold before firing.
-                        if live.isAvailable {
-                            LivePreviewOverlay(
-                                sessionId: session.id,
-                                partialTranscript: live.transcript,
-                                outputLanguage: sessionManager
-                                    .sessionLanguageForLivePreview
-                            )
-                            .padding(.top, 14)
-                            .padding(.horizontal, 24)
-                            .transition(.opacity)
-                        }
-                    }
+                    // Live captions + draft-note preview (gated on the
+                    // showLiveTranscription toggle). Whisper batch
+                    // transcription on stop is unaffected.
+                    liveTranscriptionSection
+                        .padding(.top, 28)
                 }
 
                 Spacer()
@@ -180,36 +457,6 @@ struct CaptureView: View {
             }
             .animation(AurionAnimation.smooth, value: session.isConsentConfirmed)
             .animation(AurionAnimation.smooth, value: session.state)
-        }
-        .onChange(of: session.state) { _, newState in
-            switch newState {
-            case .recording:
-                startTimer()
-                AurionHaptics.impact(.heavy)
-                withAnimation(AurionAnimation.pulse) {
-                    isPulsing = true
-                    recBadgePulsing = true
-                }
-            case .paused:
-                stopTimer()
-                isPulsing = false
-                recBadgePulsing = false
-            case .processingStage1:
-                stopTimer()
-                isPulsing = false
-                recBadgePulsing = false
-                AurionHaptics.notification(.success)
-            default:
-                break
-            }
-        }
-        .onAppear {
-            if !session.isConsentConfirmed {
-                AurionHaptics.notification(.warning)
-            }
-        }
-        .sheet(isPresented: $showingFrameGallery) {
-            FrameGalleryView(source: builtInSource)
         }
     }
 
@@ -368,44 +615,6 @@ struct CaptureView: View {
             showCameraPreview ? L("capture.a11yHidePreview")
                               : L("capture.a11yShowPreview")
         )
-    }
-
-    // MARK: - Camera Preview
-
-    /// Live preview card — anchors to the active BuiltInCaptureSource's
-    /// AVCaptureSession so we share inputs/outputs with the frame extractor
-    /// (no second mic claim, no resource conflict). Shown only when the
-    /// underlying AVCaptureSession is actually running (gated on
-    /// `isReadyForPreview`) AND the physician hasn't toggled it off.
-    ///
-    /// Sized to fill the screen width (minus the standard horizontal padding
-    /// applied by the caller) at a 4:3 landscape aspect ratio. The native
-    /// camera capture is portrait, but `videoGravity = .resizeAspectFill`
-    /// on the preview layer crops the top/bottom of that portrait frame so
-    /// the visible card is wide — better for confirming the patient is
-    /// centered in the shot.
-    @ViewBuilder
-    private var cameraPreviewCard: some View {
-        let registry = CaptureSourceRegistry.shared
-        // Only render when the active video source is the built-in camera
-        // AND it has finished bringing up the capture pipeline. The latter
-        // gates out a brief window (a few hundred ms after Start) where
-        // `session.state == .recording` but the AVCaptureSession itself
-        // hasn't yet finished its async configure+startRunning. Attaching
-        // a preview layer during that window caused EXC_BAD_ACCESS on
-        // AVFoundation's render thread.
-        if let builtIn = registry.activeVideoSource as? BuiltInCaptureSource,
-           builtIn.isReadyForPreview {
-            CameraPreviewLayer(session: registry.builtIn.previewSession)
-                .frame(maxWidth: .infinity)
-                .aspectRatio(4.0 / 3.0, contentMode: .fit)
-                .clipShape(RoundedRectangle(cornerRadius: 18))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 18)
-                        .stroke(Color.aurionGold.opacity(0.35), lineWidth: 1)
-                )
-                .shadow(color: .black.opacity(0.35), radius: 16, x: 0, y: 4)
-        }
     }
 
     // MARK: - Audio Waveform
@@ -705,7 +914,20 @@ struct CaptureView: View {
     // MARK: - Control Bar
 
     private var controlBar: some View {
-        HStack(alignment: .center) {
+        VStack(spacing: AurionSpacing.md) {
+            // Utility row: live-transcription (captions) toggle. Shown only
+            // while live so the pre-record bar stays a single record button;
+            // sits above the transport row so the record button stays centered.
+            if session.state == .recording || session.state == .paused {
+                HStack {
+                    Spacer()
+                    transcriptionToggleButton
+                }
+                .padding(.horizontal, 40)
+            }
+
+            // Transport controls: pause/resume · record/stop · stop
+            HStack(alignment: .center) {
             Spacer()
 
             // Left button: Pause/Resume (56px circle)
@@ -826,8 +1048,9 @@ struct CaptureView: View {
             .accessibilityHint(L("capture.a11yStopHint"))
 
             Spacer()
+            }
+            .padding(.horizontal, 40)
         }
-        .padding(.horizontal, 40)
         .padding(.bottom, 40)
     }
 
