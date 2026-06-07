@@ -112,6 +112,11 @@ class AuditEventType(StrEnum):
     STAGE2_FAILED = "stage2_failed"
     NOTE_VERSION_CREATED = "note_version_created"
     TEMPLATE_CHANGED = "template_changed"
+    # Session create resolved a chosen context whose pinned template_key is
+    # no longer an available built-in template; we coerced to the specialty
+    # default (#314, B2). Count-only — the row's existence IS the signal, no
+    # kwargs (never the context id, template name, or visit-type label).
+    SESSION_TEMPLATE_KEY_COERCED = "session_template_key_coerced"
     CONFLICT_RESOLVED = "conflict_resolved"
 
     # ── Frames / masking ─────────────────────────────────────────────────
@@ -462,6 +467,8 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.NOTE_VERSION_CREATED: frozenset({"version", "sections_edited"}),
     AuditEventType.TEMPLATE_CHANGED: frozenset({"new_specialty"}),
+    # Count-only — no kwargs (never the context id / template / label).
+    AuditEventType.SESSION_TEMPLATE_KEY_COERCED: frozenset(),
     AuditEventType.CONFLICT_RESOLVED: frozenset({"claim_id", "action", "new_version"}),
     # Frames / masking
     AuditEventType.FRAME_UPLOADED: frozenset(

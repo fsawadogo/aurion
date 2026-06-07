@@ -6,6 +6,8 @@ Invalid transitions are rejected. No session ends without an audit trail.
 
 from __future__ import annotations
 
+import json
+import logging
 import uuid
 from typing import Optional
 
@@ -18,12 +20,15 @@ from app.core.models import (
     EvalAssignmentModel,
     EvalScoreModel,
     NoteVersionModel,
+    PhysicianProfileModel,
     PilotMetricsModel,
     SessionModel,
     Stage2JobModel,
     TranscriptModel,
 )
 from app.core.types import SessionState
+
+logger = logging.getLogger("aurion.session")
 
 # ── Valid Transitions ──────────────────────────────────────────────────────
 
@@ -91,6 +96,99 @@ class ConsentRequiredError(Exception):
 VALID_CAPTURE_MODES = {"multimodal", "audio_only", "smart_dictation"}
 
 
+async def resolve_context_template_key(
+    db: AsyncSession,
+    clinician_id: uuid.UUID,
+    consultation_type: Optional[str],
+    context_id: Optional[str],
+) -> tuple[Optional[str], bool]:
+    """Resolve the Stage-1 template key to SNAPSHOT for a chosen context (#314).
+
+    Given the calling clinician + the visit type (``consultation_type``)
+    + the chosen ``context_id``, look up the clinician's
+    ``contexts_per_visit_type`` map (B1, #313) and resolve the template
+    in this order:
+
+      1. ``template_ref`` — phase 2 (custom templates, #318). Ignored
+         here; always treated as absent.
+      2. ``template_key`` — a built-in specialty template pinned to the
+         context. Used when present AND still an available built-in.
+      3. fall through to the session ``specialty`` default — represented
+         as ``None`` so Stage 1 calls ``get_template(specialty)`` exactly
+         as it did pre-#314 (byte-for-byte back-compat).
+
+    A pinned ``template_key`` that is no longer an available built-in
+    (stale / renamed / removed from disk) is COERCED to the specialty
+    default (``None``) and flagged so the caller can write a count-only
+    audit note. Every "can't resolve" path — no ``context_id``, no
+    ``consultation_type``, no profile, the visit type absent from the
+    map, no matching context id, or a null ``template_key`` — degrades
+    silently to ``(None, False)``. This function never raises.
+
+    Returns ``(template_key, coerced_stale)``:
+      * ``template_key`` — a validated built-in key to snapshot on the
+        row, or ``None`` to mean "use the session specialty default".
+      * ``coerced_stale`` — ``True`` only when a non-null pinned
+        ``template_key`` was dropped because it isn't an available
+        template.
+    """
+    if not context_id or not consultation_type:
+        return None, False
+
+    result = await db.execute(
+        select(PhysicianProfileModel).where(
+            PhysicianProfileModel.clinician_id == clinician_id
+        )
+    )
+    profile = result.scalar_one_or_none()
+    if profile is None:
+        return None, False
+
+    try:
+        contexts_map = json.loads(
+            getattr(profile, "contexts_per_visit_type", None) or "{}"
+        )
+    except (TypeError, ValueError):
+        return None, False
+    if not isinstance(contexts_map, dict):
+        return None, False
+
+    contexts = contexts_map.get(consultation_type)
+    if not isinstance(contexts, list):
+        return None, False
+
+    match: Optional[dict] = None
+    for ctx in contexts:
+        if isinstance(ctx, dict) and ctx.get("id") == context_id:
+            match = ctx
+            break
+    if match is None:
+        return None, False
+
+    # Resolution order: template_ref (phase 2 — ignored) → template_key
+    # → specialty default (None when the context pinned no template).
+    template_key = match.get("template_key")
+    if not template_key or not isinstance(template_key, str):
+        return None, False
+
+    # Lazy import: the route + transcription paths import both this
+    # module and note_gen, so we defer the cross-module import to call
+    # time to stay clear of any import-order coupling.
+    from app.modules.note_gen.service import list_available_templates
+
+    if template_key not in list_available_templates():
+        # Stale / renamed pin — coerce to the specialty default (None)
+        # and flag for a count-only audit note. Never errors the create.
+        logger.info(
+            "Context template_key for clinician=%s coerced to specialty "
+            "default (no longer an available template)",
+            clinician_id,
+        )
+        return None, True
+
+    return template_key, False
+
+
 async def create_session(
     db: AsyncSession,
     clinician_id: uuid.UUID,
@@ -102,6 +200,8 @@ async def create_session(
     participants: Optional[list[dict]] = None,
     provider_overrides: Optional[dict] = None,
     capture_mode: str = "multimodal",
+    context_id: Optional[str] = None,
+    template_key: Optional[str] = None,
 ) -> SessionModel:
     """Create a new session in CONSENT_PENDING state.
 
@@ -110,14 +210,19 @@ async def create_session(
     response path can round-trip it; pre-P1-7 rows used `str(dict)`
     which is not valid JSON and decoded as `None` on read — those rows
     keep working, they just don't expose overrides on subsequent GETs.
+
+    `context_id` and `template_key` carry the resolved Visit Type →
+    Context → Template selection (#314). Both are computed by
+    ``resolve_context_template_key`` upstream and persisted verbatim —
+    `template_key=None` means "use the session specialty default" at
+    Stage 1, exactly as before this feature existed.
     """
-    import json as _json
-    participants_json = _json.dumps(participants) if participants else None
+    participants_json = json.dumps(participants) if participants else None
     # JSON encode so `_to_response` can round-trip via json.loads. The
     # previous str(...) call produced Python repr (single quotes, enum
     # references) which is not parseable; the field was effectively
     # write-only on the wire.
-    overrides_json = _json.dumps(provider_overrides) if provider_overrides else None
+    overrides_json = json.dumps(provider_overrides) if provider_overrides else None
 
     if capture_mode not in VALID_CAPTURE_MODES:
         capture_mode = "multimodal"
@@ -127,6 +232,8 @@ async def create_session(
         specialty=specialty,
         consultation_type=consultation_type,
         encounter_context=encounter_context,
+        context_id=context_id,
+        template_key=template_key,
         output_language=output_language,
         encounter_type=encounter_type,
         participants_json=participants_json,

@@ -131,6 +131,19 @@ class SessionModel(Base):
     )
     consultation_type: Mapped[str | None] = mapped_column(String(50), nullable=True)
     encounter_context: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Visit Type → Context → Template (#314 / B2). ``context_id`` is the
+    # ``ctx_<8hex>`` id of the context the clinician chose on the iOS
+    # context sheet at create time, sourced from their profile's
+    # ``contexts_per_visit_type`` map (B1 / #313). NULL when no context
+    # was chosen or the client predates the feature. ``template_key`` is
+    # the SNAPSHOT of the built-in specialty template that context
+    # resolved to — resolved + validated against ``list_available_templates``
+    # once at create time so Stage 1 stays deterministic and auditable even
+    # if the profile is edited mid-encounter. NULL means "use the session
+    # ``specialty`` default", byte-for-byte the pre-#314 behaviour. Both
+    # columns are non-PHI identifiers — never logged with patient context.
+    context_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    template_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
     output_language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
     encounter_type: Mapped[str] = mapped_column(String(50), nullable=False, default="doctor_patient")
     participants_json: Mapped[str | None] = mapped_column(Text, nullable=True)

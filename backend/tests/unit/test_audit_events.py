@@ -74,6 +74,9 @@ EXPECTED_VALUES: dict[str, str] = {
     "STAGE2_FAILED": "stage2_failed",
     "NOTE_VERSION_CREATED": "note_version_created",
     "TEMPLATE_CHANGED": "template_changed",
+    # Session context → template snapshot coerced a stale pin to the
+    # specialty default (#314, B2). Count-only audit row.
+    "SESSION_TEMPLATE_KEY_COERCED": "session_template_key_coerced",
     "CONFLICT_RESOLVED": "conflict_resolved",
     # Frames / masking
     "FRAME_UPLOADED": "frame_uploaded",
