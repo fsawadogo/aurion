@@ -144,15 +144,13 @@ struct VoiceProcessingView: View {
         }
 
         DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.25) {
-            extractAndStoreEmbedding()
+            let didSave = extractAndStoreEmbedding()
             withAnimation(.aurionIOS) { isProcessing = false }
-            // Only celebrate when the embedding actually landed in the
-            // Keychain. A failed extraction (no file / unanalyzable audio)
-            // sets `failureMessage` and must fire the error notification,
-            // not the success chime + checkmark.
-            if failureMessage == nil {
+            // Fire success haptic only when the embedding was actually saved to
+            // Keychain. Fire error haptic when extraction/storage failed.
+            if didSave {
                 AurionHaptics.notification(.success)
-            } else {
+            } else if failureMessage != nil {
                 AurionHaptics.notification(.error)
             }
         }
@@ -164,19 +162,24 @@ struct VoiceProcessingView: View {
     /// audio file. Per CLAUDE.md, the raw recording must NEVER be
     /// persisted to disk past this point and the embedding NEVER leaves
     /// the device.
-    private func extractAndStoreEmbedding() {
+    ///
+    /// Returns `true` if the embedding was successfully saved to Keychain,
+    /// `false` otherwise. On failure, sets `failureMessage` to describe the error.
+    @discardableResult
+    private func extractAndStoreEmbedding() -> Bool {
         guard let url = audioFileURL else {
             failureMessage = L("onboarding.voiceProc.noRecording")
-            return
+            return false
         }
         guard let embedding = VoiceEmbeddingExtractor.extract(from: url) else {
             failureMessage = L("onboarding.voiceProc.analyzeFailed")
             try? FileManager.default.removeItem(at: url)
-            return
+            return false
         }
         KeychainHelper.shared.saveVoiceEmbedding(embedding)
         try? FileManager.default.removeItem(at: url)
         AuditLogger.log(event: .voiceEnrollmentComplete)
+        return true
     }
 
     /// Re-run enrollment after a failure: reset the progress UI + failure

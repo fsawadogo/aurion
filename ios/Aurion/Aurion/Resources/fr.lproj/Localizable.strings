@@ -794,6 +794,7 @@
 "export.mime.text" = "Fichier texte brut";
 "export.format" = "Format";
 "export.estSize" = "Taille estim\U00E9e";
+"export.estSizeValue" = "~%d Ko";
 "export.phi" = "RPS";
 "export.scrubbed" = "Nettoy\U00E9es";
 "export.exportAs" = "Exporter en %@";

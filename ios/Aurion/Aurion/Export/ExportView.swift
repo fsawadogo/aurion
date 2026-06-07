@@ -121,11 +121,14 @@ struct ExportView: View {
                                 : Color.aurionFieldBackground
                         )
                         .foregroundColor(
+                            // Brand-navy on gold — matches AurionGoldButton.
+                            // `.white` washed out against the gold fill (#298).
                             selectedFormat == format
-                                ? .white
+                                ? .aurionNavy
                                 : .aurionTextPrimary
                         )
                 }
+                .accessibilityAddTraits(selectedFormat == format ? .isSelected : [])
             }
         }
         .clipShape(Capsule())
@@ -155,7 +158,7 @@ struct ExportView: View {
 
                 Text(L("export.subtitle", selectedFormat.mimeDescription))
                     .aurionFont(15, weight: .regular, relativeTo: .subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.aurionTextSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, AurionSpacing.xl)
             }
@@ -164,7 +167,7 @@ struct ExportView: View {
             HStack(spacing: AurionSpacing.lg) {
                 fileInfoItem(icon: "doc.text", label: L("export.format"), value: selectedFormat.rawValue)
                 Divider().frame(height: 32)
-                fileInfoItem(icon: "internaldrive", label: L("export.estSize"), value: "~25 KB")
+                fileInfoItem(icon: "internaldrive", label: L("export.estSize"), value: estimatedSizeLabel)
                 Divider().frame(height: 32)
                 fileInfoItem(icon: "lock.shield", label: L("export.phi"), value: L("export.scrubbed"))
             }
@@ -217,7 +220,7 @@ struct ExportView: View {
 
                 Text(progressLabel)
                     .aurionFont(13, weight: .medium, relativeTo: .footnote)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.aurionTextSecondary)
             }
 
             // Linear progress bar
@@ -271,7 +274,7 @@ struct ExportView: View {
 
                 Text(L("export.doneSub", selectedFormat.rawValue))
                     .aurionFont(15, weight: .regular, relativeTo: .subheadline)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(.aurionTextSecondary)
                     .multilineTextAlignment(.center)
                     .padding(.horizontal, AurionSpacing.xl)
             }
@@ -312,6 +315,23 @@ struct ExportView: View {
                 .clipShape(Capsule())
             }
         }
+    }
+
+    /// Rough on-device size estimate for the file-info card. The
+    /// exporters run synchronously from the loaded note, so we approximate
+    /// the output by tallying the section + claim text the document will
+    /// contain and dividing by 1 KB (#298 — replaces a hardcoded "~25 KB"
+    /// that ignored content). Cosmetic: the completion view shows the true
+    /// byte count once the file is written.
+    private var estimatedSizeLabel: String {
+        guard let note else { return "--" }
+        let chars = note.sections.reduce(0) { sectionSum, section in
+            sectionSum + section.title.count + section.claims.reduce(0) { claimSum, claim in
+                claimSum + claim.text.count + claim.sourceQuote.count
+            }
+        }
+        let kb = max(1, Int((Double(chars) / 1024.0).rounded()))
+        return L("export.estSizeValue", kb)
     }
 
     // MARK: - File Info Item

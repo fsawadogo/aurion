@@ -330,12 +330,6 @@ struct ProfileView: View {
             // ── Privacy & Data (Law 25) ───────────────────────
             Section {
                 Button {
-                    loadMyData()
-                } label: {
-                    Label(L("profile.viewData"), systemImage: "doc.text.magnifyingglass")
-                }
-
-                Button {
                     exportMyData()
                 } label: {
                     Label(L("profile.exportData"), systemImage: "square.and.arrow.up")
@@ -525,25 +519,6 @@ struct ProfileView: View {
     }
 
     // MARK: - Privacy Actions
-
-    private func loadMyData() {
-        isLoadingData = true
-        Task {
-            do {
-                let url = URL(string: "\(AppConfig.baseAPIPath)/privacy/my-data")!
-                var request = URLRequest(url: url)
-                if let token = KeychainHelper.shared.bearerToken() {
-                    request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
-                }
-                let (data, _) = try await URLSession.shared.data(for: request)
-                myData = try JSONDecoder().decode(MyDataResponse.self, from: data)
-                showDataExport = true
-            } catch {
-                self.error = "Failed to load data: \(error.localizedDescription)"
-            }
-            isLoadingData = false
-        }
-    }
 
     private func exportMyData() {
         isLoadingData = true

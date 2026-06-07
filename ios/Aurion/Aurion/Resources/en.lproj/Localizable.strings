@@ -806,6 +806,7 @@
 "export.mime.text" = "Plain Text File";
 "export.format" = "Format";
 "export.estSize" = "Est. Size";
+"export.estSizeValue" = "~%d KB";
 "export.phi" = "PHI";
 "export.scrubbed" = "Scrubbed";
 "export.exportAs" = "Export as %@";
