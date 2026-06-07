@@ -1575,7 +1575,7 @@ final class SessionManager: ObservableObject {
         // session ids are UUIDs, and a retry hits the existing-file
         // branch above. Filename matches OfflineUploadQueue's pattern
         // so a future "promote-to-offline-queue" path can adopt it.
-        let url = directory.appendingPathComponent("\(sessionId).wav")
+        let url = AudioUploadStaging.fileURL(sessionId: sessionId)
         do {
             try bytes.write(to: url, options: [.atomic, .completeFileProtection])
         } catch {
@@ -1596,9 +1596,7 @@ final class SessionManager: ObservableObject {
     /// responsibility, not ours — this directory holds only the
     /// currently-uploading session's WAV, which is short-lived.
     private func audioUploadStagingDirectory() -> URL {
-        let fm = FileManager.default
-        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("AudioUploadStaging", isDirectory: true)
+        AudioUploadStaging.directory
     }
 
     /// Delete the on-disk WAV from the upload-staging directory and
