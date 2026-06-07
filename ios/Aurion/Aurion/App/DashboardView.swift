@@ -634,6 +634,13 @@ struct DashboardView: View {
                         .padding(.top, 8)
 
                         VStack(spacing: 12) {
+                            // The three participant combinations (#321). The
+                            // key clinical axis is whether the attending
+                            // physician is present — not "what flavor of extra
+                            // person is in the room". "Team member(s)" subsumes
+                            // nurse / PA / resident / fellow / student.
+
+                            // 1 — Doctor + Patient (standard 1:1, no team).
                             AurionSelectableCard(
                                 icon: "person.2",
                                 title: L("encounter.doctorPatient.title"),
@@ -644,30 +651,35 @@ struct DashboardView: View {
                                 selectedParticipants = []
                             }
 
+                            // 2 — Doctor + team member(s) + Patient (attending
+                            // present *with* the care team).
                             AurionSelectableCard(
                                 icon: "person.3",
-                                title: L("encounter.allied.title"),
-                                subtitle: L("encounter.allied.sub"),
-                                selected: selectedEncounterType == "doctor_patient_allied"
+                                title: L("encounter.doctorTeam.title"),
+                                subtitle: L("encounter.doctorTeam.sub"),
+                                selected: selectedEncounterType == "doctor_team_patient"
                             ) {
-                                selectedEncounterType = "doctor_patient_allied"
+                                selectedEncounterType = "doctor_team_patient"
                             }
 
-                            if selectedEncounterType == "doctor_patient_allied" {
-                                alliedHealthPicker
+                            if selectedEncounterType == "doctor_team_patient" {
+                                teamMemberEntry
                             }
 
+                            // 3 — Team member(s) + Patient (attending NOT
+                            // present — a resident / nurse / fellow sees the
+                            // patient on their own).
                             AurionSelectableCard(
-                                icon: "graduationcap",
-                                title: L("encounter.trainee.title"),
-                                subtitle: L("encounter.trainee.sub"),
-                                selected: selectedEncounterType == "doctor_patient_transitory"
+                                icon: "stethoscope",
+                                title: L("encounter.teamOnly.title"),
+                                subtitle: L("encounter.teamOnly.sub"),
+                                selected: selectedEncounterType == "team_patient"
                             ) {
-                                selectedEncounterType = "doctor_patient_transitory"
+                                selectedEncounterType = "team_patient"
                             }
 
-                            if selectedEncounterType == "doctor_patient_transitory" {
-                                traineeForm
+                            if selectedEncounterType == "team_patient" {
+                                teamMemberEntry
                             }
                         }
                     }
@@ -690,6 +702,21 @@ struct DashboardView: View {
             .background(Color.aurionBackground)
         }
         .presentationDetents([.large])
+    }
+
+    /// Team-member entry shown under both team-including combinations
+    /// (#321). "Team member(s)" subsumes the former allied (nurse / PA,
+    /// persistent from the profile) and trainee (resident / fellow / student,
+    /// ad-hoc) inputs — both collapse here so the clinician can name who is
+    /// present regardless of whether the attending is in the room. Choosing
+    /// WHICH members from a per-day roster + per-member access is #275; this
+    /// only reuses the existing lightweight entry so the capture pill still
+    /// shows names.
+    private var teamMemberEntry: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            alliedHealthPicker
+            traineeForm
+        }
     }
 
     private var alliedHealthPicker: some View {

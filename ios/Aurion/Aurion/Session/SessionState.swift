@@ -140,10 +140,15 @@ final class CaptureSession: ObservableObject, Identifiable {
     /// to render the mode pill and (eventually) by `CaptureManager` to suppress
     /// the video stream when the physician picks an audio-only mode.
     let captureMode: CaptureMode
-    /// Encounter shape selected on the start sheet — `doctor_patient`,
-    /// `doctor_patient_allied`, or `doctor_patient_transitory`. Used by
-    /// `CaptureView` to render the shared-encounter pill when the room
-    /// includes more than the physician.
+    /// Encounter shape selected on the start sheet — one of the three
+    /// participant combinations (#321), keyed on whether the attending
+    /// physician is present:
+    /// - `doctor_patient`        — attending + patient (standard 1:1).
+    /// - `doctor_team_patient`   — attending + team member(s) + patient.
+    /// - `team_patient`          — team member(s) + patient, attending absent.
+    /// Free-form on the wire (`POST /sessions` `encounter_type` is an open
+    /// `str` column). Used by `CaptureView` to render the shared-encounter
+    /// pill when the room includes more than the physician.
     let encounterType: String
     /// Non-physician collaborators in the same encounter. Empty for
     /// `doctor_patient`. Surfaced on the capture screen so everyone present

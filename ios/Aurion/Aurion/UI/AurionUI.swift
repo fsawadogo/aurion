@@ -198,6 +198,13 @@ struct AurionTextButton: View {
             Text(label)
                 .aurionFont(16, weight: .medium, relativeTo: .body)
                 .foregroundColor(color)
+                // Nav-bar buttons (Cancel / Back / Done) must stay on one
+                // line — at larger Dynamic Type "Cancel" was wrapping to
+                // "Canc\nel" inside the fixed-width nav slot (#321). One line
+                // at its natural width; AurionNavBar's minWidth slot grows to
+                // fit instead of clipping.
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 12)
         }
@@ -463,15 +470,19 @@ struct AurionNavBar<Leading: View, Trailing: View>: View {
 
     var body: some View {
         HStack {
+            // minWidth (not a hard width) so a Cancel/Back label that grows at
+            // larger Dynamic Type gets the room it needs instead of wrapping
+            // inside an 80pt slot (#321). The 80pt floor keeps the title
+            // centered in the common case.
             HStack { leading() }
-                .frame(width: 80, alignment: .leading)
+                .frame(minWidth: 80, alignment: .leading)
             Spacer(minLength: 0)
             Text(title)
                 .aurionFont(17, weight: .semibold, relativeTo: .headline)
                 .foregroundColor(.aurionTextPrimary)
             Spacer(minLength: 0)
             HStack { trailing() }
-                .frame(width: 80, alignment: .trailing)
+                .frame(minWidth: 80, alignment: .trailing)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
