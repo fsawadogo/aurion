@@ -119,6 +119,17 @@ class PipelineConfig(BaseModel):
     # history; below 1 makes the lookup pointless (would never include
     # any encounters).
     longitudinal_context_max_encounters: int = Field(default=3, ge=1, le=10)
+    # ── Windowed media retention (#338) ────────────────────────────────
+    # How long raw session media (audio + masked clips/frames) is retained
+    # in S3 before it becomes eligible for purge, expressed in days. Read
+    # ONLY when `feature_flags.media_review_retention_enabled` is True —
+    # when that flag is OFF nothing consults this value and the historical
+    # behavior (no active purge; S3 lifecycle TTL alone) is preserved. Seven
+    # days is enough for a clinician to come back and replay the encounter
+    # audio during review without re-recording. Bounds 1..30 MUST match the
+    # AppConfig JSON-Schema validator another lane adds — do not widen them
+    # here without widening that validator in lockstep.
+    media_review_retention_days: int = Field(default=7, ge=1, le=30)
 
 
 class FeatureFlagsConfig(BaseModel):
@@ -162,6 +173,16 @@ class FeatureFlagsConfig(BaseModel):
     coding_card_enabled: bool = False
     patient_summary_card_enabled: bool = False
     emr_writeback_card_enabled: bool = False
+    # ── Windowed media retention (#338) ───────────────────────────────────
+    # Master gate for the windowed media-retention feature: when ON, raw
+    # session audio (and masked clips/frames) is retained for
+    # `pipeline.media_review_retention_days` so a clinician can replay the
+    # encounter audio during review, then actively purged on final-note
+    # approval. DEFAULT OFF — when OFF every code path is byte-identical to
+    # today (no active purge-on-approval, no audio-replay endpoint; the S3
+    # lifecycle TTL remains the only backstop). PHI-sensitive, so it ships
+    # dark and the operator flips it via POST /admin/feature-flags.
+    media_review_retention_enabled: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────
