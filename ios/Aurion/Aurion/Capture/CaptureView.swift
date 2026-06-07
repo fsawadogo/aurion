@@ -171,6 +171,7 @@ struct CaptureView: View {
             HStack(spacing: 6) {
                 streamIndicators
                 maskingShield
+                consentBadge
             }
         }
         .padding(.horizontal, AurionSpacing.lg)
@@ -312,6 +313,42 @@ struct CaptureView: View {
             .background(Color.white.opacity(0.10))
             .clipShape(Circle())
             .accessibilityLabel(L("capture.maskingReassurance"))
+    }
+
+    // MARK: - Consent Reassurance Badge
+
+    /// Compact consent indicator for the immersive (full-screen camera) layout,
+    /// which has no room for the standard consent chip. Appears once consent is
+    /// confirmed — a quiet trust signal that the session was opened with patient
+    /// consent. Until then the bottom cluster shows the full consent prompt, so
+    /// a "pending" badge here would be redundant. Deliberately GREEN (not the
+    /// cluster's gold accent): green reads as "confirmed/safe" and keeps consent
+    /// visually distinct from the adjacent gold masking shield. Fixed green —
+    /// not an adaptive status token — because this always sits over the camera's
+    /// dark scrim. Non-interactive; method + time are carried by the VoiceOver
+    /// value. Animates in via the `isConsentConfirmed` animation on the layout
+    /// (same `.transition` pattern as `recBadge`).
+    @ViewBuilder private var consentBadge: some View {
+        if session.isConsentConfirmed {
+            Image(systemName: "checkmark.circle.fill")
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundColor(.aurionGreen)
+                .frame(width: 24, height: 24)
+                .background(Color.white.opacity(0.10))
+                .clipShape(Circle())
+                .transition(AurionTransition.scaleIn)
+                .accessibilityLabel(L("capture.consentBadgeA11y"))
+                .accessibilityValue(consentBadgeA11yValue)
+        }
+    }
+
+    /// Method + time for the consent badge's VoiceOver value, mirroring the
+    /// standard consent chip. Empty when consent details are unavailable.
+    private var consentBadgeA11yValue: String {
+        guard let method = session.consentMethod,
+              let at = session.consentConfirmedAt else { return "" }
+        return L("capture.consentChip", method.displayName,
+                 Self.consentTimeFormatter.string(from: at))
     }
 
     // MARK: - Standard Layout (navy gradient + big timer)

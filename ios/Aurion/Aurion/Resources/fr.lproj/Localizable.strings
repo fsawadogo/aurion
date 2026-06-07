@@ -946,3 +946,4 @@
 "capture.a11yHideTranscription" = "Masquer la transcription en direct";
 "capture.a11yShowTranscription" = "Afficher la transcription en direct";
 "capture.maskingReassurance" = "Les visages sont masqu\U00E9s sur cet appareil avant tout t\U00E9l\U00E9versement de la vid\U00E9o.";
+"capture.consentBadgeA11y" = "Consentement confirm\U00E9";
