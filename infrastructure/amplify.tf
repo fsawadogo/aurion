@@ -222,6 +222,17 @@ resource "aws_amplify_app" "web_portal" {
   tags = {
     Name = "aurion-portal-${var.environment}"
   }
+
+  # Amplify stores customHeaders as a server-normalized YAML document, which
+  # never round-trips byte-identically to this heredoc — so every plan showed a
+  # spurious `custom_headers` diff (the 2026-06-07 drift on this resource). The
+  # security headers above ARE the deployed set; ignore post-create changes so
+  # Terraform stops fighting AWS's normalization and drift-detect stays clean.
+  # To intentionally CHANGE the headers, remove this temporarily, apply, re-add.
+  # (#326)
+  lifecycle {
+    ignore_changes = [custom_headers]
+  }
 }
 
 # -----------------------------------------------------------------------------

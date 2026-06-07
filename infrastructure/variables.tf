@@ -66,9 +66,8 @@ variable "whisper_instance_type" {
 # -----------------------------------------------------------------------------
 
 variable "api_image_tag" {
-  description = "ECR image tag for the FastAPI container. Defaults to 'latest' for dev ergonomics; production deploys MUST pass an immutable commit SHA via `-var=\"api_image_tag=<sha>\"` (or via CI/CD env override). The ECR repo `image_tag_mutability = MUTABLE` lets dev keep moving; prod stays SHA-pinned by convention, enforced at the deploy pipeline."
+  description = "ECR image tag (immutable commit SHA) for the FastAPI container. REQUIRED — no default. CI passes the freshly-built SHA (`-var=\"api_image_tag=<sha>\"`); any out-of-band `terraform apply` must pass the CURRENTLY-DEPLOYED SHA (read it from `aws ecs describe-task-definition --task-definition aurion-api-<env> --query taskDefinition.containerDefinitions[0].image`). The default used to be 'latest', which silently shipped a STALE image on a bare apply (rev 100, 2026-06-07): its `alembic upgrade head` failed with \"Can't locate revision '0031'\" because :latest predated the live DB migration. Removing the default makes a bare apply fail fast instead of regressing the image (#326)."
   type        = string
-  default     = "latest"
 
   validation {
     condition     = length(var.api_image_tag) > 0

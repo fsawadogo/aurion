@@ -14,6 +14,10 @@ api_domain = "api-dev.aurionclinical.com"
 # prod via prod.tfvars. CTO decision 2026-06-03.
 web_portal_subdomain = "portal.aurionclinical.com"
 
-# Mutable tag is fine in dev — image_tag_mutability on the ECR repo
-# allows it. Prod overrides via `-var="api_image_tag=<sha>"` at deploy.
-api_image_tag = "latest"
+# api_image_tag is INTENTIONALLY not set here (matches prod.tfvars). It used to
+# be "latest", which is the footgun behind the 2026-06-07 incident: a bare
+# `terraform apply -var-file=dev.tfvars` (no -var override) shipped a STALE
+# :latest image whose `alembic upgrade head` failed on the live DB migration.
+# CI's deploy-dev always passes `-var "api_image_tag=<sha>"` (CLI > tfvars), so
+# CI is unaffected; any out-of-band apply must now pass the CURRENTLY-DEPLOYED
+# SHA explicitly (read it from `aws ecs describe-task-definition`). See #326.

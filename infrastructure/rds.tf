@@ -19,14 +19,12 @@ resource "aws_security_group" "db" {
     security_groups = [aws_security_group.api.id]
   }
 
-  # No egress — database does not need outbound internet access
-  egress {
-    description = "No outbound"
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = []
-  }
+  # No egress — the DB never initiates outbound. We OMIT the egress block
+  # rather than declaring an empty-cidr rule: aws_security_group with no egress
+  # block manages egress as the empty set (Terraform removes AWS's default
+  # allow-all), matching the live SG ([]). The old explicit
+  # `egress { cidr_blocks = [] }` was a no-op AWS never round-tripped, so every
+  # plan showed spurious drift on this SG (the 2026-06-07 drift). (#326)
 
   tags = {
     Name = "aurion-db-sg-${var.environment}"
