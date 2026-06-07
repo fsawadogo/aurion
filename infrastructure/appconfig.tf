@@ -178,6 +178,14 @@ resource "aws_appconfig_configuration_profile" "main" {
             coding_card_enabled          = { type = "boolean" }
             patient_summary_card_enabled = { type = "boolean" }
             emr_writeback_card_enabled   = { type = "boolean" }
+            # Visual-evidence path flags (lane-backend/vision-evidence-feature-
+            # flags). Gate the two video-vision paths independently so the
+            # pipeline can be steered from AppConfig without a redeploy:
+            # clip (Gemini) interpretation vs legacy frame-by-frame video.
+            # NOT in `required` so an older document without these keys still
+            # validates (backend Pydantic schema defaults both `true`).
+            clip_video_interpretation_enabled = { type = "boolean" }
+            frame_by_frame_video_enabled      = { type = "boolean" }
           }
         }
       }
