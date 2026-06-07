@@ -574,6 +574,15 @@ resource "aws_ecs_task_definition" "api" {
         { name = "AUTH_EMAIL_ENABLED", value = "true" },
         { name = "AUTH_EMAIL_FROM", value = "noreply@aurionclinical.com" },
         { name = "AUTH_PASSWORD_RESET_URL_BASE", value = "https://${var.web_portal_subdomain}/reset-password" },
+        # Semantic trigger classifier (Tier 2) — embeddings fallback that
+        # catches paraphrased exam/imaging cues the keyword list misses
+        # (e.g. "can you bend your knee" → active_physical_examination), so
+        # under-narrated physical exams still flag visual triggers and reach
+        # the clip/vision pipeline (#324). One batched OpenAI
+        # text-embedding-3-small call per session over keyword-missed
+        # segments (~free at pilot scale); fail-soft to keyword-only on any
+        # error. Threshold defaults to 0.45 (AURION_SEMANTIC_TRIGGER_THRESHOLD).
+        { name = "AURION_SEMANTIC_TRIGGER_ENABLED", value = "1" },
       ]
 
       secrets = [
