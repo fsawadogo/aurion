@@ -160,6 +160,15 @@ class AuditEventType(StrEnum):
     # labels themselves. Same posture TEAM_MEMBERS_UPDATED (names),
     # MACRO_CREATED (body), and PROMPT_USER_PROMPT_SET (text) take.
     PROFILE_CONSULTATION_TYPES_UPDATED = "profile_consultation_types_updated"
+    # Visit-type → context → template map changed via PUT /profile (#313,
+    # B1). Each context carries a clinician-authored ``label`` (gated by the
+    # same PHI format checks as consultation types) and an optional
+    # ``template_key``. Labels, keys, and context ids are user-authored and
+    # could in the worst case carry PHI; we therefore carry ONLY aggregate
+    # count deltas in the audit row — never labels, keys, ids, or
+    # template names. Same count-only posture TEAM_MEMBERS_UPDATED (names)
+    # and PROFILE_CONSULTATION_TYPES_UPDATED (labels) take.
+    PROFILE_CONTEXTS_UPDATED = "profile_contexts_updated"
 
     # ── Admin ────────────────────────────────────────────────────────────
     USER_CREATED = "user_created"
@@ -560,6 +569,23 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
             "defaults_removed",
             "customs_added",
             "customs_removed",
+        }
+    ),
+    # Profile (#313, B1) — visit-type → context → template map edit. The
+    # whitelist is AGGREGATE COUNTS ONLY. NEVER include the context
+    # labels, the visit-type keys, the context ids, or the attached
+    # template keys — all are user-authored and PHI-risk. ``actor_id`` is
+    # the clinician UUID; the five count fields let the post-pilot review
+    # answer "did clinicians adopt contexts/templates?" without surfacing
+    # any free text.
+    AuditEventType.PROFILE_CONTEXTS_UPDATED: frozenset(
+        {
+            "actor_id",
+            "visit_types_touched",
+            "contexts_added",
+            "contexts_removed",
+            "templates_attached",
+            "templates_detached",
         }
     ),
     # Admin
