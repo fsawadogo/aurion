@@ -5,6 +5,7 @@ from pydantic import ValidationError
 
 from app.modules.config.schema import (
     AppConfigSchema,
+    FeatureFlagsConfig,
     NoteGenerationProviderKey,
     PipelineConfig,
     ProvidersConfig,
@@ -53,6 +54,33 @@ class TestPipelineConfig:
     def test_out_of_range_rejected(self):
         with pytest.raises(ValidationError):
             PipelineConfig(stage1_skip_window_seconds=5)  # min is 10
+
+    def test_media_review_retention_days_default(self):
+        # #338 — windowed media retention. Default 7 days.
+        config = PipelineConfig()
+        assert config.media_review_retention_days == 7
+
+    def test_media_review_retention_days_bounds(self):
+        # Bounds 1..30 MUST match the AppConfig JSON-Schema validator the
+        # infra lane adds — both ends are exclusive failures.
+        assert PipelineConfig(media_review_retention_days=1).media_review_retention_days == 1
+        assert PipelineConfig(media_review_retention_days=30).media_review_retention_days == 30
+        with pytest.raises(ValidationError):
+            PipelineConfig(media_review_retention_days=0)  # min is 1
+        with pytest.raises(ValidationError):
+            PipelineConfig(media_review_retention_days=31)  # max is 30
+
+
+class TestFeatureFlagsConfig:
+    def test_media_review_retention_disabled_by_default(self):
+        # #338 — PHI-sensitive feature ships dark. Default OFF so OFF
+        # behavior is byte-identical to today.
+        config = FeatureFlagsConfig()
+        assert config.media_review_retention_enabled is False
+
+    def test_media_review_retention_can_be_enabled(self):
+        config = FeatureFlagsConfig(media_review_retention_enabled=True)
+        assert config.media_review_retention_enabled is True
 
 
 class TestAppConfigSchema:

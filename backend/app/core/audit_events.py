@@ -140,6 +140,14 @@ class AuditEventType(StrEnum):
     FRAMES_PURGED = "frames_purged"
     EVAL_FRAMES_MIGRATED = "eval_frames_migrated"
     CLEANUP_PARTIAL_FAILURE = "cleanup_partial_failure"
+    # ── Windowed media retention (#338) ───────────────────────────────────
+    # A retained-media replay URL was minted for a reviewer (currently the
+    # audio-replay endpoint; the kwarg whitelist also names clip/frame for
+    # the same surface). Carries the actor UUID, the evidence kind, and the
+    # signed-URL TTL — NEVER an S3 key, signed URL, or any object body. The
+    # row's existence is the audit signal that someone re-listened to / re-
+    # watched retained media during review.
+    EVIDENCE_REPLAYED = "evidence_replayed"
 
     # ── Privacy / account ────────────────────────────────────────────────
     BIOMETRIC_CONSENT_CONFIRMED = "biometric_consent_confirmed"
@@ -535,14 +543,28 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.PROVIDER_FALLBACK: frozenset(
         {"frame_id", "original_error", "fallback_provider"}
     ),
-    # Cleanup
-    AuditEventType.AUDIO_PURGED: frozenset({"bucket", "s3_key"}),
+    # Cleanup.
+    # AUDIO_PURGED carries EITHER a single ``s3_key`` (the legacy
+    # key-scoped `purge_audio`) OR an ``audio_count`` (the prefix-based
+    # `purge_audio_for_session` added for #338, which deletes every
+    # `audio/{session_id}/...` object and has no single canonical key).
+    # Widening a whitelist is back-compatible — existing consumers keep
+    # working; the count is PHI-free (an integer, never an object body).
+    AuditEventType.AUDIO_PURGED: frozenset({"bucket", "s3_key", "audio_count"}),
     AuditEventType.FRAMES_PURGED: frozenset({"bucket", "frame_count"}),
     AuditEventType.EVAL_FRAMES_MIGRATED: frozenset(
         {"source_bucket", "dest_bucket", "frame_count"}
     ),
     AuditEventType.CLEANUP_PARTIAL_FAILURE: frozenset(
         {"bucket", "s3_key", "error_message", "failed_count"}
+    ),
+    # Windowed media retention (#338) — a reviewer minted a replay URL for
+    # retained media. ``actor_id`` is the requester UUID; ``evidence_kind``
+    # is one of {"audio", "clip", "frame"}; ``ttl_seconds`` is the signed-
+    # URL validity window. NEVER the S3 key, the signed URL, or any body —
+    # the row records THAT replay happened, not WHAT was replayed.
+    AuditEventType.EVIDENCE_REPLAYED: frozenset(
+        {"actor_id", "evidence_kind", "ttl_seconds"}
     ),
     # Privacy / account — iOS-only voice events stay empty
     AuditEventType.BIOMETRIC_CONSENT_CONFIRMED: frozenset(),

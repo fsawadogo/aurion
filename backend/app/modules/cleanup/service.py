@@ -31,11 +31,22 @@ logger = logging.getLogger("aurion.cleanup")
 # Evidence kind → S3 prefix shape. Single source of truth so any future
 # evidence kind (e.g. screen captures, depth maps) lands as one new
 # entry, not a third copy of the purge/migrate logic.
-EvidenceKind = Literal["frame", "clip"]
+EvidenceKind = Literal["frame", "clip", "screen"]
 
 _EVIDENCE_PREFIX_TEMPLATE: dict[EvidenceKind, str] = {
-    "frame": "{session_id}/",  # historical baseline — used to be flat
+    # Frame stills live at `frames/{session_id}/{ts}.jpg` (upload-side
+    # layout — see app/api/v1/frames.py and notes._expand_claim). The
+    # historical template was a flat `{session_id}/`, which matched NOTHING
+    # under the real layout — `purge_frames` and `verify_purge`'s frame
+    # check silently operated on zero objects. This is the bug fix (#338).
+    "frame": "frames/{session_id}/",
     "clip": "clips/{session_id}/",
+    # Screen-capture frames land under their own sibling prefix
+    # (`screen_frames/{session_id}/...`). Single-sourced here so any future
+    # screen sweep reuses the same shape; the pilot runs screen capture OFF
+    # so nothing is produced today and the S3 lifecycle TTL backstops any
+    # that ever land.
+    "screen": "screen_frames/{session_id}/",
 }
 
 
@@ -100,17 +111,23 @@ async def _purge_evidence_under_prefix(
     session_id: str,
     prefix: str,
     operation_label: str,
+    bucket: str = FRAMES_BUCKET,
 ) -> tuple[list[str], list[str]]:
-    """Delete every S3 object under ``prefix`` in the frames bucket.
+    """Delete every S3 object under ``prefix`` in ``bucket``.
 
     Core helper shared by `purge_frames` + `purge_clips` (DRY rule from
-    §6c). Returns ``(deleted_keys, failed_keys)`` so the caller can
-    decide which audit event to emit and at what severity. Does NOT
-    write the audit event itself — that lets `purge_all_evidence`
-    aggregate one summary row instead of two.
+    §6c) and now also `purge_audio_for_session`. Returns
+    ``(deleted_keys, failed_keys)`` so the caller can decide which audit
+    event to emit and at what severity. Does NOT write the audit event
+    itself — that lets `purge_all_evidence` aggregate one summary row
+    instead of two.
+
+    ``bucket`` defaults to ``FRAMES_BUCKET`` so every existing caller is
+    byte-identical; the audio purge passes ``bucket=AUDIO_BUCKET`` to reuse
+    the same paginate-and-batch-delete machinery against the audio bucket.
 
     The ``operation_label`` is forwarded to ``with_retry`` so the retry
-    telemetry distinguishes frame vs clip purges in the dashboards.
+    telemetry distinguishes frame vs clip vs audio purges in the dashboards.
     """
     client = get_s3_client()
     keys_deleted: list[str] = []
@@ -118,7 +135,7 @@ async def _purge_evidence_under_prefix(
 
     try:
         paginator = client.get_paginator("list_objects_v2")
-        for page in paginator.paginate(Bucket=FRAMES_BUCKET, Prefix=prefix):
+        for page in paginator.paginate(Bucket=bucket, Prefix=prefix):
             objects = page.get("Contents", [])
             if not objects:
                 continue
@@ -129,7 +146,7 @@ async def _purge_evidence_under_prefix(
             try:
                 await with_retry(
                     client.delete_objects,
-                    Bucket=FRAMES_BUCKET,
+                    Bucket=bucket,
                     Delete=delete_request,
                     max_retries=3,
                     base_delay=1.0,
@@ -276,6 +293,66 @@ async def purge_all_evidence(session_id: str) -> None:
     """
     await purge_frames(session_id)
     await purge_clips(session_id)
+
+
+async def purge_audio_for_session(session_id: str) -> None:
+    """Purge ALL raw audio objects for a session from S3, by prefix.
+
+    Lists ``audio/{session_id}/`` in ``AUDIO_BUCKET`` (via the generalized
+    `_purge_evidence_under_prefix` with ``bucket=AUDIO_BUCKET``), batch-
+    deletes every object, then emits ONE ``AUDIO_PURGED`` audit row
+    carrying the bucket + an integer ``audio_count``.
+
+    This is the prefix-based purge the dead, key-requiring `purge_audio`
+    could never be: the transcription upload path persists keys shaped
+    ``audio/{session_id}/{uuid}.wav`` and DISCARDS the exact key
+    (transcription.service.transcribe_audio), so a single-key delete was
+    never reachable. Listing by the session prefix deletes whatever landed
+    there regardless of the uuid.
+
+    PHI-safe: the audit row carries only the bucket + a count — never an
+    S3 key (there is no single canonical key) and never any object body.
+
+    Args:
+        session_id: The session whose raw audio should be purged.
+    """
+    audit = get_audit_log_service()
+    prefix = f"audio/{session_id}/"
+    logger.info(
+        "Purging audio: session=%s bucket=%s prefix=%s",
+        str(session_id)[:8],
+        AUDIO_BUCKET,
+        prefix,
+    )
+
+    keys_deleted, failed_keys = await _purge_evidence_under_prefix(
+        session_id=session_id,
+        prefix=prefix,
+        operation_label="s3_delete_audio",
+        bucket=AUDIO_BUCKET,
+    )
+
+    if failed_keys:
+        await audit.write_event(
+            session_id=session_id,
+            event_type=AuditEventType.CLEANUP_PARTIAL_FAILURE,
+            bucket=AUDIO_BUCKET,
+            failed_count=len(failed_keys),
+        )
+
+    await audit.write_event(
+        session_id=session_id,
+        event_type=AuditEventType.AUDIO_PURGED,
+        bucket=AUDIO_BUCKET,
+        audio_count=len(keys_deleted),
+    )
+
+    logger.info(
+        "Audio purged: session=%s deleted=%d failed=%d",
+        str(session_id)[:8],
+        len(keys_deleted),
+        len(failed_keys),
+    )
 
 
 async def _migrate_evidence_under_prefix(
@@ -509,3 +586,71 @@ async def verify_purge(session_id: str) -> bool:
         "Purge verified: session=%s — all prefixes empty", str(session_id)[:8]
     )
     return True
+
+
+async def purge_session_media(session_id: str) -> None:
+    """Orchestrate the full media purge for a session.
+
+    Single entrypoint used by purge-on-approval
+    (``notes.approve_final_note``, gated behind
+    ``feature_flags.media_review_retention_enabled``) and any future
+    retention-window sweep. Each leg runs independently inside its own
+    non-fatal ``try/except`` that only logs — mirroring the
+    ``export/service.py`` cleanup block — so one failed leg never blocks
+    the others and never bubbles to the caller. The S3 lifecycle TTL is
+    the backstop for anything that fails here.
+
+    Legs, in order:
+      1. ``migrate_eval_frames``     — move masked eval frames to EVAL_BUCKET
+      2. ``migrate_eval_clips``      — move masked eval clips to EVAL_BUCKET
+      3. ``purge_frames``            — delete remaining frames (FRAMES_BUCKET)
+      4. ``purge_clips``             — delete remaining clips (FRAMES_BUCKET)
+      5. ``purge_audio_for_session`` — delete raw audio (AUDIO_BUCKET)
+
+    Args:
+        session_id: The session whose media should be migrated + purged.
+    """
+    try:
+        await migrate_eval_frames(session_id)
+    except Exception as exc:
+        logger.error(
+            "Eval frame migration failed during media purge: session=%s error=%s",
+            str(session_id)[:8],
+            str(exc),
+        )
+
+    try:
+        await migrate_eval_clips(session_id)
+    except Exception as exc:
+        logger.error(
+            "Eval clip migration failed during media purge: session=%s error=%s",
+            str(session_id)[:8],
+            str(exc),
+        )
+
+    try:
+        await purge_frames(session_id)
+    except Exception as exc:
+        logger.error(
+            "Frame purge failed during media purge: session=%s error=%s",
+            str(session_id)[:8],
+            str(exc),
+        )
+
+    try:
+        await purge_clips(session_id)
+    except Exception as exc:
+        logger.error(
+            "Clip purge failed during media purge: session=%s error=%s",
+            str(session_id)[:8],
+            str(exc),
+        )
+
+    try:
+        await purge_audio_for_session(session_id)
+    except Exception as exc:
+        logger.error(
+            "Audio purge failed during media purge: session=%s error=%s",
+            str(session_id)[:8],
+            str(exc),
+        )

@@ -77,6 +77,7 @@ class FeatureFlagsResponse(BaseModel):
     coding_card_enabled: bool
     patient_summary_card_enabled: bool
     emr_writeback_card_enabled: bool
+    media_review_retention_enabled: bool
 
 
 class UpdateFeatureFlagsResponse(BaseModel):
@@ -162,6 +163,9 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         coding_card_enabled=cfg_feature_flags.coding_card_enabled,
         patient_summary_card_enabled=cfg_feature_flags.patient_summary_card_enabled,
         emr_writeback_card_enabled=cfg_feature_flags.emr_writeback_card_enabled,
+        media_review_retention_enabled=(
+            cfg_feature_flags.media_review_retention_enabled
+        ),
     )
 
 

@@ -22,6 +22,7 @@ from app.core.audit_events import AuditEventType
 from app.core.database import async_session_factory, get_db
 from app.core.models import TranscriptModel
 from app.core.s3 import (
+    AUDIO_BUCKET,
     DEFAULT_EVIDENCE_TTL_SECONDS,
     FRAMES_BUCKET,
     generate_presigned_evidence_url,
@@ -30,6 +31,8 @@ from app.core.s3 import (
 from app.core.types import SessionState, Transcript
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.cleanup.service import purge_session_media
+from app.modules.config.appconfig_client import get_config
 from app.modules.note_gen.service import (
     approve_note,
     edit_note,
@@ -169,6 +172,21 @@ class NoteApprovalResponse(BaseModel):
     version: int
     approved: bool
     message: str
+
+
+class AudioReplayUrlResponse(BaseModel):
+    """Short-lived signed URL for replaying a session's retained raw audio
+    during review (#338).
+
+    `audio_url` is null when media-review retention is on but no audio
+    object exists for the session (already purged on approval, or never
+    uploaded) or when the list/presign degrades — the client shows its
+    "audio not available" state instead of erroring. `expires_in` is the
+    signed-URL validity window in seconds.
+    """
+
+    audio_url: Optional[str] = None
+    expires_in: int
 
 
 class Stage2StatusResponse(BaseModel):
@@ -489,6 +507,23 @@ async def approve_final_note(
         completeness_score=approved_note.completeness_score,
     )
 
+    # Windowed media retention (#338): purge raw session media on the FIRST
+    # final-note approval. The already-approved re-entry above returns early,
+    # so re-approval never re-purges. Flag-gated and DEFAULT OFF — when the
+    # flag is off this block is skipped entirely and behavior is byte-
+    # identical to today (the S3 lifecycle TTL remains the only backstop).
+    # Non-fatal: a purge failure must never fail the approval the clinician
+    # just performed; the S3 TTL backstop catches anything that slips.
+    if get_config().feature_flags.media_review_retention_enabled:
+        try:
+            await purge_session_media(str(session_id))
+        except Exception:
+            logger.error(
+                "media purge on approval failed: session=%s",
+                str(session_id),
+                exc_info=True,
+            )
+
     return NoteApprovalResponse(
         session_id=str(session_id),
         stage=approved_note.stage,
@@ -496,6 +531,112 @@ async def approve_final_note(
         approved=True,
         message="Final note approved. Ready for export.",
     )
+
+
+# Sessions in these states still retain their raw audio (not yet exported
+# or purged) so the audio-replay URL can be minted. EXPORTED/PURGED and
+# pre-review states have no replayable audio.
+_AUDIO_RETAINED_STATES: set[SessionState] = {
+    SessionState.AWAITING_REVIEW,
+    SessionState.PROCESSING_STAGE2,
+    SessionState.REVIEW_COMPLETE,
+}
+
+
+@router.get(
+    "/{session_id}/audio-replay-url", response_model=AudioReplayUrlResponse
+)
+async def get_audio_replay_url(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AudioReplayUrlResponse:
+    """Mint a short-lived signed URL to replay the session's retained raw
+    audio during review (#338).
+
+    Gated behind ``feature_flags.media_review_retention_enabled`` — 403
+    when the flag is off (the feature does not exist for the client). The
+    session must be owned by the caller and in a state where audio is still
+    retained (AWAITING_REVIEW / PROCESSING_STAGE2 / REVIEW_COMPLETE);
+    EXPORTED, PURGED, and pre-review states have no replayable audio → 409.
+
+    Lists ``audio/{session_id}/`` in the audio bucket and presigns the
+    first object (one audio object per session in the pilot). The signed
+    URL keeps the ca-central-1 SigV4 host and the default 1h TTL — the TTL
+    is deliberately NOT widened. Degrades to ``audio_url=null`` on a
+    list/presign error (mirrors the note builders' presign-degrade
+    pattern) so a transient S3 hiccup surfaces as "unavailable" rather
+    than a 500.
+    """
+    if not get_config().feature_flags.media_review_retention_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Media review retention is not enabled.",
+        )
+
+    session = await get_owned_session_or_404(db, session_id, user)
+
+    if session.state not in _AUDIO_RETAINED_STATES:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Audio replay unavailable: session is in {session.state.value}. "
+                "Retained audio exists only in AWAITING_REVIEW, "
+                "PROCESSING_STAGE2, or REVIEW_COMPLETE."
+            ),
+        )
+
+    audio_url = _resolve_audio_replay_url(str(session_id))
+
+    await write_audit(
+        session_id,
+        AuditEventType.EVIDENCE_REPLAYED,
+        actor_id=str(user.user_id),
+        evidence_kind="audio",
+        ttl_seconds=DEFAULT_EVIDENCE_TTL_SECONDS,
+    )
+
+    return AudioReplayUrlResponse(
+        audio_url=audio_url,
+        expires_in=DEFAULT_EVIDENCE_TTL_SECONDS,
+    )
+
+
+def _resolve_audio_replay_url(session_id: str) -> Optional[str]:
+    """List the session's retained audio and presign the first object.
+
+    Returns None (graceful degradation) when there is no audio object or
+    when the list / presign call fails — never raises. The S3 key and the
+    signed URL are never logged (PHI-adjacent identifier + a TTL-bounded
+    read grant); only a truncated session id reaches the warning line.
+    """
+    client = get_s3_client()
+    prefix = f"audio/{session_id}/"
+    try:
+        response = client.list_objects_v2(Bucket=AUDIO_BUCKET, Prefix=prefix)
+    except (BotoCoreError, ClientError) as exc:
+        logger.warning(
+            "Audio replay listing failed: session=%s: %s",
+            str(session_id)[:12],
+            exc,
+        )
+        return None
+    keys = [
+        obj["Key"]
+        for obj in response.get("Contents", [])
+        if isinstance(obj.get("Key"), str)
+    ]
+    if not keys:
+        return None
+    try:
+        return generate_presigned_evidence_url(keys[0], bucket=AUDIO_BUCKET)
+    except (BotoCoreError, ClientError) as exc:
+        logger.warning(
+            "Audio replay presign failed: session=%s: %s",
+            str(session_id)[:12],
+            exc,
+        )
+        return None
 
 
 @router.get("/{session_id}/detail", response_model=NoteDetailResponse)

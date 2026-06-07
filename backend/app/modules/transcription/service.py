@@ -1,7 +1,10 @@
 """Transcription orchestration — upload audio, call provider, parse result.
 
 Sequence: S3 upload → provider call via registry → trigger classifier →
-PHI audit → audit log entries. Audio S3 object has < 1h TTL.
+PHI audit → audit log entries. The audio S3 object is retained under the
+bucket's lifecycle policy (~1 day; configurable in dev via
+``media_retention_days``) and is actively purged on final-note approval
+when ``feature_flags.media_review_retention_enabled`` is on.
 """
 
 from __future__ import annotations
@@ -104,7 +107,9 @@ async def upload_audio_to_s3(
 ) -> str:
     """Upload audio to S3. Returns the S3 object key.
 
-    Audio bucket has < 1h TTL — objects auto-expire.
+    The audio bucket has a lifecycle policy (~1 day; configurable in dev
+    via ``media_retention_days``) and the object is also actively purged
+    on final-note approval when ``media_review_retention_enabled`` is on.
     S3 key never contains PHI.
     """
     s3_key = f"audio/{session_id}/{uuid.uuid4()}.wav"
@@ -237,18 +242,3 @@ async def transcribe_audio(
             f"Transcription failed: {e}",
             e,
         )
-
-
-async def delete_audio_from_s3(s3_key: str) -> bool:
-    """Explicitly delete audio from S3 after transcription.
-
-    This is in addition to the bucket TTL policy — belt and suspenders.
-    """
-    try:
-        s3 = get_s3_client()
-        s3.delete_object(Bucket=AUDIO_BUCKET, Key=s3_key)
-        logger.info("Audio purged: key=%s", s3_key)
-        return True
-    except (BotoCoreError, ClientError) as e:
-        logger.error("Audio purge failed: key=%s error=%s", s3_key, str(e))
-        return False

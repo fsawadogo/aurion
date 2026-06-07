@@ -96,6 +96,8 @@ EXPECTED_VALUES: dict[str, str] = {
     "FRAMES_PURGED": "frames_purged",
     "EVAL_FRAMES_MIGRATED": "eval_frames_migrated",
     "CLEANUP_PARTIAL_FAILURE": "cleanup_partial_failure",
+    # Windowed media retention (#338) — replay URL minted for a reviewer.
+    "EVIDENCE_REPLAYED": "evidence_replayed",
     # Privacy / account
     "BIOMETRIC_CONSENT_CONFIRMED": "biometric_consent_confirmed",
     "VOICE_ENROLLMENT_COMPLETE": "voice_enrollment_complete",
@@ -221,6 +223,41 @@ def test_validate_returns_unknown_kwargs() -> None:
         ["version", "provideR_used", "completeness_score"],  # typo
     )
     assert unknown == {"provideR_used"}
+
+
+def test_audio_purged_accepts_widened_audio_count_kwarg() -> None:
+    """#338 — `purge_audio_for_session` emits AUDIO_PURGED with a count,
+    not a single s3_key. The widened whitelist must accept both shapes."""
+    # Prefix-based purge shape.
+    assert (
+        validate_audit_kwargs(
+            AuditEventType.AUDIO_PURGED, ["bucket", "audio_count"]
+        )
+        == set()
+    )
+    # Legacy key-scoped shape still accepted (back-compatible widening).
+    assert (
+        validate_audit_kwargs(
+            AuditEventType.AUDIO_PURGED, ["bucket", "s3_key"]
+        )
+        == set()
+    )
+
+
+def test_evidence_replayed_accepts_its_three_kwargs() -> None:
+    """#338 — EVIDENCE_REPLAYED carries actor_id + evidence_kind +
+    ttl_seconds and nothing else (no S3 key, no signed URL)."""
+    assert (
+        validate_audit_kwargs(
+            AuditEventType.EVIDENCE_REPLAYED,
+            ["actor_id", "evidence_kind", "ttl_seconds"],
+        )
+        == set()
+    )
+    # An S3 key must NOT be accepted — it would leak the object location.
+    assert validate_audit_kwargs(
+        AuditEventType.EVIDENCE_REPLAYED, ["actor_id", "s3_key"]
+    ) == {"s3_key"}
 
 
 def test_validate_is_permissive_for_raw_string_event_types() -> None:

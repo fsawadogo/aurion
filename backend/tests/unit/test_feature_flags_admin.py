@@ -67,6 +67,7 @@ def _all_flags_response(**overrides) -> FeatureFlagsResponse:
         "coding_card_enabled": False,
         "patient_summary_card_enabled": False,
         "emr_writeback_card_enabled": False,
+        "media_review_retention_enabled": False,
     }
     base.update(overrides)
     return FeatureFlagsResponse(**base)
