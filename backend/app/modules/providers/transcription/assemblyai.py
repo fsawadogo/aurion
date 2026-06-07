@@ -25,6 +25,30 @@ _BASE_URL = "https://api.assemblyai.com/v2"
 _SPEECH_MODEL = os.getenv("ASSEMBLYAI_SPEECH_MODEL", "universal-2")
 
 
+def _is_no_speech_error(message: str) -> bool:
+    """True when an AssemblyAI error means "this file has no detectable
+    speech" rather than a genuine provider/transport failure.
+
+    A silent / empty / no-spoken-audio capture makes AssemblyAI's
+    ``language_detection`` step ERROR (status="error") instead of
+    completing with an empty transcript. We match that condition leniently
+    so the caller can treat it as an empty transcript — which lets the
+    downstream empty-transcript guard return the friendly 422 ("no audio
+    transcribed") instead of letting a ProviderError escape as a 500.
+    """
+    lowered = (message or "").lower()
+    return any(
+        marker in lowered
+        for marker in (
+            "no spoken audio",
+            "language_detection cannot be performed",
+            "does not contain any audio",
+            "audio duration is too short",
+            "no audio could be transcribed",
+        )
+    )
+
+
 class AssemblyAITranscriptionProvider(TranscriptionProvider):
     """AssemblyAI transcription provider."""
 
@@ -75,9 +99,25 @@ class AssemblyAITranscriptionProvider(TranscriptionProvider):
                     if poll_data["status"] == "completed":
                         return self._parse_response(poll_data, session_id)
                     elif poll_data["status"] == "error":
+                        err = poll_data.get("error") or "unknown"
+                        # No-speech captures error here rather than completing
+                        # empty. Treat as an empty transcript so the empty-
+                        # transcript guard returns a friendly 422 instead of a
+                        # 500 escaping to the client (the "95% server error").
+                        if _is_no_speech_error(err):
+                            logger.info(
+                                "AssemblyAI reported no spoken audio: "
+                                "session=%s — returning empty transcript",
+                                session_id,
+                            )
+                            return Transcript(
+                                session_id=session_id,
+                                provider_used="assemblyai",
+                                segments=[],
+                            )
                         raise ProviderError(
                             "assemblyai",
-                            f"Transcription failed: {poll_data.get('error', 'unknown')}",
+                            f"Transcription failed: {err}",
                         )
 
                     # Wait before next poll
@@ -90,6 +130,14 @@ class AssemblyAITranscriptionProvider(TranscriptionProvider):
             # API's own error envelope, never transcript/PHI content.
             body = (e.response.text or "")[:300] if e.response is not None else ""
             status = e.response.status_code if e.response is not None else "?"
+            # NOTE: we deliberately do NOT apply the no-speech shortcut here.
+            # The poll status=="error" branch is AssemblyAI's explicit,
+            # documented no-speech signal (the reason lives in a dedicated
+            # `error` field). An HTTP error body is free-form text, so loose
+            # substring matching on it could misclassify a genuine failure
+            # (e.g. a rate-limit/quota body that happens to mention audio) as
+            # "no speech" and silently swallow a real outage. Let real HTTP
+            # errors raise ProviderError.
             logger.error(
                 "AssemblyAI HTTP error: session=%s status=%s body=%s",
                 session_id, status, body,
