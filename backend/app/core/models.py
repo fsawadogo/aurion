@@ -144,6 +144,19 @@ class SessionModel(Base):
     # columns are non-PHI identifiers — never logged with patient context.
     context_id: Mapped[str | None] = mapped_column(String(40), nullable=True)
     template_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    # Custom-template binding snapshot (#318 / B3). When the chosen
+    # context bound a custom ``template_ref`` (a ``custom_templates`` row
+    # owned by the clinician) instead of a built-in ``template_key``, the
+    # resolved-and-owned custom template id is snapshotted here at create
+    # time so Stage 1 can load its content deterministically. Mutually
+    # exclusive with ``template_key`` in practice — a context binds one or
+    # the other. NULL means "no custom template" (use ``template_key`` or
+    # the session ``specialty`` default). Plain UUID, not a DB-level FK:
+    # the custom_templates row may be deleted after snapshot, in which
+    # case Stage 1 degrades to the specialty default (never crashes).
+    custom_template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
     output_language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
     encounter_type: Mapped[str] = mapped_column(String(50), nullable=False, default="doctor_patient")
     participants_json: Mapped[str | None] = mapped_column(Text, nullable=True)

@@ -16,6 +16,7 @@ import uuid
 from pathlib import Path
 from typing import Optional
 
+from pydantic import ValidationError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -598,6 +599,73 @@ async def _enforce_transcript_guard(
         )
 
 
+# ── Stage 1 template resolution (#318 / B3) ──────────────────────────────
+
+
+async def _resolve_stage1_template(
+    *,
+    template_key: Optional[str],
+    specialty: str,
+    custom_template_id: Optional[uuid.UUID],
+    db: AsyncSession,
+) -> Template:
+    """Resolve the ``Template`` to use for Stage 1.
+
+    When the session snapshotted a ``custom_template_id`` (the chosen
+    context bound a custom ``template_ref``, #318 / B3), load that row's
+    content and validate it against the ``Template`` Pydantic schema
+    before use. Any defensive failure — the row was deleted after the
+    snapshot, the lookup errored, or the stored content no longer parses
+    as a ``Template`` — degrades to the built-in / specialty path so
+    Stage 1 never crashes over a stale custom binding.
+
+    When ``custom_template_id`` is ``None`` the resolution is
+    byte-for-byte the pre-#318 behaviour: ``get_template(template_key or
+    specialty)``. The built-in / None paths never touch the
+    custom_templates table.
+    """
+    if custom_template_id is None:
+        return get_template(template_key or specialty)
+
+    # Lazy import — keep note_gen free of an import-time dependency on the
+    # custom_templates module (mirrors the session-service lazy imports).
+    from app.modules.custom_templates.service import get_by_id
+
+    try:
+        row = await get_by_id(custom_template_id, db)
+    except Exception:  # noqa: BLE001 — never crash Stage 1 over a lookup
+        logger.warning(
+            "Custom template load failed (custom_template_id=%s); falling "
+            "back to specialty default",
+            custom_template_id,
+            exc_info=True,
+        )
+        return get_template(template_key or specialty)
+
+    if row is None:
+        logger.info(
+            "Custom template %s not found at Stage 1 (deleted after "
+            "snapshot?); falling back to %s",
+            custom_template_id,
+            template_key or specialty,
+        )
+        return get_template(template_key or specialty)
+
+    try:
+        # Validate against the Template schema before use. The content was
+        # validated on every write, but a row from a pre-constraint era
+        # (or a future schema change) shouldn't be trusted blindly into
+        # the pipeline.
+        return Template.model_validate_json(row.content)
+    except ValidationError:
+        logger.error(
+            "Custom template %s content no longer validates against the "
+            "Template schema; falling back to specialty default",
+            custom_template_id,
+        )
+        return get_template(template_key or specialty)
+
+
 # ── Stage 1 Note Generation ──────────────────────────────────────────────
 
 
@@ -609,6 +677,7 @@ async def generate_stage1_note(
     provider_override: Optional[str] = None,
     output_language: str = "en",
     template_key: Optional[str] = None,
+    custom_template_id: Optional[uuid.UUID] = None,
 ) -> Note:
     """Generate a Stage 1 note from a transcript.
 
@@ -619,8 +688,17 @@ async def generate_stage1_note(
     behaviour. ``specialty`` is still threaded through for completeness-
     score continuity and stored on the note + version row.
 
+    ``custom_template_id`` is the per-session SNAPSHOT of a CUSTOM
+    template the chosen context bound (#318 / B3). When set, that custom
+    template's content is loaded + validated against the ``Template``
+    schema and used for Stage 1; a stale snapshot (row deleted, or
+    content that no longer validates) degrades defensively to the
+    built-in / specialty path. When ``None`` the resolution is exactly
+    ``get_template(template_key or specialty)`` — byte-for-byte unchanged.
+
     Pipeline:
-    1. Load the template (``template_key`` snapshot, else specialty)
+    1. Load the template (custom snapshot → ``template_key`` snapshot →
+       specialty)
     2. Select the system prompt — the calling physician's saved user
        prompt when present, the CLAUDE.md default otherwise
        (AI-PROMPTS-B replacement semantics)
@@ -647,9 +725,15 @@ async def generate_stage1_note(
     # those costs for a session we already know we won't process.
     await _enforce_transcript_guard(transcript, session_id)
 
-    # #314 — the snapshotted context template_key wins when present; falls
-    # back to the session specialty exactly as before when None/empty.
-    template = get_template(template_key or specialty)
+    # #314 / #318 — resolve the Stage-1 template: a custom snapshot wins
+    # when present (load + validate its content), else the snapshotted
+    # built-in template_key, else the session specialty exactly as before.
+    template = await _resolve_stage1_template(
+        template_key=template_key,
+        specialty=specialty,
+        custom_template_id=custom_template_id,
+        db=db,
+    )
     registry = get_registry()
 
     if provider_override:

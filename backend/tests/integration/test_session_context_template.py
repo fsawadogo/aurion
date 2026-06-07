@@ -116,7 +116,7 @@ async def test_context_id_and_resolved_template_forwarded(
     with (
         patch(
             "app.api.v1.sessions.resolve_context_template_key",
-            AsyncMock(return_value=("musculoskeletal", False)),
+            AsyncMock(return_value=("musculoskeletal", None, False)),
         ) as resolve_mock,
         patch(
             "app.api.v1.sessions.create_session",
@@ -143,6 +143,8 @@ async def test_context_id_and_resolved_template_forwarded(
     create_kwargs = create_mock.call_args.kwargs
     assert create_kwargs["context_id"] == "ctx_aaaaaaaa"
     assert create_kwargs["template_key"] == "musculoskeletal"
+    # Built-in path → no custom template snapshot.
+    assert create_kwargs["custom_template_id"] is None
 
     # No coercion → no coercion audit row.
     assert "session_template_key_coerced" not in _event_values(mock_audit)
@@ -161,7 +163,7 @@ async def test_stale_pin_emits_count_only_coercion_audit(
     with (
         patch(
             "app.api.v1.sessions.resolve_context_template_key",
-            AsyncMock(return_value=(None, True)),
+            AsyncMock(return_value=(None, None, True)),
         ),
         patch(
             "app.api.v1.sessions.create_session",
@@ -184,6 +186,7 @@ async def test_stale_pin_emits_count_only_coercion_audit(
     create_kwargs = create_mock.call_args.kwargs
     assert create_kwargs["context_id"] == "ctx_eeeeeeee"
     assert create_kwargs["template_key"] is None
+    assert create_kwargs["custom_template_id"] is None
 
     events = _event_values(mock_audit)
     assert "session_created" in events
@@ -213,7 +216,7 @@ async def test_old_client_no_context_id_forwards_none(
     with (
         patch(
             "app.api.v1.sessions.resolve_context_template_key",
-            AsyncMock(return_value=(None, False)),
+            AsyncMock(return_value=(None, None, False)),
         ) as resolve_mock,
         patch(
             "app.api.v1.sessions.create_session",
@@ -232,5 +235,6 @@ async def test_old_client_no_context_id_forwards_none(
     create_kwargs = create_mock.call_args.kwargs
     assert create_kwargs["context_id"] is None
     assert create_kwargs["template_key"] is None
+    assert create_kwargs["custom_template_id"] is None
 
     assert "session_template_key_coerced" not in _event_values(mock_audit)

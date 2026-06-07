@@ -257,13 +257,20 @@ async def create_session_route(
                     ),
                 )
 
-    # Visit Type → Context → Template (#314 / B2). Resolve + validate the
-    # chosen context's template ONCE here so the snapshot on the row is
-    # deterministic at Stage 1 even if the profile is edited mid-encounter.
-    # Never raises — any "can't resolve" path returns the specialty-default
-    # sentinel (None). A stale pin (template no longer available) is coerced
-    # to the default and flagged for a count-only audit note below.
-    resolved_template_key, template_key_coerced = await resolve_context_template_key(
+    # Visit Type → Context → Template (#314 / B2; #318 / B3). Resolve +
+    # validate the chosen context's template ONCE here so the snapshot on
+    # the row is deterministic at Stage 1 even if the profile is edited
+    # mid-encounter. The context binds EITHER a built-in template_key OR a
+    # custom template_ref (resolved to an owned custom_template_id). Never
+    # raises — any "can't resolve" path returns the specialty-default
+    # sentinel (None, None). A stale pin (built-in no longer available, or a
+    # custom ref now deleted / unowned) is coerced to the default and
+    # flagged for a count-only audit note below.
+    (
+        resolved_template_key,
+        resolved_custom_template_id,
+        template_key_coerced,
+    ) = await resolve_context_template_key(
         db=db,
         clinician_id=user.user_id,
         consultation_type=body.consultation_type,
@@ -283,6 +290,7 @@ async def create_session_route(
         capture_mode=body.capture_mode,
         context_id=body.context_id,
         template_key=resolved_template_key,
+        custom_template_id=resolved_custom_template_id,
     )
     await write_audit(
         session.id,
@@ -290,9 +298,11 @@ async def create_session_route(
         clinician_id=str(user.user_id),
         specialty=body.specialty,
     )
-    # Count-only note when a chosen context pinned a template that's no
-    # longer available — the snapshot fell back to the specialty default.
-    # No kwargs: never the context id, template name, or visit-type label.
+    # Count-only note when a chosen context pinned a template that no
+    # longer resolves — a built-in key removed from disk OR a custom
+    # template_ref now deleted / unowned (#318 / B3). The snapshot fell
+    # back to the specialty default. No kwargs: never the context id,
+    # template name, ref, or visit-type label.
     if template_key_coerced:
         await write_audit(
             session.id,

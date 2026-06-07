@@ -1,19 +1,20 @@
-"""Unit tests for the visit-type → context → template foundation (#313, B1).
-
-PHASE 1 ONLY — built-in template keys; ``template_ref`` is accepted but
-always coerced to None.
+"""Unit tests for the visit-type → context → template foundation (#313, B1;
+#318, B3).
 
 Locks (pure, no DB — exercises the pydantic models + helpers directly):
   * ``VisitTypeContext`` label validation has parity with custom
     consultation-type labels (shared ``_validate_consultation_type``).
   * ``template_key`` membership gate (must be a built-in template).
-  * ``template_ref`` is forced to None in phase 1.
+  * ``template_ref`` is now PRESERVED (#318 / B3) and is mutually
+    exclusive with ``template_key``; its ownership + existence check
+    lives at PUT time (see ``tests/integration/test_context_custom_template.py``).
   * Orphan visit-type keys are pruned against the request's
     ``consultation_types``; built-in keys always survive.
   * Context ids are server-assigned when absent/malformed and preserved
     when well-formed.
   * 30-contexts-per-visit-type soft cap.
-  * ``_diff_contexts`` returns AGGREGATE COUNTS ONLY, and the
+  * ``_diff_contexts`` returns AGGREGATE COUNTS ONLY (seven counts,
+    incl. the B3 custom-template pair), and the
     ``PROFILE_CONTEXTS_UPDATED`` audit whitelist carries no free text.
 """
 
@@ -109,10 +110,35 @@ def test_visitTypeContext_rejectsUnknownTemplateKey() -> None:
         VisitTypeContext(label="LL", template_key="not_a_real_template_xyz")
 
 
-def test_visitTypeContext_templateRefForcedNoneInPhase1() -> None:
-    """A supplied ``template_ref`` is accepted but ignored (stored null)."""
-    ctx = VisitTypeContext(label="LL", template_ref="custom:abc123")
+def test_visitTypeContext_acceptsTemplateRefAlone() -> None:
+    """A ``template_ref`` alone (no ``template_key``) is now PRESERVED
+    (#318 / B3) — it's no longer forced to None. Ownership + existence is
+    validated at PUT time, not in the model."""
+    ref = "a1b2c3d4-0000-0000-0000-000000000000"
+    ctx = VisitTypeContext(label="LL", template_ref=ref)
+    assert ctx.template_ref == ref
+    assert ctx.template_key is None
+
+
+def test_visitTypeContext_blankTemplateRefNormalizesToNone() -> None:
+    """A whitespace-only ``template_ref`` reads as 'no ref' (None), so it
+    doesn't trip the mutual-exclusion gate or the PUT-time lookup."""
+    ctx = VisitTypeContext(label="LL", template_ref="   ")
     assert ctx.template_ref is None
+
+
+def test_visitTypeContext_rejectsBothTemplateKeyAndRef() -> None:
+    """Mutual exclusion (#318 / B3): a context binds EITHER a built-in
+    ``template_key`` OR a custom ``template_ref`` — never both. The
+    rejected values never echo (hide_input_in_errors)."""
+    secret_ref = "a1b2c3d4-0000-0000-0000-000000000000"
+    with pytest.raises(ValidationError) as exc:
+        VisitTypeContext(
+            label="LL",
+            template_key=_BUILTIN_TEMPLATE,
+            template_ref=secret_ref,
+        )
+    assert secret_ref not in str(exc.value)
 
 
 # ── VisitTypeContext: id assignment + preservation ────────────────────────
@@ -254,6 +280,8 @@ def test_diff_addContext() -> None:
         "contexts_removed": 0,
         "templates_attached": 0,
         "templates_detached": 0,
+        "custom_templates_attached": 0,
+        "custom_templates_detached": 0,
     }
 
 
@@ -318,6 +346,8 @@ def test_diff_returnsOnlyCountFields_noFreeText() -> None:
         "contexts_removed",
         "templates_attached",
         "templates_detached",
+        "custom_templates_attached",
+        "custom_templates_detached",
     }
     assert all(isinstance(v, int) for v in deltas.values())
     blob = repr(deltas)
@@ -335,8 +365,9 @@ def test_audit_eventTypeExists() -> None:
 
 
 def test_audit_whitelistIsCountsPlusActorOnly() -> None:
-    """The whitelist must be exactly actor_id + the five aggregate
-    counts — no field that could carry a label/key/id/template name."""
+    """The whitelist must be exactly actor_id + the seven aggregate
+    counts (incl. the #318 / B3 custom-template pair) — no field that
+    could carry a label/key/ref/id/template name."""
     assert ALLOWED_AUDIT_KWARGS[AuditEventType.PROFILE_CONTEXTS_UPDATED] == (
         frozenset(
             {
@@ -346,6 +377,8 @@ def test_audit_whitelistIsCountsPlusActorOnly() -> None:
                 "contexts_removed",
                 "templates_attached",
                 "templates_detached",
+                "custom_templates_attached",
+                "custom_templates_detached",
             }
         )
     )
