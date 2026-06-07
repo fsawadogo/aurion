@@ -567,6 +567,8 @@
       "labelAria": "Étiquette du contexte « {label} »",
       "templateAria": "Gabarit du contexte « {label} »",
       "defaultTemplate": "Utiliser ma spécialité par défaut",
+      "customGroup": "Gabarits personnalisés",
+      "customUnavailable": "Gabarit personnalisé (indisponible)",
       "delete": "Supprimer le contexte « {label} »",
       "limit": "Maximum 30 contextes par type de consultation.",
       "templates": {

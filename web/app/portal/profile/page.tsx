@@ -8,10 +8,16 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import ConsultationTypesEditor from "@/components/portal/ConsultationTypesEditor";
-import VisitTypeContextsEditor from "@/components/portal/VisitTypeContextsEditor";
+import VisitTypeContextsEditor, {
+  type ContextCustomTemplate,
+} from "@/components/portal/VisitTypeContextsEditor";
 import PageHeader from "@/components/portal/PageHeader";
-import { getMyProfile, updateMyProfile } from "@/lib/portal-api";
-import type { PhysicianProfile } from "@/types";
+import {
+  getMyProfile,
+  listMyCustomTemplates,
+  updateMyProfile,
+} from "@/lib/portal-api";
+import type { CustomTemplate, PhysicianProfile } from "@/types";
 
 /**
  * Clinician profile — view + edit.
@@ -60,6 +66,13 @@ export default function PortalProfilePage() {
   const tSpecialties = useTranslations("Specialties");
   const [profile, setProfile] = useState<PhysicianProfile | null>(null);
   const [draft, setDraft] = useState<PhysicianProfile | null>(null);
+  // OWNED custom templates → the per-context picker's "Custom templates"
+  // optgroup (#320/W2). Filtered to owner == this clinician because the
+  // backend binds a `template_ref` via the owner-scoped `get_owned`; a
+  // community-shared row would 422 on save.
+  const [customTemplates, setCustomTemplates] = useState<
+    ContextCustomTemplate[]
+  >([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -69,9 +82,21 @@ export default function PortalProfilePage() {
     setLoading(true);
     setError(null);
     try {
-      const p = await getMyProfile();
+      // Fetch the profile + custom templates together. A custom-templates
+      // failure resolves to [] so it can NEVER block the profile load —
+      // the picker just falls back to built-ins only. No client logging:
+      // custom display names can be PHI.
+      const [p, templates] = await Promise.all([
+        getMyProfile(),
+        listMyCustomTemplates().catch(() => [] as CustomTemplate[]),
+      ]);
       setProfile(p);
       setDraft(p);
+      setCustomTemplates(
+        templates
+          .filter((tpl) => tpl.owner_id === p.clinician_id)
+          .map((tpl) => ({ id: tpl.id, display_name: tpl.display_name })),
+      );
     } catch (e) {
       setError(e instanceof Error ? e.message : t("loadError"));
     } finally {
@@ -228,6 +253,7 @@ export default function PortalProfilePage() {
                 onChange={(next) =>
                   setDraft({ ...draft, contexts_per_visit_type: next })
                 }
+                customTemplates={customTemplates}
               />
             </div>
           </Card>

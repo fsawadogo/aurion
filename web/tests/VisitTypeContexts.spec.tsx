@@ -7,6 +7,7 @@ import VisitTypeContextsEditor, {
   BUILT_IN_TEMPLATE_KEYS,
   MAX_CONTEXTS_PER_VISIT_TYPE,
   newContextId,
+  type ContextCustomTemplate,
 } from "@/components/portal/VisitTypeContextsEditor";
 import type { VisitTypeContext } from "@/types";
 import enMessages from "@/messages/en.json";
@@ -34,9 +35,11 @@ type CtxMap = Record<string, VisitTypeContext[]>;
 function Harness({
   visitTypes,
   initial,
+  customTemplates,
 }: {
   visitTypes: string[];
   initial: CtxMap;
+  customTemplates?: ContextCustomTemplate[];
 }) {
   const [value, setValue] = useState<CtxMap>(initial);
   return (
@@ -45,10 +48,24 @@ function Harness({
         visitTypes={visitTypes}
         value={value}
         onChange={setValue}
+        customTemplates={customTemplates}
       />
       <pre data-testid="state">{JSON.stringify(value)}</pre>
     </>
   );
+}
+
+const CUSTOM_TEMPLATES: ContextCustomTemplate[] = [
+  { id: "11111111-1111-1111-1111-111111111111", display_name: "Knee Protocol" },
+  {
+    id: "22222222-2222-2222-2222-222222222222",
+    display_name: "Shoulder Workup",
+  },
+];
+
+/** A context already bound to a custom `template_ref`. */
+function ctxRef(label: string, template_ref: string): VisitTypeContext {
+  return { id: newContextId(), label, template_key: null, template_ref };
 }
 
 function getState(): CtxMap {
@@ -146,6 +163,145 @@ describe("VisitTypeContextsEditor — template select", () => {
     await waitFor(() => {
       expect(getState().new_patient[0].template_key).toBeNull();
     });
+  });
+});
+
+/* ── Custom templates (#320/W2) ───────────────────────────────────────── */
+
+describe("VisitTypeContextsEditor — custom templates", () => {
+  it("adds a Custom templates optgroup populated from the owned library", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [ctx("Left knee")] }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /new patient/i }));
+    const select = screen.getByRole("combobox");
+    // 1 default + 8 built-ins + 2 custom.
+    expect(within(select).getAllByRole("option")).toHaveLength(
+      1 + BUILT_IN_TEMPLATE_KEYS.length + CUSTOM_TEMPLATES.length,
+    );
+    expect(
+      within(select).getByRole("group", { name: /custom templates/i }),
+    ).toBeInTheDocument();
+    expect(
+      within(select).getByRole("option", { name: /knee protocol/i }),
+    ).toBeInTheDocument();
+  });
+
+  it("sets template_ref + clears template_key when a custom option is picked", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [ctx("Left knee", "orthopedic_surgery")] }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /new patient/i }));
+    const select = screen.getByRole("combobox");
+    await user.selectOptions(select, CUSTOM_TEMPLATES[0].id);
+    await waitFor(() => {
+      const row = getState().new_patient[0];
+      expect(row.template_ref).toBe(CUSTOM_TEMPLATES[0].id);
+      expect(row.template_key).toBeNull();
+    });
+  });
+
+  it("clears template_ref when a built-in is picked after a custom (mutual exclusion)", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{
+            new_patient: [ctxRef("Left knee", CUSTOM_TEMPLATES[0].id)],
+          }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /new patient/i }));
+    const select = screen.getByRole("combobox");
+    await user.selectOptions(select, "orthopedic_surgery");
+    await waitFor(() => {
+      const row = getState().new_patient[0];
+      expect(row.template_key).toBe("orthopedic_surgery");
+      expect(row.template_ref).toBeNull();
+    });
+  });
+
+  it("selecting the default clears a previously-bound custom ref", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{
+            new_patient: [ctxRef("Left knee", CUSTOM_TEMPLATES[0].id)],
+          }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /new patient/i }));
+    await user.selectOptions(screen.getByRole("combobox"), "");
+    await waitFor(() => {
+      const row = getState().new_patient[0];
+      expect(row.template_ref).toBeNull();
+      expect(row.template_key).toBeNull();
+    });
+  });
+
+  it("shows only built-ins when the custom library is empty", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [ctx("Left knee")] }}
+          customTemplates={[]}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /new patient/i }));
+    const select = screen.getByRole("combobox");
+    expect(within(select).getAllByRole("option")).toHaveLength(
+      1 + BUILT_IN_TEMPLATE_KEYS.length,
+    );
+    expect(
+      within(select).queryByRole("group", { name: /custom templates/i }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("gracefully surfaces a stale ref whose template is gone, preserving the binding", async () => {
+    const user = userEvent.setup();
+    const staleId = "deadbeef-dead-dead-dead-deaddeaddead";
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [ctxRef("Left knee", staleId)] }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /new patient/i }));
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    // The placeholder option is selected (the select reflects the ref).
+    expect(
+      within(select).getByRole("option", { name: /unavailable/i }),
+    ).toBeInTheDocument();
+    expect(select.value).toBe(staleId);
+    // No interaction → the binding is untouched (no silent reset).
+    expect(getState().new_patient[0].template_ref).toBe(staleId);
   });
 });
 

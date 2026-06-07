@@ -567,6 +567,8 @@
       "labelAria": "Label for context \"{label}\"",
       "templateAria": "Template for context \"{label}\"",
       "defaultTemplate": "Use my specialty default",
+      "customGroup": "Custom templates",
+      "customUnavailable": "Custom template (unavailable)",
       "delete": "Remove context \"{label}\"",
       "limit": "30 contexts maximum per visit type.",
       "templates": {
