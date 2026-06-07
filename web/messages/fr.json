@@ -554,6 +554,32 @@
         }
       }
     },
+    "contexts": {
+      "label": "Contextes par type de consultation",
+      "description": "Ajoutez des contextes sous un type de consultation (ex. « genou gauche », « révision ») et associez-en chacun à un gabarit intégré au besoin. Laissez le gabarit sur votre spécialité par défaut pour en hériter.",
+      "noVisitTypes": "Ajoutez un type de consultation ci-dessus pour y rattacher des contextes.",
+      "empty": "Aucun contexte pour l’instant.",
+      "addContext": "Ajouter un contexte",
+      "add": "Ajouter",
+      "cancel": "Annuler",
+      "placeholder": "ex. genou gauche, révision",
+      "inputLabel": "Étiquette du contexte",
+      "labelAria": "Étiquette du contexte « {label} »",
+      "templateAria": "Gabarit du contexte « {label} »",
+      "defaultTemplate": "Utiliser ma spécialité par défaut",
+      "delete": "Supprimer le contexte « {label} »",
+      "limit": "Maximum 30 contextes par type de consultation.",
+      "templates": {
+        "general": "Général",
+        "emergency_medicine": "Médecine d’urgence",
+        "family_medicine": "Médecine familiale",
+        "internal_medicine": "Médecine interne",
+        "musculoskeletal": "Musculosquelettique",
+        "orthopedic_surgery": "Chirurgie orthopédique",
+        "pediatrics": "Pédiatrie",
+        "plastic_surgery": "Chirurgie plastique"
+      }
+    },
     "saveChanges": "Enregistrer les modifications",
     "discard": "Annuler",
     "unsaved": "Modifications non enregistrées",

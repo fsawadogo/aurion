@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import ConsultationTypesEditor from "@/components/portal/ConsultationTypesEditor";
+import VisitTypeContextsEditor from "@/components/portal/VisitTypeContextsEditor";
 import PageHeader from "@/components/portal/PageHeader";
 import { getMyProfile, updateMyProfile } from "@/lib/portal-api";
 import type { PhysicianProfile } from "@/types";
@@ -95,6 +96,9 @@ export default function PortalProfilePage() {
         primary_specialty: draft.primary_specialty,
         preferred_templates: draft.preferred_templates,
         consultation_types: draft.consultation_types,
+        // Sent alongside consultation_types so the server prunes
+        // contexts whose visit type this save dropped (#313/W1).
+        contexts_per_visit_type: draft.contexts_per_visit_type ?? {},
         retention_days: draft.retention_days,
         auto_upload: draft.auto_upload,
         consent_reprompt: draft.consent_reprompt,
@@ -216,6 +220,13 @@ export default function PortalProfilePage() {
                 value={draft.consultation_types}
                 onChange={(next) =>
                   setDraft({ ...draft, consultation_types: next })
+                }
+              />
+              <VisitTypeContextsEditor
+                visitTypes={draft.consultation_types}
+                value={draft.contexts_per_visit_type ?? {}}
+                onChange={(next) =>
+                  setDraft({ ...draft, contexts_per_visit_type: next })
                 }
               />
             </div>
@@ -435,7 +446,11 @@ function isEqual(a: PhysicianProfile, b: PhysicianProfile): boolean {
     a.auto_upload === b.auto_upload &&
     a.retention_days === b.retention_days &&
     sameStringArray(a.preferred_templates, b.preferred_templates) &&
-    sameStringArray(a.consultation_types, b.consultation_types)
+    sameStringArray(a.consultation_types, b.consultation_types) &&
+    sameContexts(
+      a.contexts_per_visit_type ?? {},
+      b.contexts_per_visit_type ?? {},
+    )
   );
 }
 
@@ -444,5 +459,34 @@ function sameStringArray(a: string[], b: string[]): boolean {
   const bs = [...b].sort();
   const as = [...a].sort();
   for (let i = 0; i < as.length; i++) if (as[i] !== bs[i]) return false;
+  return true;
+}
+
+/** Deep-compare two visit-type → context maps. Context order within a
+ * visit type is significant (it's the render + save order), so we
+ * compare positionally; only the key set is order-insensitive. */
+function sameContexts(
+  a: Record<string, PhysicianProfile["contexts_per_visit_type"][string]>,
+  b: Record<string, PhysicianProfile["contexts_per_visit_type"][string]>,
+): boolean {
+  const aKeys = Object.keys(a).sort();
+  const bKeys = Object.keys(b).sort();
+  if (aKeys.length !== bKeys.length) return false;
+  for (let i = 0; i < aKeys.length; i++) {
+    if (aKeys[i] !== bKeys[i]) return false;
+    const av = a[aKeys[i]];
+    const bv = b[bKeys[i]];
+    if (av.length !== bv.length) return false;
+    for (let j = 0; j < av.length; j++) {
+      if (
+        av[j].id !== bv[j].id ||
+        av[j].label !== bv[j].label ||
+        av[j].template_key !== bv[j].template_key ||
+        av[j].template_ref !== bv[j].template_ref
+      ) {
+        return false;
+      }
+    }
+  }
   return true;
 }

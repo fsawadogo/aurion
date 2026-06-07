@@ -572,6 +572,29 @@ export interface CurrentUser {
  * (multiple select on iOS), so the web treats it as a Set<string>
  * locally and serialises with `.join(",")` on save.
  */
+/** One context row under a visit type (#313/W1). Mirrors the backend
+ * `VisitTypeContext` (`backend/app/api/v1/profile.py`) and the iOS
+ * struct.
+ *
+ * A "context" is a clinician-authored sub-mode of a visit type — e.g.
+ * under "new_patient", contexts "Left knee" or "Revision" — each
+ * optionally pinned to a built-in specialty template.
+ *
+ *  - `id` is server-assigned (`ctx_<8 hex>`); the client mints a
+ *    well-formed one for new rows so React keys stay stable and the
+ *    backend preserves it on round-trip.
+ *  - `template_key` is one of the 8 built-in template keys, or `null`
+ *    to inherit the physician's specialty default.
+ *  - `template_ref` (custom-template pointer) is ALWAYS `null` in
+ *    phase 1 — custom templates land in phase 2 (#318).
+ */
+export interface VisitTypeContext {
+  id: string;
+  label: string;
+  template_key: string | null;
+  template_ref: string | null;
+}
+
 export interface PhysicianProfile {
   clinician_id: string;
   display_name: string;
@@ -579,6 +602,11 @@ export interface PhysicianProfile {
   primary_specialty: string;
   preferred_templates: string[];
   consultation_types: string[];
+  /** Visit-type → context list map (#313/W1). Keyed by a
+   * `consultation_types` entry (default key or custom label). Keys not
+   * in `consultation_types` are pruned server-side on the next PUT.
+   * Defaults to `{}` on profiles that never set a context. */
+  contexts_per_visit_type: Record<string, VisitTypeContext[]>;
   allied_health_team: AlliedHealthMember[];
   output_language: "en" | "fr";
   /** Portal/iOS chrome theme (#189). "system" follows OS. */
@@ -601,6 +629,10 @@ export interface PhysicianProfileUpdate {
   primary_specialty?: string;
   preferred_templates?: string[];
   consultation_types?: string[];
+  /** Visit-type → context list map (#313/W1). Send alongside
+   * `consultation_types` so the server can prune orphan keys in the
+   * same request. Omit to leave the stored map untouched. */
+  contexts_per_visit_type?: Record<string, VisitTypeContext[]>;
   allied_health_team?: AlliedHealthMember[];
   output_language?: "en" | "fr";
   /** Portal/iOS chrome theme (#189). Distinct from output_language —

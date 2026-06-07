@@ -554,6 +554,32 @@
         }
       }
     },
+    "contexts": {
+      "label": "Visit-type contexts",
+      "description": "Add contexts under a visit type (e.g. \"left knee\", \"revision\") and optionally pin each to a built-in template. Leave the template on your specialty default to inherit it.",
+      "noVisitTypes": "Add a visit type above to attach contexts to it.",
+      "empty": "No contexts yet.",
+      "addContext": "Add context",
+      "add": "Add",
+      "cancel": "Cancel",
+      "placeholder": "e.g. left knee, revision",
+      "inputLabel": "Context label",
+      "labelAria": "Label for context \"{label}\"",
+      "templateAria": "Template for context \"{label}\"",
+      "defaultTemplate": "Use my specialty default",
+      "delete": "Remove context \"{label}\"",
+      "limit": "30 contexts maximum per visit type.",
+      "templates": {
+        "general": "General",
+        "emergency_medicine": "Emergency Medicine",
+        "family_medicine": "Family Medicine",
+        "internal_medicine": "Internal Medicine",
+        "musculoskeletal": "Musculoskeletal",
+        "orthopedic_surgery": "Orthopedic Surgery",
+        "pediatrics": "Pediatrics",
+        "plastic_surgery": "Plastic Surgery"
+      }
+    },
     "saveChanges": "Save changes",
     "discard": "Discard",
     "unsaved": "Unsaved changes",
