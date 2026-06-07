@@ -7,6 +7,7 @@ import pytest
 
 from app.core.types import (
     MaskedFrame,
+    ProviderError,
     Template,
     TemplateSection,
     Transcript,
@@ -15,7 +16,10 @@ from app.core.types import (
 from app.modules.providers.note_gen.anthropic import AnthropicNoteGenerationProvider
 from app.modules.providers.note_gen.gemini import GeminiNoteGenerationProvider
 from app.modules.providers.note_gen.openai import OpenAINoteGenerationProvider
-from app.modules.providers.transcription.assemblyai import AssemblyAITranscriptionProvider
+from app.modules.providers.transcription.assemblyai import (
+    AssemblyAITranscriptionProvider,
+    _is_no_speech_error,
+)
 from app.modules.providers.transcription.whisper import WhisperTranscriptionProvider
 from app.modules.providers.vision.anthropic import AnthropicVisionProvider
 from app.modules.providers.vision.gemini import GeminiVisionProvider
@@ -141,6 +145,91 @@ class TestTranscriptionProviders:
         assert result.session_id == "session-001"
         assert result.provider_used == "assemblyai"
         assert len(result.segments) > 0
+
+    @pytest.mark.asyncio
+    async def test_assemblyai_no_spoken_audio_yields_empty_transcript(self):
+        """A silent / no-spoken-audio capture makes AssemblyAI's
+        language_detection step return status="error" rather than completing.
+        The provider must treat that as an EMPTY transcript (so the downstream
+        empty-transcript guard returns a friendly 422) rather than raising a
+        ProviderError that escapes as a 500 — the "95% server error" bug."""
+        provider = AssemblyAITranscriptionProvider()
+
+        upload_response = MagicMock()
+        upload_response.raise_for_status = MagicMock()
+        upload_response.json.return_value = {"upload_url": "https://test.com/audio"}
+
+        transcript_response = MagicMock()
+        transcript_response.raise_for_status = MagicMock()
+        transcript_response.json.return_value = {"id": "test-id"}
+
+        poll_response = MagicMock()
+        poll_response.raise_for_status = MagicMock()
+        poll_response.json.return_value = {
+            "id": "test-id",
+            "status": "error",
+            "error": "language_detection cannot be performed on files with "
+            "no spoken audio.",
+        }
+
+        with patch("app.modules.providers.transcription.assemblyai.httpx.AsyncClient") as mock_client, \
+             patch("app.modules.providers.transcription.assemblyai._ASSEMBLYAI_API_KEY", "test-key"):
+            instance = AsyncMock()
+            instance.post = AsyncMock(side_effect=[upload_response, transcript_response])
+            instance.get = AsyncMock(return_value=poll_response)
+            instance.__aenter__ = AsyncMock(return_value=instance)
+            instance.__aexit__ = AsyncMock(return_value=False)
+            mock_client.return_value = instance
+
+            result = await provider.transcribe(b"silent_audio", "session-noaudio")
+
+        assert result.session_id == "session-noaudio"
+        assert result.provider_used == "assemblyai"
+        assert result.segments == []
+
+    @pytest.mark.asyncio
+    async def test_assemblyai_genuine_error_still_raises(self):
+        """A real provider error (not a no-speech condition) must still raise
+        ProviderError — we only soften the no-spoken-audio case."""
+        provider = AssemblyAITranscriptionProvider()
+
+        upload_response = MagicMock()
+        upload_response.raise_for_status = MagicMock()
+        upload_response.json.return_value = {"upload_url": "https://test.com/audio"}
+
+        transcript_response = MagicMock()
+        transcript_response.raise_for_status = MagicMock()
+        transcript_response.json.return_value = {"id": "test-id"}
+
+        poll_response = MagicMock()
+        poll_response.raise_for_status = MagicMock()
+        poll_response.json.return_value = {
+            "id": "test-id",
+            "status": "error",
+            "error": "internal transcription engine failure",
+        }
+
+        with patch("app.modules.providers.transcription.assemblyai.httpx.AsyncClient") as mock_client, \
+             patch("app.modules.providers.transcription.assemblyai._ASSEMBLYAI_API_KEY", "test-key"):
+            instance = AsyncMock()
+            instance.post = AsyncMock(side_effect=[upload_response, transcript_response])
+            instance.get = AsyncMock(return_value=poll_response)
+            instance.__aenter__ = AsyncMock(return_value=instance)
+            instance.__aexit__ = AsyncMock(return_value=False)
+            mock_client.return_value = instance
+
+            with pytest.raises(ProviderError):
+                await provider.transcribe(b"audio", "session-err")
+
+    def test_is_no_speech_error_matching(self):
+        """The no-speech matcher is lenient across AssemblyAI's phrasings but
+        does not swallow unrelated errors."""
+        assert _is_no_speech_error(
+            "language_detection cannot be performed on files with no spoken audio."
+        )
+        assert _is_no_speech_error("File does not contain any audio.")
+        assert not _is_no_speech_error("internal transcription engine failure")
+        assert not _is_no_speech_error("")
 
     def test_assemblyai_handles_null_words_and_utterances(self):
         """Regression: a completed transcript with no detected speech comes
