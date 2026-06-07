@@ -666,7 +666,15 @@ struct CaptureView: View {
                     Task { await sessionManager.confirmConsent(method: pendingConsentMethod) }
                 }
 
-                Button(L("common.cancel")) {}
+                Button(L("common.cancel")) {
+                    // Abort the consent-pending session and return to the
+                    // dashboard. Was an empty closure — Cancel did nothing,
+                    // trapping the user on the consent gate (#294). endSession
+                    // is the established teardown (drops the staged WAV, ends
+                    // the Live Activity, sets uiState = .idle).
+                    AurionHaptics.impact(.light)
+                    sessionManager.endSession()
+                }
                     .aurionFont(14, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
             }
