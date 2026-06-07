@@ -704,6 +704,10 @@
 "context.placeholder" = "p. ex. Douleur au genou droit, 3 semaines apr\U00E8s r\U00E9paration du m\U00E9nisque.";
 "context.tip" = "Aurion s\U2019en sert pour orienter la note structur\U00E9e. Reste sur l\U2019appareil.";
 "context.minHint" = "Saisissez au moins quelques mots de contexte pour d\U00E9marrer la session.";
+"context.chooseSub" = "Choisissez un contexte enregistr\U00E9, ou Autre pour le d\U00E9crire.";
+"context.selectHint" = "S\U00E9lectionnez un contexte pour d\U00E9marrer la session.";
+"context.other" = "Autre";
+"context.otherSub" = "D\U00E9crivez vous-m\U00EAme cette consultation";
 "context.captureMode" = "Mode de capture";
 "context.captureModeSub" = "Comment Aurion doit-il observer cette consultation ?";
 

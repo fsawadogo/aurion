@@ -72,7 +72,8 @@ final class APIClient: Sendable {
         outputLanguage: String = "en",
         encounterType: String = "doctor_patient",
         participants: [[String: Any]]? = nil,
-        captureMode: String = "multimodal"
+        captureMode: String = "multimodal",
+        contextId: String? = nil
     ) async throws -> SessionResponse {
         var body: [String: Any] = [
             "specialty": specialty,
@@ -83,6 +84,11 @@ final class APIClient: Sendable {
         if let consultationType { body["consultation_type"] = consultationType }
         if let encounterContext { body["encounter_context"] = encounterContext }
         if let participants { body["participants"] = participants }
+        // #316 (I2): the chosen saved context's server id. Non-PHI — an
+        // opaque `ctx_<hex>` the backend maps to its pinned template. Omitted
+        // for the free-text "Other" path so the server falls back to the
+        // specialty-default template.
+        if let contextId { body["context_id"] = contextId }
         return try await post(path: "/sessions", body: body)
     }
 

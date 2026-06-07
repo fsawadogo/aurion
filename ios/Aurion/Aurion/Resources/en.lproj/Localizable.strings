@@ -716,6 +716,10 @@
 "context.placeholder" = "e.g. Right knee pain, 3 weeks post-op meniscus repair.";
 "context.tip" = "Aurion uses this to focus the structured note. Stays on-device.";
 "context.minHint" = "Enter at least a few words of context to start the session.";
+"context.chooseSub" = "Pick a saved context, or choose Other to describe it.";
+"context.selectHint" = "Select a context to start the session.";
+"context.other" = "Other";
+"context.otherSub" = "Describe this encounter yourself";
 "context.captureMode" = "Capture mode";
 "context.captureModeSub" = "How should Aurion observe this encounter?";
 

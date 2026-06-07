@@ -192,6 +192,12 @@ struct SessionStartRequest {
     let encounterType: String
     let participants: [[String: Any]]?
     let captureMode: CaptureMode
+    /// Server id of the physician's saved visit-type context chosen at
+    /// session start (#316, I2). `nil` for the free-text "Other" escape
+    /// hatch — the backend then resolves the specialty-default template.
+    /// Non-PHI: an opaque `ctx_<hex>` identifier, never patient content;
+    /// the patient-facing label rides the existing `encounterContext`.
+    let contextId: String?
 
     init(
         specialty: String,
@@ -200,7 +206,8 @@ struct SessionStartRequest {
         outputLanguage: String = "en",
         encounterType: String = "doctor_patient",
         participants: [[String: Any]]? = nil,
-        captureMode: CaptureMode = .multimodal
+        captureMode: CaptureMode = .multimodal,
+        contextId: String? = nil
     ) {
         self.specialty = specialty
         self.consultationType = consultationType
@@ -209,6 +216,7 @@ struct SessionStartRequest {
         self.encounterType = encounterType
         self.participants = participants
         self.captureMode = captureMode
+        self.contextId = contextId
     }
 }
 
@@ -372,7 +380,8 @@ final class SessionManager: ObservableObject {
                 outputLanguage: request.outputLanguage,
                 encounterType: request.encounterType,
                 participants: request.participants,
-                captureMode: request.captureMode.rawValue
+                captureMode: request.captureMode.rawValue,
+                contextId: request.contextId
             )
             let participants: [SessionParticipant] = (request.participants ?? []).compactMap { dict in
                 guard let name = dict["name"] as? String,
