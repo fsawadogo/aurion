@@ -700,6 +700,11 @@
 "encounter.adjustSub" = "Aurion will adjust capture and consent accordingly.";
 "encounter.doctorPatient.title" = "Doctor + Patient";
 "encounter.doctorPatient.sub" = "Standard one-on-one visit";
+"encounter.doctorTeam.title" = "Doctor + team member(s) + Patient";
+"encounter.doctorTeam.sub" = "Attending present with the care team";
+"encounter.teamOnly.title" = "Team member(s) + Patient";
+"encounter.teamOnly.sub" = "Attending not present \U2014 a resident, nurse, or fellow sees the patient";
+/* Legacy keys (#321): the old allied / trainee options collapsed into the two team combinations above. Retained for safety; no longer referenced. */
 "encounter.allied.title" = "With Team Member";
 "encounter.allied.sub" = "Nurse or PA also present";
 "encounter.trainee.title" = "With Trainee";
