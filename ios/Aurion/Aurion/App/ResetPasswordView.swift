@@ -80,10 +80,22 @@ struct ResetPasswordView: View {
 
             VStack(spacing: 0) {
                 topBar
-                Spacer(minLength: 24)
-                card
-                    .padding(.horizontal, 24)
-                Spacer()
+                // Scrollable so the two password fields stay reachable with
+                // the keyboard up at large Dynamic Type sizes; the min-height
+                // frame keeps the card vertically centered when it fits.
+                GeometryReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            Spacer(minLength: 24)
+                            card
+                                .padding(.horizontal, 24)
+                            Spacer(minLength: 24)
+                        }
+                        .frame(minHeight: proxy.size.height)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                    .scrollDismissesKeyboard(.interactively)
+                }
             }
         }
         .onAppear {

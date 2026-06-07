@@ -98,6 +98,16 @@ struct CaptureView: View {
                         .tracking(0.4)
                         .foregroundColor(Color.aurionOnNavySecondary)
 
+                    // On Stop the side controls fade out and the timer
+                    // freezes; without this the screen reads as hung while
+                    // Stage 1 runs. A brief in-view spinner makes the
+                    // transcribe→assemble wait legible.
+                    if session.state == .processingStage1 {
+                        processingIndicator
+                            .padding(.top, 24)
+                            .transition(.opacity)
+                    }
+
                     if let method = session.consentMethod, let timestamp = session.consentConfirmedAt {
                         consentChip(method: method, at: timestamp)
                             .padding(.top, 6)
@@ -319,6 +329,11 @@ struct CaptureView: View {
                     }
                 }
             }
+            // Keep the 24pt visual circle but expand the touch region to the
+            // HIG-minimum 44pt so it isn't easy to miss-tap during a live
+            // encounter.
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
             .buttonStyle(.plain)
             .accessibilityLabel(L("capture.a11yViewFrames"))
         }
@@ -344,10 +359,14 @@ struct CaptureView: View {
                 .background(Color.white.opacity(0.10))
                 .clipShape(Circle())
         }
+        // Expand the tap target to the HIG-minimum 44pt while keeping the
+        // 24pt visual circle.
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
         .buttonStyle(.plain)
         .accessibilityLabel(
-            showCameraPreview ? "Hide camera preview (background recording)"
-                              : "Show camera preview"
+            showCameraPreview ? L("capture.a11yHidePreview")
+                              : L("capture.a11yShowPreview")
         )
     }
 
@@ -437,6 +456,26 @@ struct CaptureView: View {
         // mid-speech but also can't peg at max constantly.
         let level = CGFloat(min(1.0, max(0.15, Double(builtInSource.audioLevel) * 1.6)))
         return 6 + 30 * level * envelope
+    }
+
+    // MARK: - Processing Indicator
+
+    /// Shown while Stage 1 runs (record_stop → stage1_delivered). The timer
+    /// is intentionally frozen here, so a spinner + label is the only signal
+    /// that work is in flight. Decorative spinner; the label carries the
+    /// meaning for VoiceOver.
+    private var processingIndicator: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .tint(.aurionGold)
+            Text(L("capture.processing"))
+                .aurionFont(14, weight: .medium, relativeTo: .subheadline)
+                .foregroundColor(Color.aurionOnNavySecondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
     }
 
     // MARK: - Collaboration Pill
@@ -627,7 +666,15 @@ struct CaptureView: View {
                     Task { await sessionManager.confirmConsent(method: pendingConsentMethod) }
                 }
 
-                Button(L("common.cancel")) {}
+                Button(L("common.cancel")) {
+                    // Abort the consent-pending session and return to the
+                    // dashboard. Was an empty closure — Cancel did nothing,
+                    // trapping the user on the consent gate (#294). endSession
+                    // is the established teardown (drops the staged WAV, ends
+                    // the Live Activity, sets uiState = .idle).
+                    AurionHaptics.impact(.light)
+                    sessionManager.endSession()
+                }
                     .aurionFont(14, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
             }
@@ -663,7 +710,6 @@ struct CaptureView: View {
 
             // Left button: Pause/Resume (56px circle)
             Button(action: {
-                print("[AURION] pause/resume tapped. state=\(session.state) consent=\(session.isConsentConfirmed)")
                 AurionHaptics.impact(.light)
                 if session.state == .recording { sessionManager.pauseRecording() }
                 else if session.state == .paused { sessionManager.resumeRecording() }
@@ -687,7 +733,6 @@ struct CaptureView: View {
 
             // Center: Gold record/stop button (78px)
             Button(action: {
-                print("[AURION] record/stop tapped. state=\(session.state) consent=\(session.isConsentConfirmed) enabled=\(session.recordButtonEnabled)")
                 AurionHaptics.impact(.medium)
                 Task {
                     if session.state == .consentPending && session.isConsentConfirmed {
@@ -759,7 +804,6 @@ struct CaptureView: View {
 
             // Right button: Stop (56px circle)
             Button(action: {
-                print("[AURION] stop tapped. state=\(session.state)")
                 AurionHaptics.impact(.medium)
                 Task { await sessionManager.stopRecording() }
             }) {

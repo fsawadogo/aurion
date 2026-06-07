@@ -86,9 +86,11 @@ struct DashboardView: View {
 
     private var todayCount: Int {
         let calendar = Calendar.current
-        let formatter = ISO8601DateFormatter()
+        // Shared fractional-tolerant parser (Theme.parseISODate). A bare
+        // ISO8601DateFormatter rejects the backend's fractional-seconds
+        // timestamps, which made this count always 0 (#279).
         return recentSessions.filter { s in
-            guard let d = formatter.date(from: s.createdAt) else { return false }
+            guard let d = parseISODate(s.createdAt) else { return false }
             return calendar.isDateInToday(d)
         }.count
     }
@@ -112,9 +114,27 @@ struct DashboardView: View {
     }
 
     private var quickStartCards: [(specialty: String, type: String, label: String, icon: String)] {
-        let profile = appState.physicianProfile
-        let specialty = profile?.primarySpecialty ?? "general"
-        let types = profile?.consultationTypes ?? ["new_patient", "follow_up"]
+        Self.quickStartCards(for: appState.physicianProfile)
+    }
+
+    /// Derive the Quick Start cards from the physician profile.
+    ///
+    /// Returns `[]` when `profile` is nil — the caller renders a skeleton
+    /// instead of fabricating GENERAL defaults that would start a
+    /// "general"-template session for the wrong specialty (#278). When a
+    /// profile exists but its `consultationTypes` are empty, fall back to
+    /// the two default *types* but keep the profile's real specialty —
+    /// never "general".
+    ///
+    /// Pure + static so it's unit-testable without hosting the view.
+    static func quickStartCards(
+        for profile: PhysicianProfileResponse?
+    ) -> [(specialty: String, type: String, label: String, icon: String)] {
+        guard let profile else { return [] }
+        let specialty = profile.primarySpecialty
+        let types = profile.consultationTypes.isEmpty
+            ? ["new_patient", "follow_up"]
+            : profile.consultationTypes
         let icon: String = {
             switch specialty {
             case "orthopedic_surgery": return "figure.walk"
@@ -145,6 +165,14 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     OfflineStatusBanner()
+                    // Single source of truth for session errors. Previously
+                    // rendered in BOTH resumableSection and quickStartSection,
+                    // so one failure surfaced two identical banners. Hoisted
+                    // here so it shows exactly once regardless of which
+                    // section triggered it.
+                    if let err = sessionManager.error {
+                        ErrorBanner(err, onDismiss: { sessionManager.error = nil })
+                    }
                     greetingHeader
                         .tourAnchor(.greeting)
                         .id(TourAnchor.greeting)
@@ -175,8 +203,8 @@ struct DashboardView: View {
             .contentMargins(.bottom, 24, for: .scrollContent)
             .background(Color.aurionBackground)
             .navigationBarHidden(true)
-            .task { await loadRecentSessions() }
-            .refreshable { await loadRecentSessions() }
+            .task { await loadDashboardData() }
+            .refreshable { await loadDashboardData() }
             .onAppear {
                 // Defer the staircase trigger one runloop so the initial
                 // paint is the pre-reveal state — gives the springs a delta.
@@ -316,9 +344,6 @@ struct DashboardView: View {
                 }
                 .buttonStyle(.plain)
             }
-            if let err = sessionManager.error {
-                ErrorBanner(err, onDismiss: { sessionManager.error = nil })
-            }
         }
     }
 
@@ -391,6 +416,13 @@ struct DashboardView: View {
     private var quickStartSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: L("dashboard.quickStart"))
+            // While the profile is still loading (nil), show shimmer
+            // placeholders rather than GENERAL fallback cards — tapping a
+            // wrong-specialty card would start a "general"-template session
+            // for an ortho/plastics surgeon (#278).
+            if appState.physicianProfile == nil {
+                quickStartSkeleton
+            } else {
             LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
                 ForEach(Array(quickStartCards.enumerated()), id: \.element.type) { idx, card in
                     Button {
@@ -437,10 +469,30 @@ struct DashboardView: View {
                     .accessibilityHint(L("a11y.startEncounterHint"))
                 }
             }
-            if let error = sessionManager.error {
-                ErrorBanner(error, onDismiss: { sessionManager.error = nil })
             }
         }
+    }
+
+    /// Shimmer placeholder shown while the physician profile is loading
+    /// (nil). Mirrors the 2-up Quick Start grid so the layout doesn't jump
+    /// when the real cards replace it. Renders no GENERAL fallback (#278).
+    private var quickStartSkeleton: some View {
+        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            ForEach(0..<2, id: \.self) { _ in
+                AurionCard(padding: 14) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        AurionSkeleton(cornerRadius: AurionRadius.sm)
+                            .frame(width: 36, height: 36)
+                        Spacer(minLength: 0)
+                        AurionSkeleton().frame(width: 70, height: 10)
+                        AurionSkeleton().frame(width: 110, height: 14)
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
+                }
+            }
+        }
+        .accessibilityLabel(L("dashboard.quickStart"))
+        .accessibilityHint(L("common.loading"))
     }
 
     // MARK: - Recent Sessions (compact list inside one card)
@@ -477,7 +529,14 @@ struct DashboardView: View {
                 AurionCard(padding: 0) {
                     VStack(spacing: 0) {
                         ForEach(Array(recentSessions.prefix(3).enumerated()), id: \.element.id) { index, session in
-                            recentSessionRow(session: session)
+                            // The row reads as a tappable card but did nothing
+                            // on tap. Mirror `pendingReviewSection` — route the
+                            // tap into the session's note via NavigationLink
+                            // inside the dashboard's own NavigationStack.
+                            NavigationLink(destination: SessionNoteView(session: session)) {
+                                recentSessionRow(session: session)
+                            }
+                            .buttonStyle(.plain)
                             if index < min(recentSessions.count, 3) - 1 {
                                 Rectangle().fill(Color.aurionBorder).frame(height: 1).padding(.leading, 60)
                             }
@@ -526,6 +585,10 @@ struct DashboardView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+        // The Spacer between the label stack and the status pill otherwise
+        // swallows taps; make the whole padded row the hit target so the
+        // wrapping NavigationLink fires anywhere on the row.
+        .contentShape(Rectangle())
     }
 
     // MARK: - Encounter Type Sheet (screen 4)
@@ -646,7 +709,12 @@ struct DashboardView: View {
                                 if isChecked {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.aurionTextPrimary)
+                                        // Navy-on-gold (fixed) — the gold fill
+                                        // is identical in both modes, so an
+                                        // adaptive checkmark went white-on-gold
+                                        // (washed out) in dark mode (#293).
+                                        .foregroundColor(.aurionNavy)
+                                        .accessibilityHidden(true)
                                 }
                             }
                             Text("\(member.role.displayFormatted) \u{2014} \(member.name)")
@@ -654,8 +722,11 @@ struct DashboardView: View {
                                 .foregroundColor(.aurionTextPrimary)
                             Spacer()
                         }
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(isChecked ? .isSelected : [])
                 }
             }
         }
@@ -697,6 +768,7 @@ struct DashboardView: View {
                         .foregroundColor(.aurionGold)
                 }
                 .disabled(traineeName.isEmpty || selectedParticipants.count >= 3)
+                .accessibilityHint(selectedParticipants.count >= 3 ? L("encounter.participantCapReached") : "")
             }
         }
         .padding(.leading, 56)
@@ -846,6 +918,17 @@ struct DashboardView: View {
             captureMode: selectedCaptureMode
         )
         Task { await sessionManager.startNewSession(request) }
+    }
+
+    /// Dashboard appear / pull-to-refresh entry point. Self-heals a missing
+    /// profile (e.g. if the launch-time fetch in `AurionApp` failed) so the
+    /// Quick Start grid recovers its real specialty + visit types instead of
+    /// staying on the skeleton/GENERAL fallback (#278), then loads sessions.
+    private func loadDashboardData() async {
+        if appState.physicianProfile == nil {
+            appState.physicianProfile = try? await APIClient.shared.getProfile()
+        }
+        await loadRecentSessions()
     }
 
     private func loadRecentSessions() async {

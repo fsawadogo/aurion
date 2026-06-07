@@ -15,8 +15,17 @@ struct OnboardingFlowView: View {
     }
 
     /// Step labels displayed below the progress bar — must align with
-    /// `OnboardingStep.allCases` order.
-    private static let stepLabels = ["Pair", "Voice", "Consent", "Record", "Save"]
+    /// `OnboardingStep.allCases` order. Computed (not static) so the words
+    /// re-localize when the UI language changes at runtime.
+    private var stepLabels: [String] {
+        [
+            L("onboarding.flow.stepPair"),
+            L("onboarding.flow.stepVoice"),
+            L("onboarding.flow.stepConsent"),
+            L("onboarding.flow.stepRecord"),
+            L("onboarding.flow.stepSave"),
+        ]
+    }
 
     /// Maps the current enum case to a 0-based index.
     private var currentStepIndex: Int {
@@ -83,7 +92,10 @@ struct OnboardingFlowView: View {
                                 withAnimation(AurionAnimation.smooth) {
                                     currentStep = .voiceProcessing
                                 }
-                            }
+                            },
+                            // Mic-denied recovery (#296 #10): voice enrollment
+                            // is optional, so offer Skip out of the dead-end.
+                            onSkip: { completeOnboarding() }
                         )
                         .transition(AurionTransition.fadeSlide)
                     case .voiceProcessing:
@@ -107,9 +119,10 @@ struct OnboardingFlowView: View {
             // Thin gold progress line
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    // Track
+                    // Track — adaptive (was .aurionNavy.opacity(0.1),
+                    // invisible on the dark background in dark mode) (#293).
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.aurionNavy.opacity(0.1))
+                        .fill(Color.aurionBorder)
                         .frame(height: 3)
 
                     // Filled portion
@@ -129,12 +142,15 @@ struct OnboardingFlowView: View {
 
             // Step labels
             HStack(spacing: 0) {
-                ForEach(0..<Self.stepLabels.count, id: \.self) { index in
-                    Text(Self.stepLabels[index])
-                        .font(.system(
-                            size: 11,
-                            weight: index == currentStepIndex ? .bold : .medium
-                        ))
+                ForEach(0..<stepLabels.count, id: \.self) { index in
+                    Text(stepLabels[index])
+                        .aurionFont(
+                            11,
+                            weight: index == currentStepIndex ? .bold : .medium,
+                            relativeTo: .caption2
+                        )
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.7)
                         .foregroundColor(
                             index == currentStepIndex
                                 ? .aurionGold
@@ -147,6 +163,14 @@ struct OnboardingFlowView: View {
                 }
             }
         }
+        // Expose the header as one progress element instead of five
+        // disconnected words; VoiceOver hears the current step and total.
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(L("a11y.progress"))
+        .accessibilityValue(
+            L("setup.step", currentStepIndex + 1, OnboardingStep.allCases.count)
+                + ", " + stepLabels[currentStepIndex]
+        )
     }
 
     private func completeOnboarding() {

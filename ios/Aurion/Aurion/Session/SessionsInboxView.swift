@@ -5,8 +5,14 @@ import SwiftUI
 /// with counts, then a single rounded card containing every session row.
 /// "Resume" gold pill replaces the status badge for pending sessions.
 struct SessionsInboxView: View {
+    /// Needed to re-engage capture for resumable rows via `adoptSession`
+    /// — the same path the dashboard's "Continue Recording" card uses.
+    @EnvironmentObject private var sessionManager: SessionManager
     @State private var sessions: [SessionResponse] = []
     @State private var isLoading = true
+    /// True when the last load failed AND we have nothing cached to show —
+    /// drives the error+retry state instead of fabricating demo data (#295).
+    @State private var loadFailed = false
     @State private var sortNewestFirst = true
     @State private var filter: Filter = .all
     /// iPad readable-measure clamp — mirrors ``DashboardView``. Inbox
@@ -34,6 +40,9 @@ struct SessionsInboxView: View {
         case pending = "Pending"
         case completed = "Completed"
         case exported = "Exported"
+        /// Localized chip label — mirrors ``DateRange.labelKey`` so the
+        /// pill never renders the bare English rawValue in French.
+        var labelKey: String { "sessions.filter.\(rawValue.lowercased())" }
     }
 
     /// Preset date windows for the inbox. `since == nil` means no lower
@@ -53,21 +62,12 @@ struct SessionsInboxView: View {
         }
     }
 
-    // ISO-8601 parsers — some `created_at` values carry fractional seconds
-    // (e.g. "...:02.75Z"), which the default formatter rejects, so try the
-    // fractional variant first and fall back to plain.
-    private static let isoFractional: ISO8601DateFormatter = {
-        let f = ISO8601DateFormatter()
-        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return f
-    }()
-    private static let isoPlain = ISO8601DateFormatter()
-
     private func inDateRange(_ s: SessionResponse) -> Bool {
         guard let since = dateRange.since else { return true }
-        // Unparseable timestamp → don't hide the row.
-        guard let created = Self.isoFractional.date(from: s.createdAt)
-            ?? Self.isoPlain.date(from: s.createdAt) else { return true }
+        // Unparseable timestamp → don't hide the row. Uses the shared
+        // fractional-tolerant parser (Theme.parseISODate) — same logic the
+        // dashboard count and relative-time formatter share (#279).
+        guard let created = parseISODate(s.createdAt) else { return true }
         return created >= since
     }
 
@@ -105,6 +105,21 @@ struct SessionsInboxView: View {
         ["AWAITING_REVIEW", "PROCESSING_STAGE1", "PROCESSING_STAGE2"].contains(s.state)
     }
 
+    /// What the trailing control + row tap should do for a given state.
+    /// Decoupled from `isPending` (which drives the filter counts) so the
+    /// affordance matches the action: only genuinely-active capture states
+    /// resume into `CaptureView`; AWAITING_REVIEW reviews the note; every
+    /// processing/terminal state shows a non-actionable status pill (#276).
+    enum InboxRowAction: Equatable { case resume, review, status }
+
+    static func rowAction(for state: String) -> InboxRowAction {
+        switch state {
+        case "RECORDING", "PAUSED": return .resume
+        case "AWAITING_REVIEW": return .review
+        default: return .status  // PROCESSING_STAGE1/2, REVIEW_COMPLETE, EXPORTED, PURGED…
+        }
+    }
+
     var body: some View {
         NavigationStack(path: $path) {
             VStack(alignment: .leading, spacing: 0) {
@@ -113,12 +128,16 @@ struct SessionsInboxView: View {
                 Group {
                     if isLoading {
                         skeletonList
+                    } else if loadFailed && sessions.isEmpty {
+                        Spacer()
+                        loadErrorState
+                        Spacer()
                     } else if filtered.isEmpty {
                         Spacer()
                         EmptyStateView(
                             icon: "tray",
-                            title: filter == .all ? "No sessions yet" : "No \(filter.rawValue.lowercased()) sessions",
-                            subtitle: filter == .all ? "Start one from the Dashboard" : "Try a different filter"
+                            title: filter == .all ? L("sessions.noSessions") : L("sessions.noFiltered", L(filter.labelKey).lowercased()),
+                            subtitle: filter == .all ? L("sessions.noSessionsSub") : L("sessions.tryFilter")
                         )
                         .frame(maxWidth: .infinity)
                         Spacer()
@@ -142,8 +161,8 @@ struct SessionsInboxView: View {
                 } else {
                     EmptyStateView(
                         icon: "tray.slash",
-                        title: "Session not available",
-                        subtitle: "This note may have been purged or signed out from another device."
+                        title: L("sessions.tombstone.title"),
+                        subtitle: L("sessions.tombstone.subtitle")
                     )
                     .padding()
                 }
@@ -186,6 +205,10 @@ struct SessionsInboxView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(dateRange == .all ? .aurionTextSecondary : .aurionGold)
                     .padding(8)
+                    // Keep the 14pt glyph but guarantee a 44pt minimum
+                    // touch target (HIG).
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityLabel(L("sessions.dateFilter"))
             .accessibilityValue(L(dateRange.labelKey))
@@ -201,6 +224,9 @@ struct SessionsInboxView: View {
                     // Direction flip animates the same arrow rather than
                     // swapping symbols — feels intentional, not flickery.
                     .contentTransition(.symbolEffect(.replace))
+                    // 14pt glyph, but a 44pt minimum touch target (HIG).
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L("a11y.sortSessions"))
@@ -216,7 +242,7 @@ struct SessionsInboxView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(Filter.allCases, id: \.self) { f in
-                    AurionFilterChip(label: f.rawValue, count: count(for: f), active: filter == f) {
+                    AurionFilterChip(label: L(f.labelKey), count: count(for: f), active: filter == f) {
                         withAnimation(.aurionIOS) { filter = f }
                     }
                 }
@@ -266,10 +292,25 @@ struct SessionsInboxView: View {
             AurionCard(padding: 0) {
                 VStack(spacing: 0) {
                     ForEach(Array(filtered.enumerated()), id: \.element.id) { index, session in
-                        NavigationLink(value: session.id) {
-                            sessionRow(session)
+                        Group {
+                            if Self.rowAction(for: session.state) == .resume {
+                                // Resumable capture → re-engage CaptureView via
+                                // the same path the dashboard uses, NOT the note
+                                // view (#276).
+                                Button {
+                                    AurionHaptics.impact(.light)
+                                    Task { await sessionManager.adoptSession(session) }
+                                } label: {
+                                    sessionRow(session)
+                                }
+                                .buttonStyle(.plain)
+                            } else {
+                                NavigationLink(value: session.id) {
+                                    sessionRow(session)
+                                }
+                                .buttonStyle(.plain)
+                            }
                         }
-                        .buttonStyle(.plain)
                         .contextMenu {
                             Button(role: .destructive) {
                                 sessionToDiscard = session
@@ -318,12 +359,27 @@ struct SessionsInboxView: View {
         sessionToDiscard = nil
         do {
             try await APIClient.shared.discardSession(sessionId: s.id)
+            // Purge the local staged WAV too — discarding server-side must
+            // not leave raw audio on the device (#282).
+            LocalDataPurger.purgeStagedAudio(sessionId: s.id)
             withAnimation { sessions.removeAll { $0.id == s.id } }
             AurionHaptics.notification(.success)
         } catch {
             AurionHaptics.notification(.error)
             await loadSessions()
         }
+    }
+
+    /// Gold capsule (navy text, fixed in both modes) used for the
+    /// actionable Resume / Review affordances. Matches the dashboard pill.
+    private func goldPill(_ label: String) -> some View {
+        Text(label)
+            .font(.system(size: 12, weight: .semibold))
+            .foregroundColor(.aurionNavy)
+            .padding(.horizontal, 12)
+            .padding(.vertical, 6)
+            .background(Color.aurionGold)
+            .clipShape(Capsule())
     }
 
     private func sessionRow(_ s: SessionResponse) -> some View {
@@ -368,16 +424,12 @@ struct SessionsInboxView: View {
                     .lineLimit(1)
             }
             Spacer()
-            if isPending(s) {
-                Text(L("sessions.resume"))
-                    .font(.system(size: 12, weight: .semibold))
-                    // Brand-navy on gold pill — fixed in both modes.
-                    .foregroundColor(.aurionNavy)
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 6)
-                    .background(Color.aurionGold)
-                    .clipShape(Capsule())
-            } else {
+            switch Self.rowAction(for: s.state) {
+            case .resume:
+                goldPill(L("sessions.resume"))
+            case .review:
+                goldPill(L("sessions.review"))
+            case .status:
                 AurionStatusPill(
                     kind: sessionStateKind(s.state),
                     labelOverride: sessionStateLabel(s.state)
@@ -391,18 +443,37 @@ struct SessionsInboxView: View {
 
     // MARK: - Data
 
+    /// Error + retry state shown when a from-empty load fails (#295),
+    /// replacing the old fabricated demo sessions.
+    private var loadErrorState: some View {
+        VStack(spacing: AurionSpacing.md) {
+            EmptyStateView(
+                icon: "wifi.exclamationmark",
+                title: L("sessions.loadFailed.title"),
+                subtitle: L("sessions.loadFailed.subtitle")
+            )
+            Button(L("common.retry")) {
+                Task { await loadSessions() }
+            }
+            .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+            .foregroundColor(.aurionGold)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private func loadSessions() async {
         isLoading = true
         defer { isLoading = false }
         do {
             sessions = try await APIClient.shared.listSessions()
+            loadFailed = false
         } catch {
-            sessions = [
-                SessionResponse(id: "demo-1", clinicianId: "c1", specialty: "orthopedic_surgery", state: "AWAITING_REVIEW", encounterType: "doctor_patient", createdAt: "2026-04-14T10:30:00Z", updatedAt: "2026-04-14T11:00:00Z"),
-                SessionResponse(id: "demo-2", clinicianId: "c1", specialty: "plastic_surgery", state: "EXPORTED", encounterType: "doctor_patient", createdAt: "2026-04-13T14:00:00Z", updatedAt: "2026-04-13T14:45:00Z"),
-                SessionResponse(id: "demo-3", clinicianId: "c1", specialty: "orthopedic_surgery", state: "REVIEW_COMPLETE", encounterType: "doctor_patient_allied", createdAt: "2026-04-12T09:15:00Z", updatedAt: "2026-04-12T10:00:00Z"),
-                SessionResponse(id: "demo-4", clinicianId: "c1", specialty: "orthopedic_surgery", state: "PURGED", encounterType: "doctor_patient", createdAt: "2026-04-11T08:00:00Z", updatedAt: "2026-04-11T09:00:00Z"),
-            ]
+            // Surface the failure instead of fabricating demo sessions
+            // (#295 — fake clinical rows on a real network error were
+            // misleading). A failed *refresh* that still has cached
+            // sessions keeps the list; only a from-empty failure shows the
+            // error state.
+            loadFailed = true
         }
     }
 }

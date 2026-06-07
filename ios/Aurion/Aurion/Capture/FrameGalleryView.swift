@@ -42,6 +42,11 @@ struct FrameGalleryView: View {
                                     frameThumbnail(frame)
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(
+                                    L("frames.a11yFrame", formatTimestamp(frame.timestamp))
+                                )
+                                .accessibilityHint(L("frames.a11yFrameHint"))
                                 .transition(
                                     .scale(scale: 0.85)
                                         .combined(with: .opacity)
@@ -96,12 +101,29 @@ struct FrameGalleryView: View {
                     .aspectRatio(3.0 / 4.0, contentMode: .fit)
                     .clipped()
             } else {
-                Rectangle()
-                    .fill(Color.aurionCardBackground)
-                    .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                // Decode failure (corrupt/empty JPEG) — surface a warning
+                // glyph + label so it reads as "this frame couldn't load",
+                // not as a blank/black tile that looks like a capture gap.
+                ZStack {
+                    Rectangle()
+                        .fill(Color.aurionCardBackground)
+                        .aspectRatio(3.0 / 4.0, contentMode: .fit)
+                    VStack(spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle")
+                            .font(.system(size: 22, weight: .regular))
+                            .foregroundColor(.aurionMutedGray)
+                        Text(L("frames.decodeFailed"))
+                            .aurionFont(11, weight: .medium, relativeTo: .caption2)
+                            .foregroundColor(.aurionMutedGray)
+                            .multilineTextAlignment(.center)
+                    }
+                    .padding(8)
+                }
             }
 
-            // Timestamp pill — bottom-left over the image for context
+            // Timestamp pill — bottom-left over the image for context.
+            // Decorative: the timestamp is already spoken via the button's
+            // accessibilityLabel, so hide it from VoiceOver here.
             Text(formatTimestamp(frame.timestamp))
                 .aurionFont(10, weight: .semibold, relativeTo: .caption2)
                 .monospacedDigit()
@@ -111,6 +133,7 @@ struct FrameGalleryView: View {
                 .background(.ultraThinMaterial)
                 .clipShape(Capsule())
                 .padding(6)
+                .accessibilityHidden(true)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(

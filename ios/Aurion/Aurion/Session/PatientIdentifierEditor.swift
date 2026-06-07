@@ -129,85 +129,102 @@ struct PatientIdentifierSheet: View {
     @Binding var isPresented: Bool
 
     @State private var draft: String = ""
-    @State private var isWorking = false
+    @State private var inFlight: InFlightAction?
     @State private var errorMessage: String?
+
+    /// Which network action is currently in flight, so the spinner
+    /// renders on the tapped button only (#13) — Save and Clear share
+    /// the same roundtrip but must not both show a spinner.
+    private enum InFlightAction { case save, clear }
+
+    /// Any action in flight disables every control to block a
+    /// double-submit.
+    private var isWorking: Bool { inFlight != nil }
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(L("patientId.subtitle"))
-                    .aurionFont(13, relativeTo: .footnote)
-                    .foregroundColor(.aurionTextSecondary)
-                    .padding(.horizontal, 4)
+            // Scrollable form + a pinned action bar. At larger Dynamic
+            // Type (or with the keyboard raised) the subtitle, field,
+            // error, and privacy hint can grow past the medium detent;
+            // scrolling the form while keeping Save/Clear docked at the
+            // bottom keeps the actions reachable (#271).
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(L("patientId.subtitle"))
+                            .aurionFont(13, relativeTo: .footnote)
+                            .foregroundColor(.aurionTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 4)
 
-                // Text field — disables QuickType, auto-correct,
-                // auto-cap. We don't want the identifier surfacing
-                // in the predictive bar or being autocorrected to
-                // a similar-looking word.
-                TextField(L("patientId.placeholder"), text: $draft)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .keyboardType(.asciiCapable)
-                    .font(.system(size: 16, weight: .regular, design: .monospaced))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 12)
-                    .background(Color.aurionSurfaceAlt)
-                    .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.aurionBorder, lineWidth: 1)
-                    )
-                    .disabled(isWorking)
+                        // Text field — disables QuickType, auto-correct,
+                        // auto-cap. We don't want the identifier surfacing
+                        // in the predictive bar or being autocorrected to
+                        // a similar-looking word.
+                        TextField(L("patientId.placeholder"), text: $draft)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .keyboardType(.asciiCapable)
+                            .font(.system(size: 16, weight: .regular, design: .monospaced))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 12)
+                            .background(Color.aurionSurfaceAlt)
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.aurionBorder, lineWidth: 1)
+                            )
+                            .disabled(isWorking)
 
-                if let msg = errorMessage {
-                    Text(msg)
-                        .aurionFont(12, relativeTo: .caption)
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 4)
+                        if let msg = errorMessage {
+                            Text(msg)
+                                .aurionFont(12, relativeTo: .caption)
+                                .foregroundColor(.aurionRed)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 4)
+                        }
+
+                        Text(L("patientId.privacyHint"))
+                            .aurionFont(11, relativeTo: .caption2)
+                            .foregroundColor(.aurionTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 4)
+                            .padding(.top, 4)
+                    }
+                    .padding(20)
                 }
-
-                Text(L("patientId.privacyHint"))
-                    .aurionFont(11, relativeTo: .caption2)
-                    .foregroundColor(.aurionTextSecondary)
-                    .padding(.horizontal, 4)
-                    .padding(.top, 4)
-
-                Spacer()
 
                 HStack(spacing: 12) {
                     if identifier != nil {
                         Button(role: .destructive) {
                             Task { await clear() }
                         } label: {
-                            Text(L("patientId.clear"))
-                                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
+                            HStack {
+                                if inFlight == .clear {
+                                    ProgressView().tint(.aurionRed)
+                                }
+                                Text(L("patientId.clear"))
+                                    .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
                         }
                         .buttonStyle(.bordered)
                         .disabled(isWorking)
                     }
 
-                    Button {
+                    AurionGoldButton(
+                        label: inFlight == .save ? L("patientId.saving") : L("patientId.save"),
+                        full: true,
+                        disabled: isWorking || draft.trimmingCharacters(in: .whitespaces).isEmpty
+                    ) {
                         Task { await save() }
-                    } label: {
-                        HStack {
-                            if isWorking {
-                                ProgressView().tint(.aurionNavy)
-                            }
-                            Text(L("patientId.save"))
-                                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
-                                .foregroundColor(.aurionNavy)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.aurionGold)
-                        .cornerRadius(12)
                     }
-                    .disabled(isWorking || draft.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 20)
             }
-            .padding(20)
             .navigationTitle(L("patientId.editTitle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -224,23 +241,23 @@ struct PatientIdentifierSheet: View {
             // user can edit-in-place vs retyping from scratch.
             draft = identifier ?? ""
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 
     private func save() async {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        await runCall(setting: trimmed)
+        await runCall(.save, setting: trimmed)
     }
 
     private func clear() async {
-        await runCall(setting: nil)
+        await runCall(.clear, setting: nil)
     }
 
-    private func runCall(setting value: String?) async {
-        isWorking = true
+    private func runCall(_ action: InFlightAction, setting value: String?) async {
+        inFlight = action
         errorMessage = nil
-        defer { isWorking = false }
+        defer { inFlight = nil }
         do {
             _ = try await APIClient.shared.setSessionIdentifier(
                 sessionId: sessionId,

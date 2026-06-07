@@ -9,6 +9,11 @@ struct PostEncounterView: View {
     @State private var selectedLanguage: String
     @State private var preferredTemplates: [TemplateResponse] = []
     @State private var isLoadingTemplates = false
+    /// `true` when the template fetch threw. We still fall back to the
+    /// current specialty so the physician can proceed, but we surface an
+    /// inline error + Retry rather than silently masking the failure as a
+    /// one-item list.
+    @State private var templatesLoadFailed = false
     @State private var isConfirming = false
     /// Patient identifier (#61). Seeded from the session row on
     /// load; the editor binding writes back here. Stays nil when
@@ -39,44 +44,56 @@ struct PostEncounterView: View {
                     SectionHeader(title: L("postEncounter.template"))
 
                     // Templates in a single card with dividers
-                    VStack(spacing: 0) {
-                        if isLoadingTemplates {
-                            HStack { Spacer(); ProgressView(); Spacer() }
-                                .padding(16)
-                        } else {
-                            ForEach(Array(preferredTemplates.enumerated()), id: \.element.key) { index, template in
-                                Button {
-                                    AurionHaptics.selection()
-                                    selectedTemplate = template.key
-                                } label: {
-                                    HStack {
-                                        Text(localizedSpecialty(template.key))
-                                            .aurionFont(15, relativeTo: .subheadline)
-                                            .foregroundColor(.aurionTextPrimary)
-                                        Spacer()
-                                        if selectedTemplate == template.key {
-                                            Image(systemName: "checkmark")
-                                                .font(.system(size: 16, weight: .medium))
-                                                .foregroundColor(.aurionGold)
+                    AurionCard(padding: 0) {
+                        VStack(spacing: 0) {
+                            if isLoadingTemplates {
+                                HStack { Spacer(); ProgressView(); Spacer() }
+                                    .padding(16)
+                            } else {
+                                ForEach(Array(preferredTemplates.enumerated()), id: \.element.key) { index, template in
+                                    let isSelected = selectedTemplate == template.key
+                                    Button {
+                                        AurionHaptics.selection()
+                                        selectedTemplate = template.key
+                                    } label: {
+                                        HStack {
+                                            Text(localizedSpecialty(template.key))
+                                                .aurionFont(15, relativeTo: .subheadline)
+                                                .foregroundColor(.aurionTextPrimary)
+                                            Spacer()
+                                            if isSelected {
+                                                Image(systemName: "checkmark")
+                                                    .font(.system(size: 16, weight: .medium))
+                                                    .foregroundColor(.aurionGold)
+                                            }
                                         }
+                                        .padding(.horizontal, 16)
+                                        .padding(.vertical, 14)
+                                        // Subtle gold wash reinforces selection
+                                        // visually alongside the .isSelected trait.
+                                        .background(isSelected ? Color.aurionGold.opacity(0.08) : Color.clear)
                                     }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 14)
-                                }
-                                .buttonStyle(.plain)
+                                    .buttonStyle(.plain)
+                                    .accessibilityAddTraits(isSelected ? .isSelected : [])
 
-                                if index < preferredTemplates.count - 1 {
-                                    Divider().padding(.leading, 16)
+                                    if index < preferredTemplates.count - 1 {
+                                        Divider().padding(.leading, 16)
+                                    }
                                 }
                             }
                         }
                     }
-                    .background(Color.aurionCardBackground)
-                    .cornerRadius(16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.aurionBorder, lineWidth: 1)
-                    )
+
+                    // Inline failure surface for the template fetch. The
+                    // list above still shows the current-specialty fallback
+                    // so the physician isn't blocked; this just makes the
+                    // failure honest and offers a Retry.
+                    if templatesLoadFailed {
+                        ErrorBanner(
+                            L("postEncounter.templatesLoadFailed"),
+                            onRetry: { Task { await loadTemplates() } }
+                        )
+                    }
 
                     // Patient identifier section (#61). Optional —
                     // physician can skip it and the note still
@@ -95,41 +112,40 @@ struct PostEncounterView: View {
                     // Language section
                     SectionHeader(title: L("postEncounter.outputLanguage"))
 
-                    VStack(spacing: 0) {
-                        ForEach(Array(languages.enumerated()), id: \.element.0) { index, lang in
-                            let (key, name, flag) = lang
-                            Button {
-                                AurionHaptics.selection()
-                                selectedLanguage = key
-                            } label: {
-                                HStack(spacing: 12) {
-                                    Text(flag).aurionFont(22, relativeTo: .title2)
-                                    Text(name)
-                                        .aurionFont(15, relativeTo: .subheadline)
-                                        .foregroundColor(.aurionTextPrimary)
-                                    Spacer()
-                                    if selectedLanguage == key {
-                                        Image(systemName: "checkmark")
-                                            .font(.system(size: 16, weight: .medium))
-                                            .foregroundColor(.aurionGold)
+                    AurionCard(padding: 0) {
+                        VStack(spacing: 0) {
+                            ForEach(Array(languages.enumerated()), id: \.element.0) { index, lang in
+                                let (key, name, flag) = lang
+                                let isSelected = selectedLanguage == key
+                                Button {
+                                    AurionHaptics.selection()
+                                    selectedLanguage = key
+                                } label: {
+                                    HStack(spacing: 12) {
+                                        Text(flag).aurionFont(22, relativeTo: .title2)
+                                        Text(name)
+                                            .aurionFont(15, relativeTo: .subheadline)
+                                            .foregroundColor(.aurionTextPrimary)
+                                        Spacer()
+                                        if isSelected {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 16, weight: .medium))
+                                                .foregroundColor(.aurionGold)
+                                        }
                                     }
+                                    .padding(.horizontal, 16)
+                                    .padding(.vertical, 14)
+                                    .background(isSelected ? Color.aurionGold.opacity(0.08) : Color.clear)
                                 }
-                                .padding(.horizontal, 16)
-                                .padding(.vertical, 14)
-                            }
-                            .buttonStyle(.plain)
+                                .buttonStyle(.plain)
+                                .accessibilityAddTraits(isSelected ? .isSelected : [])
 
-                            if index < languages.count - 1 {
-                                Divider().padding(.leading, 16)
+                                if index < languages.count - 1 {
+                                    Divider().padding(.leading, 16)
+                                }
                             }
                         }
                     }
-                    .background(Color.aurionCardBackground)
-                    .cornerRadius(16)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 16)
-                            .stroke(Color.aurionBorder, lineWidth: 1)
-                    )
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
@@ -171,10 +187,17 @@ struct PostEncounterView: View {
         isLoadingTemplates = true
         do {
             preferredTemplates = try await APIClient.shared.getPreferredTemplates()
+            templatesLoadFailed = false
         } catch {
-            preferredTemplates = [
-                TemplateResponse(key: selectedTemplate, displayName: selectedTemplate.displayFormatted, sections: [])
-            ]
+            templatesLoadFailed = true
+            // Keep a usable fallback (the current specialty) so Generate
+            // still works, but only seed it if we have nothing yet — a
+            // Retry that fails again shouldn't clobber a prior good list.
+            if preferredTemplates.isEmpty {
+                preferredTemplates = [
+                    TemplateResponse(key: selectedTemplate, displayName: selectedTemplate.displayFormatted, sections: [])
+                ]
+            }
         }
         isLoadingTemplates = false
     }

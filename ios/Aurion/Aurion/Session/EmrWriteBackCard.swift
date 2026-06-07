@@ -106,7 +106,7 @@ struct EmrWriteBackCard: View {
             if let msg = errorMessage {
                 Text(msg)
                     .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(.red)
+                    .foregroundColor(.aurionRed)
             }
         }
         .padding(16)
@@ -374,7 +374,8 @@ struct EmrWriteBackCard: View {
                 if let externalId = row.externalId, !externalId.isEmpty,
                    externalId != "unknown-\(row.sessionId)" {
                     Text(L("emr.externalIdLabel", externalId))
-                        .font(.system(size: 11, weight: .regular, design: .monospaced))
+                        .monospaced()
+                        .aurionFont(11, relativeTo: .caption2)
                         .foregroundColor(.aurionTextPrimary)
                         .lineLimit(2)
                 }
@@ -395,8 +396,11 @@ struct EmrWriteBackCard: View {
                 HStack(spacing: 6) {
                     Text(relativeTime(row.createdAt))
                     Text("\u{00B7}").foregroundColor(.aurionTextSecondary.opacity(0.4))
+                    // Fingerprint is a hex digest — monospace it (scales
+                    // with the row via the HStack's aurionFont).
                     Text(L("emr.fingerprintLabel",
                             String(row.payloadFingerprint.prefix(12))))
+                        .monospaced()
                 }
                 .aurionFont(10, relativeTo: .caption2)
                 .foregroundColor(.aurionTextSecondary)
@@ -537,7 +541,9 @@ struct EmrWriteBackCard: View {
                 connector: selectedConnector
             )
             // Prepend for newest-first ordering — matches backend
-            rows = [row] + rows
+            withAnimation(AurionAnimation.smooth) {
+                rows = [row] + rows
+            }
             if row.status == "failed" {
                 AurionHaptics.notification(.warning)
                 if let reason = row.errorReason, !reason.isEmpty {

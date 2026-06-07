@@ -21,12 +21,11 @@ struct DeviceStatusCard: View {
 
             VStack(alignment: .leading, spacing: 4) {
                 Text(name)
-                    .font(.subheadline)
-                    .fontWeight(.medium)
+                    .aurionFont(15, weight: .medium, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextPrimary)
                 Text(subtitle)
-                    .font(.caption2)
-                    .foregroundColor(.secondary)
+                    .aurionFont(11, relativeTo: .caption2)
+                    .foregroundColor(.aurionTextSecondary)
             }
 
             Spacer()
@@ -36,8 +35,7 @@ struct DeviceStatusCard: View {
                     .fill(status.color)
                     .frame(width: 8, height: 8)
                 Text(status.label)
-                    .font(.caption2)
-                    .fontWeight(.medium)
+                    .aurionFont(11, weight: .medium, relativeTo: .caption2)
                     .foregroundColor(status.color)
             }
             .padding(.horizontal, 10)
@@ -51,7 +49,16 @@ struct DeviceStatusCard: View {
         .cornerRadius(12)
         .swipeActions(edge: .trailing) {
             if let onForget {
-                Button("Forget", role: .destructive) { onForget() }
+                Button(L("common.forget"), role: .destructive) { onForget() }
+            }
+        }
+        // Read the whole card as one element, and expose Forget as a
+        // VoiceOver action so it's reachable outside a List (where
+        // .swipeActions does nothing).
+        .accessibilityElement(children: .combine)
+        .accessibilityActions {
+            if let onForget {
+                Button(L("common.forget"), action: onForget)
             }
         }
     }
@@ -66,11 +73,11 @@ enum DeviceStatus {
 
     var label: String {
         switch self {
-        case .connected: return "Connected"
-        case .disconnected: return "Disconnected"
-        case .scanning: return "Scanning"
-        case .recovering: return "Recovering"
-        case .unavailable: return "Unavailable"
+        case .connected: return L("deviceStatus.connected")
+        case .disconnected: return L("deviceStatus.disconnected")
+        case .scanning: return L("deviceStatus.scanning")
+        case .recovering: return L("deviceStatus.recovering")
+        case .unavailable: return L("deviceStatus.unavailable")
         }
     }
 

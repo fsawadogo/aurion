@@ -1,4 +1,5 @@
 import SwiftUI
+import AVFoundation
 
 /// Photo-viewer-style presentation of a single clip-kind citation.
 /// Mirrors `FullFrameView` in `Capture/FrameGalleryView.swift` so the
@@ -30,24 +31,45 @@ struct FullClipView: View {
     let timestamp: TimeInterval
     @Environment(\.dismiss) private var dismiss
 
+    /// Readiness of the clip asset. `AurionVideoPlayer` owns its own
+    /// `AVPlayer` and exposes no status, so we probe playability on a
+    /// parallel `AVURLAsset` to gate loading → ready → failed. This covers
+    /// the common failure modes — missing local file, corrupt MP4, or a
+    /// slow/unreachable signed remote URL — instead of leaving a black frame.
+    private enum ClipLoadState: Equatable {
+        case loading
+        case ready
+        case failed
+    }
+    @State private var loadState: ClipLoadState = .loading
+
     var body: some View {
         NavigationStack {
             ZStack {
                 Color.black.ignoresSafeArea()
 
-                AurionVideoPlayer(url: clipURL)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .transition(.opacity)
-                    .accessibilityLabel(L("clip.viewer.accessibility"))
+                switch loadState {
+                case .ready:
+                    AurionVideoPlayer(url: clipURL)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .transition(.opacity)
+                        .accessibilityLabel(L("clip.viewer.accessibility"))
 
-                VStack {
-                    Spacer()
-                    if durationMs > 0 {
-                        durationPill
-                            .padding(.bottom, 24)
+                    VStack {
+                        Spacer()
+                        if durationMs > 0 {
+                            durationPill
+                                .padding(.bottom, 24)
+                        }
                     }
+                case .loading:
+                    loadingOverlay
+                case .failed:
+                    unavailableOverlay
                 }
             }
+            .animation(AurionAnimation.smooth, value: loadState)
+            .task(id: clipURL) { await loadClip() }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .principal) {
@@ -68,6 +90,62 @@ struct FullClipView: View {
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
         .navigationViewStyle(.stack)
+    }
+
+    // MARK: - Loading / failure surfaces
+
+    /// Spinner over the black background while the clip readies. Keeps the
+    /// chrome identical to the playing state so the transition is just the
+    /// spinner fading out as the video fades in.
+    private var loadingOverlay: some View {
+        VStack(spacing: 14) {
+            ProgressView()
+                .tint(.white)
+                .scaleEffect(1.2)
+            Text(L("clip.loading"))
+                .aurionFont(13, weight: .medium, relativeTo: .footnote)
+                .foregroundColor(.white.opacity(0.7))
+        }
+        .transition(.opacity)
+    }
+
+    /// Inline failure surface — a warning glyph, an explanation, and a
+    /// secondary Close so the physician can leave without hunting for the
+    /// toolbar button. The toolbar Close stays available too.
+    private var unavailableOverlay: some View {
+        VStack(spacing: 14) {
+            Image(systemName: "exclamationmark.triangle")
+                .font(.system(size: 40, weight: .light))
+                .foregroundColor(.white.opacity(0.6))
+            Text(L("clip.unavailable"))
+                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                .foregroundColor(.white)
+                .multilineTextAlignment(.center)
+            Button(L("common.close")) {
+                AurionHaptics.selection()
+                dismiss()
+            }
+            .aurionFont(15, weight: .semibold, relativeTo: .body)
+            .foregroundColor(.aurionGold)
+            .padding(.top, 4)
+        }
+        .padding(40)
+        .transition(.opacity)
+    }
+
+    /// Probe playability on a parallel asset (iOS 16 async loader). Local
+    /// files resolve near-instantly; remote signed URLs surface the spinner
+    /// until the asset responds, and any error/non-playable result flips to
+    /// the failure surface rather than leaving a black frame.
+    private func loadClip() async {
+        loadState = .loading
+        let asset = AVURLAsset(url: clipURL)
+        do {
+            let playable = try await asset.load(.isPlayable)
+            loadState = playable ? .ready : .failed
+        } catch {
+            loadState = .failed
+        }
     }
 
     /// Floating duration pill anchored bottom-centre. Distinct from

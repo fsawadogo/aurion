@@ -47,6 +47,10 @@ struct PatientSummaryCard: View {
     @State private var showShareSheet = false
     @State private var copiedFlash = false
 
+    // Drives the action row's collapse to icon-only at accessibility
+    // text sizes so the four chips don't clip / push off-screen.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     // Backend cap matches the portal — see web/types/index.ts:
     // PatientSummaryEditRequest.body has min_length=1, max_length=4000.
     private let maxChars = 4000
@@ -88,7 +92,7 @@ struct PatientSummaryCard: View {
             if let msg = errorMessage {
                 Text(msg)
                     .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(.red)
+                    .foregroundColor(.aurionRed)
             }
         }
         .padding(16)
@@ -276,7 +280,7 @@ struct PatientSummaryCard: View {
                 Text(L("summary.charLimit", draftBody.count, maxChars))
                     .aurionFont(11, relativeTo: .caption2)
                     .foregroundColor(draftBody.count > maxChars
-                                     ? .red : .aurionTextSecondary)
+                                     ? .aurionRed : .aurionTextSecondary)
                 Spacer()
                 Button(L("summary.cancel")) {
                     isEditing = false
@@ -328,15 +332,24 @@ struct PatientSummaryCard: View {
             HStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 11, weight: .semibold))
-                Text(label)
-                    .aurionFont(11, weight: .semibold, relativeTo: .caption)
+                // At accessibility text sizes the four labelled chips
+                // can't fit one row — drop to icon-only and let the
+                // VoiceOver label below carry the meaning.
+                if !dynamicTypeSize.isAccessibilitySize {
+                    Text(label)
+                        .aurionFont(11, weight: .semibold, relativeTo: .caption)
+                        .lineLimit(1)
+                }
             }
             .foregroundColor(.aurionTextPrimary)
             .padding(.horizontal, 10)
             .padding(.vertical, 6)
+            .frame(minHeight: 44)
             .background(Color.aurionSurfaceAlt)
             .clipShape(Capsule())
+            .contentShape(Capsule())
         }
+        .accessibilityLabel(label)
         .disabled(disabled)
         .opacity(disabled ? 0.5 : 1.0)
     }

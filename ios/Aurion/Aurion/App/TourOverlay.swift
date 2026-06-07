@@ -41,6 +41,7 @@ struct TourOverlay: View {
                 .contentShape(Rectangle())
                 .onTapGesture { tour.next() }
                 .animation(AurionAnimation.spring, value: tour.stepIndex)
+                .accessibilityHidden(true)
 
             if let rect = spotlight {
                 RoundedRectangle(cornerRadius: 18, style: .continuous)
@@ -116,12 +117,17 @@ struct TourOverlay: View {
                     HStack(spacing: 6) {
                         Image(systemName: tour.dontShowAgain ? "checkmark.square.fill" : "square")
                             .foregroundColor(tour.dontShowAgain ? .aurionGold : .aurionTextSecondary)
+                            .accessibilityHidden(true)
                         Text(L("tour.dontShowAgain"))
                             .aurionFont(12, relativeTo: .caption)
                             .foregroundColor(.aurionTextSecondary)
                     }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel(L("tour.dontShowAgain"))
+                .accessibilityAddTraits(tour.dontShowAgain ? .isSelected : [])
             }
             .padding(.top, 2)
 
@@ -156,6 +162,8 @@ struct TourOverlay: View {
         .frame(maxWidth: .infinity)
         .id(tour.stepIndex)
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
+        .accessibilityElement(children: .contain)
+        .accessibilityAddTraits(.isModal)
     }
 }
 

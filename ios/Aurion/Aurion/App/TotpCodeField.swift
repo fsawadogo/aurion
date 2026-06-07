@@ -20,6 +20,11 @@ struct TotpCodeField: View {
     /// gradient (white digits), setup view ships in the same context.
     var tint: Color = .aurionGold
     var digitColor: Color = .white
+    /// Bump this from the caller (e.g. after clearing the code on a bad-code
+    /// error) to re-assert keyboard focus. `onAppear` only fires once, so a
+    /// still-mounted field whose keyboard was dismissed needs an explicit
+    /// nudge — changing this value drives `onChange` below.
+    var resetToken: Int = 0
 
     @FocusState private var focused: Bool
 
@@ -59,16 +64,28 @@ struct TotpCodeField: View {
             .opacity(0.001)   // present but invisible — keeps the keyboard wired
             .frame(width: 1, height: 1)
             .accessibilityLabel(L("login.mfa.challenge.codeLabel"))
+            // The six visible cells are decorative duplicates of this
+            // field's value — report progress here so VoiceOver lands on a
+            // single meaningful element instead of six empty cells.
+            .accessibilityValue(L("login.mfa.challenge.codeProgress", code.count, Self.codeLength))
 
             HStack(spacing: 10) {
                 ForEach(0..<Self.codeLength, id: \.self) { idx in
                     cell(at: idx)
                 }
             }
+            .accessibilityHidden(true)
         }
         .contentShape(Rectangle())
         .onTapGesture { focused = true }
         .onAppear { focused = true }
+        .onChange(of: resetToken) { _ in
+            // Toggle through `false` so SwiftUI registers the change even if
+            // `focused` is already true in its own state but the keyboard was
+            // dismissed — re-presents the keypad without a manual tap.
+            focused = false
+            DispatchQueue.main.async { focused = true }
+        }
     }
 
     private func cell(at index: Int) -> some View {
@@ -77,6 +94,8 @@ struct TotpCodeField: View {
         let isCursor = (index == chars.count) && focused
         return Text(char.isEmpty ? " " : char)
             .aurionFont(22, weight: .semibold, relativeTo: .title3)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
             .frame(width: 44, height: 54)
             .foregroundColor(digitColor)
             .background(Color.white.opacity(0.08))

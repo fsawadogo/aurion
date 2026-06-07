@@ -58,6 +58,10 @@ struct NoteReviewView: View {
     let onDismiss: () -> Void
     @StateObject private var wsClient: WebSocketClient
     @State private var note: NoteResponse?
+    /// Captures a failed initial note fetch so the view can show a real
+    /// error + Retry instead of an infinite ProgressView. Cleared on a
+    /// successful (re)load. Never set on the `initialNote` short-circuit.
+    @State private var loadError: String?
     /// Which section's source panel is currently expanded inline. nil = none.
     /// Sections render as continuous prose (one paragraph per section); tapping
     /// the paragraph toggles the per-section citation list.
@@ -171,6 +175,17 @@ struct NoteReviewView: View {
                 } else {
                     approvalBar(n)
                 }
+            } else if let loadError {
+                // Initial fetch failed — give the physician a real error
+                // surface with Retry rather than a spinner that never
+                // resolves. Retry clears the error and re-runs loadNote().
+                Spacer()
+                ErrorBanner(loadError, onRetry: {
+                    self.loadError = nil
+                    loadNote()
+                })
+                .padding(.horizontal, 16)
+                Spacer()
             } else {
                 Spacer()
                 ProgressView(L("noteReview.loading"))
@@ -579,7 +594,7 @@ struct NoteReviewView: View {
                     .foregroundColor(.aurionTextPrimary)
                 if s.hasConflicts {
                     Text(L("noteReview.conflictBadge"))
-                        .font(.system(size: 10, weight: .bold))
+                        .aurionFont(10, weight: .bold, relativeTo: .caption2)
                         .tracking(0.6)
                         .foregroundColor(.aurionStatusConflict)
                         .padding(.horizontal, 6)
@@ -591,7 +606,7 @@ struct NoteReviewView: View {
                     // block approval; Stage 2 vision fills them only if
                     // imaging was actually reviewed during the encounter.
                     Text(L("noteReview.optionalBadge"))
-                        .font(.system(size: 10, weight: .bold))
+                        .aurionFont(10, weight: .bold, relativeTo: .caption2)
                         .tracking(0.6)
                         .foregroundColor(.aurionTextSecondary)
                         .padding(.horizontal, 6)
@@ -654,7 +669,7 @@ struct NoteReviewView: View {
             Rectangle().fill(Color.aurionGold).frame(width: 2)
             VStack(alignment: .leading, spacing: 10) {
                 Text(L("noteReview.sources"))
-                    .font(.system(size: 10, weight: .semibold))
+                    .aurionFont(10, weight: .semibold, relativeTo: .caption2)
                     .tracking(0.6)
                     .foregroundColor(.aurionTextSecondary)
                 ForEach(claims, id: \.id) { claim in
@@ -717,7 +732,7 @@ struct NoteReviewView: View {
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L("noteReview.conflictHint"))
-                        .font(.system(size: 11, weight: .semibold))
+                        .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                         .tracking(0.4)
                         .foregroundColor(.aurionStatusConflict)
                     Text(claim.text)
@@ -760,6 +775,10 @@ struct NoteReviewView: View {
                     RoundedRectangle(cornerRadius: 6)
                         .stroke(Color.aurionBorder, lineWidth: 1)
                 )
+                // Mandatory conflict-resolution controls gate approval —
+                // guarantee the 44pt minimum tap target.
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
         }
         .disabled(inFlight)
         .opacity(inFlight ? 0.5 : 1)
@@ -939,7 +958,15 @@ struct NoteReviewView: View {
         } else {
             wsClient.connect()
             Task {
-                note = try? await APIClient.shared.getFullNote(sessionId: sessionId)
+                do {
+                    note = try await APIClient.shared.getFullNote(sessionId: sessionId)
+                    loadError = nil
+                } catch {
+                    // Surface the failure so the body renders the error +
+                    // Retry state instead of an endless spinner.
+                    loadError = (error as? APIError)?.errorDescription
+                        ?? error.localizedDescription
+                }
             }
         }
         // #61 — fetch the session row in parallel so the prior-encounters

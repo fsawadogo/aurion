@@ -58,20 +58,53 @@ struct LocalDataPurger {
     /// Sweep stale temp files (older than `staleThreshold`) without
     /// touching in-memory state. Called on app foreground so a crashed
     /// or backgrounded session doesn't leave dictation WAVs lying around.
+    ///
+    /// Also sweeps the audio-upload **staging** directory (#282): the
+    /// happy-path cleanup (`clearRecordedAudioFile`) relies on an in-memory
+    /// URL that a crash loses, orphaning the WAV. The active upload's WAV is
+    /// short-lived, so any staged file older than `staleThreshold` is a
+    /// definitive orphan and safe to delete.
     @discardableResult
     static func purgeStaleArtifacts() -> Int {
-        let deleted = sweepTempFiles(maxAge: staleThreshold)
+        let tempDeleted = sweepTempFiles(maxAge: staleThreshold)
+        let stagedDeleted = sweep(
+            directory: AudioUploadStaging.directory,
+            maxAge: staleThreshold,
+            filter: { $0.pathExtension == "wav" }
+        )
+        let deleted = tempDeleted + stagedDeleted
         if deleted > 0 {
             AuditLogger.log(
                 event: .localDataPurged,
                 sessionId: nil,
                 extra: [
                     "reason": "stale_sweep",
-                    "temp_files_deleted": "\(deleted)",
+                    "temp_files_deleted": "\(tempDeleted)",
+                    "staged_audio_deleted": "\(stagedDeleted)",
                 ]
             )
         }
         return deleted
+    }
+
+    /// Delete the staged upload WAV for a specific session, by convention
+    /// (not via the in-memory URL). Called from the discard flow so an
+    /// explicitly-discarded session's raw audio is purged immediately
+    /// rather than waiting for the 24h stale sweep (#282). Returns whether
+    /// a file was actually removed.
+    @discardableResult
+    static func purgeStagedAudio(sessionId: String) -> Bool {
+        let url = AudioUploadStaging.fileURL(sessionId: sessionId)
+        guard FileManager.default.fileExists(atPath: url.path) else { return false }
+        let removed = (try? FileManager.default.removeItem(at: url)) != nil
+        if removed {
+            AuditLogger.log(
+                event: .localDataPurged,
+                sessionId: sessionId,
+                extra: ["reason": "session_discarded", "staged_audio_deleted": "1"]
+            )
+        }
+        return removed
     }
 
     // MARK: - Internals
@@ -80,10 +113,23 @@ struct LocalDataPurger {
     /// staging files). `maxAge == nil` means "delete everything we own";
     /// otherwise only files older than maxAge are removed.
     private static func sweepTempFiles(maxAge: TimeInterval?) -> Int {
+        sweep(
+            directory: FileManager.default.temporaryDirectory,
+            maxAge: maxAge,
+            filter: isAurionArtifact
+        )
+    }
+
+    /// Delete files in `directory` matching `filter`. `maxAge == nil` means
+    /// "delete every match"; otherwise only files older than `maxAge`.
+    /// Returns the count removed. Reused by the temp-dir sweep and the
+    /// audio-staging orphan sweep (#282); `internal` so unit tests can run
+    /// it against a throwaway directory.
+    @discardableResult
+    static func sweep(directory: URL, maxAge: TimeInterval?, filter: (URL) -> Bool) -> Int {
         let fm = FileManager.default
-        let tempDir = fm.temporaryDirectory
         guard let contents = try? fm.contentsOfDirectory(
-            at: tempDir,
+            at: directory,
             includingPropertiesForKeys: [.contentModificationDateKey],
             options: [.skipsHiddenFiles]
         ) else {
@@ -92,7 +138,7 @@ struct LocalDataPurger {
 
         var deleted = 0
         let now = Date()
-        for url in contents where isAurionArtifact(url) {
+        for url in contents where filter(url) {
             if let maxAge {
                 guard let modified = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate,
                       now.timeIntervalSince(modified) > maxAge

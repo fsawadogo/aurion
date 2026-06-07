@@ -1575,7 +1575,7 @@ final class SessionManager: ObservableObject {
         // session ids are UUIDs, and a retry hits the existing-file
         // branch above. Filename matches OfflineUploadQueue's pattern
         // so a future "promote-to-offline-queue" path can adopt it.
-        let url = directory.appendingPathComponent("\(sessionId).wav")
+        let url = AudioUploadStaging.fileURL(sessionId: sessionId)
         do {
             try bytes.write(to: url, options: [.atomic, .completeFileProtection])
         } catch {
@@ -1596,9 +1596,7 @@ final class SessionManager: ObservableObject {
     /// responsibility, not ours — this directory holds only the
     /// currently-uploading session's WAV, which is short-lived.
     private func audioUploadStagingDirectory() -> URL {
-        let fm = FileManager.default
-        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
-        return base.appendingPathComponent("AudioUploadStaging", isDirectory: true)
+        AudioUploadStaging.directory
     }
 
     /// Delete the on-disk WAV from the upload-staging directory and
@@ -1677,9 +1675,12 @@ final class SessionManager: ObservableObject {
 
     // MARK: - Stage 1 wait helpers (Bug A)
 
-    /// Wait for Stage 1 to actually land. Prefers the WebSocket push
-    /// (zero polling, no jitter); if that channel dies before the event
-    /// arrives we fall back to polling `GET /notes/{id}/stage1`.
+    /// Wait for Stage 1 to actually land. RACES the WebSocket push against
+    /// a `GET /notes/{id}/stage1` poll (#277). The push wins on the happy
+    /// path (zero polling, no jitter); the poll backstops it whenever the
+    /// socket is silent — connected-but-no-event, dropped, or never
+    /// connected — which the old WS-failure-gated fallback could not cover
+    /// (a healthy-but-silent socket hung the screen at 95% forever).
     ///
     /// **No wall-clock cap.** PR #245 originally shipped a 5-minute
     /// fallback deadline as a "safety net." That deadline was the same
@@ -1703,38 +1704,69 @@ final class SessionManager: ObservableObject {
         subscription: Stage1WSSubscriber,
         sessionId: String
     ) async {
-        // Happy path — WS fires.
-        if await subscription.waitForReady() {
-            return
+        // RACE the WS push against the REST poll — do NOT gate the poll on
+        // WS failure (#277). The old sequential form (`if waitForReady
+        // return; else poll`) hung forever when the socket was connected
+        // but silent: `waitForReady()` never returned, so the poll never
+        // started, and the screen held at 95%. The backend pipeline is
+        // synchronous (the note exists by the time the upload returned
+        // 2xx), so the poll resolves quickly as a backstop.
+        //
+        // First path to see the note wins; the loser is torn down. The
+        // poll's 2s initial cadence doubles as the WS's head-start, so on
+        // the happy path (push wired, #290) the WS wins before any poll GET
+        // — no fallback audit, no extra request. Still no wall-clock cap:
+        // both paths return only on the real note or Task cancellation
+        // (preserves the PR #245 no-false-fail principle).
+        await withTaskGroup(of: Bool.self) { group in
+            group.addTask { await subscription.waitForReady() }
+            group.addTask { [weak self] in
+                await self?.pollStage1UntilReady(sessionId: sessionId) ?? false
+            }
+            for await ready in group {
+                if ready { break }
+            }
+            // CRITICAL: resolve the WS subscriber's CheckedContinuation
+            // before the group drains. cancelAll() alone would leave the
+            // suspended waitForReady() continuation unresolved → the child
+            // never completes → withTaskGroup deadlocks. cancel() resumes
+            // it (idempotent if the WS already fired); cancelAll() then
+            // stops the losing poll's sleep.
+            subscription.cancel()
+            group.cancelAll()
         }
+    }
 
-        // WS task ended without seeing the event (disconnect or never
-        // connected). Fall back to polling, unbounded.
-        AuditLogger.logRaw(
-            eventType: "stage1_ws_fallback_to_poll",
-            sessionId: sessionId,
-            extra: [:]
-        )
-
+    /// Unbounded 2s poll of `GET /notes/{id}/stage1`, used as the backstop
+    /// in the `awaitStage1Ready` race. Returns `true` once the note lands,
+    /// `false` only on Task cancellation. The 2s initial cadence gives the
+    /// WebSocket push a head start; if the socket is silent this is what
+    /// actually advances the screen. Emits `stage1_ws_fallback_to_poll`
+    /// when the poll (not the WS) delivered — so the audit records why we
+    /// paid the polling tax (and does NOT fire when the WS won, because the
+    /// poll is cancelled mid-sleep before it ever reaches this line).
+    private func pollStage1UntilReady(sessionId: String) async -> Bool {
         while !Task.isCancelled {
-            // 2s cadence — same order of magnitude as Stage 2's
-            // existing poller. Faster polls just shove load at the
-            // backend without speeding up the actual generation.
             try? await Task.sleep(nanoseconds: 2 * 1_000_000_000)
-            if Task.isCancelled { return }
+            if Task.isCancelled { return false }
             do {
                 _ = try await api.getStage1Note(sessionId: sessionId)
-                return
+                AuditLogger.logRaw(
+                    eventType: "stage1_ws_fallback_to_poll",
+                    sessionId: sessionId,
+                    extra: [:]
+                )
+                return true
             } catch APIError.notFound {
                 // Note not generated yet — keep polling.
                 continue
             } catch {
-                // Any other error — keep polling. We don't want a
-                // single network hiccup to fail the whole wait when
-                // the WS has already failed.
+                // Any other error — keep polling. A single network hiccup
+                // shouldn't end the wait while the note may still land.
                 continue
             }
         }
+        return false
     }
 
     /// Flip `processingStatus` to a reassurance string after

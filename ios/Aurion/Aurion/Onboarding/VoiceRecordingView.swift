@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import Combine
+import UIKit
 
 /// Screen 3 — Voice recording prompt.
 /// Records 30–60 seconds of physician speech to a temp file. The file URL is
@@ -28,8 +29,17 @@ import Combine
 ///     and disables Continue until the user re-records.
 struct VoiceRecordingView: View {
     let onComplete: (URL) -> Void
+    /// Optional skip handler for the mic-permission dead-end. Voice
+    /// enrollment is optional, and when the OS has denied the microphone
+    /// the clinician cannot record at all — so the host flow can pass a
+    /// skip closure to let them proceed past this screen. Defaults to
+    /// `nil` (Skip hidden) so the view still compiles standalone and in
+    /// flows that don't offer a skip; the "Open Settings" recovery is
+    /// always available regardless.
+    var onSkip: (() -> Void)? = nil
 
     @StateObject private var recorder = VoiceRecorder()
+    @Environment(\.scenePhase) private var scenePhase
     /// Index of the active sentence — advances on the 8s sentence-tick
     /// boundary regardless of speech quality so the user sees the prompt
     /// move forward. Quality is evaluated separately per row.
@@ -118,7 +128,7 @@ struct VoiceRecordingView: View {
 
                 Text(statusText)
                     .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(statusColor)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 20)
@@ -137,6 +147,25 @@ struct VoiceRecordingView: View {
             VStack(spacing: 12) {
                 recordButton
 
+                // Mic-denied recovery: the record button is disabled, so
+                // without this the clinician is hard-stuck. "Open Settings"
+                // deep-links to the app's privacy page; returning grants
+                // are picked up by the scenePhase re-check below. Skip is
+                // offered when the host flow wires one (enrollment is
+                // optional).
+                if permissionDenied {
+                    AurionGoldButton(label: L("onboarding.voiceRec.openSettings"), full: true) {
+                        openSettings()
+                    }
+                    .transition(.opacity)
+
+                    if let onSkip {
+                        Button(L("common.skip")) { onSkip() }
+                            .aurionFont(12, relativeTo: .caption)
+                            .foregroundColor(.aurionTextPrimary)
+                    }
+                }
+
                 if canProceed, let url = recorder.lastRecordingURL {
                     AurionGoldButton(label: L("setup.continue"), full: true) { onComplete(url) }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -145,7 +174,12 @@ struct VoiceRecordingView: View {
                 Button(L("onboarding.voiceRec.rerecord")) { resetRecording() }
                     .aurionFont(12, relativeTo: .caption)
                     .foregroundColor(.aurionTextPrimary)
+                    .frame(minHeight: 44)
                     .opacity(canProceed || qualityCheckFailed ? 1 : 0)
+                    // An opacity-0 view still receives taps; gate hit-testing
+                    // so the hidden re-record link can't silently reset the
+                    // recording mid-capture.
+                    .allowsHitTesting(canProceed || qualityCheckFailed)
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
@@ -155,7 +189,15 @@ struct VoiceRecordingView: View {
         .animation(.aurionIOS, value: recorder.isRecording)
         .animation(.aurionIOS, value: canProceed)
         .animation(.aurionIOS, value: qualityCheckFailed)
+        .animation(.aurionIOS, value: permissionDenied)
         .onAppear { Task { await ensurePermission() } }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Returning from Settings (or any foregrounding) — re-read the
+            // mic authorization so a permission granted out-of-app
+            // immediately re-enables the record button instead of leaving
+            // the clinician stuck on the denied state.
+            if newPhase == .active { refreshPermissionStatus() }
+        }
         .onChange(of: recorder.audioLevel) { _, newLevel in
             // Feed each meter tick into the per-sentence accumulator so
             // the quality gate has real data to evaluate when the
@@ -200,10 +242,14 @@ struct VoiceRecordingView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(sentence)
                             .aurionFont(16, weight: .regular, relativeTo: .body)
+                            // Adaptive emphasis — active/failed were
+                            // .aurionNavy, invisible (dark-on-dark) on the
+                            // dark card in dark mode (#293). The active row
+                            // is the sentence the clinician must read aloud.
                             .foregroundColor(
-                                active ? .aurionNavy :
+                                active ? .aurionTextPrimary :
                                 (pass ? .aurionTextSecondary :
-                                    (fail ? .aurionNavy : .secondary))
+                                    (fail ? .aurionTextPrimary : .secondary))
                             )
                             .opacity(pass ? 0.7 : 1)
                             .multilineTextAlignment(.leading)
@@ -223,6 +269,12 @@ struct VoiceRecordingView: View {
                         }
                     }
                 }
+                // The pass/fail/active state is conveyed only by icon
+                // color+shape, which carries no VoiceOver label. Collapse
+                // the row into one element and speak the state alongside
+                // the sentence so the core feedback loop is audible.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(rowAccessibilityLabel(sentence: sentence, pass: pass, fail: fail, active: active))
             }
         }
         .padding(16)
@@ -253,8 +305,26 @@ struct VoiceRecordingView: View {
         } else {
             Image(systemName: "circle")
                 .font(.system(size: 16))
-                .foregroundColor(active ? .aurionNavy.opacity(0.6) : .aurionNavy.opacity(0.3))
+                // Adaptive — was .aurionNavy.opacity(...), invisible on the
+                // dark card in dark mode (#293).
+                .foregroundColor(active ? .aurionTextSecondary : .aurionMutedGray)
         }
+    }
+
+    /// VoiceOver label for a sentence row: the sentence text followed by
+    /// its capture state. Mirrors the icon states in `sentenceIcon`.
+    private func rowAccessibilityLabel(sentence: String, pass: Bool, fail: Bool, active: Bool) -> String {
+        let state: String
+        if pass {
+            state = L("onboarding.voiceRec.a11yRowCaptured")
+        } else if fail {
+            state = L("onboarding.voiceRec.a11yRowNotHeard")
+        } else if active {
+            state = L("onboarding.voiceRec.a11yRowCurrent")
+        } else {
+            state = ""
+        }
+        return state.isEmpty ? sentence : "\(sentence) \(state)"
     }
 
     // MARK: - Record button (gold disc with breathing halo on press)
@@ -290,6 +360,16 @@ struct VoiceRecordingView: View {
         .disabled(permissionDenied)
         .scaleEffect(permissionDenied ? 0.95 : 1)
         .opacity(permissionDenied ? 0.55 : 1)
+        // VoiceOver: the disc is shape-only, so spell out what it does and
+        // mirror the recording state in the label. `.startsMediaSession`
+        // tells VoiceOver tapping begins capture (dropped while recording).
+        .accessibilityLabel(recorder.isRecording
+            ? L("onboarding.voiceRec.a11yStop")
+            : L("onboarding.voiceRec.a11yStart"))
+        .accessibilityHint(recorder.isRecording
+            ? L("onboarding.voiceRec.a11yStopHint")
+            : L("onboarding.voiceRec.a11yStartHint"))
+        .accessibilityAddTraits(recorder.isRecording ? [] : .startsMediaSession)
     }
 
     private var statusText: String {
@@ -300,11 +380,43 @@ struct VoiceRecordingView: View {
         return L("onboarding.voiceRec.tapStart")
     }
 
+    /// Error/blocked status copy reads in amber to match the per-row
+    /// `.aurionGold` signal it summarizes, so the headline explaining WHY
+    /// Continue is disabled isn't visually weaker than the rows below it.
+    /// Neutral hints stay low-emphasis secondary.
+    private var statusColor: Color {
+        if permissionDenied || qualityCheckFailed { return .aurionGold }
+        return .secondary
+    }
+
     // MARK: - Recording control
 
     private func ensurePermission() async {
         let granted = await AVCaptureDevice.requestAccess(for: .audio)
         permissionDenied = !granted
+    }
+
+    /// Re-read the current mic authorization without prompting again.
+    /// Called on foreground so a permission granted in Settings flips the
+    /// UI back to a usable record button. `.notDetermined` is left to the
+    /// initial `ensurePermission()` prompt.
+    private func refreshPermissionStatus() {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            permissionDenied = false
+        case .denied, .restricted:
+            permissionDenied = true
+        case .notDetermined:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    private func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
     }
 
     private func toggleRecording() {

@@ -131,6 +131,11 @@ struct PriorEncountersRail: View {
                     Text(L("priorEncounters.seeAll", model.totalRelevant))
                         .aurionFont(12, weight: .semibold, relativeTo: .caption)
                         .foregroundColor(.aurionGold)
+                        // Enlarge the tap target to the 44pt minimum
+                        // without inflating the visible glyph.
+                        .padding(.leading, 8)
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
             }
@@ -158,13 +163,12 @@ struct PriorEncountersRail: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 10) {
                 ForEach(0..<3, id: \.self) { _ in
-                    RoundedRectangle(cornerRadius: AurionRadius.md)
-                        .fill(Color.aurionSurfaceAlt)
+                    // Shimmer placeholder (matches SessionNoteView /
+                    // SessionsInboxView) so the rail reads as "forming,"
+                    // not "stuck." AurionSkeleton supplies its own
+                    // adaptive fill + clip.
+                    AurionSkeleton(cornerRadius: AurionRadius.md)
                         .frame(width: 180, height: 78)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AurionRadius.md)
-                                .stroke(Color.aurionBorder, lineWidth: 1)
-                        )
                 }
             }
             .padding(.vertical, 4)

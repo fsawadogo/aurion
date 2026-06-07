@@ -1,13 +1,13 @@
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Export view -- generates DOCX / plain text fully on-device. The
+/// Export view -- generates DOCX / PDF / plain text fully on-device. The
 /// backend is only told that an export happened (via /export-audit) so
 /// no clinical bytes leave the phone. Triggers the cleanup pipeline on
 /// the same audit hook the server-side flow uses.
 ///
-/// PDF is intentionally deferred — DOCX opens in Pages/Word and the
-/// pilot doesn't require a separate PDF path.
+/// All three formats ship and are selectable: DOCX opens in Pages/Word,
+/// PDF renders via NotePDFRenderer, and plain text is the fallback.
 struct ExportView: View {
     let sessionId: String
     @EnvironmentObject var sessionManager: SessionManager
@@ -27,8 +27,6 @@ struct ExportView: View {
         case docx = "DOCX"
         case pdf = "PDF"
         case text = "Text"
-
-        var isAvailable: Bool { true }
 
         var icon: String {
             switch self {
@@ -51,7 +49,7 @@ struct ExportView: View {
             switch self {
             case .docx: return "docx"
             case .text: return "plain_text"
-            case .pdf: return "pdf"  // unreachable per isAvailable
+            case .pdf: return "pdf"
             }
         }
 
@@ -108,37 +106,26 @@ struct ExportView: View {
         HStack(spacing: 0) {
             ForEach(ExportFormat.allCases, id: \.self) { format in
                 Button {
-                    if format.isAvailable {
-                        AurionHaptics.selection()
-                        withAnimation(AurionAnimation.spring) {
-                            selectedFormat = format
-                        }
+                    AurionHaptics.selection()
+                    withAnimation(AurionAnimation.spring) {
+                        selectedFormat = format
                     }
                 } label: {
-                    VStack(spacing: AurionSpacing.xxs) {
-                        Text(format.rawValue)
-                            .aurionFont(13, weight: .bold, relativeTo: .footnote)
-
-                        if !format.isAvailable {
-                            Text(L("export.comingSoon"))
-                                .aurionFont(9, weight: .medium, relativeTo: .caption2)
-                                .foregroundColor(.secondary.opacity(0.6))
-                        }
-                    }
-                    .frame(maxWidth: .infinity)
-                    .padding(.vertical, AurionSpacing.sm)
-                    .background(
-                        selectedFormat == format
-                            ? Color.aurionGold
-                            : Color.aurionFieldBackground
-                    )
-                    .foregroundColor(
-                        selectedFormat == format
-                            ? .white
-                            : (format.isAvailable ? .aurionTextPrimary : .secondary.opacity(0.5))
-                    )
+                    Text(format.rawValue)
+                        .aurionFont(13, weight: .bold, relativeTo: .footnote)
+                        .frame(maxWidth: .infinity)
+                        .padding(.vertical, AurionSpacing.sm)
+                        .background(
+                            selectedFormat == format
+                                ? Color.aurionGold
+                                : Color.aurionFieldBackground
+                        )
+                        .foregroundColor(
+                            selectedFormat == format
+                                ? .white
+                                : .aurionTextPrimary
+                        )
                 }
-                .disabled(!format.isAvailable)
             }
         }
         .clipShape(Capsule())
@@ -152,7 +139,9 @@ struct ExportView: View {
             // Document icon
             ZStack {
                 Circle()
-                    .fill(Color.aurionNavy.opacity(0.06))
+                    // Adaptive halo (was .aurionNavy.opacity(0.06),
+                    // invisible on the dark background in dark mode) (#293).
+                    .fill(Color.aurionSurfaceAlt)
                     .frame(width: 100, height: 100)
 
                 Image(systemName: selectedFormat.icon)
@@ -204,7 +193,9 @@ struct ExportView: View {
         VStack(spacing: AurionSpacing.xxl) {
             ZStack {
                 Circle()
-                    .fill(Color.aurionNavy.opacity(0.06))
+                    // Adaptive halo (was .aurionNavy.opacity(0.06),
+                    // invisible on the dark background in dark mode) (#293).
+                    .fill(Color.aurionSurfaceAlt)
                     .frame(width: 100, height: 100)
 
                 CircularProgressRing(
@@ -233,7 +224,9 @@ struct ExportView: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.aurionNavy.opacity(0.1))
+                        // Adaptive track (was .aurionNavy.opacity(0.1),
+                        // invisible in dark mode) (#293).
+                        .fill(Color.aurionSurfaceAlt)
                         .frame(height: 6)
 
                     RoundedRectangle(cornerRadius: 4)

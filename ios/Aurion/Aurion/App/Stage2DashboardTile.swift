@@ -107,13 +107,24 @@ struct Stage2DashboardTile: View {
                             .font(.subheadline)
                             .foregroundColor(.aurionTextSecondary)
                             .lineLimit(2)
+                        // Stage 2 enrichment can fail without blocking the
+                        // physician — the Stage 1 note stays approvable. There
+                        // is no in-app re-run endpoint, so make the recovery
+                        // path explicit: this tile routes to the approvable
+                        // SessionNoteView, and we signal that here.
+                        if displayKind == .failed {
+                            Text(L("stage2.failedStillReviewable"))
+                                .font(.footnote.weight(.semibold))
+                                .foregroundColor(.aurionGold)
+                                .lineLimit(2)
+                        }
                     }
 
                     Spacer()
 
                     Image(systemName: "chevron.right")
                         .font(.footnote.weight(.semibold))
-                        .foregroundColor(.aurionTextSecondary)
+                        .foregroundColor(displayKind == .failed ? .aurionGold : .aurionTextSecondary)
                 }
                 .accessibilityElement(children: .combine)
                 .accessibilityLabel(L("stage2.a11y", localizedSpecialty(session.specialty), statusLine))
@@ -129,8 +140,14 @@ struct Stage2DashboardTile: View {
         .onDisappear { viewModel.stop() }
         .onChange(of: viewModel.status) { _, newValue in
             guard let newValue else { return }
-            if newValue.isCompleted { onCompleted() }
-            if newValue.isFailed { onFailed() }
+            if newValue.isCompleted {
+                AurionHaptics.notification(.success)
+                onCompleted()
+            }
+            if newValue.isFailed {
+                AurionHaptics.notification(.error)
+                onFailed()
+            }
         }
     }
 

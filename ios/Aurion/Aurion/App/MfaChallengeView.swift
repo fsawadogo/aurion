@@ -32,6 +32,9 @@ struct MfaChallengeView: View {
     @State private var code: String = ""
     @State private var isSubmitting = false
     @State private var error: String?
+    /// Bumped after a bad code clears the field, so ``TotpCodeField`` can
+    /// re-assert keyboard focus without the user tapping a cell again.
+    @State private var focusResetToken = 0
 
     private var canSubmit: Bool {
         TotpCodeField.isComplete(code) && !isSubmitting
@@ -80,7 +83,7 @@ struct MfaChallengeView: View {
 
                     TotpCodeField(code: $code, onComplete: {
                         if canSubmit { Task { await submit() } }
-                    })
+                    }, resetToken: focusResetToken)
                     .frame(maxWidth: .infinity)
 
                     Button {
@@ -142,11 +145,13 @@ struct MfaChallengeView: View {
             isSubmitting = false
             error = L("login.mfa.challenge.invalidCode")
             code = ""
+            focusResetToken += 1
             AurionHaptics.notification(.error)
         } catch {
             isSubmitting = false
             self.error = error.localizedDescription
             code = ""
+            focusResetToken += 1
             AurionHaptics.notification(.error)
         }
     }

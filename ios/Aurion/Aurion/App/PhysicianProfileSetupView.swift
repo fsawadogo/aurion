@@ -134,9 +134,15 @@ struct PhysicianProfileSetupView: View {
     static let ssnRawRE = /^\d{9}$/
     static let ssnDashedRE = /^\d{3}-\d{2}-\d{4}$/
 
-    private let languages: [(id: String, label: String, sub: String, flag: String)] = [
-        ("en", "English", "United States", "🇺🇸"),
-        ("fr", "Français", "France", "🇫🇷"),
+    // Quebec pilot (CREOQ/CLLC) — both clinic languages are Canadian, so
+    // a 🇺🇸 / 🇫🇷 flag is geographically wrong. Use the Canadian flag for
+    // both and localize the region subtitle (was hardcoded English
+    // "United States" / "France"). Keeps the flag choice in step with
+    // ProfileView's language pickers, which the clinician sees in the
+    // same session.
+    private let languages: [(id: String, label: String, subKey: String, flag: String)] = [
+        ("en", "English", "setup.language.sub.en", "🇨🇦"),
+        ("fr", "Français", "setup.language.sub.fr", "🇨🇦"),
     ]
 
     private var stepTitle: String {
@@ -222,6 +228,8 @@ struct PhysicianProfileSetupView: View {
                         }
                         .foregroundColor(.aurionTextSecondary)
                     }
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                     .accessibilityLabel(L("setup.back"))
                 }
                 Text(L("setup.step", step + 1, totalSteps))
@@ -233,6 +241,8 @@ struct PhysicianProfileSetupView: View {
                 }
                 .aurionFont(12, relativeTo: .caption)
                 .foregroundColor(.aurionTextSecondary)
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
             }
             AurionProgressBar(value: Double(step + 1) / Double(totalSteps))
         }
@@ -246,6 +256,14 @@ struct PhysicianProfileSetupView: View {
     private var footer: some View {
         VStack(spacing: 0) {
             Rectangle().fill(Color.aurionBorder).frame(height: 1)
+            // saveProfile() failures used to set `error` but the body never
+            // rendered it, so a failed save looked like a silent no-op. Surface
+            // it here, just above the action button, with a dismiss affordance.
+            if let error {
+                ErrorBanner(error, onDismiss: { withAnimation(.aurionIOS) { self.error = nil } })
+                    .aurionScreenEdge()
+                    .padding(.top, 12)
+            }
             AurionGoldButton(
                 label: step == totalSteps - 1
                     ? (isSaving ? L("setup.saving") : L("setup.getStarted"))
@@ -371,9 +389,12 @@ struct PhysicianProfileSetupView: View {
                         RoundedRectangle(cornerRadius: AurionRadius.xs)
                             .stroke(Color.aurionGold, lineWidth: 2)
                     )
+                // Fixed navy on the fixed-gold fill — the brand navy-on-gold
+                // pairing reads strongly in both modes (adaptive
+                // .aurionTextPrimary went near-white on gold in dark mode).
                 Image(systemName: "checkmark")
                     .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.aurionTextPrimary)
+                    .foregroundColor(.aurionNavy)
             }
             Text(name)
                 .aurionFont(16, relativeTo: .body)
@@ -386,7 +407,7 @@ struct PhysicianProfileSetupView: View {
                 Image(systemName: "trash")
                     .font(.system(size: 16, weight: .medium))
                     .foregroundColor(.aurionTextSecondary)
-                    .padding(8)
+                    .frame(minWidth: 44, minHeight: 44)
                     .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
@@ -685,7 +706,7 @@ struct PhysicianProfileSetupView: View {
                             Text(o.label)
                                 .aurionFont(17, weight: .semibold, relativeTo: .headline)
                                 .foregroundColor(.aurionTextPrimary)
-                            Text(o.sub)
+                            Text(L(o.subKey))
                                 .aurionFont(13, relativeTo: .footnote)
                                 .foregroundColor(.aurionTextSecondary)
                         }
@@ -759,13 +780,16 @@ struct PhysicianProfileSetupView: View {
                                 .stroke(on ? Color.aurionGold : Color.aurionInputBorder, lineWidth: 2)
                         )
                     if on {
+                        // Navy-on-gold brand pairing — stays high-contrast
+                        // in both modes, unlike adaptive .aurionTextPrimary
+                        // which washes out white-on-gold in dark mode.
                         Image(systemName: "checkmark")
                             .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.aurionTextPrimary)
+                            .foregroundColor(.aurionNavy)
                     }
                 }
                 Text(label)
-                    .font(.system(size: fontSize))
+                    .aurionFont(fontSize, relativeTo: .body)
                     .foregroundColor(.aurionTextPrimary)
                 Spacer(minLength: 0)
             }
@@ -814,7 +838,7 @@ struct PhysicianProfileSetupView: View {
             appState.hasCompletedProfileSetup = true
             AurionHaptics.notification(.success)
         } catch {
-            self.error = "Failed to save: \(error.localizedDescription)"
+            self.error = L("setup.saveFailed", error.localizedDescription)
             AurionHaptics.notification(.error)
         }
     }
