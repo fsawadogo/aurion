@@ -139,7 +139,9 @@ struct ExportView: View {
             // Document icon
             ZStack {
                 Circle()
-                    .fill(Color.aurionNavy.opacity(0.06))
+                    // Adaptive halo (was .aurionNavy.opacity(0.06),
+                    // invisible on the dark background in dark mode) (#293).
+                    .fill(Color.aurionSurfaceAlt)
                     .frame(width: 100, height: 100)
 
                 Image(systemName: selectedFormat.icon)
@@ -191,7 +193,9 @@ struct ExportView: View {
         VStack(spacing: AurionSpacing.xxl) {
             ZStack {
                 Circle()
-                    .fill(Color.aurionNavy.opacity(0.06))
+                    // Adaptive halo (was .aurionNavy.opacity(0.06),
+                    // invisible on the dark background in dark mode) (#293).
+                    .fill(Color.aurionSurfaceAlt)
                     .frame(width: 100, height: 100)
 
                 CircularProgressRing(
@@ -220,7 +224,9 @@ struct ExportView: View {
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
                     RoundedRectangle(cornerRadius: 4)
-                        .fill(Color.aurionNavy.opacity(0.1))
+                        // Adaptive track (was .aurionNavy.opacity(0.1),
+                        // invisible in dark mode) (#293).
+                        .fill(Color.aurionSurfaceAlt)
                         .frame(height: 6)
 
                     RoundedRectangle(cornerRadius: 4)

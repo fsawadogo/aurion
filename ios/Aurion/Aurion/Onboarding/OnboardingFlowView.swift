@@ -119,9 +119,10 @@ struct OnboardingFlowView: View {
             // Thin gold progress line
             GeometryReader { geo in
                 ZStack(alignment: .leading) {
-                    // Track
+                    // Track — adaptive (was .aurionNavy.opacity(0.1),
+                    // invisible on the dark background in dark mode) (#293).
                     RoundedRectangle(cornerRadius: 2)
-                        .fill(Color.aurionNavy.opacity(0.1))
+                        .fill(Color.aurionBorder)
                         .frame(height: 3)
 
                     // Filled portion

@@ -82,9 +82,11 @@ struct CodingSuggestionsCard: View {
         .cornerRadius(16)
         .overlay(
             RoundedRectangle(cornerRadius: 16)
-                // Cool navy border distinguishes this from the gold-
-                // accented clinical cards.
-                .stroke(Color.aurionNavy.opacity(0.25), lineWidth: 1)
+                // Cool blue border distinguishes this from the gold-accented
+                // clinical cards. Was .aurionNavy.opacity(0.25) — invisible on
+                // the dark card in dark mode; mid-tone blue keeps the "cool"
+                // distinction in both modes and matches the E/M chip (#293).
+                .stroke(Color.aurionBlue.opacity(0.3), lineWidth: 1)
         )
         .task { await loadIfNeeded() }
         .onChange(of: sessionState) { newValue in
@@ -489,7 +491,10 @@ struct CodingSuggestionsCard: View {
     private func systemChip(for system: String) -> some View {
         let style: (Color, String) = {
             switch system {
-            case "em":    return (Color.aurionNavy, L("coding.system.em"))
+            // Mid-tone blue (visible both modes) — was .aurionNavy, which
+            // rendered navy-on-navy-tint, invisible in dark mode; now matches
+            // the icd10/cpt chip pattern (#293).
+            case "em":    return (Color.aurionBlue, L("coding.system.em"))
             case "icd10": return (Color.purple, L("coding.system.icd10"))
             case "cpt":   return (Color.aurionGreen, L("coding.system.cpt"))
             default:      return (Color.aurionTextSecondary, system.uppercased())

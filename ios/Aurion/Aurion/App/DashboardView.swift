@@ -659,7 +659,11 @@ struct DashboardView: View {
                                 if isChecked {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.aurionTextPrimary)
+                                        // Navy-on-gold (fixed) — the gold fill
+                                        // is identical in both modes, so an
+                                        // adaptive checkmark went white-on-gold
+                                        // (washed out) in dark mode (#293).
+                                        .foregroundColor(.aurionNavy)
                                         .accessibilityHidden(true)
                                 }
                             }

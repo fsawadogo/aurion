@@ -104,7 +104,10 @@ struct CitationChip: View {
         ZStack(alignment: .bottomTrailing) {
             Text(sourceBadge)
                 .font(.system(size: 9, weight: .bold))
-                .foregroundColor(.aurionBackground)
+                // On the fixed-gold clip badge use fixed navy (crisp in both
+                // modes); the neutral-grey badge keeps the adaptive letter.
+                // Was always .aurionBackground, which washed out on gold (#293).
+                .foregroundColor(isClipKind ? .aurionNavy : .aurionBackground)
                 .frame(width: 14, height: 14)
                 .background(badgeFill)
                 .clipShape(RoundedRectangle(cornerRadius: 3))
