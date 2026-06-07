@@ -265,6 +265,13 @@ struct TeamMemberEditorView: View {
                     resetForm()
                     withAnimation { showAddForm = false }
                 }
+                // Explicit button style is mandatory inside a List row:
+                // default (.automatic) buttons make the whole row the tap
+                // target and fire EVERY button's action in order, so a tap
+                // ran Cancel (clearing the drafts) then Add (no-op). Borderless
+                // gives each its own hit target (#274). [Re-applied — this fix
+                // was dropped from the build-256 bundle merge.]
+                .buttonStyle(.borderless)
                 .foregroundColor(.aurionTextSecondary)
 
                 Spacer()
@@ -272,6 +279,7 @@ struct TeamMemberEditorView: View {
                 Button(L("profile.teamEditor.confirmAdd")) {
                     addMember()
                 }
+                .buttonStyle(.borderless)
                 .foregroundColor(canAdd ? .aurionGold : .aurionMutedGray)
                 .fontWeight(.semibold)
                 .disabled(!canAdd)
