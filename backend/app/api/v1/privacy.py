@@ -24,9 +24,10 @@ from app.core.audit_events import AuditEventType
 from app.core.clock import utcnow
 from app.core.database import get_db
 from app.core.models import NoteVersionModel, PilotMetricsModel, SessionModel
-from app.core.s3 import AUDIO_BUCKET, FRAMES_BUCKET, get_s3_client
+from app.core.s3 import AUDIO_BUCKET, EVAL_BUCKET, FRAMES_BUCKET, get_s3_client
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.cleanup.service import _evidence_prefix
 
 logger = logging.getLogger("aurion.privacy")
 
@@ -289,17 +290,60 @@ def _purge_session_prefix(s3, bucket: str, prefix: str) -> int:
 
 
 def _purge_s3_objects_for_sessions(session_ids: list[uuid.UUID]) -> int:
-    """Delete all S3 objects belonging to the given sessions.
+    """Delete all S3 media belonging to the given sessions.
 
-    Scans both audio and frames buckets for objects keyed by session ID.
-    Returns the total number of objects deleted.
+    Object keys are *kind-prefixed*, never bare session UUIDs, so the
+    purge has to target each real prefix in each bucket that holds it:
+
+        AUDIO_BUCKET   audio/{sid}/{uuid}.wav
+        FRAMES_BUCKET  frames/{sid}/{ts}.jpg
+                       clips/{sid}/{clip_id}.mp4
+                       screen_frames/{sid}/{ts}.jpg
+        EVAL_BUCKET    frames/{sid}/…, clips/{sid}/…, screen_frames/{sid}/…
+
+    ``list_objects_v2`` ``Prefix`` is a literal leading match, so the
+    earlier code's bare ``str(sid)`` prefix matched nothing and deleted
+    nothing. The eval bucket additionally holds the frames/clips copied
+    out for the eval team and — unlike the audio/frames buckets — has no
+    lifecycle/TTL, so an erasure request must reach it explicitly or that
+    media survives forever (Quebec Law 25 right to erasure).
+
+    All prefixes are session-UUID-scoped — not PHI. Per-(bucket, prefix)
+    errors are swallowed inside ``_purge_session_prefix``; the returned
+    count reflects only objects actually deleted, so the
+    ``deleted_s3_objects`` audit figure stays truthful even on a partial
+    S3 failure.
+
+    Returns the total number of objects deleted across every
+    (bucket, prefix, session) combination.
     """
     s3 = get_s3_client()
-    return sum(
-        _purge_session_prefix(s3, bucket, str(sid))
-        for bucket in (AUDIO_BUCKET, FRAMES_BUCKET)
-        for sid in session_ids
-    )
+
+    deleted = 0
+    for sid in session_ids:
+        sid_str = str(sid)
+
+        # Audio bucket: raw recordings only.
+        deleted += _purge_session_prefix(s3, AUDIO_BUCKET, f"audio/{sid_str}/")
+
+        # Visual evidence lives in BOTH the frames bucket (working copies)
+        # and the eval bucket (migrated long-term copies). The clip prefix
+        # is reused from cleanup so the purge + cleanup paths can't drift.
+        # The frame + screen prefixes are spelled out here on purpose:
+        # cleanup's ``_evidence_prefix("frame", …)`` still returns the stale
+        # flat ``{sid}/`` baseline (it predates the ``frames/{sid}/`` layout
+        # the upload path now writes — see app/api/v1/frames.py), and
+        # cleanup exposes no screen-frame prefix at all.
+        visual_prefixes = (
+            f"frames/{sid_str}/",
+            _evidence_prefix("clip", sid_str),  # clips/{sid}/
+            f"screen_frames/{sid_str}/",
+        )
+        for bucket in (FRAMES_BUCKET, EVAL_BUCKET):
+            for prefix in visual_prefixes:
+                deleted += _purge_session_prefix(s3, bucket, prefix)
+
+    return deleted
 
 
 # ── Routes ───────────────────────────────────────────────────────────────
@@ -354,7 +398,10 @@ async def delete_my_account(
     Deletes:
       - All sessions (cascades to note_versions via DB)
       - All pilot metrics for the user
-      - All remaining S3 objects for the user's sessions
+      - All remaining S3 media for the user's sessions, across every
+        bucket and kind-prefix: raw audio (audio/), plus frames/, clips/,
+        and screen_frames/ in BOTH the frames bucket and the no-TTL eval
+        bucket. The real deleted count is recorded on the audit row.
 
     Retained:
       - Audit log entries are immutable and cannot be deleted.
