@@ -236,6 +236,51 @@ class TestGeminiNativeClipCaptioning:
         assert inline["inline_data"]["mime_type"] == "video/mp4"
 
     @pytest.mark.asyncio
+    async def test_native_path_pins_video_sampling_fps(
+        self, clip: MaskedClip, anchor: TranscriptSegment
+    ) -> None:
+        """The inline video part must carry `video_metadata.fps` equal to the
+        configured capture fps. Without it Gemini samples at its 1-fps default,
+        silently discarding the extra frames a higher capture rate produces —
+        so motion fidelity (gait / ROM) wouldn't actually improve.
+        """
+        from app.modules.config.appconfig_client import get_config
+
+        captured_payload: dict[str, Any] = {}
+
+        async def fake_post(url, *args, **kwargs):
+            captured_payload.update(kwargs.get("json", {}))
+            return _mock_httpx_response(
+                status_code=200,
+                json_body=_gemini_response_payload(description="ok"),
+            )
+
+        fake_s3 = MagicMock()
+        fake_s3.get_object.return_value = {
+            "Body": MagicMock(read=MagicMock(return_value=b"x"))
+        }
+
+        with patch(
+            "app.modules.providers.vision.gemini.get_s3_client",
+            return_value=fake_s3,
+        ), patch(
+            "app.modules.providers.vision.gemini.httpx.AsyncClient"
+        ) as mock_client_cls, patch(
+            "app.modules.providers.vision.gemini._GOOGLE_AI_API_KEY",
+            "test-key",
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            await GeminiVisionProvider().caption_clip(clip, anchor)
+
+        parts = captured_payload["contents"][0]["parts"]
+        inline = next(p for p in parts if "inline_data" in p)
+        assert "video_metadata" in inline, "clip request must set video sampling fps"
+        assert inline["video_metadata"]["fps"] == get_config().pipeline.video_capture_fps
+
+    @pytest.mark.asyncio
     async def test_uses_descriptive_system_prompt(
         self, clip: MaskedClip, anchor: TranscriptSegment
     ) -> None:

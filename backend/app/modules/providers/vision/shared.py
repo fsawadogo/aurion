@@ -42,9 +42,13 @@ VISION_RESPONSE_SCHEMA: dict = {
 }
 
 
-# EXACT vision system prompt from CLAUDE.md -- no variations.
-# Shared across all vision providers.
-VISION_SYSTEM_PROMPT = """You are a clinical visual documentation assistant. Describe only what is literally visible in this image. Do not diagnose, interpret, or infer clinical meaning.
+# Vision system prompt from CLAUDE.md. Shared across all vision providers and
+# BOTH evidence kinds (still frames and video clips), so it is modality-neutral:
+# "what is literally visible" (matching CLAUDE.md's canonical wording) rather
+# than "in this image", which mislabeled video clips. The clip path additionally
+# tells the model it's a video clip and to describe motion via the user message;
+# for native-video providers (Gemini) that's where the temporal framing lives.
+VISION_SYSTEM_PROMPT = """You are a clinical visual documentation assistant. Describe only what is literally visible. Do not diagnose, interpret, or infer clinical meaning.
 
 Describe: patient position, visible body parts being examined, observable physical findings (swelling, redness, range of motion if measurable), equipment in use, screen content.
 Do not describe: clinical meaning, what findings suggest, what should be done, anything not directly visible.
