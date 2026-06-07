@@ -91,6 +91,17 @@ struct AurionApp: App {
                     // it before sign-in would just 401.
                     if appState.isAuthenticated {
                         await remoteConfig.refresh()
+                        // Eager-load the physician profile on sign-in / cold
+                        // launch. Without this, `physicianProfile` stays nil
+                        // until the Profile tab is opened, so the dashboard
+                        // Quick Start falls back to GENERAL defaults and the
+                        // Siri/widget deep-link starts a "general"-template
+                        // session for the wrong specialty (#278). `try?` —
+                        // a failed fetch leaves nil, which now renders the
+                        // skeleton state rather than misleading defaults.
+                        if appState.physicianProfile == nil {
+                            appState.physicianProfile = try? await APIClient.shared.getProfile()
+                        }
                         // Drain any encounters captured offline in a prior
                         // session and arm reconnect-driven sync. Gated on auth
                         // because the upload needs a bearer token.
