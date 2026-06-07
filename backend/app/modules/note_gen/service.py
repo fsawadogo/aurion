@@ -608,11 +608,19 @@ async def generate_stage1_note(
     db: AsyncSession,
     provider_override: Optional[str] = None,
     output_language: str = "en",
+    template_key: Optional[str] = None,
 ) -> Note:
     """Generate a Stage 1 note from a transcript.
 
+    ``template_key`` is the per-session SNAPSHOT of the chosen
+    Visit Type → Context → Template selection (#314 / B2). When set it
+    drives which template's sections get populated; when ``None`` the
+    session ``specialty`` default is used — byte-for-byte the pre-#314
+    behaviour. ``specialty`` is still threaded through for completeness-
+    score continuity and stored on the note + version row.
+
     Pipeline:
-    1. Load the specialty template
+    1. Load the template (``template_key`` snapshot, else specialty)
     2. Select the system prompt — the calling physician's saved user
        prompt when present, the CLAUDE.md default otherwise
        (AI-PROMPTS-B replacement semantics)
@@ -639,7 +647,9 @@ async def generate_stage1_note(
     # those costs for a session we already know we won't process.
     await _enforce_transcript_guard(transcript, session_id)
 
-    template = get_template(specialty)
+    # #314 — the snapshotted context template_key wins when present; falls
+    # back to the session specialty exactly as before when None/empty.
+    template = get_template(template_key or specialty)
     registry = get_registry()
 
     if provider_override:
@@ -648,9 +658,10 @@ async def generate_stage1_note(
         provider = registry.get_note_provider_with_fallback()
 
     logger.info(
-        "Generating Stage 1 note: session=%s specialty=%s provider=%s",
+        "Generating Stage 1 note: session=%s specialty=%s template=%s provider=%s",
         session_id,
         specialty,
+        template.key,
         type(provider).__name__,
     )
 

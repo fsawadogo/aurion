@@ -166,6 +166,9 @@ async def submit_transcription(
             session_id=str(session_id),
             db=db,
             output_language=session.output_language,
+            # #314 / B2 — the snapshotted context template wins; None
+            # (old rows / no context) falls back to the specialty default.
+            template_key=getattr(session, "template_key", None),
         )
     except EmptyTranscriptError as exc:
         # lane-backend/empty-transcript-guard: the service already wrote
