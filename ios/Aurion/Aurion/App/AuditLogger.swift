@@ -24,6 +24,13 @@ enum AuditEvent: String {
     case stage1Retried = "stage1_retried"
     case deviceFailover = "device_failover"
     case conflictResolved = "conflict_resolved"
+    // #322 — note-review re-entry / deferral. The backend has no "saved"
+    // state (a saved-for-later session stays AWAITING_REVIEW), so these
+    // are iOS-side breadcrumbs marking when the physician re-opened the
+    // approve-capable review flow vs. backed out to the inbox without
+    // approving. No PHI: only the session id rides along.
+    case noteReviewResumed = "note_review_resumed"
+    case noteReviewDeferred = "note_review_deferred"
     case noteApproved = "note_approved"
     case noteExported = "note_exported"
     case localDataPurged = "local_data_purged"

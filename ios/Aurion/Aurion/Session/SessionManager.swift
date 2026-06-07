@@ -1895,14 +1895,57 @@ final class SessionManager: ObservableObject {
         uiState = .reviewing
     }
 
-    func approveNote() async {
-        guard let session else { return }
-        do {
-            _ = try await api.approveFinalNote(sessionId: session.id)
-            AurionHaptics.notification(.success)
-        } catch {
-            self.error = "Approval failed: \(error.localizedDescription)"
-        }
+    /// Re-enter the approve-capable review flow for a historical session
+    /// (#322). The Sessions inbox routes an `AWAITING_REVIEW` row here
+    /// instead of the read-only `SessionNoteView`, so a note that was
+    /// "saved for later" can still be approved — closing the dead-end where
+    /// deferring a review left the note permanently non-approvable.
+    ///
+    /// We rebuild the minimal in-memory state `NoteReviewView` needs:
+    ///   * a `CaptureSession` carrying the server `id` so `approveNote`'s
+    ///     `/approve-stage1` + `/approve` calls and conflict resolution
+    ///     (all keyed on the session id) target the right session, and
+    ///   * the latest note — best-effort prefetched via the same
+    ///     `getFullNote` the inbox / `SessionNoteView` already use so the
+    ///     screen paints instantly. On a fetch failure we still enter the
+    ///     flow with a `nil` note; `NoteReviewView` then fetches fresh and
+    ///     surfaces its own Retry UI rather than stranding the physician.
+    ///
+    /// The backend keeps the session at `AWAITING_REVIEW` throughout (there
+    /// is no server-side "saved" state), so re-entry stays valid until the
+    /// physician approves. No capture is running here — the rebuilt session
+    /// is metadata-only and never calls `persist()`, so crash-recovery is
+    /// not armed for it.
+    func resumeReview(_ response: SessionResponse) async {
+        error = nil
+        // Best-effort prefetch FIRST — `try?` so a transient failure still
+        // lands us in the review flow with NoteReviewView's own fetch + Retry
+        // path. We fetch before publishing any state so there's no window
+        // where `session` is non-nil while `uiState` is still `.idle` (which
+        // would briefly route ContentView to the capture screen).
+        let fetched = try? await api.getFullNote(sessionId: response.id)
+
+        let mode = CaptureMode(rawValue: response.captureMode) ?? .multimodal
+        let captureSession = CaptureSession(
+            id: response.id,
+            specialty: response.specialty,
+            captureMode: mode,
+            encounterType: response.encounterType,
+            participants: [],
+            externalReferenceId: response.externalReferenceId,
+            providerOverrides: response.providerOverrides
+        )
+        // Reflect the server state for clarity; this is display-only and
+        // never persisted (see doc comment).
+        captureSession.state = .awaitingReview
+
+        // Publish session + note + uiState in one synchronous burst so
+        // ContentView re-renders once, straight into NoteReviewView.
+        note = fetched
+        session = captureSession
+        sessionLanguage = "en"
+        AuditLogger.log(event: .noteReviewResumed, sessionId: response.id)
+        uiState = .reviewing
     }
 
     /// Save the current session for later review without advancing the backend state.
@@ -1910,6 +1953,13 @@ final class SessionManager: ObservableObject {
     /// physician can return to the dashboard and see the next patient.
     func saveForLater() {
         AurionHaptics.notification(.success)
+        // #322 — breadcrumb the deferral. Same path for "Save for later" on
+        // NoteReadyView and "Back" on a not-yet-approved NoteReviewView; the
+        // session stays AWAITING_REVIEW server-side and is re-openable from
+        // the inbox via `resumeReview`.
+        if let sid = session?.id {
+            AuditLogger.log(event: .noteReviewDeferred, sessionId: sid)
+        }
         teardownLiveTranscriber()
         stopScreenCaptureIfRunning()
         // Tear down the on-disk WAV used by the upload chain — if Stage 1
