@@ -40,6 +40,13 @@ class FeatureFlagsResponse(BaseModel):
     session_pause_resume_enabled: bool
     per_session_provider_override: bool
     meta_wearables_enabled: bool
+    # ── Video-vision master gates (lane-backend/vision-evidence-feature-flags)
+    # Two on/off master switches for the patient video-vision paths.
+    # Exposed for parity so iOS can reflect which path(s) the operator has
+    # enabled. Distinct from `screen_capture_enabled` (frame-by-frame
+    # screen OCR).
+    clip_video_interpretation_enabled: bool
+    frame_by_frame_video_enabled: bool
     # ── Post-pilot card visibility (lane-full/card-visibility-flags) ──────
     # Four post-pilot scaffolding cards on the iOS note-review screen.
     # All default False on the schema; ADMIN flips per-card via the
@@ -80,6 +87,8 @@ async def get_client_config(_: CurrentUser = Depends(get_current_user)):
             session_pause_resume_enabled=cfg.feature_flags.session_pause_resume_enabled,
             per_session_provider_override=cfg.feature_flags.per_session_provider_override,
             meta_wearables_enabled=cfg.feature_flags.meta_wearables_enabled,
+            clip_video_interpretation_enabled=cfg.feature_flags.clip_video_interpretation_enabled,
+            frame_by_frame_video_enabled=cfg.feature_flags.frame_by_frame_video_enabled,
             orders_card_enabled=cfg.feature_flags.orders_card_enabled,
             coding_card_enabled=cfg.feature_flags.coding_card_enabled,
             patient_summary_card_enabled=cfg.feature_flags.patient_summary_card_enabled,

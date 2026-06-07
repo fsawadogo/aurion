@@ -71,6 +71,8 @@ class FeatureFlagsResponse(BaseModel):
     per_session_provider_override: bool
     meta_wearables_enabled: bool
     per_session_visual_evidence_mode_override: bool
+    clip_video_interpretation_enabled: bool
+    frame_by_frame_video_enabled: bool
     orders_card_enabled: bool
     coding_card_enabled: bool
     patient_summary_card_enabled: bool
@@ -149,6 +151,12 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         meta_wearables_enabled=cfg_feature_flags.meta_wearables_enabled,
         per_session_visual_evidence_mode_override=(
             cfg_feature_flags.per_session_visual_evidence_mode_override
+        ),
+        clip_video_interpretation_enabled=(
+            cfg_feature_flags.clip_video_interpretation_enabled
+        ),
+        frame_by_frame_video_enabled=(
+            cfg_feature_flags.frame_by_frame_video_enabled
         ),
         orders_card_enabled=cfg_feature_flags.orders_card_enabled,
         coding_card_enabled=cfg_feature_flags.coding_card_enabled,

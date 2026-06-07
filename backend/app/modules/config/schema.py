@@ -137,6 +137,20 @@ class FeatureFlagsConfig(BaseModel):
     # runs even when the pilot-wide default is `FRAMES_ONLY`. Mirrors the
     # `per_session_provider_override` pattern.
     per_session_visual_evidence_mode_override: bool = True
+    # ── Video-vision master gates (lane-backend/vision-evidence-feature-flags)
+    # Two independent on/off master switches for the two video-vision
+    # paths. They are NOT the same as `screen_capture_enabled` (which gates
+    # the frame-by-frame *screen* OCR pipeline) — these gate the *patient*
+    # video-vision paths. `resolve_evidence_mode` clamps the active
+    # `VisualEvidenceMode` by these two flags (highest-precedence
+    # resolution step). Defaults `True` so current behavior is preserved;
+    # the operator flips clip=true/frame=false (or vice-versa) via
+    # AppConfig to force a single path pilot-wide without a redeploy.
+    #
+    # Gemini native-video / clip-understanding path (providers.vision_clip).
+    clip_video_interpretation_enabled: bool = True
+    # Per-frame static-image vision path (providers.vision).
+    frame_by_frame_video_enabled: bool = True
     # ── Post-pilot card visibility (lane-full/card-visibility-flags) ──────
     # Four downstream-of-Stage-1 cards (Orders, Coding & Billing, Patient
     # Summary, EMR Write-Back) ship in the iOS note-review surface but are
