@@ -65,6 +65,11 @@ export async function getMyProfile(): Promise<PhysicianProfile> {
  * Server accepts a dict of fields to merge; only changed fields need
  * to be sent. Backend re-validates the practice_type comma-joined
  * convention.
+ *
+ * #313/W1: `contexts_per_visit_type` round-trips here. Send it together
+ * with `consultation_types` so the server prunes contexts whose visit
+ * type the same request dropped. Context labels can be PHI — they ride
+ * the PUT body only, never a query string or client log.
  */
 export async function updateMyProfile(
   body: PhysicianProfileUpdate,
