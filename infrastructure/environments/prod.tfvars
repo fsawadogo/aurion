@@ -2,6 +2,11 @@ environment       = "prod"
 multi_az          = true
 db_instance_class = "db.t3.medium"
 
+# Media retention (#338). Prod stays at the original 1-day S3 lifecycle TTL —
+# set explicitly so the per-env intent is visible (the variable default is also
+# 1, but prod is unchanged on purpose).
+media_retention_days = 1
+
 # DNS + TLS (Phase 2). Prod owns its own Route 53 hosted zone for
 # api.aurionclinical.com — apex stays at Cloudflare. After the first
 # prod apply, create 4 NS records at Cloudflare for the prod subdomain

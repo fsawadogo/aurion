@@ -17,6 +17,26 @@ variable "region" {
   description = "AWS region. Aurion data residency requires ca-central-1 (Canada)."
   type        = string
   default     = "ca-central-1"
+
+  validation {
+    # Data-residency guardrail: every PHI store (S3 buckets, KMS keys, RDS,
+    # DynamoDB) is created in var.region. An accidental tfvars override to a
+    # US/EU region would silently relocate patient data out of Canada and
+    # break the residency commitment. Pin to the ca-* prefix (ca-central-1
+    # today, ca-west-1 if we ever add a second Canadian region).
+    condition     = startswith(var.region, "ca-")
+    error_message = "region must be a Canadian AWS region (ca-* prefix) for data residency."
+  }
+}
+
+# -----------------------------------------------------------------------------
+# Media Retention — S3 lifecycle TTL for raw audio + masked frames (#338)
+# -----------------------------------------------------------------------------
+
+variable "media_retention_days" {
+  description = "Max-window TTL (in whole days) for the audio + frames S3 buckets' expiration lifecycle rules (#338). Dev uses 7 to give the eval team a review window over recent captures; prod stays at 1 (unchanged). S3 lifecycle expiration is whole-bucket and whole-day granular, so this is only the worst-case backstop ceiling — the precise deletion path is the app-level purge-on-approval that removes raw audio right after transcription and frames right after export. Raw audio is PHI, so the window is capped intentionally. Eval bucket is exempt (no lifecycle rule)."
+  type        = number
+  default     = 1
 }
 
 # -----------------------------------------------------------------------------
