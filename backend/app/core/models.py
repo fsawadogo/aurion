@@ -196,6 +196,20 @@ class PhysicianProfileModel(Base):
     primary_specialty: Mapped[str] = mapped_column(String(50), nullable=False, default="general")
     preferred_templates: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     consultation_types: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    # Visit Type → Context → Template map (#313 / B1). JSON object stored
+    # as text (same convention as ``consultation_types`` above), keyed by
+    # visit-type key (a canonical default OR a custom consultation-type
+    # label) → ordered list of context objects:
+    #   {"new_patient": [{"id": "ctx_7f3a9c21", "label": "LL",
+    #                     "template_key": "orthopedic_surgery",
+    #                     "template_ref": null}, ...]}
+    # ``template_key`` references a built-in specialty template; in phase 1
+    # ``template_ref`` (custom-template pointer) is always null. Labels are
+    # user-authored and gated through the same PHI format checks as
+    # consultation types; the validator lives in app/api/v1/profile.py.
+    contexts_per_visit_type: Mapped[str] = mapped_column(
+        Text, nullable=False, default="{}"
+    )
     allied_health_team: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     output_language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
     # Portal/iOS chrome theme — distinct from output_language above

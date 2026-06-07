@@ -6,11 +6,19 @@ Endpoints are accessible to any authenticated user for their own profile.
 from __future__ import annotations
 
 import json
+import re
+import secrets
 import uuid
 from typing import Optional
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    ValidationInfo,
+    field_validator,
+    model_validator,
+)
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import write_audit
@@ -18,6 +26,7 @@ from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.text_validation import validate_user_text
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.note_gen.service import list_available_templates
 from app.modules.profile.service import (
     get_or_create_profile,
     get_preferred_template_objects,
@@ -49,6 +58,31 @@ _DEFAULT_CONSULTATION_TYPES = frozenset(
 # carry "Lower-Limb New Patient" while bounding the audit risk.
 _MAX_CUSTOM_CONSULTATION_TYPES = 20
 _MAX_CONSULTATION_TYPE_LEN = 60
+
+# Per-visit-type soft cap on contexts (#313, B1). Mirrors the
+# consultation-type cap rationale — a generous bound that a runaway
+# client can't blow past while staying well above realistic pilot use
+# (Dr. Marie / Dr. Perry expect a handful per visit type).
+_MAX_CONTEXTS_PER_VISIT_TYPE = 30
+
+# Context id shape: ``ctx_`` + 8 lowercase-hex chars, minted via
+# ``secrets.token_hex(4)``. We preserve a client-supplied id ONLY when it
+# matches this shape (i.e. a value round-tripped from a prior GET); any
+# other value is regenerated so a client can't smuggle free text (PHI)
+# into the id field.
+_CONTEXT_ID_RE = re.compile(r"^ctx_[0-9a-f]{8}$")
+
+
+def _assign_context_id(existing: Optional[str]) -> str:
+    """Return a stable context id.
+
+    Preserves a well-formed existing id (the edit path round-trips the
+    id from a prior GET); mints a fresh ``ctx_<8 hex>`` id when absent,
+    blank, or malformed.
+    """
+    if existing and _CONTEXT_ID_RE.match(existing.strip()):
+        return existing.strip()
+    return "ctx_" + secrets.token_hex(4)
 
 
 def _validate_consultation_type(value: str) -> str:
@@ -124,6 +158,52 @@ def _split_defaults_customs(types: list[str]) -> tuple[set[str], set[str]]:
 # ── Schemas ─────────────────────────────────────────────────────────────────
 
 
+class VisitTypeContext(BaseModel):
+    """One context row under a visit type (#313, B1).
+
+    A "context" is a clinician-authored sub-mode of a visit type — e.g.
+    under "new_patient", contexts "LL" (lower limb) and "Breast" — each
+    optionally pinned to a built-in specialty template.
+
+    Validation posture mirrors custom consultation-type labels:
+      * ``label`` goes through ``_validate_consultation_type`` (the shared
+        ``validate_user_text`` format gate + proper-noun-pair heuristic).
+      * ``id`` is server-assigned (``ctx_<8 hex>``) when absent/blank/
+        malformed; a well-formed id is preserved on edit.
+      * ``template_key``, when non-null, MUST reference a built-in
+        template (``list_available_templates()``); else rejected.
+      * ``template_ref`` (the custom-template pointer) is accepted but
+        always forced to None in phase 1 — no custom-template logic yet.
+
+    ``hide_input_in_errors=True`` keeps a rejected label out of any 422
+    body / Sentry frame, same posture as ``UpdateProfileRequest``.
+    """
+
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    id: str = ""
+    label: str
+    template_key: Optional[str] = None
+    template_ref: Optional[str] = None
+
+    @model_validator(mode="after")
+    def _validate(self) -> "VisitTypeContext":
+        # Label: identical gate to a custom consultation-type label. Raises
+        # ValueError (→ 422) on a PHI-shaped or over-long value, never
+        # echoing the value itself.
+        self.label = _validate_consultation_type(self.label)
+        # Id: preserve a well-formed round-tripped id, else server-assign.
+        self.id = _assign_context_id(self.id)
+        # Phase 1: custom-template pointers are not wired — ignore any
+        # supplied value and persist null.
+        self.template_ref = None
+        # template_key, when set, must be a built-in template key.
+        if self.template_key is not None:
+            if self.template_key not in list_available_templates():
+                raise ValueError("template_key is not an available template")
+        return self
+
+
 class ProfileResponse(BaseModel):
     clinician_id: str
     display_name: str
@@ -131,6 +211,10 @@ class ProfileResponse(BaseModel):
     primary_specialty: str
     preferred_templates: list[str]
     consultation_types: list[str]
+    # Visit-type → context → template map (#313, B1). Returned as raw
+    # stored dicts (not re-validated through ``VisitTypeContext``) so a
+    # built-in template later removed from disk can't make a GET 500.
+    contexts_per_visit_type: dict[str, list[dict]] = {}
     allied_health_team: list[dict] = []
     output_language: str
     # Portal/iOS chrome preferences (Phase A1). Distinct from
@@ -159,6 +243,10 @@ class UpdateProfileRequest(BaseModel):
     primary_specialty: Optional[str] = None
     preferred_templates: Optional[list[str]] = None
     consultation_types: Optional[list[str]] = None
+    # Declared AFTER ``consultation_types`` on purpose: the validator below
+    # reads the already-validated ``consultation_types`` off ``info.data``
+    # to know which custom visit-type keys are canonical for THIS request.
+    contexts_per_visit_type: Optional[dict[str, list[VisitTypeContext]]] = None
     allied_health_team: Optional[list[dict]] = None
     output_language: Optional[str] = None
     ui_theme: Optional[str] = None
@@ -232,6 +320,51 @@ class UpdateProfileRequest(BaseModel):
             cleaned.append(canonical)
         return cleaned
 
+    @field_validator("contexts_per_visit_type")
+    @classmethod
+    def _validate_contexts_per_visit_type(
+        cls,
+        v: Optional[dict[str, list[VisitTypeContext]]],
+        info: ValidationInfo,
+    ) -> Optional[dict[str, list[VisitTypeContext]]]:
+        """Gate the visit-type → context map (cross-field rules).
+
+        Each context's label, id, ``template_key`` membership, and
+        ``template_ref`` nulling are enforced by ``VisitTypeContext``
+        itself (its model-validator runs first, during parsing). This
+        validator adds the rules that need the whole request in view:
+
+          * Every map KEY must be a canonical visit type — a built-in
+            default ("new_patient", "follow_up", "pre_op", "post_op") OR a
+            custom label present in the SAME request's
+            ``consultation_types``. Orphan keys (a visit type the clinician
+            removed or renamed) are PRUNED, not rejected, so a stale client
+            map self-heals on the next write.
+          * Per-visit-type soft cap of 30 contexts.
+        """
+        if v is None:
+            return v
+        # Canonical key set = built-in defaults + this request's custom
+        # consultation types. If the request omits ``consultation_types``
+        # we fall back to defaults-only (custom-keyed contexts then prune);
+        # the realistic client sends both fields together.
+        consult = info.data.get("consultation_types")
+        canonical: set[str] = set(_DEFAULT_CONSULTATION_TYPES)
+        if consult:
+            canonical.update(consult)
+        pruned: dict[str, list[VisitTypeContext]] = {}
+        for key, contexts in v.items():
+            if key not in canonical:
+                # Orphan visit type — drop the key and its contexts.
+                continue
+            if len(contexts) > _MAX_CONTEXTS_PER_VISIT_TYPE:
+                raise ValueError(
+                    f"max {_MAX_CONTEXTS_PER_VISIT_TYPE} contexts per "
+                    "visit type"
+                )
+            pruned[key] = contexts
+        return pruned
+
 
 # ── Routes ──────────────────────────────────────────────────────────────────
 
@@ -285,7 +418,33 @@ async def update_profile_route(
         except (TypeError, ValueError):
             types_before = None
 
+    # GH-313 — snapshot the pre-update contexts map for the audit diff
+    # below. Same "no signal → skip emit" fallback as the lists above.
+    contexts_before: Optional[dict] = None
+    if body.contexts_per_visit_type is not None:
+        try:
+            raw_ctx = json.loads(
+                getattr(existing, "contexts_per_visit_type", None) or "{}"
+            )
+            if isinstance(raw_ctx, dict):
+                contexts_before = raw_ctx
+        except (TypeError, ValueError):
+            contexts_before = None
+
     updates = body.model_dump(exclude_none=True)
+
+    # GH-313 — serialize contexts WITHOUT exclude_none so the stored shape
+    # keeps the explicit null ``template_key`` / ``template_ref`` keys the
+    # clients read back (a recursive ``exclude_none`` would drop them).
+    # Built once here and reused for the audit diff below.
+    contexts_after: Optional[dict] = None
+    if body.contexts_per_visit_type is not None:
+        contexts_after = {
+            key: [ctx.model_dump() for ctx in contexts]
+            for key, contexts in body.contexts_per_visit_type.items()
+        }
+        updates["contexts_per_visit_type"] = contexts_after
+
     profile = await update_profile(db, clinician_id=user.user_id, updates=updates)
 
     # GH-260 — emit TEAM_MEMBERS_UPDATED only when the count actually
@@ -343,6 +502,21 @@ async def update_profile_route(
                 customs_removed=customs_removed,
             )
 
+    # GH-313 — emit PROFILE_CONTEXTS_UPDATED with AGGREGATE COUNTS ONLY,
+    # and only on a real diff. ``_diff_contexts`` keys identity on the
+    # context id; the five counts never carry labels, keys, ids, or
+    # template names. See the kwarg whitelist in
+    # `audit_events.py::PROFILE_CONTEXTS_UPDATED` for the PHI contract.
+    if contexts_after is not None and contexts_before is not None:
+        deltas = _diff_contexts(contexts_before, contexts_after)
+        if any(deltas.values()):
+            await write_audit(
+                _PROFILE_AUDIT_SESSION,
+                AuditEventType.PROFILE_CONTEXTS_UPDATED,
+                actor_id=str(user.user_id),
+                **deltas,
+            )
+
     return _to_response(profile)
 
 
@@ -359,6 +533,79 @@ async def get_profile_templates(
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 
+def _diff_contexts(
+    before: dict[str, list[dict]],
+    after: dict[str, list[dict]],
+) -> dict[str, int]:
+    """Aggregate, PHI-free count deltas between two context maps (#313).
+
+    Identity is the context ``id`` (stable across an in-place edit).
+    Returns exactly the five whitelisted ``PROFILE_CONTEXTS_UPDATED``
+    counts — NEVER labels, visit-type keys, ids, or template names:
+
+      * ``visit_types_touched`` — visit-type keys whose normalized
+        context list changed (covers label edits + template swaps +
+        add/remove + key add/remove).
+      * ``contexts_added`` / ``contexts_removed`` — net context-id churn.
+      * ``templates_attached`` — contexts that gained a template
+        (None → set, including brand-new contexts that ship with one).
+      * ``templates_detached`` — contexts that lost a template
+        (set → None, including removed contexts that had one).
+    """
+
+    def _by_id(m: dict[str, list[dict]]) -> dict[str, Optional[str]]:
+        # id → template_key (or None), flattened across all visit types.
+        out: dict[str, Optional[str]] = {}
+        for contexts in m.values():
+            for ctx in contexts:
+                cid = ctx.get("id")
+                if isinstance(cid, str) and cid:
+                    out[cid] = ctx.get("template_key")
+        return out
+
+    def _norm(contexts: list[dict]) -> list[tuple]:
+        return [
+            (
+                c.get("id"),
+                c.get("label"),
+                c.get("template_key"),
+                c.get("template_ref"),
+            )
+            for c in contexts
+        ]
+
+    before_ids = _by_id(before)
+    after_ids = _by_id(after)
+
+    contexts_added = len(set(after_ids) - set(before_ids))
+    contexts_removed = len(set(before_ids) - set(after_ids))
+
+    templates_attached = sum(
+        1
+        for cid, tk in after_ids.items()
+        if tk is not None and before_ids.get(cid) is None
+    )
+    templates_detached = sum(
+        1
+        for cid, tk in before_ids.items()
+        if tk is not None and after_ids.get(cid) is None
+    )
+
+    visit_types_touched = sum(
+        1
+        for key in set(before) | set(after)
+        if _norm(before.get(key, [])) != _norm(after.get(key, []))
+    )
+
+    return {
+        "visit_types_touched": visit_types_touched,
+        "contexts_added": contexts_added,
+        "contexts_removed": contexts_removed,
+        "templates_attached": templates_attached,
+        "templates_detached": templates_detached,
+    }
+
+
 def _to_response(profile) -> ProfileResponse:
     return ProfileResponse(
         clinician_id=str(profile.clinician_id),
@@ -367,6 +614,9 @@ def _to_response(profile) -> ProfileResponse:
         primary_specialty=profile.primary_specialty,
         preferred_templates=json.loads(profile.preferred_templates),
         consultation_types=json.loads(profile.consultation_types),
+        contexts_per_visit_type=json.loads(
+            getattr(profile, "contexts_per_visit_type", None) or "{}"
+        ),
         allied_health_team=json.loads(profile.allied_health_team),
         output_language=profile.output_language,
         ui_theme=getattr(profile, "ui_theme", "system"),

@@ -74,6 +74,13 @@ async def update_profile(
         profile.preferred_templates = json.dumps(updates["preferred_templates"])
     if "consultation_types" in updates:
         profile.consultation_types = json.dumps(updates["consultation_types"])
+    if "contexts_per_visit_type" in updates:
+        # The route serializes this WITHOUT exclude_none (so explicit null
+        # template_key/template_ref keys survive); the value is already a
+        # plain dict[str, list[dict]] ready to persist as text.
+        profile.contexts_per_visit_type = json.dumps(
+            updates["contexts_per_visit_type"]
+        )
     if "allied_health_team" in updates:
         team = updates["allied_health_team"]
         if len(team) > 2:
