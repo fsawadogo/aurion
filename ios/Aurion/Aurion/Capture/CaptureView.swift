@@ -145,12 +145,29 @@ struct CaptureView: View {
     /// (clears the notch / Dynamic Island); the scrim bleeds up underneath so
     /// controls stay legible over any camera content.
     private var immersiveTopBar: some View {
-        HStack {
+        // Three zones — specialty (leading), recording status (center), stream
+        // status cluster (trailing). The timer and the status cluster are kept
+        // RIGID (.fixedSize + higher layoutPriority) so they never compress or
+        // wrap when the bar is tight; the specialty badge is the single
+        // flexible element and truncates to absorb the squeeze. Previously a
+        // plain HStack let SwiftUI shrink every text node, so the specialty
+        // wrapped to a vertical sliver and the timer wrapped mid-digits.
+        // spacing: 0 + Spacer(minLength: 0): the flexible gaps come entirely
+        // from the two Spacers, which expand to separate the zones when there's
+        // slack and collapse to nothing on the tightest phone (13 mini, 375pt,
+        // recording w/ video) so the rigid timer + status cluster never clip.
+        // Fixed inter-child spacing would have burned ~48pt we can't spare.
+        HStack(spacing: 0) {
             specialtyBadge
+                // Caps the chip so it truncates ("Orthopedic Su…") rather than
+                // dominating; it's the single flexible zone (lowest priority),
+                // collapsing toward icon-only first when the bar is tight.
+                .frame(maxWidth: 132, alignment: .leading)
+                .layoutPriority(0)
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            // Compact status replaces the big 88pt timer in this layout.
+            // Compact recording status — the focal element in this layout.
             HStack(spacing: 8) {
                 if session.state == .recording {
                     recBadge
@@ -160,19 +177,24 @@ struct CaptureView: View {
                     .font(.system(size: 17, weight: .semibold, design: .monospaced))
                     .monospacedDigit()
                     .foregroundColor(.white)
+                    .lineLimit(1)
                     .contentTransition(.numericText())
                     .animation(AurionAnimation.smooth, value: elapsedTime)
                     .accessibilityLabel(L("capture.a11yElapsed"))
                     .accessibilityValue(accessibleElapsedTime)
             }
+            .fixedSize()
+            .layoutPriority(1)
 
-            Spacer()
+            Spacer(minLength: 0)
 
             HStack(spacing: 6) {
                 streamIndicators
                 maskingShield
                 consentBadge
             }
+            .fixedSize()
+            .layoutPriority(1)
         }
         .padding(.horizontal, AurionSpacing.lg)
         .padding(.top, AurionSpacing.sm)
@@ -474,6 +496,12 @@ struct CaptureView: View {
             Text(displayName)
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.white)
+                // Single line + tail truncation so a long specialty
+                // ("Orthopedic Surgery") shrinks to "Orthopedic Su…" when the
+                // top bar is crowded instead of character-wrapping into a
+                // vertical sliver. The icon stays at intrinsic size.
+                .lineLimit(1)
+                .truncationMode(.tail)
         }
         .padding(.horizontal, AurionSpacing.sm)
         .padding(.vertical, AurionSpacing.xs)

@@ -304,6 +304,9 @@
 /* lane-ios/audio-upload-resilience — affiché pendant l\U2019envoi
    des octets audio au backend (post-finalisation, pré-Stage 1). */
 "processing.uploadingAudio" = "Envoi de l\U2019audio\U2026";
+/* Action sur la carte d\U2019\U00E9chec « aucune parole » — abandonne cette
+   session vide et revient au d\U00E9but. */
+"processing.recordAgain" = "R\U00E9enregistrer";
 /* Prompt d\U2019erreur Stage 1 (le backend a réellement échoué). */
 "processing.stage1Failed.title" = "Impossible de g\U00E9n\U00E9rer la note";
 "processing.stage1Failed.detail" = "Le pipeline Stage 1 ne s\U2019est pas termin\U00E9. Touchez R\U00E9essayer pour relancer \U2014 votre enregistrement est toujours en m\U00E9moire.";
@@ -314,6 +317,8 @@
 "audio_upload_failed_file" = "Le fichier audio n\U2019a pas pu \U00EAtre enregistr\U00E9 \U2014 veuillez r\U00E9essayer";
 "audio_upload_failed_too_short" = "L\U2019enregistrement est trop court pour \U00EAtre trait\U00E9";
 "audio_upload_failed_server" = "Erreur serveur \U2014 votre enregistrement est sauvegard\U00E9. R\U00E9essayer?";
+/* HTTP 422 — aucun discours exploitable n\U2019a \U00E9t\U00E9 capt\U00E9. */
+"audio_upload_no_speech" = "Aucune parole d\U00E9tect\U00E9e dans cet enregistrement. V\U00E9rifiez votre microphone et r\U00E9enregistrez.";
 /* État terminal : le fichier WAV local n\U2019est plus disponible \U2014
    l\U2019utilisateur doit refaire l\U2019enregistrement. */
 "audio_upload_recording_lost" = "Enregistrement perdu \U2014 veuillez r\U00E9enregistrer.";

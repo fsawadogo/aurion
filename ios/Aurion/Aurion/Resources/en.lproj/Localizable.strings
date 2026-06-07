@@ -307,6 +307,9 @@
    Pre-#243 the status flipped straight to "Generating note\U2026" which
    hid network failures behind a misleading label. */
 "processing.uploadingAudio" = "Uploading audio\U2026";
+/* Action on the no-speech failure card — discards this empty session and
+   returns to start, since re-uploading silent audio would just fail again. */
+"processing.recordAgain" = "Record again";
 /* Retry prompt copy when Stage 1 actually fails on the backend
    (provider error, server 5xx). The 30s wall-clock case no longer
    exists — wording stays generic so it covers any backend failure. */
@@ -322,6 +325,10 @@
 "audio_upload_failed_file" = "Audio file couldn\U2019t be saved \U2014 please retry";
 "audio_upload_failed_too_short" = "Recording was too short to process";
 "audio_upload_failed_server" = "Server error \U2014 your recording is safe. Retry?";
+/* HTTP 422 from the transcription endpoint — no usable speech was captured
+   (silent / empty / too-short). Friendly, non-alarming copy that points at
+   the real fix (re-record) instead of "server error". */
+"audio_upload_no_speech" = "We didn\U2019t detect any speech in this recording. Check your microphone and re-record.";
 /* Terminal state: the on-disk WAV that the retry path would have re-uploaded
    has vanished (force-quit + OS sandbox cleanup). No upload is possible \U2014
    the user has to start a new recording. */

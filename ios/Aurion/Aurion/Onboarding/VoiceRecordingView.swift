@@ -37,6 +37,13 @@ struct VoiceRecordingView: View {
     /// flows that don't offer a skip; the "Open Settings" recovery is
     /// always available regardless.
     var onSkip: (() -> Void)? = nil
+    /// Optional back handler. The onboarding flow hides the nav-bar back
+    /// button and gates Continue behind a completed recording, so without
+    /// this the clinician is trapped on the record screen with no way to
+    /// return to the previous step. When provided, a back control is shown
+    /// at the top-leading. Defaults to `nil` so the view still compiles
+    /// standalone / in flows that don't offer a back.
+    var onBack: (() -> Void)? = nil
 
     @StateObject private var recorder = VoiceRecorder()
     @Environment(\.scenePhase) private var scenePhase
@@ -181,10 +188,38 @@ struct VoiceRecordingView: View {
                     // recording mid-capture.
                     .allowsHitTesting(canProceed || qualityCheckFailed)
             }
+            .frame(maxWidth: .infinity)
             .padding(.horizontal, 20)
             .padding(.top, 12)
-            .padding(.bottom, 8)
-            .background(.ultraThinMaterial)
+            // Lifted off the home indicator and de-slabbed: the controls
+            // used to ride a centered `.ultraThinMaterial` panel that —
+            // because nothing here is full-width before recording — shrank
+            // to a floating rectangle behind the record disc. Just the
+            // button now, sitting a bit higher.
+            .padding(.bottom, 40)
+        }
+        // Top-leading back control. The onboarding flow hides the nav-bar
+        // back button and Continue is gated behind a finished recording, so
+        // without this the clinician is trapped on the record screen.
+        .safeAreaInset(edge: .top) {
+            if let onBack {
+                HStack {
+                    Button(action: onBack) {
+                        HStack(spacing: 4) {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 15, weight: .semibold))
+                            Text(L("setup.back"))
+                                .aurionFont(15, weight: .medium, relativeTo: .body)
+                        }
+                        .foregroundColor(.aurionTextPrimary)
+                        .contentShape(Rectangle())
+                    }
+                    .frame(minHeight: 44)
+                    .accessibilityLabel(L("setup.back"))
+                    Spacer()
+                }
+                .padding(.horizontal, 20)
+            }
         }
         .animation(.aurionIOS, value: recorder.isRecording)
         .animation(.aurionIOS, value: canProceed)
