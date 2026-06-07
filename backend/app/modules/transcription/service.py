@@ -3,8 +3,11 @@
 Sequence: S3 upload → provider call via registry → trigger classifier →
 PHI audit → audit log entries. The audio S3 object is retained under the
 bucket's lifecycle policy (~1 day; configurable in dev via
-``media_retention_days``) and is actively purged on final-note approval
-when ``feature_flags.media_review_retention_enabled`` is on.
+``media_retention_days``). Under the keep-full-window retention model the
+object stays available for the full window and is removed only by that S3
+lifecycle TTL or an on-demand Law 25 erasure — final-note approval does NOT
+purge it (``feature_flags.media_review_retention_enabled`` only exposes the
+audio-replay/download surfaces).
 """
 
 from __future__ import annotations
@@ -108,9 +111,10 @@ async def upload_audio_to_s3(
     """Upload audio to S3. Returns the S3 object key.
 
     The audio bucket has a lifecycle policy (~1 day; configurable in dev
-    via ``media_retention_days``) and the object is also actively purged
-    on final-note approval when ``media_review_retention_enabled`` is on.
-    S3 key never contains PHI.
+    via ``media_retention_days``). Under the keep-full-window retention
+    model the object is retained for the full window and removed only by
+    that S3 lifecycle TTL or an on-demand Law 25 erasure — final-note
+    approval does NOT purge it. S3 key never contains PHI.
     """
     s3_key = f"audio/{session_id}/{uuid.uuid4()}.wav"
     try:
