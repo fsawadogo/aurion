@@ -10,6 +10,9 @@ struct SessionsInboxView: View {
     @EnvironmentObject private var sessionManager: SessionManager
     @State private var sessions: [SessionResponse] = []
     @State private var isLoading = true
+    /// True when the last load failed AND we have nothing cached to show —
+    /// drives the error+retry state instead of fabricating demo data (#295).
+    @State private var loadFailed = false
     @State private var sortNewestFirst = true
     @State private var filter: Filter = .all
     /// iPad readable-measure clamp — mirrors ``DashboardView``. Inbox
@@ -125,6 +128,10 @@ struct SessionsInboxView: View {
                 Group {
                     if isLoading {
                         skeletonList
+                    } else if loadFailed && sessions.isEmpty {
+                        Spacer()
+                        loadErrorState
+                        Spacer()
                     } else if filtered.isEmpty {
                         Spacer()
                         EmptyStateView(
@@ -436,18 +443,37 @@ struct SessionsInboxView: View {
 
     // MARK: - Data
 
+    /// Error + retry state shown when a from-empty load fails (#295),
+    /// replacing the old fabricated demo sessions.
+    private var loadErrorState: some View {
+        VStack(spacing: AurionSpacing.md) {
+            EmptyStateView(
+                icon: "wifi.exclamationmark",
+                title: L("sessions.loadFailed.title"),
+                subtitle: L("sessions.loadFailed.subtitle")
+            )
+            Button(L("common.retry")) {
+                Task { await loadSessions() }
+            }
+            .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+            .foregroundColor(.aurionGold)
+        }
+        .frame(maxWidth: .infinity)
+    }
+
     private func loadSessions() async {
         isLoading = true
         defer { isLoading = false }
         do {
             sessions = try await APIClient.shared.listSessions()
+            loadFailed = false
         } catch {
-            sessions = [
-                SessionResponse(id: "demo-1", clinicianId: "c1", specialty: "orthopedic_surgery", state: "AWAITING_REVIEW", encounterType: "doctor_patient", createdAt: "2026-04-14T10:30:00Z", updatedAt: "2026-04-14T11:00:00Z"),
-                SessionResponse(id: "demo-2", clinicianId: "c1", specialty: "plastic_surgery", state: "EXPORTED", encounterType: "doctor_patient", createdAt: "2026-04-13T14:00:00Z", updatedAt: "2026-04-13T14:45:00Z"),
-                SessionResponse(id: "demo-3", clinicianId: "c1", specialty: "orthopedic_surgery", state: "REVIEW_COMPLETE", encounterType: "doctor_patient_allied", createdAt: "2026-04-12T09:15:00Z", updatedAt: "2026-04-12T10:00:00Z"),
-                SessionResponse(id: "demo-4", clinicianId: "c1", specialty: "orthopedic_surgery", state: "PURGED", encounterType: "doctor_patient", createdAt: "2026-04-11T08:00:00Z", updatedAt: "2026-04-11T09:00:00Z"),
-            ]
+            // Surface the failure instead of fabricating demo sessions
+            // (#295 — fake clinical rows on a real network error were
+            // misleading). A failed *refresh* that still has cached
+            // sessions keeps the list; only a from-empty failure shows the
+            // error state.
+            loadFailed = true
         }
     }
 }

@@ -48,6 +48,8 @@
 "sessions.sortOldest" = "Oldest first";
 "sessions.sortHint" = "Double-tap to reverse the sort order.";
 "sessions.searchPrompt" = "Search by specialty or status";
+"sessions.loadFailed.title" = "Couldn\U2019t load sessions";
+"sessions.loadFailed.subtitle" = "Check your connection and try again.";
 
 /* ── Note Ready ───────────────────────────────────────── */
 "noteReady.title" = "Note Ready";

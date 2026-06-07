@@ -48,6 +48,8 @@
 "sessions.sortOldest" = "Plus anciennes d\U2019abord";
 "sessions.sortHint" = "Touchez deux fois pour inverser l\U2019ordre de tri.";
 "sessions.searchPrompt" = "Rechercher par sp\U00E9cialit\U00E9 ou statut";
+"sessions.loadFailed.title" = "Impossible de charger les sessions";
+"sessions.loadFailed.subtitle" = "V\U00E9rifiez votre connexion et r\U00E9essayez.";
 
 /* ── Note pr\U00EAte ─────────────────────────────────── */
 "noteReady.title" = "Note pr\U00EAte";
