@@ -144,6 +144,18 @@ resource "aws_appconfig_configuration_profile" "main" {
             # push lands, the backend keeps reading the Pydantic default
             # (20), which is byte-identical to what the new schema enforces.
             min_transcript_char_threshold = { type = "integer", minimum = 0, maximum = 1000 }
+            # Windowed media retention (#338). Number of days the backend
+            # treats as the in-review retention window for captured media —
+            # the app-level purge-on-approval path is precise; this is the
+            # max-window backstop. Bounds 1..30 MUST match the backend
+            # Pydantic Field that lane B adds to PipelineConfig in
+            # backend/app/modules/config/schema.py. NOT in the pipeline
+            # `required` list (precedent: longitudinal_context_max_encounters)
+            # so an older hosted document without this key still validates
+            # under additionalProperties = false — the backend Pydantic
+            # default supplies the value until the CLI hosted-version push
+            # ships the key live.
+            media_review_retention_days = { type = "integer", minimum = 1, maximum = 30 }
           }
         }
         feature_flags = {
@@ -186,6 +198,15 @@ resource "aws_appconfig_configuration_profile" "main" {
             # validates (backend Pydantic schema defaults both `true`).
             clip_video_interpretation_enabled = { type = "boolean" }
             frame_by_frame_video_enabled      = { type = "boolean" }
+            # Windowed media retention (#338). Gates the in-review retention
+            # window behaviour. Default-OFF: the hosted document the operator
+            # pushes leaves this false (and prod stays unchanged) so the
+            # feature only activates once explicitly enabled. NOT in the
+            # feature_flags `required` list (precedent: the card flags) so an
+            # older document without the key still validates under
+            # additionalProperties = false — the backend Pydantic schema
+            # supplies the default.
+            media_review_retention_enabled = { type = "boolean" }
           }
         }
       }

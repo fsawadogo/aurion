@@ -10,18 +10,20 @@ awslocal s3 mb s3://aurion-audio-local
 awslocal s3 mb s3://aurion-frames-local
 awslocal s3 mb s3://aurion-eval-local
 
+# Days=7 mirrors the dev media_retention_days TTL (#338) — keeps local/dev S3
+# lifecycle behaviour aligned with the dev tfvars review window. Prod stays at 1.
 awslocal s3api put-bucket-lifecycle-configuration \
   --bucket aurion-audio-local \
   --lifecycle-configuration '{
     "Rules": [{"ID": "expire-audio", "Status": "Enabled",
-      "Expiration": {"Days": 1}, "Filter": {"Prefix": ""}}]
+      "Expiration": {"Days": 7}, "Filter": {"Prefix": ""}}]
   }'
 
 awslocal s3api put-bucket-lifecycle-configuration \
   --bucket aurion-frames-local \
   --lifecycle-configuration '{
     "Rules": [{"ID": "expire-frames", "Status": "Enabled",
-      "Expiration": {"Days": 1}, "Filter": {"Prefix": ""}}]
+      "Expiration": {"Days": 7}, "Filter": {"Prefix": ""}}]
   }'
 
 echo "--> S3 buckets created."

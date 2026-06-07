@@ -107,7 +107,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "audio" {
     filter {}
 
     expiration {
-      days = 1
+      days = var.media_retention_days
     }
   }
 }
@@ -188,7 +188,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "frames" {
     filter {}
 
     expiration {
-      days = 1
+      days = var.media_retention_days
     }
   }
 }

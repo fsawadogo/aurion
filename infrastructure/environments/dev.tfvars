@@ -2,6 +2,12 @@ environment       = "dev"
 multi_az          = false
 db_instance_class = "db.t3.medium"
 
+# Media retention review window (#338). Audio + frames S3 buckets expire after
+# 7 days in dev so the eval team can review recent captures. Raw audio is PHI,
+# so the window is capped intentionally — this is only the max-window backstop;
+# app-level purge-on-approval still deletes media on the precise path.
+media_retention_days = 7
+
 # DNS + TLS (Phase 2). Each env owns its own Route 53 zone for its
 # subdomain — apex (aurionclinical.com) stays at Cloudflare.
 # After the first apply, take the `route53_nameservers` output and
