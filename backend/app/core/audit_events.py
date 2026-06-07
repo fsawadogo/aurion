@@ -166,13 +166,15 @@ class AuditEventType(StrEnum):
     # MACRO_CREATED (body), and PROMPT_USER_PROMPT_SET (text) take.
     PROFILE_CONSULTATION_TYPES_UPDATED = "profile_consultation_types_updated"
     # Visit-type → context → template map changed via PUT /profile (#313,
-    # B1). Each context carries a clinician-authored ``label`` (gated by the
-    # same PHI format checks as consultation types) and an optional
-    # ``template_key``. Labels, keys, and context ids are user-authored and
-    # could in the worst case carry PHI; we therefore carry ONLY aggregate
-    # count deltas in the audit row — never labels, keys, ids, or
-    # template names. Same count-only posture TEAM_MEMBERS_UPDATED (names)
-    # and PROFILE_CONSULTATION_TYPES_UPDATED (labels) take.
+    # B1; #318, B3). Each context carries a clinician-authored ``label``
+    # (gated by the same PHI format checks as consultation types) and
+    # binds EITHER a built-in ``template_key`` OR a custom ``template_ref``
+    # (the B3 custom-template pointer). Labels, keys, refs, and context ids
+    # are user-authored and could in the worst case carry PHI; we therefore
+    # carry ONLY aggregate count deltas in the audit row — never labels,
+    # keys, refs, ids, or template names. Same count-only posture
+    # TEAM_MEMBERS_UPDATED (names) and PROFILE_CONSULTATION_TYPES_UPDATED
+    # (labels) take.
     PROFILE_CONTEXTS_UPDATED = "profile_contexts_updated"
 
     # ── Admin ────────────────────────────────────────────────────────────
@@ -593,6 +595,12 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
             "contexts_removed",
             "templates_attached",
             "templates_detached",
+            # #318 / B3 — count-only custom-template binding churn. Same
+            # PHI posture as the built-in pair above: no ids, no refs, no
+            # template names — just how many contexts gained / lost a
+            # custom template_ref.
+            "custom_templates_attached",
+            "custom_templates_detached",
         }
     ),
     # Admin

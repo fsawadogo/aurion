@@ -75,6 +75,27 @@ async def get_owned(
     return result.scalar_one_or_none()
 
 
+async def get_by_id(
+    template_id: uuid.UUID, db: AsyncSession
+) -> Optional[CustomTemplateModel]:
+    """Fetch a custom template by id WITHOUT an owner scope.
+
+    For TRUSTED internal callers only — specifically the Stage-1
+    template-snapshot path (#318 / B3), where the session already carries
+    a ``custom_template_id`` that was ownership-validated at session
+    create time. Returns None when the row no longer exists (e.g. the
+    clinician deleted the template after the session was created), so the
+    caller can degrade to the specialty default. Clinician-facing
+    surfaces must keep using ``get_owned`` — never this — so a caller
+    can't read another clinician's template by id.
+    """
+    stmt = select(CustomTemplateModel).where(
+        CustomTemplateModel.id == template_id
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
 async def create_for_owner(
     owner_id: uuid.UUID, payload: dict, db: AsyncSession
 ) -> CustomTemplateModel:

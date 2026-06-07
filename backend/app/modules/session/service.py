@@ -101,39 +101,51 @@ async def resolve_context_template_key(
     clinician_id: uuid.UUID,
     consultation_type: Optional[str],
     context_id: Optional[str],
-) -> tuple[Optional[str], bool]:
-    """Resolve the Stage-1 template key to SNAPSHOT for a chosen context (#314).
+) -> tuple[Optional[str], Optional[uuid.UUID], bool]:
+    """Resolve the Stage-1 template SNAPSHOT for a chosen context (#314 / #318).
 
     Given the calling clinician + the visit type (``consultation_type``)
     + the chosen ``context_id``, look up the clinician's
     ``contexts_per_visit_type`` map (B1, #313) and resolve the template
     in this order:
 
-      1. ``template_ref`` — phase 2 (custom templates, #318). Ignored
-         here; always treated as absent.
-      2. ``template_key`` — a built-in specialty template pinned to the
-         context. Used when present AND still an available built-in.
+      1. ``template_key`` — a built-in specialty template pinned to the
+         context. Used when present AND still an available built-in. A
+         context binds EITHER a ``template_key`` OR a ``template_ref``
+         (mutual exclusion is enforced at PUT time, #318); the built-in
+         pin is checked first so the common path never touches the
+         ``custom_templates`` table.
+      2. ``template_ref`` — phase 2 custom template (#318 / B3). The UUID
+         of a ``custom_templates`` row. Re-resolved + ownership-checked
+         HERE (defensively, even though PUT validated it) because the row
+         could have been deleted between profile save and session create.
+         An owned, existing ref snapshots its ``custom_template_id``.
       3. fall through to the session ``specialty`` default — represented
-         as ``None`` so Stage 1 calls ``get_template(specialty)`` exactly
-         as it did pre-#314 (byte-for-byte back-compat).
+         as ``(None, None)`` so Stage 1 calls ``get_template(specialty)``
+         exactly as it did pre-#314 (byte-for-byte back-compat).
 
     A pinned ``template_key`` that is no longer an available built-in
-    (stale / renamed / removed from disk) is COERCED to the specialty
-    default (``None``) and flagged so the caller can write a count-only
+    (stale / renamed / removed from disk) OR a ``template_ref`` that no
+    longer resolves to an owned existing custom template (deleted /
+    unowned / malformed) is COERCED to the specialty default
+    (``(None, None)``) and flagged so the caller can write a count-only
     audit note. Every "can't resolve" path — no ``context_id``, no
     ``consultation_type``, no profile, the visit type absent from the
-    map, no matching context id, or a null ``template_key`` — degrades
-    silently to ``(None, False)``. This function never raises.
+    map, no matching context id, or a context that pinned nothing —
+    degrades silently to ``(None, None, False)``. This function never
+    raises.
 
-    Returns ``(template_key, coerced_stale)``:
-      * ``template_key`` — a validated built-in key to snapshot on the
-        row, or ``None`` to mean "use the session specialty default".
-      * ``coerced_stale`` — ``True`` only when a non-null pinned
-        ``template_key`` was dropped because it isn't an available
-        template.
+    Returns ``(template_key, custom_template_id, coerced_stale)``:
+      * ``template_key`` — a validated built-in key to snapshot, or
+        ``None``.
+      * ``custom_template_id`` — the owned custom-template UUID to
+        snapshot, or ``None``. At most one of ``template_key`` /
+        ``custom_template_id`` is non-None.
+      * ``coerced_stale`` — ``True`` only when a non-null pin (built-in
+        key or custom ref) was dropped because it no longer resolves.
     """
     if not context_id or not consultation_type:
-        return None, False
+        return None, None, False
 
     result = await db.execute(
         select(PhysicianProfileModel).where(
@@ -142,20 +154,20 @@ async def resolve_context_template_key(
     )
     profile = result.scalar_one_or_none()
     if profile is None:
-        return None, False
+        return None, None, False
 
     try:
         contexts_map = json.loads(
             getattr(profile, "contexts_per_visit_type", None) or "{}"
         )
     except (TypeError, ValueError):
-        return None, False
+        return None, None, False
     if not isinstance(contexts_map, dict):
-        return None, False
+        return None, None, False
 
     contexts = contexts_map.get(consultation_type)
     if not isinstance(contexts, list):
-        return None, False
+        return None, None, False
 
     match: Optional[dict] = None
     for ctx in contexts:
@@ -163,30 +175,79 @@ async def resolve_context_template_key(
             match = ctx
             break
     if match is None:
-        return None, False
+        return None, None, False
 
-    # Resolution order: template_ref (phase 2 — ignored) → template_key
-    # → specialty default (None when the context pinned no template).
+    # Resolution order: template_key (built-in) → template_ref (custom)
+    # → specialty default. Built-in wins when both are present (defensive
+    # — mutual exclusion at PUT time means this won't normally happen).
     template_key = match.get("template_key")
-    if not template_key or not isinstance(template_key, str):
-        return None, False
+    if template_key and isinstance(template_key, str):
+        # Lazy import: the route + transcription paths import both this
+        # module and note_gen, so we defer the cross-module import to call
+        # time to stay clear of any import-order coupling.
+        from app.modules.note_gen.service import list_available_templates
 
-    # Lazy import: the route + transcription paths import both this
-    # module and note_gen, so we defer the cross-module import to call
-    # time to stay clear of any import-order coupling.
-    from app.modules.note_gen.service import list_available_templates
+        if template_key not in list_available_templates():
+            # Stale / renamed pin — coerce to the specialty default and
+            # flag for a count-only audit note. Never errors the create.
+            logger.info(
+                "Context template_key for clinician=%s coerced to specialty "
+                "default (no longer an available template)",
+                clinician_id,
+            )
+            return None, None, True
+        return template_key, None, False
 
-    if template_key not in list_available_templates():
-        # Stale / renamed pin — coerce to the specialty default (None)
-        # and flag for a count-only audit note. Never errors the create.
+    # No built-in pin — try a custom template_ref (#318 / B3).
+    template_ref = match.get("template_ref")
+    if template_ref and isinstance(template_ref, str):
+        return await _resolve_custom_template_ref(
+            db, clinician_id, template_ref
+        )
+
+    # Context pinned nothing → specialty default.
+    return None, None, False
+
+
+async def _resolve_custom_template_ref(
+    db: AsyncSession,
+    clinician_id: uuid.UUID,
+    template_ref: str,
+) -> tuple[Optional[str], Optional[uuid.UUID], bool]:
+    """Re-resolve a custom ``template_ref`` at session-create time (#318).
+
+    Returns ``(None, custom_template_id, False)`` when the ref parses as a
+    UUID AND points at a ``custom_templates`` row owned by
+    ``clinician_id``. Any failure — malformed UUID, deleted row, or a row
+    owned by someone else (the owner-scoped lookup collapses both into a
+    ``None`` result) — degrades to the specialty default
+    ``(None, None, True)`` with the coercion flag set so the caller emits
+    a count-only audit note. Never raises.
+    """
+    try:
+        ref_uuid = uuid.UUID(template_ref)
+    except (ValueError, TypeError, AttributeError):
         logger.info(
-            "Context template_key for clinician=%s coerced to specialty "
-            "default (no longer an available template)",
+            "Context template_ref for clinician=%s coerced to specialty "
+            "default (malformed reference)",
             clinician_id,
         )
-        return None, True
+        return None, None, True
 
-    return template_key, False
+    # Lazy import — same import-order rationale as the note_gen import
+    # above; the custom-templates service owns the ownership-scoped read.
+    from app.modules.custom_templates.service import get_owned
+
+    owned = await get_owned(ref_uuid, clinician_id, db)
+    if owned is None:
+        logger.info(
+            "Context template_ref for clinician=%s coerced to specialty "
+            "default (no longer an owned custom template)",
+            clinician_id,
+        )
+        return None, None, True
+
+    return None, owned.id, False
 
 
 async def create_session(
@@ -202,6 +263,7 @@ async def create_session(
     capture_mode: str = "multimodal",
     context_id: Optional[str] = None,
     template_key: Optional[str] = None,
+    custom_template_id: Optional[uuid.UUID] = None,
 ) -> SessionModel:
     """Create a new session in CONSENT_PENDING state.
 
@@ -211,11 +273,14 @@ async def create_session(
     which is not valid JSON and decoded as `None` on read — those rows
     keep working, they just don't expose overrides on subsequent GETs.
 
-    `context_id` and `template_key` carry the resolved Visit Type →
-    Context → Template selection (#314). Both are computed by
-    ``resolve_context_template_key`` upstream and persisted verbatim —
-    `template_key=None` means "use the session specialty default" at
-    Stage 1, exactly as before this feature existed.
+    `context_id`, `template_key`, and `custom_template_id` carry the
+    resolved Visit Type → Context → Template selection (#314 / #318). All
+    are computed by ``resolve_context_template_key`` upstream and
+    persisted verbatim. `template_key=None` AND `custom_template_id=None`
+    means "use the session specialty default" at Stage 1, exactly as
+    before this feature existed. At most one of `template_key` /
+    `custom_template_id` is non-None — a context binds either a built-in
+    template or a custom one.
     """
     participants_json = json.dumps(participants) if participants else None
     # JSON encode so `_to_response` can round-trip via json.loads. The
@@ -234,6 +299,7 @@ async def create_session(
         encounter_context=encounter_context,
         context_id=context_id,
         template_key=template_key,
+        custom_template_id=custom_template_id,
         output_language=output_language,
         encounter_type=encounter_type,
         participants_json=participants_json,

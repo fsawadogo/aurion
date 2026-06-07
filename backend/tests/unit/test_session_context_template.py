@@ -3,9 +3,11 @@
 Three surfaces:
 
   1. ``resolve_context_template_key`` — the create-time resolver:
-     resolution order (template_ref ignored → template_key → specialty
-     default), snapshot of a valid built-in key, every "can't resolve"
-     fallback path, and stale-pin coercion.
+     resolution order (built-in template_key → custom template_ref →
+     specialty default), snapshot of a valid built-in key, every
+     "can't resolve" fallback path, and stale-pin coercion. Custom
+     template_ref resolution (#318 / B3) is covered in
+     ``test_context_custom_template.py``.
   2. ``create_session`` — persists ``context_id`` + ``template_key``
      verbatim, including the old-client (no-context) path where both are
      None.
@@ -81,20 +83,23 @@ async def test_resolves_valid_template_key(available_templates):
     )
     db = _db_with_profile(profile)
 
-    key, coerced = await resolve_context_template_key(
+    key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), "new_patient", "ctx_aaaaaaaa"
     )
 
     assert key == "musculoskeletal"
+    assert custom_id is None
     assert coerced is False
 
 
 @pytest.mark.asyncio
-async def test_template_ref_is_ignored_when_template_key_present(
+async def test_template_key_wins_when_both_present(
     available_templates,
 ):
-    """Resolution order: a non-null ``template_ref`` (phase 2) never
-    overrides a valid ``template_key``."""
+    """Resolution order: a valid built-in ``template_key`` wins over a
+    ``template_ref`` if both are somehow stored (defensive — PUT-time
+    mutual exclusion means this won't normally happen). The custom ref is
+    never even looked up, so the DB is only hit for the profile."""
     profile = _profile(
         {
             "follow_up": [
@@ -102,28 +107,29 @@ async def test_template_ref_is_ignored_when_template_key_present(
                     "id": "ctx_bbbbbbbb",
                     "label": "Breast",
                     "template_key": "orthopedic_surgery",
-                    "template_ref": "custom_should_be_ignored",
+                    "template_ref": str(uuid.uuid4()),
                 }
             ]
         }
     )
     db = _db_with_profile(profile)
 
-    key, coerced = await resolve_context_template_key(
+    key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), "follow_up", "ctx_bbbbbbbb"
     )
 
     assert key == "orthopedic_surgery"
+    assert custom_id is None
     assert coerced is False
 
 
 @pytest.mark.asyncio
-async def test_template_ref_alone_does_not_resolve_in_phase1(
+async def test_malformed_template_ref_coerces_to_specialty_default(
     available_templates,
 ):
-    """A context with only a ``template_ref`` (no ``template_key``) falls
-    through to the specialty default in phase 1 — custom templates aren't
-    wired yet (#318)."""
+    """A context whose only binding is a malformed ``template_ref`` (not a
+    UUID) can't resolve a custom template — it degrades to the specialty
+    default and flags the count-only coercion audit note (#318)."""
     profile = _profile(
         {
             "new_patient": [
@@ -138,12 +144,13 @@ async def test_template_ref_alone_does_not_resolve_in_phase1(
     )
     db = _db_with_profile(profile)
 
-    key, coerced = await resolve_context_template_key(
+    key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), "new_patient", "ctx_cccccccc"
     )
 
     assert key is None
-    assert coerced is False
+    assert custom_id is None
+    assert coerced is True
 
 
 # ── resolve_context_template_key — fallback paths (all → (None, False)) ──────
@@ -165,7 +172,7 @@ async def test_null_template_key_falls_back(available_templates):
     )
     db = _db_with_profile(profile)
 
-    key, coerced = await resolve_context_template_key(
+    key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), "new_patient", "ctx_dddddddd"
     )
 
@@ -180,7 +187,7 @@ async def test_no_context_id_short_circuits_without_db():
     db = AsyncMock()
     db.execute = AsyncMock(side_effect=AssertionError("must not query"))
 
-    key, coerced = await resolve_context_template_key(
+    key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), "new_patient", None
     )
 
@@ -194,7 +201,7 @@ async def test_no_consultation_type_short_circuits():
     db = AsyncMock()
     db.execute = AsyncMock(side_effect=AssertionError("must not query"))
 
-    key, coerced = await resolve_context_template_key(
+    key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), None, "ctx_aaaaaaaa"
     )
 
@@ -207,7 +214,7 @@ async def test_no_consultation_type_short_circuits():
 async def test_missing_profile_falls_back():
     db = _db_with_profile(None)
 
-    key, coerced = await resolve_context_template_key(
+    key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), "new_patient", "ctx_aaaaaaaa"
     )
 
@@ -220,7 +227,7 @@ async def test_visit_type_absent_from_map_falls_back(available_templates):
     profile = _profile({"follow_up": []})
     db = _db_with_profile(profile)
 
-    key, coerced = await resolve_context_template_key(
+    key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), "new_patient", "ctx_aaaaaaaa"
     )
 
@@ -244,7 +251,7 @@ async def test_context_id_not_found_falls_back(available_templates):
     )
     db = _db_with_profile(profile)
 
-    key, coerced = await resolve_context_template_key(
+    key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), "new_patient", "ctx_zzzzzzzz"
     )
 
@@ -257,7 +264,7 @@ async def test_corrupt_contexts_json_falls_back(available_templates):
     profile = SimpleNamespace(contexts_per_visit_type="{not valid json")
     db = _db_with_profile(profile)
 
-    key, coerced = await resolve_context_template_key(
+    key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), "new_patient", "ctx_aaaaaaaa"
     )
 
@@ -289,7 +296,7 @@ async def test_stale_template_key_coerced_to_specialty_default(
     )
     db = _db_with_profile(profile)
 
-    key, coerced = await resolve_context_template_key(
+    key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), "new_patient", "ctx_eeeeeeee"
     )
 

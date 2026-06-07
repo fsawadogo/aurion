@@ -11,7 +11,7 @@ import secrets
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from pydantic import (
     BaseModel,
     ConfigDict,
@@ -26,6 +26,7 @@ from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.text_validation import validate_user_text
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.custom_templates import service as custom_templates_service
 from app.modules.note_gen.service import list_available_templates
 from app.modules.profile.service import (
     get_or_create_profile,
@@ -172,11 +173,17 @@ class VisitTypeContext(BaseModel):
         malformed; a well-formed id is preserved on edit.
       * ``template_key``, when non-null, MUST reference a built-in
         template (``list_available_templates()``); else rejected.
-      * ``template_ref`` (the custom-template pointer) is accepted but
-        always forced to None in phase 1 — no custom-template logic yet.
+      * ``template_ref`` (the custom-template pointer, #318 / B3) is the
+        UUID of a ``custom_templates`` row the calling clinician owns. It
+        is MUTUALLY EXCLUSIVE with ``template_key`` — a context binds
+        either a built-in key OR a custom ref, never both. The
+        ownership + existence check needs the DB and the caller's id, so
+        it runs at PUT time in ``update_profile_route``; this model
+        validator only enforces the cross-field mutual-exclusion rule
+        and normalizes the stored value.
 
-    ``hide_input_in_errors=True`` keeps a rejected label out of any 422
-    body / Sentry frame, same posture as ``UpdateProfileRequest``.
+    ``hide_input_in_errors=True`` keeps a rejected label / ref out of any
+    422 body / Sentry frame, same posture as ``UpdateProfileRequest``.
     """
 
     model_config = ConfigDict(hide_input_in_errors=True)
@@ -194,13 +201,27 @@ class VisitTypeContext(BaseModel):
         self.label = _validate_consultation_type(self.label)
         # Id: preserve a well-formed round-tripped id, else server-assign.
         self.id = _assign_context_id(self.id)
-        # Phase 1: custom-template pointers are not wired — ignore any
-        # supplied value and persist null.
-        self.template_ref = None
+        # Normalize the custom-template pointer: blank → None so an empty
+        # string from a client doesn't read as "a ref is set".
+        if self.template_ref is not None:
+            self.template_ref = self.template_ref.strip() or None
+        # Mutual exclusion (#318 / B3): a context binds EITHER a built-in
+        # template_key OR a custom template_ref — never both. We reject
+        # rather than silently dropping one so a confused client can't
+        # half-apply its intent. ``hide_input_in_errors`` keeps the values
+        # out of the 422 body.
+        if self.template_key is not None and self.template_ref is not None:
+            raise ValueError(
+                "template_key and template_ref are mutually exclusive"
+            )
         # template_key, when set, must be a built-in template key.
         if self.template_key is not None:
             if self.template_key not in list_available_templates():
                 raise ValueError("template_key is not an available template")
+        # NOTE: template_ref ownership + existence is validated at PUT time
+        # (needs the DB + caller id) — see ``update_profile_route``. A
+        # non-owned / nonexistent / malformed ref is REJECTED there (422),
+        # never silently dropped.
         return self
 
 
@@ -394,6 +415,20 @@ async def update_profile_route(
     existing = await get_or_create_profile(
         db, clinician_id=user.user_id, display_name=user.email
     )
+
+    # GH-318 / B3 — validate every custom-template pointer BEFORE any
+    # write. A ``template_ref`` must be a ``custom_templates`` row that
+    # exists AND is owned by the calling clinician; a malformed, missing,
+    # or non-owned ref is REJECTED (422), never silently dropped. The 422
+    # detail is reason-only — the ref value never echoes (a non-owner
+    # could otherwise probe another clinician's template ids). The
+    # ``VisitTypeContext`` model already enforced mutual exclusion with
+    # ``template_key`` during parsing.
+    if body.contexts_per_visit_type is not None:
+        await _validate_template_refs(
+            body.contexts_per_visit_type, owner_id=user.user_id, db=db
+        )
+
     team_before_count: Optional[int] = None
     if body.allied_health_team is not None:
         try:
@@ -502,11 +537,12 @@ async def update_profile_route(
                 customs_removed=customs_removed,
             )
 
-    # GH-313 — emit PROFILE_CONTEXTS_UPDATED with AGGREGATE COUNTS ONLY,
-    # and only on a real diff. ``_diff_contexts`` keys identity on the
-    # context id; the five counts never carry labels, keys, ids, or
-    # template names. See the kwarg whitelist in
-    # `audit_events.py::PROFILE_CONTEXTS_UPDATED` for the PHI contract.
+    # GH-313 / GH-318 — emit PROFILE_CONTEXTS_UPDATED with AGGREGATE
+    # COUNTS ONLY, and only on a real diff. ``_diff_contexts`` keys
+    # identity on the context id; the seven counts (incl. the B3
+    # custom_templates_attached / custom_templates_detached pair) never
+    # carry labels, keys, ids, or template names. See the kwarg whitelist
+    # in `audit_events.py::PROFILE_CONTEXTS_UPDATED` for the PHI contract.
     if contexts_after is not None and contexts_before is not None:
         deltas = _diff_contexts(contexts_before, contexts_after)
         if any(deltas.values()):
@@ -533,6 +569,47 @@ async def get_profile_templates(
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
 
+async def _validate_template_refs(
+    contexts_per_visit_type: dict[str, list[VisitTypeContext]],
+    *,
+    owner_id: uuid.UUID,
+    db: AsyncSession,
+) -> None:
+    """Reject any ``template_ref`` that isn't an owned, existing custom
+    template (#318 / B3).
+
+    Gathers the distinct ``template_ref`` values across every context in
+    the request and verifies each against ``custom_templates`` scoped to
+    ``owner_id``. Raises ``HTTPException(422)`` on the first failure —
+    malformed UUID, nonexistent row, or a row owned by someone else (the
+    owner-scoped lookup collapses "not found" and "not yours" into one
+    404-shaped result, so a non-owner can't distinguish the two). The
+    detail string is reason-only: the rejected ref never rides along.
+    """
+    refs = {
+        ctx.template_ref
+        for contexts in contexts_per_visit_type.values()
+        for ctx in contexts
+        if ctx.template_ref
+    }
+    for ref in refs:
+        try:
+            ref_uuid = uuid.UUID(ref)
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(
+                status_code=422,
+                detail="template_ref is not a valid custom template reference",
+            )
+        owned = await custom_templates_service.get_owned(
+            ref_uuid, owner_id, db
+        )
+        if owned is None:
+            raise HTTPException(
+                status_code=422,
+                detail="template_ref does not reference an owned custom template",
+            )
+
+
 def _diff_contexts(
     before: dict[str, list[dict]],
     after: dict[str, list[dict]],
@@ -540,27 +617,35 @@ def _diff_contexts(
     """Aggregate, PHI-free count deltas between two context maps (#313).
 
     Identity is the context ``id`` (stable across an in-place edit).
-    Returns exactly the five whitelisted ``PROFILE_CONTEXTS_UPDATED``
+    Returns exactly the seven whitelisted ``PROFILE_CONTEXTS_UPDATED``
     counts — NEVER labels, visit-type keys, ids, or template names:
 
       * ``visit_types_touched`` — visit-type keys whose normalized
         context list changed (covers label edits + template swaps +
         add/remove + key add/remove).
       * ``contexts_added`` / ``contexts_removed`` — net context-id churn.
-      * ``templates_attached`` — contexts that gained a template
-        (None → set, including brand-new contexts that ship with one).
-      * ``templates_detached`` — contexts that lost a template
-        (set → None, including removed contexts that had one).
+      * ``templates_attached`` — contexts that gained a built-in
+        template_key (None → set, including brand-new contexts that ship
+        with one).
+      * ``templates_detached`` — contexts that lost a built-in
+        template_key (set → None, including removed contexts that had one).
+      * ``custom_templates_attached`` — contexts that gained a custom
+        ``template_ref`` (None → set), the #318 / B3 mirror of
+        ``templates_attached``.
+      * ``custom_templates_detached`` — contexts that lost a custom
+        ``template_ref`` (set → None).
     """
 
-    def _by_id(m: dict[str, list[dict]]) -> dict[str, Optional[str]]:
-        # id → template_key (or None), flattened across all visit types.
-        out: dict[str, Optional[str]] = {}
+    def _by_id(
+        m: dict[str, list[dict]],
+    ) -> dict[str, tuple[Optional[str], Optional[str]]]:
+        # id → (template_key, template_ref), flattened across visit types.
+        out: dict[str, tuple[Optional[str], Optional[str]]] = {}
         for contexts in m.values():
             for ctx in contexts:
                 cid = ctx.get("id")
                 if isinstance(cid, str) and cid:
-                    out[cid] = ctx.get("template_key")
+                    out[cid] = (ctx.get("template_key"), ctx.get("template_ref"))
         return out
 
     def _norm(contexts: list[dict]) -> list[tuple]:
@@ -577,18 +662,35 @@ def _diff_contexts(
     before_ids = _by_id(before)
     after_ids = _by_id(after)
 
+    def _tk(entry: Optional[tuple]) -> Optional[str]:
+        return entry[0] if entry else None
+
+    def _tr(entry: Optional[tuple]) -> Optional[str]:
+        return entry[1] if entry else None
+
     contexts_added = len(set(after_ids) - set(before_ids))
     contexts_removed = len(set(before_ids) - set(after_ids))
 
     templates_attached = sum(
         1
-        for cid, tk in after_ids.items()
-        if tk is not None and before_ids.get(cid) is None
+        for cid, (tk, _tr_) in after_ids.items()
+        if tk is not None and _tk(before_ids.get(cid)) is None
     )
     templates_detached = sum(
         1
-        for cid, tk in before_ids.items()
-        if tk is not None and after_ids.get(cid) is None
+        for cid, (tk, _tr_) in before_ids.items()
+        if tk is not None and _tk(after_ids.get(cid)) is None
+    )
+
+    custom_templates_attached = sum(
+        1
+        for cid, (_tk_, tr) in after_ids.items()
+        if tr is not None and _tr(before_ids.get(cid)) is None
+    )
+    custom_templates_detached = sum(
+        1
+        for cid, (_tk_, tr) in before_ids.items()
+        if tr is not None and _tr(after_ids.get(cid)) is None
     )
 
     visit_types_touched = sum(
@@ -603,6 +705,8 @@ def _diff_contexts(
         "contexts_removed": contexts_removed,
         "templates_attached": templates_attached,
         "templates_detached": templates_detached,
+        "custom_templates_attached": custom_templates_attached,
+        "custom_templates_detached": custom_templates_detached,
     }
 
 

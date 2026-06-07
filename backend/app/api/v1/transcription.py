@@ -169,6 +169,10 @@ async def submit_transcription(
             # #314 / B2 — the snapshotted context template wins; None
             # (old rows / no context) falls back to the specialty default.
             template_key=getattr(session, "template_key", None),
+            # #318 / B3 — when the context bound a custom template, its id
+            # is snapshotted here; Stage 1 loads + validates that content.
+            # None (built-in / no context) keeps the pre-#318 path.
+            custom_template_id=getattr(session, "custom_template_id", None),
         )
     except EmptyTranscriptError as exc:
         # lane-backend/empty-transcript-guard: the service already wrote

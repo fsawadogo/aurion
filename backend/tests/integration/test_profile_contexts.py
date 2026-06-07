@@ -8,7 +8,9 @@ End-to-end coverage of the route glue the unit tests can't reach:
   * Orphan visit-type keys (not in the request's consultation_types and
     not a built-in default) are pruned at the route.
   * ``template_key`` membership gate: built-in accepted, unknown → 422.
-  * ``template_ref`` is forced null in phase 1.
+  * ``template_ref`` ownership/existence is validated at PUT time (#318 /
+    B3); a malformed / non-owned ref → 422. Full B3 PUT-time + Stage-1
+    coverage lives in ``test_context_custom_template.py``.
   * 30-contexts-per-visit-type cap → 422 before any audit emit.
   * ``PROFILE_CONTEXTS_UPDATED`` fires once on a real diff with AGGREGATE
     COUNTS ONLY — never labels / keys / ids / template names. Same-map and
@@ -183,9 +185,12 @@ async def test_rejectsUnknownTemplateKey(
     assert _context_events(mock_audit_log) == []
 
 
-async def test_templateRefForcedNull(
+async def test_malformedTemplateRefRejected(
     app_client, db_session, mock_audit_log
 ) -> None:
+    """#318 / B3: ``template_ref`` is no longer forced null — a malformed
+    (non-UUID) ref is REJECTED at PUT, not silently dropped. The 422
+    body never echoes the rejected ref."""
     _user_id, email = await seed_user(db_session)
     access = await _login(app_client, email)
 
@@ -198,9 +203,9 @@ async def test_templateRefForcedNull(
             }
         },
     )
-    assert response.status_code == 200, response.text
-    row = response.json()["contexts_per_visit_type"]["new_patient"][0]
-    assert row["template_ref"] is None
+    assert response.status_code == 422, response.text
+    assert "custom:abc" not in response.text
+    assert _context_events(mock_audit_log) == []
 
 
 async def test_rejectsOverCap(app_client, db_session, mock_audit_log) -> None:
