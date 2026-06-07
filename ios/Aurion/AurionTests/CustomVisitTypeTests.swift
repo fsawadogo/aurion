@@ -218,4 +218,120 @@ struct CustomVisitTypeTests {
             #expect(frValue != key, "FR missing localization for \(key)")
         }
     }
+
+    // MARK: - Per-visit-type contexts (GH-315 / I1)
+
+    @Test func builtInTemplateKeys_matchBackend() {
+        // The 8 keys MUST equal the backend's `list_available_templates()`
+        // membership gate (the union of template JSON files on disk) so a
+        // template_key the picker can emit never trips a 422.
+        let expected: Set<String> = [
+            "general",
+            "emergency_medicine",
+            "family_medicine",
+            "internal_medicine",
+            "musculoskeletal",
+            "orthopedic_surgery",
+            "pediatrics",
+            "plastic_surgery",
+        ]
+        #expect(Set(BuiltInTemplate.keys) == expected)
+        #expect(BuiltInTemplate.keys.count == 8)
+    }
+
+    @Test func maxContextsPerVisitType_matchesBackendCap() {
+        // iOS soft cap MUST equal `_MAX_CONTEXTS_PER_VISIT_TYPE` (30) on
+        // the backend so the user can't add a 31st context client-side and
+        // then eat a 422 on save.
+        #expect(VisitTypeContextEditor.maxContexts == 30)
+    }
+
+    @Test func contextLabel_reusesVisitTypeValidator() {
+        // Context labels run the SAME format gate as custom visit-type
+        // labels: shorthand passes, PHI shapes / over-long are rejected,
+        // and `reject_full_name` is OFF for multi-word shorthand.
+        #expect(
+            PhysicianProfileSetupView.validateCustomVisitType("LL", existing: [])
+                == nil
+        )
+        #expect(
+            PhysicianProfileSetupView.validateCustomVisitType("right knee", existing: [])
+                == nil
+        )
+        #expect(
+            PhysicianProfileSetupView.validateCustomVisitType("Breast", existing: [])
+                == nil
+        )
+        #expect(
+            PhysicianProfileSetupView.validateCustomVisitType(
+                "Marie Gdalevitch", existing: []
+            ) != nil
+        )
+        #expect(
+            PhysicianProfileSetupView.validateCustomVisitType(
+                "perry@clinic.lan", existing: []
+            ) != nil
+        )
+        #expect(
+            PhysicianProfileSetupView.validateCustomVisitType(
+                String(repeating: "X", count: 61), existing: []
+            ) != nil
+        )
+        // De-dup is against the existing context labels in the SAME visit
+        // type (passed via `existing:`).
+        #expect(
+            PhysicianProfileSetupView.validateCustomVisitType("LL", existing: ["LL"])
+                != nil
+        )
+    }
+
+    @Test func newContext_hasEmptyServerId_forBackendAssignment() {
+        // A freshly authored context ships `id == ""`; the backend mints
+        // the stable `ctx_<hex>` id and the client preserves it thereafter.
+        let ctx = VisitTypeContext(label: "LL")
+        #expect(ctx.serverID == "")
+        #expect(ctx.templateKey == nil)
+        let payload = VisitTypeContext.encodePayload(ctx)
+        #expect(payload["id"] as? String == "")
+        #expect(payload["label"] as? String == "LL")
+        // template_key omitted when nil (backend defaults it to null =
+        // specialty default); template_ref is never sent.
+        #expect(payload["template_key"] == nil)
+        #expect(payload["template_ref"] == nil)
+    }
+
+    @Test func templateDisplayNames_resolveInEnglishAndFrench() {
+        // Every built-in template — plus the "specialty default" option and
+        // the editor chrome — must localize in BOTH EN and FR (AC: FR
+        // parity). The L() helper returns the key verbatim on a miss.
+        guard let fr = Bundle.main.path(forResource: "fr", ofType: "lproj"),
+              let frBundle = Bundle(path: fr)
+        else {
+            Issue.record("fr.lproj missing from main bundle")
+            return
+        }
+        for key in BuiltInTemplate.keys {
+            let sKey = "specialty.\(key)"
+            #expect(L(sKey) != sKey, "EN missing template name for \(key)")
+            #expect(
+                frBundle.localizedString(forKey: sKey, value: sKey, table: nil) != sKey,
+                "FR missing template name for \(key)"
+            )
+        }
+        let chrome = [
+            "setup.context.add",
+            "setup.context.placeholder",
+            "setup.context.commit",
+            "setup.context.cancel",
+            "setup.context.limit",
+            "setup.context.template.default",
+        ]
+        for key in chrome {
+            #expect(L(key) != key, "EN missing localization for \(key)")
+            #expect(
+                frBundle.localizedString(forKey: key, value: key, table: nil) != key,
+                "FR missing localization for \(key)"
+            )
+        }
+    }
 }

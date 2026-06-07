@@ -23,6 +23,15 @@ struct DashboardView: View {
     @State private var selectedEncounterType = "doctor_patient"
     @State private var selectedParticipants: [[String: Any]] = []
     @State private var selectedCaptureMode: CaptureMode = .multimodal
+    /// #316 (I2) — the physician's saved context picked for this session, or
+    /// nil when none is chosen yet / the free-text "Other" path is active.
+    /// Drives both the card selection highlight and the `context_id` sent on
+    /// Start. Identity compared by ``VisitTypeContext/id`` (local UUID).
+    @State private var selectedContext: VisitTypeContext?
+    /// True when the physician taps the "Other" escape hatch — reveals the
+    /// free-text field (which keeps the 3-char rule) and sends a nil
+    /// `context_id` so the backend resolves the specialty-default template.
+    @State private var isOtherContextSelected = false
     /// Drives the entrance staircase — flipped true on first appear so the
     /// greeting / quick-start / recent rows spring in 60ms apart instead
     /// of materializing as one block. Stays true for the lifetime of the
@@ -227,6 +236,15 @@ struct DashboardView: View {
             }
             .sheet(isPresented: $showEncounterTypeSheet) { encounterTypeSheet }
             .sheet(isPresented: $showContextPrompt) { encounterContextSheet }
+            .onChange(of: showContextPrompt) { _, presented in
+                // Fresh context step every time it opens — clear any prior
+                // saved-context pick / "Other" state so a new encounter
+                // doesn't inherit the last one's selection (#316).
+                if presented {
+                    selectedContext = nil
+                    isOtherContextSelected = false
+                }
+            }
             .onChange(of: navigation.pendingQuickStart) { _, request in
                 // App Intent or Spotlight asked us to start a session for a
                 // specific specialty. Mirror the Quick Start card tap so the
@@ -790,26 +808,7 @@ struct DashboardView: View {
                     VStack(alignment: .leading, spacing: 20) {
                         captureModePicker
 
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Text(L("context.question"))
-                                    .aurionFont(22, weight: .semibold, relativeTo: .title2)
-                                    .tracking(-0.22)
-                                    .foregroundColor(.aurionTextPrimary)
-                                Text("•")
-                                    .aurionFont(22, weight: .semibold, relativeTo: .title2)
-                                    .foregroundColor(.aurionGold)
-                            }
-                            Text(L("context.required"))
-                                .aurionFont(14, relativeTo: .subheadline)
-                                .foregroundColor(.aurionTextSecondary)
-                        }
-
-                        AurionField(
-                            placeholder: L("context.placeholder"),
-                            text: $encounterContext,
-                            multiline: true
-                        )
+                        contextStep
 
                         // Gold tip box
                         HStack(alignment: .top, spacing: 10) {
@@ -835,14 +834,14 @@ struct DashboardView: View {
                     AurionGoldButton(
                         label: L("dashboard.startButton"),
                         full: true,
-                        disabled: !hasMinimumContext
+                        disabled: !canStartSession
                     ) {
                         showContextPrompt = false
                         startSession()
                     }
                     .padding(.top, 4)
-                    if !hasMinimumContext {
-                        Text(L("context.minHint"))
+                    if let hint = startDisabledHint {
+                        Text(hint)
                             .aurionFont(12, relativeTo: .caption)
                             .foregroundColor(.aurionTextSecondary)
                             .multilineTextAlignment(.center)
@@ -856,6 +855,104 @@ struct DashboardView: View {
             .background(Color.aurionBackground)
         }
         .presentationDetents([.large])
+    }
+
+    // MARK: - Context Step (#316, I2)
+
+    /// The physician's saved contexts for the visit type chosen on the Quick
+    /// Start card, sourced from the cached profile's `contextsPerVisitType`.
+    /// Empty when the visit type has none configured — the UI then falls back
+    /// to the legacy free-text-only step.
+    private var availableContexts: [VisitTypeContext] {
+        guard let type = selectedQuickStart?.consultationType else { return [] }
+        return appState.physicianProfile?.contextsPerVisitType[type] ?? []
+    }
+
+    /// Routes the context step: curated picker when the chosen visit type has
+    /// saved contexts, otherwise today's free-text-only field. Keeping the two
+    /// paths in one place means the fallback stays byte-identical to the
+    /// pre-#316 behavior when no contexts are configured.
+    @ViewBuilder
+    private var contextStep: some View {
+        if availableContexts.isEmpty {
+            legacyContextInput
+        } else {
+            savedContextPicker
+        }
+    }
+
+    /// Pre-#316 behavior: a single required free-text field (3-char rule).
+    /// Used when the visit type has no saved contexts.
+    private var legacyContextInput: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            contextQuestionHeader(subtitle: L("context.required"))
+            AurionField(
+                placeholder: L("context.placeholder"),
+                text: $encounterContext,
+                multiline: true
+            )
+        }
+    }
+
+    /// Curated picker: the visit type's saved contexts as the primary
+    /// selectable options, plus an "Other" escape hatch that reveals the
+    /// free-text field. Picking a saved context is enough to enable Start;
+    /// "Other" retains the 3-char minimum and sends a nil `context_id`.
+    private var savedContextPicker: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            contextQuestionHeader(subtitle: L("context.chooseSub"))
+
+            VStack(spacing: 10) {
+                ForEach(availableContexts) { ctx in
+                    AurionSelectableCard(
+                        title: ctx.label,
+                        selected: !isOtherContextSelected && selectedContext?.id == ctx.id
+                    ) {
+                        selectedContext = ctx
+                        isOtherContextSelected = false
+                    }
+                }
+
+                AurionSelectableCard(
+                    icon: "square.and.pencil",
+                    title: L("context.other"),
+                    subtitle: L("context.otherSub"),
+                    selected: isOtherContextSelected
+                ) {
+                    isOtherContextSelected = true
+                    selectedContext = nil
+                }
+
+                if isOtherContextSelected {
+                    AurionField(
+                        placeholder: L("context.placeholder"),
+                        text: $encounterContext,
+                        multiline: true
+                    )
+                    .transition(.opacity)
+                }
+            }
+        }
+        .animation(AurionAnimation.smooth, value: isOtherContextSelected)
+    }
+
+    /// Shared "What brings the patient in today? •" title with a swappable
+    /// sub-line (required vs. choose-or-describe).
+    private func contextQuestionHeader(subtitle: String) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(spacing: 6) {
+                Text(L("context.question"))
+                    .aurionFont(22, weight: .semibold, relativeTo: .title2)
+                    .tracking(-0.22)
+                    .foregroundColor(.aurionTextPrimary)
+                Text("•")
+                    .aurionFont(22, weight: .semibold, relativeTo: .title2)
+                    .foregroundColor(.aurionGold)
+            }
+            Text(subtitle)
+                .aurionFont(14, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextSecondary)
+        }
     }
 
     // MARK: - Capture Mode Picker (in context sheet)
@@ -895,27 +992,67 @@ struct DashboardView: View {
     /// Encounter context is required before a session can start. We enforce
     /// a minimum trimmed length (3 chars) so the field can't be bypassed
     /// with a single space — physicians must give Aurion something to anchor
-    /// the note template against.
+    /// the note template against. Gates the free-text paths (legacy + "Other").
     private var hasMinimumContext: Bool {
         encounterContext.trimmingCharacters(in: .whitespacesAndNewlines).count >= 3
+    }
+
+    /// True when picking a saved context is a live option for this session
+    /// (the chosen visit type has at least one) AND one is currently selected.
+    private var hasSavedContextSelection: Bool {
+        !availableContexts.isEmpty && !isOtherContextSelected && selectedContext != nil
+    }
+
+    /// Whether Start is enabled. A picked saved context is enough on its own
+    /// (#316) — no 3-char gate. The free-text paths (legacy field, or "Other")
+    /// still require the 3-char minimum.
+    private var canStartSession: Bool {
+        if hasSavedContextSelection { return true }
+        // Saved contexts exist but none picked AND "Other" not chosen → block.
+        if !availableContexts.isEmpty && !isOtherContextSelected { return false }
+        return hasMinimumContext
+    }
+
+    /// Sub-button hint shown while Start is disabled, nil once it's enabled.
+    /// Tells the physician whether to pick a context or type a few words.
+    private var startDisabledHint: String? {
+        if canStartSession { return nil }
+        if !availableContexts.isEmpty && !isOtherContextSelected {
+            return L("context.selectHint")
+        }
+        return L("context.minHint")
     }
 
     // MARK: - Actions
 
     private func startSession() {
         guard let qs = selectedQuickStart else { return }
-        // Defensive — UI already blocks Start Session when context is empty,
-        // but if somehow we get here without it, bail rather than ship a
-        // contextless session to the backend.
-        guard hasMinimumContext else { return }
+        // Defensive — UI already blocks Start when the context step is
+        // incomplete, but if somehow we get here without it, bail rather than
+        // ship a contextless session to the backend.
+        guard canStartSession else { return }
+        // A picked saved context contributes its label (the existing free-text
+        // ENCOUNTER CONTEXT field) AND its server id (#316). The "Other" /
+        // legacy paths send the typed free text and a nil context_id, so the
+        // backend resolves the specialty-default template.
+        let encounterLabel: String
+        let contextId: String?
+        if hasSavedContextSelection, let ctx = selectedContext {
+            encounterLabel = ctx.label
+            contextId = ctx.serverID.isEmpty ? nil : ctx.serverID
+        } else {
+            encounterLabel = encounterContext.trimmingCharacters(in: .whitespacesAndNewlines)
+            contextId = nil
+        }
         let request = SessionStartRequest(
             specialty: qs.specialty,
             consultationType: qs.consultationType,
-            encounterContext: encounterContext.trimmingCharacters(in: .whitespacesAndNewlines),
+            encounterContext: encounterLabel,
             outputLanguage: appState.physicianProfile?.outputLanguage ?? "en",
             encounterType: selectedEncounterType,
             participants: selectedParticipants.isEmpty ? nil : selectedParticipants,
-            captureMode: selectedCaptureMode
+            captureMode: selectedCaptureMode,
+            contextId: contextId
         )
         Task { await sessionManager.startNewSession(request) }
     }
