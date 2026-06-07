@@ -646,7 +646,12 @@ struct DashboardView: View {
                                 if isChecked {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 10, weight: .bold))
-                                        .foregroundColor(.aurionTextPrimary)
+                                        // Navy-on-gold (fixed) — the gold fill
+                                        // is identical in both modes, so an
+                                        // adaptive checkmark went white-on-gold
+                                        // (washed out) in dark mode. Matches the
+                                        // Resume/Review pill convention (#293).
+                                        .foregroundColor(.aurionNavy)
                                 }
                             }
                             Text("\(member.role.displayFormatted) \u{2014} \(member.name)")

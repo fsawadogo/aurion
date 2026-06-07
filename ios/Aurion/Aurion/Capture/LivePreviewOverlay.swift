@@ -98,12 +98,16 @@ struct LivePreviewOverlay: View {
                     .foregroundColor(.aurionAmber)
                 Text(L("preview.title"))
                     .aurionFont(13, weight: .semibold, relativeTo: .footnote)
-                    .foregroundColor(.aurionTextPrimary)
+                    // Fixed-light: this overlay floats on the fixed-dark
+                    // capture screen (amber@10% bg is near-transparent), so
+                    // adaptive text is invisible in LIGHT mode (#293). Matches
+                    // CaptureView's on-navy palette.
+                    .foregroundColor(.white)
                 draftBadge
                 if let p = preview {
                     Text(L("preview.versionMeta", p.version, relativeTime(p.createdAt)))
                         .aurionFont(10, relativeTo: .caption2)
-                        .foregroundColor(.aurionTextSecondary)
+                        .foregroundColor(.aurionOnNavySecondary)
                 }
                 Spacer()
                 if isGenerating {
@@ -111,7 +115,7 @@ struct LivePreviewOverlay: View {
                 }
                 Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
                     .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.aurionTextSecondary)
+                    .foregroundColor(.aurionOnNavySecondary)
             }
             .contentShape(Rectangle())
         }
@@ -142,7 +146,8 @@ struct LivePreviewOverlay: View {
                 .padding(.top, 2)
             Text(L("preview.disclaimer"))
                 .aurionFont(10, relativeTo: .caption2)
-                .foregroundColor(.aurionTextSecondary)
+                // Fixed-light on the dark capture overlay (#293).
+                .foregroundColor(.aurionOnNavySecondary)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(.bottom, 4)
@@ -160,7 +165,7 @@ struct LivePreviewOverlay: View {
             // we keep showing the last known body.
             Text(L("preview.noTranscript"))
                 .aurionFont(11, relativeTo: .caption2)
-                .foregroundColor(.aurionTextSecondary)
+                .foregroundColor(.aurionOnNavySecondary)
                 .italic()
                 .padding(.vertical, 4)
         } else if let p = preview {
@@ -173,11 +178,11 @@ struct LivePreviewOverlay: View {
         } else if isGenerating {
             Text(L("preview.refreshing"))
                 .aurionFont(11, relativeTo: .caption2)
-                .foregroundColor(.aurionTextSecondary)
+                .foregroundColor(.aurionOnNavySecondary)
         } else {
             Text(L("preview.waiting"))
                 .aurionFont(11, relativeTo: .caption2)
-                .foregroundColor(.aurionTextSecondary)
+                .foregroundColor(.aurionOnNavySecondary)
         }
     }
 
@@ -192,7 +197,7 @@ struct LivePreviewOverlay: View {
             if visible.isEmpty {
                 Text(L("preview.waiting"))
                     .aurionFont(11, relativeTo: .caption2)
-                    .foregroundColor(.aurionTextSecondary)
+                    .foregroundColor(.aurionOnNavySecondary)
                     .italic()
             } else {
                 ForEach(visible, id: \.id) { section in

@@ -200,10 +200,14 @@ struct VoiceRecordingView: View {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(sentence)
                             .aurionFont(16, weight: .regular, relativeTo: .body)
+                            // Adaptive emphasis — active/failed were
+                            // .aurionNavy, invisible (dark-on-dark) on the
+                            // dark card in dark mode (#293). The active row
+                            // is the sentence the clinician must read aloud.
                             .foregroundColor(
-                                active ? .aurionNavy :
+                                active ? .aurionTextPrimary :
                                 (pass ? .aurionTextSecondary :
-                                    (fail ? .aurionNavy : .secondary))
+                                    (fail ? .aurionTextPrimary : .secondary))
                             )
                             .opacity(pass ? 0.7 : 1)
                             .multilineTextAlignment(.leading)
@@ -253,7 +257,9 @@ struct VoiceRecordingView: View {
         } else {
             Image(systemName: "circle")
                 .font(.system(size: 16))
-                .foregroundColor(active ? .aurionNavy.opacity(0.6) : .aurionNavy.opacity(0.3))
+                // Adaptive — was .aurionNavy.opacity(...), invisible on the
+                // dark card in dark mode (#293).
+                .foregroundColor(active ? .aurionTextSecondary : .aurionMutedGray)
         }
     }
 

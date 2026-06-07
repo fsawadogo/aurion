@@ -99,7 +99,9 @@ struct WearableSetupView: View {
             Image(systemName: "eyeglasses")
                 .font(.system(size: 72))
                 .foregroundColor(.aurionTextPrimary)
-                .aurionBreathingGlow(color: .aurionNavy, radius: 24)
+                // Mid-tone glow (was .aurionNavy — invisible halo on the
+                // dark background in dark mode) (#293).
+                .aurionBreathingGlow(color: .aurionGold, radius: 24)
         }
     }
 

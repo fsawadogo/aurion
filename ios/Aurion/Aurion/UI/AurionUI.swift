@@ -125,7 +125,10 @@ struct AurionGhostButton: View {
                 .background(Color.aurionCardBackground)
                 .overlay(
                     RoundedRectangle(cornerRadius: AurionRadius.md)
-                        .stroke(Color.aurionNavy.opacity(0.18), lineWidth: 1)
+                        // Adaptive border — was .aurionNavy.opacity(0.18), a
+                        // fixed-dark hairline invisible on the dark card in
+                        // dark mode (#293).
+                        .stroke(Color.aurionBorder, lineWidth: 1)
                 )
                 .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
         }
@@ -135,7 +138,10 @@ struct AurionGhostButton: View {
 
 struct AurionTextButton: View {
     let label: String
-    var color: Color = .aurionNavy
+    // Adaptive by default so nav-bar text buttons (Cancel/Back/Done) stay
+    // visible in dark mode — was .aurionNavy, which rendered dark-on-dark
+    // (#293). Callers on a navy/gold surface still pass an explicit color.
+    var color: Color = .aurionTextPrimary
     let action: () -> Void
 
     var body: some View {
@@ -380,7 +386,10 @@ struct AurionField: View {
             .clipShape(RoundedRectangle(cornerRadius: AurionRadius.sm))
             .overlay(
                 RoundedRectangle(cornerRadius: AurionRadius.sm)
-                    .stroke(focused ? Color.aurionGold : Color.aurionNavy.opacity(0.18), lineWidth: 1)
+                    // Adaptive unfocused border (was .aurionNavy.opacity(0.18),
+                    // an invisible field outline in dark mode); gold focus
+                    // ring unchanged (#293).
+                    .stroke(focused ? Color.aurionGold : Color.aurionInputBorder, lineWidth: 1)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: AurionRadius.sm)
@@ -573,7 +582,9 @@ struct AurionBottomSheet<Content: View>: View {
     var body: some View {
         VStack(spacing: 14) {
             Capsule()
-                .fill(Color.aurionNavy.opacity(0.18))
+                // Adaptive grabber — was .aurionNavy.opacity(0.18), invisible
+                // on the dark sheet in dark mode (#293).
+                .fill(Color.aurionMutedGray.opacity(0.5))
                 .frame(width: 36, height: 5)
                 .padding(.top, 12)
             content()
