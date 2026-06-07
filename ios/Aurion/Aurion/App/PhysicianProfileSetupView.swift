@@ -334,7 +334,14 @@ struct PhysicianProfileSetupView: View {
     private var specialtyStep: some View {
         VStack(spacing: 8) {
             ForEach(specialties, id: \.self) { id in
-                radioRow(label: localizedSpecialty(id), selected: primarySpecialty == id) {
+                // Single-select — tapping an option sets it as the primary
+                // specialty; the others clear. Shared card in `.checkbox`
+                // mode keeps the gold-fill + navy checkmark treatment.
+                AurionSelectableCard(
+                    title: localizedSpecialty(id),
+                    selected: primarySpecialty == id,
+                    indicator: .checkbox
+                ) {
                     primarySpecialty = id
                 }
             }
@@ -345,7 +352,11 @@ struct PhysicianProfileSetupView: View {
         VStack(spacing: 8) {
             // ── Defaults ──────────────────────────────────────────────
             ForEach(visitTypes, id: \.self) { id in
-                checkboxRow(label: localizedConsultationType(id), on: consultationTypes.contains(id)) {
+                AurionSelectableCard(
+                    title: localizedConsultationType(id),
+                    selected: consultationTypes.contains(id),
+                    indicator: .checkbox
+                ) {
                     if consultationTypes.contains(id) {
                         consultationTypes.remove(id)
                     } else {
@@ -380,47 +391,31 @@ struct PhysicianProfileSetupView: View {
     }
 
     private func customTypeRow(_ name: String) -> some View {
-        HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: AurionRadius.xs)
-                    .fill(Color.aurionGold)
-                    .frame(width: 22, height: 22)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: AurionRadius.xs)
-                            .stroke(Color.aurionGold, lineWidth: 2)
-                    )
-                // Fixed navy on the fixed-gold fill — the brand navy-on-gold
-                // pairing reads strongly in both modes (adaptive
-                // .aurionTextPrimary went near-white on gold in dark mode).
-                Image(systemName: "checkmark")
-                    .font(.system(size: 12, weight: .bold))
-                    .foregroundColor(.aurionNavy)
-            }
-            Text(name)
-                .aurionFont(16, relativeTo: .body)
-                .foregroundColor(.aurionTextPrimary)
-            Spacer(minLength: 0)
-            Button {
-                AurionHaptics.selection()
-                customConsultationTypes.removeAll { $0 == name }
-            } label: {
-                Image(systemName: "trash")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundColor(.aurionTextSecondary)
-                    .frame(minWidth: 44, minHeight: 44)
-                    .contentShape(Rectangle())
-            }
-            .buttonStyle(.plain)
-            .accessibilityLabel(L("setup.visit.custom.delete", name))
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 14)
-        .background(Color.aurionCardBackground)
-        .overlay(
-            RoundedRectangle(cornerRadius: AurionRadius.md)
-                .stroke(Color.aurionGold, lineWidth: 1)
+        // Custom types are inherently selected when present, so the shared
+        // card renders in its always-checked (`selected: true`) state with a
+        // trailing trash affordance for delete. (HIG: inline delete over a
+        // modal sheet for short list edits.) The card body itself is a no-op
+        // tap target — the only action is the trash button.
+        AurionSelectableCard(
+            title: name,
+            selected: true,
+            indicator: .checkbox,
+            trailing: {
+                Button {
+                    AurionHaptics.selection()
+                    customConsultationTypes.removeAll { $0 == name }
+                } label: {
+                    Image(systemName: "trash")
+                        .font(.system(size: 16, weight: .medium))
+                        .foregroundColor(.aurionTextSecondary)
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel(L("setup.visit.custom.delete", name))
+            },
+            action: {}
         )
-        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
     }
 
     private var addCustomTypeButton: some View {
@@ -528,7 +523,11 @@ struct PhysicianProfileSetupView: View {
     private var templatesStep: some View {
         VStack(spacing: 8) {
             ForEach(specialties, id: \.self) { id in
-                checkboxRow(label: localizedSpecialty(id), on: preferredTemplates.contains(id), fontSize: 15) {
+                AurionSelectableCard(
+                    title: localizedSpecialty(id),
+                    selected: preferredTemplates.contains(id),
+                    indicator: .checkbox
+                ) {
                     if preferredTemplates.contains(id) {
                         preferredTemplates.remove(id)
                     } else {
@@ -730,79 +729,6 @@ struct PhysicianProfileSetupView: View {
                 .buttonStyle(.plain)
             }
         }
-    }
-
-    // MARK: - Row primitives
-
-    private func radioRow(label: String, selected: Bool, action: @escaping () -> Void) -> some View {
-        Button {
-            AurionHaptics.selection()
-            action()
-        } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    Circle()
-                        .stroke(selected ? Color.aurionGold : Color.aurionInputBorder, lineWidth: 2)
-                        .frame(width: 20, height: 20)
-                    if selected {
-                        Circle().fill(Color.aurionGold).frame(width: 10, height: 10)
-                    }
-                }
-                Text(label)
-                    .aurionFont(16, relativeTo: .body)
-                    .foregroundColor(.aurionTextPrimary)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(Color.aurionCardBackground)
-            .overlay(
-                RoundedRectangle(cornerRadius: AurionRadius.md)
-                    .stroke(selected ? Color.aurionGold : Color.aurionBorder, lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
-        }
-        .buttonStyle(.plain)
-    }
-
-    private func checkboxRow(label: String, on: Bool, fontSize: CGFloat = 16, action: @escaping () -> Void) -> some View {
-        Button {
-            AurionHaptics.selection()
-            action()
-        } label: {
-            HStack(spacing: 12) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: AurionRadius.xs)
-                        .fill(on ? Color.aurionGold : Color.clear)
-                        .frame(width: 22, height: 22)
-                        .overlay(
-                            RoundedRectangle(cornerRadius: AurionRadius.xs)
-                                .stroke(on ? Color.aurionGold : Color.aurionInputBorder, lineWidth: 2)
-                        )
-                    if on {
-                        // Navy-on-gold brand pairing — stays high-contrast
-                        // in both modes, unlike adaptive .aurionTextPrimary
-                        // which washes out white-on-gold in dark mode.
-                        Image(systemName: "checkmark")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundColor(.aurionNavy)
-                    }
-                }
-                Text(label)
-                    .aurionFont(fontSize, relativeTo: .body)
-                    .foregroundColor(.aurionTextPrimary)
-                Spacer(minLength: 0)
-            }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 14)
-            .background(Color.aurionCardBackground)
-            .overlay(
-                RoundedRectangle(cornerRadius: AurionRadius.md)
-                    .stroke(on ? Color.aurionGold : Color.aurionBorder, lineWidth: 1)
-            )
-            .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
-        }
-        .buttonStyle(.plain)
     }
 
     // MARK: - Save

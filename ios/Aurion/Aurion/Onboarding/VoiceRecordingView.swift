@@ -415,12 +415,14 @@ struct VoiceRecordingView: View {
         return L("onboarding.voiceRec.tapStart")
     }
 
-    /// Error/blocked status copy reads in amber to match the per-row
-    /// `.aurionGold` signal it summarizes, so the headline explaining WHY
-    /// Continue is disabled isn't visually weaker than the rows below it.
-    /// Neutral hints stay low-emphasis secondary.
+    /// A denied mic is a hard error the user must resolve in Settings, so it
+    /// reads in `.aurionRed`. A failed quality check is a recoverable amber
+    /// warning, matching the per-row `.aurionGold` signal it summarizes, so
+    /// the headline explaining WHY Continue is disabled isn't visually weaker
+    /// than the rows below it. Neutral hints stay low-emphasis secondary.
     private var statusColor: Color {
-        if permissionDenied || qualityCheckFailed { return .aurionGold }
+        if permissionDenied { return .aurionRed }
+        if qualityCheckFailed { return .aurionGold }
         return .secondary
     }
 

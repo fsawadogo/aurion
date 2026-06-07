@@ -35,6 +35,55 @@ struct AurionCard<Content: View>: View {
     }
 }
 
+// MARK: - Auth glass card + back bar
+//
+// Shared chrome for the auth gate screens (login, forgot-password,
+// reset-password). `AuthGlassCard` is the frosted panel — white@6% fill,
+// 18pt radius, white@10% hairline — that floats on the navy gradient those
+// screens use as their *background* (the gradient is NOT part of the card).
+// `AuthBackBar` is the leading chevron + "back to login" row above it; the
+// label key is passed in so each screen keeps its own localized string.
+
+struct AuthGlassCard<Content: View>: View {
+    var padding: CGFloat = 24
+    @ViewBuilder let content: () -> Content
+
+    var body: some View {
+        content()
+            .padding(padding)
+            .background(Color.white.opacity(0.06))
+            .cornerRadius(18)
+            .overlay(
+                RoundedRectangle(cornerRadius: 18)
+                    .stroke(Color.white.opacity(0.10), lineWidth: 1)
+            )
+    }
+}
+
+struct AuthBackBar: View {
+    let label: String
+    let onDismiss: () -> Void
+
+    var body: some View {
+        HStack {
+            Button {
+                AurionHaptics.selection()
+                onDismiss()
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.left")
+                    Text(label)
+                }
+                .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
+                .foregroundColor(.white.opacity(0.8))
+            }
+            Spacer()
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 20)
+    }
+}
+
 // MARK: - Icon bubble
 //
 // Tinted circular halo behind an SF Symbol. Used everywhere we want a
@@ -610,11 +659,25 @@ struct AurionBottomSheet<Content: View>: View {
 // Two-line option card with leading icon tile and optional trailing checkmark.
 // Used for Encounter Type, Practice Type, and Language picker rows.
 
+/// Selected-state indicator for ``AurionSelectableCard``.
+enum AurionSelectionIndicator {
+    /// Trailing gold check-circle — the icon-led cards (encounter type,
+    /// practice type, capture mode).
+    case circle
+    /// Leading gold-fill + navy checkmark square — the label-only option
+    /// lists (specialty, visit types, templates).
+    case checkbox
+}
+
 struct AurionSelectableCard<Trailing: View>: View {
-    let icon: String
+    // `icon` / `subtitle` are optional so the same card serves both the
+    // icon-led two-line cards (icon + title + subtitle) and the label-only
+    // option rows (title only). `indicator` picks the selected-state glyph.
+    var icon: String? = nil
     let title: String
-    let subtitle: String
+    var subtitle: String? = nil
     let selected: Bool
+    var indicator: AurionSelectionIndicator = .circle
     @ViewBuilder let trailing: () -> Trailing
     let action: () -> Void
 
@@ -624,17 +687,24 @@ struct AurionSelectableCard<Trailing: View>: View {
             action()
         } label: {
             HStack(spacing: 14) {
-                AurionIconTile(systemName: icon, active: selected)
+                if let icon {
+                    AurionIconTile(systemName: icon, active: selected)
+                }
+                if indicator == .checkbox {
+                    selectionCheckbox
+                }
                 VStack(alignment: .leading, spacing: 2) {
                     Text(title)
                         .aurionFont(17, weight: .semibold, relativeTo: .headline)
                         .foregroundColor(.aurionTextPrimary)
-                    Text(subtitle)
-                        .aurionFont(13, relativeTo: .footnote)
-                        .foregroundColor(.aurionTextSecondary)
+                    if let subtitle {
+                        Text(subtitle)
+                            .aurionFont(13, relativeTo: .footnote)
+                            .foregroundColor(.aurionTextSecondary)
+                    }
                 }
                 Spacer(minLength: 0)
-                if selected {
+                if indicator == .circle, selected {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 22))
                         .foregroundColor(.aurionGold)
@@ -654,11 +724,47 @@ struct AurionSelectableCard<Trailing: View>: View {
         }
         .buttonStyle(.plain)
     }
+
+    /// Gold-fill + navy checkmark square — the leading indicator for
+    /// `.checkbox` rows. Navy-on-gold is the brand pairing that stays
+    /// high-contrast in both light and dark modes (an adaptive foreground
+    /// washed out to white-on-gold in dark mode).
+    private var selectionCheckbox: some View {
+        ZStack {
+            RoundedRectangle(cornerRadius: AurionRadius.xs)
+                .fill(selected ? Color.aurionGold : Color.clear)
+                .frame(width: 22, height: 22)
+                .overlay(
+                    RoundedRectangle(cornerRadius: AurionRadius.xs)
+                        .stroke(selected ? Color.aurionGold : Color.aurionInputBorder, lineWidth: 2)
+                )
+            if selected {
+                Image(systemName: "checkmark")
+                    .font(.system(size: 12, weight: .bold))
+                    .foregroundColor(.aurionNavy)
+            }
+        }
+    }
 }
 
 extension AurionSelectableCard where Trailing == EmptyView {
-    init(icon: String, title: String, subtitle: String, selected: Bool, action: @escaping () -> Void) {
-        self.init(icon: icon, title: title, subtitle: subtitle, selected: selected, trailing: { EmptyView() }, action: action)
+    init(
+        icon: String? = nil,
+        title: String,
+        subtitle: String? = nil,
+        selected: Bool,
+        indicator: AurionSelectionIndicator = .circle,
+        action: @escaping () -> Void
+    ) {
+        self.init(
+            icon: icon,
+            title: title,
+            subtitle: subtitle,
+            selected: selected,
+            indicator: indicator,
+            trailing: { EmptyView() },
+            action: action
+        )
     }
 }
 

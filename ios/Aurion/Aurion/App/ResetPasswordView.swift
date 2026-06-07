@@ -108,22 +108,10 @@ struct ResetPasswordView: View {
     // MARK: - Subviews
 
     private var topBar: some View {
-        HStack {
-            Button {
-                AurionHaptics.selection()
-                onDismiss()
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "chevron.left")
-                    Text(L("login.resetPassword.backToLogin"))
-                }
-                .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
-                .foregroundColor(.white.opacity(0.8))
-            }
-            Spacer()
-        }
-        .padding(.horizontal, 24)
-        .padding(.top, 20)
+        AuthBackBar(
+            label: L("login.resetPassword.backToLogin"),
+            onDismiss: onDismiss
+        )
     }
 
     @ViewBuilder
@@ -136,125 +124,115 @@ struct ResetPasswordView: View {
     }
 
     private var formCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            VStack(alignment: .leading, spacing: 6) {
-                Text(L("login.resetPassword.title"))
-                    .aurionFont(22, weight: .semibold, relativeTo: .title2)
-                    .foregroundColor(.white)
-                Text(L("login.resetPassword.subtitle"))
-                    .aurionFont(13, relativeTo: .footnote)
-                    .foregroundColor(Color.aurionOnNavySecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-
-            passwordField(
-                label: L("login.resetPassword.newPasswordLabel"),
-                text: $newPassword,
-                field: .newPassword,
-                isVisible: $showNew,
-                submit: .next,
-                onSubmit: { focusedField = .confirm }
-            )
-
-            passwordField(
-                label: L("login.resetPassword.confirmLabel"),
-                text: $confirmPassword,
-                field: .confirm,
-                isVisible: $showConfirm,
-                submit: .done,
-                onSubmit: {
-                    if canSubmit { Task { await submit() } }
+        AuthGlassCard {
+            VStack(alignment: .leading, spacing: 18) {
+                VStack(alignment: .leading, spacing: 6) {
+                    Text(L("login.resetPassword.title"))
+                        .aurionFont(22, weight: .semibold, relativeTo: .title2)
+                        .foregroundColor(.white)
+                    Text(L("login.resetPassword.subtitle"))
+                        .aurionFont(13, relativeTo: .footnote)
+                        .foregroundColor(Color.aurionOnNavySecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
-            )
 
-            // Inline validation hints — mirror the web side's
-            // local-validation strings. Surfaced only when the user
-            // has typed something so empty-field state stays quiet.
-            if !newPassword.isEmpty,
-               newPassword.count < Self.passwordMinLength {
-                Text(L("login.resetPassword.invalidLength"))
-                    .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(Color.aurionOnNavyError)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            } else if !confirmPassword.isEmpty, !passwordsMatch {
-                Text(L("login.resetPassword.mismatch"))
-                    .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(Color.aurionOnNavyError)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-            }
+                passwordField(
+                    label: L("login.resetPassword.newPasswordLabel"),
+                    text: $newPassword,
+                    field: .newPassword,
+                    isVisible: $showNew,
+                    submit: .next,
+                    onSubmit: { focusedField = .confirm }
+                )
 
-            Button {
-                AurionHaptics.impact(.medium)
-                Task { await submit() }
-            } label: {
-                HStack(spacing: 10) {
-                    if isSubmitting {
-                        ProgressView().tint(.aurionNavy)
-                        Text(L("login.resetPassword.submitting"))
-                    } else {
-                        Image(systemName: "lock.rotation")
-                            .font(.system(size: 16, weight: .semibold))
-                        Text(L("login.resetPassword.submitButton"))
+                passwordField(
+                    label: L("login.resetPassword.confirmLabel"),
+                    text: $confirmPassword,
+                    field: .confirm,
+                    isVisible: $showConfirm,
+                    submit: .done,
+                    onSubmit: {
+                        if canSubmit { Task { await submit() } }
                     }
-                }
-                .frame(maxWidth: .infinity)
-            }
-            .buttonStyle(AurionPrimaryButtonStyle())
-            .disabled(!canSubmit)
+                )
 
-            if let transientError {
-                Text(transientError)
-                    .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(Color.aurionOnNavyError)
-                    .multilineTextAlignment(.leading)
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                // Inline validation hints — mirror the web side's
+                // local-validation strings. Surfaced only when the user
+                // has typed something so empty-field state stays quiet.
+                if !newPassword.isEmpty,
+                   newPassword.count < Self.passwordMinLength {
+                    Text(L("login.resetPassword.invalidLength"))
+                        .aurionFont(12, relativeTo: .caption)
+                        .foregroundColor(Color.aurionOnNavyError)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else if !confirmPassword.isEmpty, !passwordsMatch {
+                    Text(L("login.resetPassword.mismatch"))
+                        .aurionFont(12, relativeTo: .caption)
+                        .foregroundColor(Color.aurionOnNavyError)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+
+                Button {
+                    AurionHaptics.impact(.medium)
+                    Task { await submit() }
+                } label: {
+                    HStack(spacing: 10) {
+                        if isSubmitting {
+                            ProgressView().tint(.aurionNavy)
+                            Text(L("login.resetPassword.submitting"))
+                        } else {
+                            Image(systemName: "lock.rotation")
+                                .font(.system(size: 16, weight: .semibold))
+                            Text(L("login.resetPassword.submitButton"))
+                        }
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(AurionPrimaryButtonStyle())
+                .disabled(!canSubmit)
+
+                if let transientError {
+                    Text(transientError)
+                        .aurionFont(12, relativeTo: .caption)
+                        .foregroundColor(Color.aurionOnNavyError)
+                        .multilineTextAlignment(.leading)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
             }
         }
-        .padding(24)
-        .background(Color.white.opacity(0.06))
-        .cornerRadius(18)
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
-        )
     }
 
     private var successCard: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            HStack(spacing: 12) {
-                Image(systemName: "checkmark.seal.fill")
-                    .font(.system(size: 28, weight: .regular))
-                    .foregroundColor(.aurionGold)
-                Text(L("login.resetPassword.successTitle"))
-                    .aurionFont(22, weight: .semibold, relativeTo: .title2)
-                    .foregroundColor(.white)
-            }
-
-            Text(L("login.resetPassword.success"))
-                .aurionFont(14, relativeTo: .subheadline)
-                .foregroundColor(Color.aurionOnNavySecondary)
-                .fixedSize(horizontal: false, vertical: true)
-
-            Button {
-                AurionHaptics.selection()
-                onDismiss()
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "arrow.right.circle.fill")
-                        .font(.system(size: 16, weight: .semibold))
-                    Text(L("login.resetPassword.signIn"))
+        AuthGlassCard {
+            VStack(alignment: .leading, spacing: 18) {
+                HStack(spacing: 12) {
+                    Image(systemName: "checkmark.seal.fill")
+                        .font(.system(size: 28, weight: .regular))
+                        .foregroundColor(.aurionGold)
+                    Text(L("login.resetPassword.successTitle"))
+                        .aurionFont(22, weight: .semibold, relativeTo: .title2)
+                        .foregroundColor(.white)
                 }
-                .frame(maxWidth: .infinity)
+
+                Text(L("login.resetPassword.success"))
+                    .aurionFont(14, relativeTo: .subheadline)
+                    .foregroundColor(Color.aurionOnNavySecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button {
+                    AurionHaptics.selection()
+                    onDismiss()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.right.circle.fill")
+                            .font(.system(size: 16, weight: .semibold))
+                        Text(L("login.resetPassword.signIn"))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(AurionPrimaryButtonStyle())
             }
-            .buttonStyle(AurionPrimaryButtonStyle())
         }
-        .padding(24)
-        .background(Color.white.opacity(0.06))
-        .cornerRadius(18)
-        .overlay(
-            RoundedRectangle(cornerRadius: 18)
-                .stroke(Color.white.opacity(0.10), lineWidth: 1)
-        )
     }
 
     @ViewBuilder

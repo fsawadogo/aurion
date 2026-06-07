@@ -374,7 +374,7 @@ struct SessionsInboxView: View {
     /// actionable Resume / Review affordances. Matches the dashboard pill.
     private func goldPill(_ label: String) -> some View {
         Text(label)
-            .font(.system(size: 12, weight: .semibold))
+            .aurionFont(12, weight: .semibold, relativeTo: .caption2)
             .foregroundColor(.aurionNavy)
             .padding(.horizontal, 12)
             .padding(.vertical, 6)
