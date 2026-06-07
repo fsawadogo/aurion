@@ -9,9 +9,13 @@
  * Mirrors the iOS context editor (I1) and the B1 backend contract:
  *   - one collapsible section per `consultation_types` entry (default
  *     key or custom label);
- *   - each context row = a label input + a built-in-template `<select>`
- *     ("Use my specialty default" + the 8 built-ins, localized) + a
- *     delete button;
+ *   - each context row = a label input + a template `<select>`
+ *     ("Use my specialty default" + the 8 built-ins + a "Custom
+ *     templates" optgroup of the caller's OWNED custom templates, all
+ *     localized) + a delete button. A built-in `template_key` and a
+ *     custom `template_ref` are mutually exclusive — picking one clears
+ *     the other, mirroring the backend `VisitTypeContext` validator
+ *     (#318/B3, #320/W2);
  *   - an inline "Add context" affordance reusing the exact
  *     `validateConsultationType` rules (60 chars, no SSN / email /
  *     proper-noun-pair) the visit-type editor already pins;
@@ -74,18 +78,37 @@ export function newContextId(): string {
   );
 }
 
+/** Slim custom-template option for the per-context picker (#320/W2).
+ *
+ * The parent fetches `GET /me/custom-templates` and passes ONLY the
+ * caller's OWNED rows mapped to `{id, display_name}`. A community-shared
+ * row the caller doesn't own would 422 on the PUT (the backend binds a
+ * `template_ref` via the owner-scoped `get_owned`), so the parent
+ * filters to owned before handing them down. `id` is the value written
+ * into a context's `template_ref`. Display names can be PHI — they ride
+ * this prop only, never a client log. */
+export interface ContextCustomTemplate {
+  id: string;
+  display_name: string;
+}
+
 interface VisitTypeContextsEditorProps {
   /** The current `consultation_types` — one accordion per entry. */
   visitTypes: string[];
   /** Visit-type → context list map (`contexts_per_visit_type`). */
   value: Record<string, VisitTypeContext[]>;
   onChange: (next: Record<string, VisitTypeContext[]>) => void;
+  /** Caller's OWNED custom templates → the "Custom templates" optgroup
+   * (#320/W2). Defaults to `[]` so the empty-library case (and the W1
+   * call sites / tests that don't pass it) render built-ins only. */
+  customTemplates?: ContextCustomTemplate[];
 }
 
 export default function VisitTypeContextsEditor({
   visitTypes,
   value,
   onChange,
+  customTemplates = [],
 }: VisitTypeContextsEditorProps) {
   const t = useTranslations("Profile.contexts");
   const tTemplates = useTranslations("Profile.contexts.templates");
@@ -106,6 +129,43 @@ export default function VisitTypeContextsEditor({
     key,
     label: tTemplates(key),
   })).sort((a, b) => a.label.localeCompare(b.label));
+
+  // Custom-template options for the "Custom templates" optgroup (#320/W2).
+  // Sorted by display name to match the built-in list. The display name
+  // can be PHI, so it never leaves this render path — no logging.
+  const customOptions = customTemplates
+    .map((c) => ({ id: c.id, label: c.display_name }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+
+  // Membership sets the change handler uses to route a selected option
+  // value to the right field (built-in key → `template_key`, custom id →
+  // `template_ref`), enforcing the same mutual exclusion as the backend.
+  const builtInKeySet = new Set<string>(BUILT_IN_TEMPLATE_KEYS);
+  const customIdSet = new Set(customTemplates.map((c) => c.id));
+
+  /** Apply a template `<select>` choice to one context, honouring the
+   * built-in/custom mutual exclusion:
+   *   - "" (default)  → clear BOTH pointers (inherit specialty default);
+   *   - built-in key  → set `template_key`, clear `template_ref`;
+   *   - custom id     → set `template_ref`, clear `template_key`.
+   * A value matching neither set can only be a stale ref re-selected,
+   * which `onChange` never fires for (it's already the value), so we
+   * leave the binding untouched. */
+  function selectTemplate(vt: string, id: string, optionValue: string) {
+    if (optionValue === "") {
+      updateContext(vt, id, { template_key: null, template_ref: null });
+    } else if (builtInKeySet.has(optionValue)) {
+      updateContext(vt, id, {
+        template_key: optionValue,
+        template_ref: null,
+      });
+    } else if (customIdSet.has(optionValue)) {
+      updateContext(vt, id, {
+        template_ref: optionValue,
+        template_key: null,
+      });
+    }
+  }
 
   function visitTypeLabel(vt: string): string {
     return (DEFAULT_VISIT_TYPE_KEYS as readonly string[]).includes(vt)
@@ -284,14 +344,13 @@ export default function VisitTypeContextsEditor({
                         className="form-input flex-1"
                       />
                       <select
-                        value={ctx.template_key ?? ""}
+                        // A custom `template_ref` wins over a built-in
+                        // `template_key` for the displayed value — the two
+                        // are mutually exclusive, but reading both defends
+                        // against a half-applied row. "" = specialty default.
+                        value={ctx.template_ref ?? ctx.template_key ?? ""}
                         onChange={(e) =>
-                          updateContext(vt, ctx.id, {
-                            template_key:
-                              e.target.value === ""
-                                ? null
-                                : e.target.value,
-                          })
+                          selectTemplate(vt, ctx.id, e.target.value)
                         }
                         aria-label={t("templateAria", {
                           label: ctx.label,
@@ -304,6 +363,28 @@ export default function VisitTypeContextsEditor({
                             {o.label}
                           </option>
                         ))}
+                        {customOptions.length > 0 && (
+                          <optgroup label={t("customGroup")}>
+                            {customOptions.map((o) => (
+                              <option key={o.id} value={o.id}>
+                                {o.label}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {ctx.template_ref !== null &&
+                          !customIdSet.has(ctx.template_ref) && (
+                            /* Stale ref: the bound custom template was
+                             * deleted (or the list failed to load). Render
+                             * a placeholder option whose value equals the
+                             * ref so the <select> stays on it instead of
+                             * silently snapping to the default — the
+                             * binding round-trips and the physician can
+                             * re-pick. Mirrors iOS I3 graceful display. */
+                            <option value={ctx.template_ref}>
+                              {t("customUnavailable")}
+                            </option>
+                          )}
                       </select>
                       <button
                         type="button"

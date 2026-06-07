@@ -585,8 +585,12 @@ export interface CurrentUser {
  *    backend preserves it on round-trip.
  *  - `template_key` is one of the 8 built-in template keys, or `null`
  *    to inherit the physician's specialty default.
- *  - `template_ref` (custom-template pointer) is ALWAYS `null` in
- *    phase 1 — custom templates land in phase 2 (#318).
+ *  - `template_ref` is the id (UUID) of one of the caller's OWNED
+ *    custom templates (`GET /me/custom-templates`), MUTUALLY EXCLUSIVE
+ *    with `template_key` (#318/B3, #320/W2). Setting one clears the
+ *    other; the backend re-validates ownership + existence on the PUT
+ *    (reason-only 422 if the ref isn't an owned, existing row). `null`
+ *    = no custom binding (the built-in key or specialty default applies).
  */
 export interface VisitTypeContext {
   id: string;
