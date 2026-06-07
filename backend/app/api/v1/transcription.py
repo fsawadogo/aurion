@@ -219,6 +219,21 @@ async def submit_transcription(
             detail=f"Stage 1 note generation failed: {exc}",
         )
 
+    # Empty-note guardrail (#280): the note generated but has zero populated
+    # required sections (completeness 0). This is NOT a failure — the request
+    # was well-formed and the note is real — but it must be VISIBLE rather than
+    # a silent "success", so the empty-note rate is auditable + CloudWatch-
+    # alarmable (7/16 recent notes were completeness=0.00 with no signal).
+    # PHI-free payload: counts + score only, never transcript text.
+    if stage1_note.completeness_score <= 0.0:
+        await write_audit(
+            session_id,
+            AuditEventType.STAGE1_EMPTY_NOTE,
+            segment_count=len(transcript.segments),
+            transcript_char_count=sum(len(s.text) for s in transcript.segments),
+            completeness=stage1_note.completeness_score,
+        )
+
     try:
         await transition_session(db, session, SessionState.AWAITING_REVIEW)
     except InvalidTransitionError as exc:

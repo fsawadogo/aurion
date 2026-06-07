@@ -9,8 +9,11 @@ extraction -- everything else lives here.
 from __future__ import annotations
 
 import json
+import logging
 
 from app.core.types import Note, NoteClaim, NoteSection, Template, Transcript
+
+logger = logging.getLogger("aurion.note_gen.parse")
 
 # JSON Schema for the Note response. Used by providers that support
 # schema-enforced output (Anthropic tool_use, Gemini responseSchema)
@@ -200,11 +203,31 @@ def parse_note_response(
 
     # Ensure all template sections are present
     existing_ids = {s.id for s in sections}
+    model_section_ids = set(existing_ids)
+    backfilled = 0
     for ts in template.sections:
         if ts.id not in existing_ids:
             sections.append(
                 NoteSection(id=ts.id, title=ts.title, status="not_captured", claims=[])
             )
+            backfilled += 1
+
+    # Surface silent degradations (#280). A model response that omits
+    # template sections — or returns section ids outside the template —
+    # gets backfilled to `not_captured`, which previously dropped to a
+    # 0.00 note recorded as provider "success" with no signal.
+    if backfilled:
+        out_of_template = model_section_ids - {ts.id for ts in template.sections}
+        logger.warning(
+            "note parse backfilled %d/%d template section(s) "
+            "(stage=%d provider=%s template=%s out_of_template_ids=%d)",
+            backfilled,
+            len(template.sections),
+            stage,
+            provider_name,
+            template.key,
+            len(out_of_template),
+        )
 
     # Calculate completeness score
     required = [s for s in template.sections if s.required]
@@ -214,6 +237,15 @@ def parse_note_response(
         and any(ts.id == s.id and ts.required for ts in template.sections)
     ]
     completeness = len(populated) / len(required) if required else 0.0
+
+    if required and not populated:
+        logger.warning(
+            "note parse produced 0 populated required sections "
+            "(stage=%d provider=%s template=%s) — empty note",
+            stage,
+            provider_name,
+            template.key,
+        )
 
     return Note(
         session_id=transcript.session_id,
