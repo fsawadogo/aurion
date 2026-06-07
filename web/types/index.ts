@@ -449,6 +449,21 @@ export interface MediaDownloadUrls {
   expires_in: number;
 }
 
+/* ─── Audio replay (physician own-session, #338) ─────────────────────────── */
+// Mirrors backend GET /api/v1/notes/{session_id}/audio-replay-url. This is the
+// CLINICIAN-facing, ownership-gated replay surface (distinct from the admin
+// /admin/media download URLs above): the physician replays the raw audio of
+// THEIR OWN session in the browser. `audio_url` is a short-lived presigned URL
+// (ca-central-1, ~1h) or null when no audio exists / a transient error. The
+// URL is for playback only — it is never offered as a download, and never
+// logged client-side. Each successful call also writes an EVIDENCE_REPLAYED
+// audit row server-side, so callers must only hit it on an explicit user
+// action, never automatically on mount.
+export interface AudioReplayUrlResponse {
+  audio_url: string | null;
+  expires_in: number;
+}
+
 /* ─── Pilot Metrics ──────────────────────────────────────────────────────── */
 
 export interface PilotMetric {

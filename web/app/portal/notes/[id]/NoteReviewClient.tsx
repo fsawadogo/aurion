@@ -10,6 +10,7 @@ import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import CodingSuggestionsCard from "@/components/portal/CodingSuggestionsCard";
 import CompletenessRing from "@/components/portal/CompletenessRing";
 import EmrWriteBackCard from "@/components/portal/EmrWriteBackCard";
+import EncounterAudioCard from "@/components/portal/EncounterAudioCard";
 import LivePreviewCard from "@/components/portal/LivePreviewCard";
 import NoteContextBadge from "@/components/portal/NoteContextBadge";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
@@ -293,6 +294,15 @@ export default function NoteReviewPage() {
               firstSectionId={detail.conflict_state.unresolved_section_ids[0]}
             />
           )}
+
+          {/* Encounter audio replay (#338) — physician replays the raw
+              audio of their OWN session in-browser. Fetches the presigned
+              URL only on the explicit "Play recording" click (each call
+              writes an EVIDENCE_REPLAYED audit row), and never offers a
+              download. The button always renders; the endpoint's 403
+              gracefully covers the media_review_retention_enabled flag-off
+              case since the portal can't read that backend flag directly. */}
+          <EncounterAudioCard sessionId={sessionId} />
 
           {/* Two-column layout: transcript ↔ note */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[600px]">

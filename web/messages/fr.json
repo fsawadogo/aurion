@@ -823,6 +823,17 @@
       "exportDocx": "Exporter DOCX",
       "stateLabel": "État : {state}"
     },
+    "recording": {
+      "title": "Audio de la consultation",
+      "description": "Réécoutez l’audio brut capté pendant cette consultation. Lecture seule — l’enregistrement ne peut pas être téléchargé.",
+      "play": "Écouter l’enregistrement",
+      "playerAria": "Lecteur audio de la consultation",
+      "playerFallback": "Votre navigateur ne prend pas en charge la lecture audio.",
+      "unavailable": "Aucun enregistrement disponible pour cette session.",
+      "notEnabled": "La lecture de l’enregistrement n’est pas activée.",
+      "wrongState": "L’enregistrement n’est pas encore disponible pour cette session.",
+      "error": "Impossible de charger l’enregistrement. Veuillez réessayer."
+    },
     "identifier": {
       "addCta": "Ajouter un identifiant patient",
       "editAria": "Modifier l’identifiant patient",
