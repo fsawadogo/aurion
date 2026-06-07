@@ -429,6 +429,15 @@ final class APIClient: Sendable {
         return try await get(path: "/profile/templates")
     }
 
+    /// The caller's custom note templates (`GET /me/custom-templates`, #318 B3
+    /// / #319 I3) — their own plus any community-shared ones the backend
+    /// returns alongside. Used to populate the per-context "Custom templates"
+    /// picker section. Display names are clinician-authored → potentially PHI;
+    /// callers must never log the result.
+    func getCustomTemplates() async throws -> [CustomTemplateSummary] {
+        return try await get(path: "/me/custom-templates")
+    }
+
     // MARK: - Frames
 
     /// Upload a single masked JPEG frame to the backend. Backend persists it
@@ -1720,8 +1729,13 @@ struct AlliedHealthMember: Codable, Sendable, Equatable, Identifiable {
 ///
 /// Wire shape: `{id, label, template_key, template_ref}`. The backend assigns
 /// `id` (`ctx_<8 hex>`) for a context sent with an empty `id`; a well-formed id
-/// round-trips so an edit updates in place. `templateRef` is ALWAYS null in
-/// phase 1 (custom templates are #318) — it is neither sent nor surfaced.
+/// round-trips so an edit updates in place.
+///
+/// `templateKey` (one of the 8 built-ins) and `templateRef` (the UUID of one of
+/// the caller's `/me/custom-templates` rows, #318 B3 / #319 I3) are MUTUALLY
+/// EXCLUSIVE: setting one clears the other. Both nil = use the physician's
+/// specialty default. The backend re-validates ownership of any `template_ref`
+/// and rejects the save with a reason-only 422 if it isn't owned.
 struct VisitTypeContext: Codable, Sendable, Identifiable {
     /// Local-only stable identity for SwiftUI `ForEach`. Two freshly added
     /// contexts both carry `serverID == ""`, so the wire id can't drive
@@ -1732,9 +1746,13 @@ struct VisitTypeContext: Codable, Sendable, Identifiable {
     /// added and hasn't saved yet; preserved verbatim on edit.
     var serverID: String
     var label: String
-    /// One of the 8 built-in template keys (``BuiltInTemplate/keys``), or nil
-    /// = use the physician's specialty default.
+    /// One of the 8 built-in template keys (``BuiltInTemplate/keys``), or nil.
+    /// Mutually exclusive with ``templateRef``.
     var templateKey: String?
+    /// UUID of a custom (clinician-authored) template the caller owns
+    /// (``CustomTemplateSummary/id``), or nil. Mutually exclusive with
+    /// ``templateKey``.
+    var templateRef: String?
 
     var id: UUID { localID }
 
@@ -1742,13 +1760,20 @@ struct VisitTypeContext: Codable, Sendable, Identifiable {
         case serverID = "id"
         case label
         case templateKey = "template_key"
+        case templateRef = "template_ref"
     }
 
-    init(serverID: String = "", label: String, templateKey: String? = nil) {
+    init(
+        serverID: String = "",
+        label: String,
+        templateKey: String? = nil,
+        templateRef: String? = nil
+    ) {
         self.localID = UUID()
         self.serverID = serverID
         self.label = label
         self.templateKey = templateKey
+        self.templateRef = templateRef
     }
 
     init(from decoder: Decoder) throws {
@@ -1757,6 +1782,7 @@ struct VisitTypeContext: Codable, Sendable, Identifiable {
         self.serverID = (try? c.decode(String.self, forKey: .serverID)) ?? ""
         self.label = try c.decode(String.self, forKey: .label)
         self.templateKey = try c.decodeIfPresent(String.self, forKey: .templateKey)
+        self.templateRef = try c.decodeIfPresent(String.self, forKey: .templateRef)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1764,21 +1790,56 @@ struct VisitTypeContext: Codable, Sendable, Identifiable {
         try c.encode(serverID, forKey: .serverID)
         try c.encode(label, forKey: .label)
         try c.encodeIfPresent(templateKey, forKey: .templateKey)
+        try c.encodeIfPresent(templateRef, forKey: .templateRef)
     }
 
     /// Serialize to the `[String: Any]` shape `updateProfile` expects. An
     /// empty `id` signals "new" to the backend; a non-empty id is preserved.
-    /// `template_key` is omitted when nil (the backend defaults it to null =
-    /// specialty default); `template_ref` is never sent (always null phase 1).
-    static func encodePayload(_ ctx: VisitTypeContext) -> [String: Any] {
+    ///
+    /// `template_ref` wins when set (mutually exclusive with `template_key`);
+    /// otherwise `template_key` is sent when set. Both omitted => the backend
+    /// defaults the context to the physician's specialty template.
+    ///
+    /// `validCustomTemplateIDs`, when supplied (i.e. the custom-template list
+    /// loaded successfully), drops a `template_ref` the caller no longer owns
+    /// — a template deleted upstream would otherwise fail the whole PUT with a
+    /// 422. The orphaned context silently falls back to the specialty default,
+    /// matching the "template unavailable — using default" state the UI shows.
+    /// Pass `nil` (the default) to send refs verbatim when the list is unknown.
+    static func encodePayload(
+        _ ctx: VisitTypeContext,
+        validCustomTemplateIDs: Set<String>? = nil
+    ) -> [String: Any] {
         var dict: [String: Any] = [
             "id": ctx.serverID,
             "label": ctx.label,
         ]
-        if let tk = ctx.templateKey {
+        if let ref = ctx.templateRef {
+            let isDead = validCustomTemplateIDs.map { !$0.contains(ref) } ?? false
+            if !isDead {
+                dict["template_ref"] = ref
+            }
+        } else if let tk = ctx.templateKey {
             dict["template_key"] = tk
         }
         return dict
+    }
+}
+
+/// A custom (clinician-authored) note template, trimmed to what the per-context
+/// picker needs (`GET /me/custom-templates`, #318 B3 / #319 I3). The backend
+/// row carries the full template JSON; the picker only needs the `id` (the UUID
+/// a context's ``VisitTypeContext/templateRef`` points at) and the display
+/// name. Extra response fields are ignored on decode.
+///
+/// `displayName` is clinician-authored → treat as potentially PHI. Never log.
+struct CustomTemplateSummary: Codable, Sendable, Identifiable {
+    let id: String
+    let displayName: String
+
+    enum CodingKeys: String, CodingKey {
+        case id
+        case displayName = "display_name"
     }
 }
 

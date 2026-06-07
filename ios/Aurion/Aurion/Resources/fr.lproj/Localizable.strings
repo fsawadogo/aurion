@@ -393,6 +393,10 @@
 "setup.context.collapse" = "Masquer les contextes pour %@";
 "setup.context.template.default" = "Utiliser ma sp\U00E9cialit\U00E9 par d\U00E9faut";
 "setup.context.template.a11y" = "Mod\U00E8le : %@";
+/* Mod\U00E8les personnalis\U00E9s dans le s\U00E9lecteur par contexte (GH-319 / I3) */
+"setup.context.template.customSection" = "Mod\U00E8les personnalis\U00E9s";
+"setup.context.template.customPlaceholder" = "Mod\U00E8le personnalis\U00E9";
+"setup.context.template.unavailable" = "Mod\U00E8le indisponible — valeur par d\U00E9faut utilis\U00E9e";
 
 /* ── Int\U00E9gration (onboarding) ─────────────────────── */
 "onboarding.getStarted" = "Commencer";

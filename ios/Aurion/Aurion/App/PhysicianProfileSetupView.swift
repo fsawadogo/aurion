@@ -32,6 +32,15 @@ struct PhysicianProfileSetupView: View {
     // which accordions are open (purely local UI state).
     @State private var contextsByType: [String: [VisitTypeContext]] = [:]
     @State private var expandedVisitTypes: Set<String> = []
+    // GH-319 (I3) — the clinician's custom note templates, fetched once from
+    // `/me/custom-templates` and threaded into each context's template picker
+    // so a context can pin a custom template (`template_ref`) in addition to
+    // the built-ins. `didLoadCustomTemplates` flips true ONLY on a successful
+    // fetch; it gates the picker's "template unavailable" affordance and the
+    // save-time dead-ref reconciliation. Display names are clinician-authored
+    // → potentially PHI; never logged.
+    @State private var customTemplates: [CustomTemplateSummary] = []
+    @State private var didLoadCustomTemplates = false
     @State private var preferredTemplates: Set<String> = []
     @State private var outputLanguage = "en"
     // Step 5 — recording preferences. Stored locally (UserDefaults) since
@@ -180,6 +189,21 @@ struct PhysicianProfileSetupView: View {
         }
         .background(Color.aurionBackground)
         .onAppear(perform: seedFromExistingProfile)
+        .task { await loadCustomTemplates() }
+    }
+
+    /// Pull the clinician's custom templates so the per-context picker can
+    /// offer them (#319 I3). Best-effort: a failure leaves the picker with
+    /// just the default + built-ins and ``didLoadCustomTemplates`` false, so
+    /// the "template unavailable" affordance stays quiet (a still-valid ref
+    /// shows a neutral placeholder, not a false "deleted" state) and the next
+    /// appearance retries. Never surfaces an error or logs the result —
+    /// custom templates are an enhancement, and their names may be PHI.
+    private func loadCustomTemplates() async {
+        guard !didLoadCustomTemplates else { return }
+        guard let templates = try? await APIClient.shared.getCustomTemplates() else { return }
+        customTemplates = templates
+        didLoadCustomTemplates = true
     }
 
     /// Populate the multi-select sets / custom-types list from
@@ -478,7 +502,9 @@ struct PhysicianProfileSetupView: View {
                         contexts: Binding(
                             get: { contextsByType[key] ?? [] },
                             set: { contextsByType[key] = $0 }
-                        )
+                        ),
+                        customTemplates: customTemplates,
+                        customTemplatesLoaded: didLoadCustomTemplates
                     )
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
@@ -861,11 +887,22 @@ struct PhysicianProfileSetupView: View {
             // are dropped so the payload only carries types that actually
             // have contexts; orphan keys are pruned server-side. New
             // contexts go up with `id == ""` so the server mints stable ids.
+            // GH-319 — only pass the known-valid custom-template id set once
+            // the fetch has actually completed. When loaded, a context whose
+            // `template_ref` points at a since-deleted template has the dead
+            // ref dropped (falls back to specialty default) so the whole PUT
+            // doesn't 422. When NOT loaded, pass nil so refs ship verbatim —
+            // we can't prove a ref is dead just because we failed to fetch.
+            let validRefIDs: Set<String>? = didLoadCustomTemplates
+                ? Set(customTemplates.map { $0.id })
+                : nil
             let contextsPayload: [String: [[String: Any]]] = contextsByType
                 .reduce(into: [:]) { acc, entry in
                     let (key, ctxs) = entry
                     guard !ctxs.isEmpty else { return }
-                    acc[key] = ctxs.map { VisitTypeContext.encodePayload($0) }
+                    acc[key] = ctxs.map {
+                        VisitTypeContext.encodePayload($0, validCustomTemplateIDs: validRefIDs)
+                    }
                 }
             let updates: [String: Any] = [
                 "practice_type": practiceTypes.sorted().joined(separator: ","),

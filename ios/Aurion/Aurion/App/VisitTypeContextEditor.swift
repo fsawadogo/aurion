@@ -48,6 +48,17 @@ struct VisitTypeContextEditor: View {
     let visitTypeLabel: String
     @Binding var contexts: [VisitTypeContext]
 
+    /// The caller's custom note templates (#319 I3), fetched once by the
+    /// parent and threaded down so every context picker shares one list.
+    /// Empty when the clinician has no custom templates (the picker then
+    /// shows only the default + the 8 built-ins). Display names are
+    /// clinician-authored → potentially PHI; never log them.
+    var customTemplates: [CustomTemplateSummary] = []
+    /// Whether ``customTemplates`` reflects a COMPLETED fetch. Gates the
+    /// "template unavailable" affordance so an in-flight (or failed) load
+    /// doesn't misreport a still-valid `template_ref` as deleted.
+    var customTemplatesLoaded: Bool = false
+
     /// Per-visit-type soft cap. MUST equal `_MAX_CONTEXTS_PER_VISIT_TYPE`
     /// (30) in `backend/app/api/v1/profile.py` so a client can't add past
     /// the cap and then eat a 422 on save. Pinned by `CustomVisitTypeTests`.
@@ -116,39 +127,72 @@ struct VisitTypeContextEditor: View {
         .clipShape(RoundedRectangle(cornerRadius: AurionRadius.sm))
     }
 
-    /// "Use my specialty default" (→ nil) + the 8 built-in templates by
-    /// localized display name. A leading checkmark marks the active choice.
+    /// "Use my specialty default" (→ both nil) + the 8 built-in templates +,
+    /// when the clinician has any, a "Custom templates" section listing their
+    /// `/me/custom-templates` rows by display name. A leading checkmark marks
+    /// the active choice.
+    ///
+    /// `template_key` (built-in) and `template_ref` (custom UUID) are mutually
+    /// exclusive: picking a built-in clears the custom ref and vice-versa;
+    /// "specialty default" clears both. The backend re-validates this.
     private func templateMenu(_ ctx: Binding<VisitTypeContext>) -> some View {
-        Menu {
+        let value = ctx.wrappedValue
+        let isDefault = value.templateKey == nil && value.templateRef == nil
+        return Menu {
+            // ── Specialty default (both nil) ──────────────────────────
             Button {
                 AurionHaptics.selection()
                 ctx.wrappedValue.templateKey = nil
+                ctx.wrappedValue.templateRef = nil
             } label: {
-                if ctx.wrappedValue.templateKey == nil {
+                if isDefault {
                     Label(L("setup.context.template.default"), systemImage: "checkmark")
                 } else {
                     Text(L("setup.context.template.default"))
                 }
             }
             Divider()
+            // ── 8 built-ins (set template_key, clear template_ref) ────
             ForEach(BuiltInTemplate.keys, id: \.self) { key in
                 Button {
                     AurionHaptics.selection()
                     ctx.wrappedValue.templateKey = key
+                    ctx.wrappedValue.templateRef = nil
                 } label: {
-                    if ctx.wrappedValue.templateKey == key {
+                    if value.templateRef == nil && value.templateKey == key {
                         Label(localizedTemplate(key), systemImage: "checkmark")
                     } else {
                         Text(localizedTemplate(key))
                     }
                 }
             }
+            // ── Custom templates (set template_ref, clear template_key) ─
+            // Section omitted entirely when the library is empty so the
+            // picker degrades to default + built-ins (AC: empty library).
+            if !customTemplates.isEmpty {
+                Section(L("setup.context.template.customSection")) {
+                    ForEach(customTemplates) { tmpl in
+                        Button {
+                            AurionHaptics.selection()
+                            ctx.wrappedValue.templateRef = tmpl.id
+                            ctx.wrappedValue.templateKey = nil
+                        } label: {
+                            if value.templateRef == tmpl.id {
+                                Label(tmpl.displayName, systemImage: "checkmark")
+                            } else {
+                                Text(tmpl.displayName)
+                            }
+                        }
+                    }
+                }
+            }
         } label: {
+            let resolved = resolvedTemplate(value)
             HStack(spacing: 6) {
-                Image(systemName: "doc.text")
+                Image(systemName: resolved.unavailable ? "exclamationmark.triangle" : "doc.text")
                     .font(.system(size: 11, weight: .medium))
-                    .foregroundColor(.aurionGoldDark)
-                Text(templateLabel(ctx.wrappedValue.templateKey))
+                    .foregroundColor(resolved.unavailable ? .aurionTextSecondary : .aurionGoldDark)
+                Text(resolved.text)
                     .aurionFont(12, relativeTo: .caption)
                     .foregroundColor(.aurionTextSecondary)
                     .lineLimit(1)
@@ -160,13 +204,32 @@ struct VisitTypeContextEditor: View {
             .contentShape(Rectangle())
         }
         .accessibilityLabel(
-            L("setup.context.template.a11y", templateLabel(ctx.wrappedValue.templateKey))
+            L("setup.context.template.a11y", resolvedTemplate(value).text)
         )
     }
 
-    private func templateLabel(_ key: String?) -> String {
-        guard let key else { return L("setup.context.template.default") }
-        return localizedTemplate(key)
+    /// The label shown on the picker trigger for a context's current binding,
+    /// plus whether it's the stale-ref state.
+    ///
+    /// A `template_ref` is resolved against the fetched ``customTemplates``.
+    /// If it isn't found we only call it "unavailable" once the list has
+    /// actually loaded (``customTemplatesLoaded``) — while a fetch is in
+    /// flight (or has failed) an empty list would otherwise misreport every
+    /// ref as deleted, so we show a neutral placeholder instead.
+    private func resolvedTemplate(_ ctx: VisitTypeContext) -> (text: String, unavailable: Bool) {
+        if let ref = ctx.templateRef {
+            if let match = customTemplates.first(where: { $0.id == ref }) {
+                return (match.displayName, false)
+            }
+            if customTemplatesLoaded {
+                return (L("setup.context.template.unavailable"), true)
+            }
+            return (L("setup.context.template.customPlaceholder"), false)
+        }
+        if let key = ctx.templateKey {
+            return (localizedTemplate(key), false)
+        }
+        return (L("setup.context.template.default"), false)
     }
 
     // MARK: - Add affordance
