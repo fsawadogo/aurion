@@ -21,6 +21,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import get_owned_session_or_404, require_state, write_audit
+from app.api.v1.websocket import notify_stage1_delivered
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import PilotMetricsModel, TranscriptModel
@@ -159,7 +160,7 @@ async def submit_transcription(
     # empty-transcript guard branch, which is a terminal failure (no audio
     # ever reached the backend; re-uploading wouldn't help).
     try:
-        await generate_stage1_note(
+        stage1_note = await generate_stage1_note(
             transcript=transcript,
             specialty=session.specialty,
             session_id=str(session_id),
@@ -231,6 +232,12 @@ async def submit_transcription(
         AuditEventType.STAGE1_DELIVERED,
         stage1_latency_ms=stage1_latency_ms,
     )
+
+    # Push the note to any connected WebSocket client so the iOS processing
+    # screen advances past 95% (#277). The pipeline is synchronous, so this
+    # fires right before the 200; notify_stage1_delivered self-swallows so a
+    # WS hiccup can never turn a delivered note into a failed request.
+    await notify_stage1_delivered(str(session_id), stage1_note)
 
     return TranscriptResponse(
         session_id=transcript.session_id,

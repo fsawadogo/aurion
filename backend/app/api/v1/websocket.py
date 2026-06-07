@@ -131,29 +131,49 @@ async def notes_websocket(websocket: WebSocket, session_id: str) -> None:
 async def notify_stage1_delivered(session_id: str, note: Note) -> None:
     """Notify all connected clients that Stage 1 note is ready.
 
-    Called by the note_gen service after Stage 1 generation completes.
+    Called from the transcription route after Stage 1 generation completes
+    and the session transitions to AWAITING_REVIEW (#277 — this is the
+    signal the iOS processing screen waits on to advance past 95%).
+
+    Best-effort: a serialization or broadcast failure must NEVER propagate
+    into the request that triggered it (the note is already persisted and
+    the 200 has the same meaning regardless). Mirrors notify_stage2_progress.
     """
-    payload = {
-        "event": "stage1_delivered",
-        "session_id": session_id,
-        "note": note.model_dump(),
-    }
-    await manager.broadcast_to_session(session_id, payload)
-    logger.info("Stage 1 delivery notification sent: session=%s", session_id)
+    try:
+        payload = {
+            "event": "stage1_delivered",
+            "session_id": session_id,
+            "note": note.model_dump(),
+        }
+        await manager.broadcast_to_session(session_id, payload)
+        logger.info("Stage 1 delivery notification sent: session=%s", session_id)
+    except Exception as exc:  # noqa: BLE001 — best-effort push, never fatal
+        logger.error(
+            "Stage 1 delivery notification failed (non-fatal): session=%s err=%s",
+            session_id,
+            type(exc).__name__,
+        )
 
 
 async def notify_stage2_delivered(session_id: str, note: Note) -> None:
     """Notify all connected clients that Stage 2 note is ready.
 
-    Called after Stage 2 visual enrichment completes.
+    Best-effort, same non-fatal contract as notify_stage1_delivered.
     """
-    payload = {
-        "event": "stage2_delivered",
-        "session_id": session_id,
-        "note": note.model_dump(),
-    }
-    await manager.broadcast_to_session(session_id, payload)
-    logger.info("Stage 2 delivery notification sent: session=%s", session_id)
+    try:
+        payload = {
+            "event": "stage2_delivered",
+            "session_id": session_id,
+            "note": note.model_dump(),
+        }
+        await manager.broadcast_to_session(session_id, payload)
+        logger.info("Stage 2 delivery notification sent: session=%s", session_id)
+    except Exception as exc:  # noqa: BLE001 — best-effort push, never fatal
+        logger.error(
+            "Stage 2 delivery notification failed (non-fatal): session=%s err=%s",
+            session_id,
+            type(exc).__name__,
+        )
 
 
 async def notify_stage2_progress(
