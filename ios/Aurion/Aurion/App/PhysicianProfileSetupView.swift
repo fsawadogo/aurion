@@ -25,6 +25,13 @@ struct PhysicianProfileSetupView: View {
     @State private var customTypeDraft: String = ""
     @State private var customTypeDraftError: String?
     @State private var isAddingCustomType = false
+    // GH-315 (I1) — level-2 contexts under each visit type, keyed by the
+    // visit-type key (default key or custom label). Seeded from the profile
+    // on entry, edited in place via the per-type accordion, and shipped back
+    // in the `contexts_per_visit_type` PUT field. `expandedVisitTypes` tracks
+    // which accordions are open (purely local UI state).
+    @State private var contextsByType: [String: [VisitTypeContext]] = [:]
+    @State private var expandedVisitTypes: Set<String> = []
     @State private var preferredTemplates: Set<String> = []
     @State private var outputLanguage = "en"
     // Step 5 — recording preferences. Stored locally (UserDefaults) since
@@ -200,6 +207,10 @@ struct PhysicianProfileSetupView: View {
             consultationTypes = defaults
             customConsultationTypes = customs
         }
+        // GH-315 — carry the saved per-visit-type contexts so re-entering
+        // the flow (Profile → Edit Practice) shows the clinician's existing
+        // contexts + template pins rather than an empty list.
+        contextsByType = p.contextsPerVisitType
         preferredTemplates = Set(p.preferredTemplates)
         outputLanguage = p.outputLanguage
     }
@@ -351,27 +362,50 @@ struct PhysicianProfileSetupView: View {
     private var visitTypesStep: some View {
         VStack(spacing: 8) {
             // ── Defaults ──────────────────────────────────────────────
+            // A selected default exposes its level-2 context accordion;
+            // deselecting hides it (the contexts persist server-side since
+            // the default keys are always canonical, so re-selecting
+            // restores them).
             ForEach(visitTypes, id: \.self) { id in
-                AurionSelectableCard(
+                visitTypeCard(
+                    key: id,
                     title: localizedConsultationType(id),
-                    selected: consultationTypes.contains(id),
-                    indicator: .checkbox
-                ) {
-                    if consultationTypes.contains(id) {
-                        consultationTypes.remove(id)
-                    } else {
-                        consultationTypes.insert(id)
-                    }
-                }
+                    isSelected: consultationTypes.contains(id),
+                    canEditContexts: consultationTypes.contains(id),
+                    onTap: {
+                        if consultationTypes.contains(id) {
+                            consultationTypes.remove(id)
+                            expandedVisitTypes.remove(id)
+                        } else {
+                            consultationTypes.insert(id)
+                        }
+                    },
+                    onDelete: nil
+                )
             }
 
             // ── Custom types ──────────────────────────────────────────
             // Each row mirrors the checkbox visual (checked, since custom
             // types are inherently selected when present) with a trash
-            // affordance for delete. Matches the inline-add pattern
-            // (HIG: avoid modal sheets for short list additions).
+            // affordance for delete. Custom types always expose their
+            // context accordion. Matches the inline-add pattern (HIG:
+            // avoid modal sheets for short list additions).
             ForEach(customConsultationTypes, id: \.self) { name in
-                customTypeRow(name)
+                visitTypeCard(
+                    key: name,
+                    title: name,
+                    isSelected: true,
+                    canEditContexts: true,
+                    onTap: {},
+                    onDelete: {
+                        customConsultationTypes.removeAll { $0 == name }
+                        // Reflect the server-side orphan prune locally: a
+                        // context map keyed under a deleted custom type is
+                        // dropped on the next save, so clear it now too.
+                        contextsByType[name] = nil
+                        expandedVisitTypes.remove(name)
+                    }
+                )
             }
 
             // ── Add affordance ────────────────────────────────────────
@@ -390,31 +424,106 @@ struct PhysicianProfileSetupView: View {
         }
     }
 
-    private func customTypeRow(_ name: String) -> some View {
-        // Custom types are inherently selected when present, so the shared
-        // card renders in its always-checked (`selected: true`) state with a
-        // trailing trash affordance for delete. (HIG: inline delete over a
-        // modal sheet for short list edits.) The card body itself is a no-op
-        // tap target — the only action is the trash button.
-        AurionSelectableCard(
-            title: name,
-            selected: true,
-            indicator: .checkbox,
-            trailing: {
-                Button {
-                    AurionHaptics.selection()
-                    customConsultationTypes.removeAll { $0 == name }
-                } label: {
-                    Image(systemName: "trash")
-                        .font(.system(size: 16, weight: .medium))
-                        .foregroundColor(.aurionTextSecondary)
-                        .frame(minWidth: 44, minHeight: 44)
-                        .contentShape(Rectangle())
+    /// A visit-type chip (default or custom) plus, when editable, a
+    /// disclosure bar and the level-2 context accordion (#315, I1). The
+    /// disclosure is a sibling of the card — NOT nested inside its button —
+    /// so tapping "Contexts" never also toggles the card's selection.
+    @ViewBuilder
+    private func visitTypeCard(
+        key: String,
+        title: String,
+        isSelected: Bool,
+        canEditContexts: Bool,
+        onTap: @escaping () -> Void,
+        onDelete: (() -> Void)?
+    ) -> some View {
+        let isExpanded = expandedVisitTypes.contains(key)
+        VStack(spacing: 6) {
+            AurionSelectableCard(
+                title: title,
+                selected: isSelected,
+                indicator: .checkbox,
+                trailing: {
+                    if let onDelete {
+                        Button {
+                            AurionHaptics.selection()
+                            withAnimation(.aurionIOS) { onDelete() }
+                        } label: {
+                            Image(systemName: "trash")
+                                .font(.system(size: 16, weight: .medium))
+                                .foregroundColor(.aurionTextSecondary)
+                                .frame(minWidth: 44, minHeight: 44)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                        .accessibilityLabel(L("setup.visit.custom.delete", title))
+                    } else {
+                        EmptyView()
+                    }
+                },
+                action: onTap
+            )
+
+            if canEditContexts {
+                contextDisclosureBar(
+                    key: key,
+                    title: title,
+                    count: contextsByType[key]?.count ?? 0,
+                    isExpanded: isExpanded
+                )
+                if isExpanded {
+                    VisitTypeContextEditor(
+                        visitTypeKey: key,
+                        visitTypeLabel: title,
+                        contexts: Binding(
+                            get: { contextsByType[key] ?? [] },
+                            set: { contextsByType[key] = $0 }
+                        )
+                    )
+                    .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                .buttonStyle(.plain)
-                .accessibilityLabel(L("setup.visit.custom.delete", name))
-            },
-            action: {}
+            }
+        }
+    }
+
+    private func contextDisclosureBar(
+        key: String,
+        title: String,
+        count: Int,
+        isExpanded: Bool
+    ) -> some View {
+        Button {
+            AurionHaptics.selection()
+            withAnimation(.aurionIOS) {
+                if expandedVisitTypes.contains(key) {
+                    expandedVisitTypes.remove(key)
+                } else {
+                    expandedVisitTypes.insert(key)
+                }
+            }
+        } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "rectangle.stack")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundColor(.aurionGoldDark)
+                Text(count == 0
+                    ? L("setup.context.title")
+                    : L("setup.context.titleCount", count))
+                    .aurionFont(13, weight: .medium, relativeTo: .footnote)
+                    .foregroundColor(.aurionTextSecondary)
+                Spacer(minLength: 0)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundColor(.aurionTextSecondary)
+                    .rotationEffect(.degrees(isExpanded ? 180 : 0))
+            }
+            .padding(.horizontal, 16)
+            .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel(
+            L(isExpanded ? "setup.context.collapse" : "setup.context.expand", title)
         )
     }
 
@@ -746,11 +855,24 @@ struct PhysicianProfileSetupView: View {
             // gates client-side so the user got immediate feedback.
             let defaultsSorted = Array(consultationTypes).sorted()
             let mergedConsultationTypes = defaultsSorted + customConsultationTypes
+            // GH-315 — ship the per-visit-type contexts alongside
+            // `consultation_types` (the backend reads the latter from the
+            // SAME request to decide which keys are canonical). Empty lists
+            // are dropped so the payload only carries types that actually
+            // have contexts; orphan keys are pruned server-side. New
+            // contexts go up with `id == ""` so the server mints stable ids.
+            let contextsPayload: [String: [[String: Any]]] = contextsByType
+                .reduce(into: [:]) { acc, entry in
+                    let (key, ctxs) = entry
+                    guard !ctxs.isEmpty else { return }
+                    acc[key] = ctxs.map { VisitTypeContext.encodePayload($0) }
+                }
             let updates: [String: Any] = [
                 "practice_type": practiceTypes.sorted().joined(separator: ","),
                 "primary_specialty": primarySpecialty,
                 "preferred_templates": Array(preferredTemplates),
                 "consultation_types": mergedConsultationTypes,
+                "contexts_per_visit_type": contextsPayload,
                 "output_language": outputLanguage,
                 "auto_upload": recordingPrefs.autoUpload,
                 "retention_days": recordingPrefs.retentionDays,

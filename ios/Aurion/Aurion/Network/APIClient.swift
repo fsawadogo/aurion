@@ -1705,6 +1705,77 @@ struct AlliedHealthMember: Codable, Sendable, Equatable, Identifiable {
     }
 }
 
+/// One clinician-authored context under a visit type (#313 B1 / #315 I1).
+///
+/// A "context" is a sub-mode of a visit type — e.g. under "new_patient",
+/// contexts "LL" (lower limb) and "Breast" — each optionally pinned to a
+/// built-in specialty template. `templateKey == nil` means "use the
+/// physician's specialty default".
+///
+/// Wire shape: `{id, label, template_key, template_ref}`. The backend assigns
+/// `id` (`ctx_<8 hex>`) for a context sent with an empty `id`; a well-formed id
+/// round-trips so an edit updates in place. `templateRef` is ALWAYS null in
+/// phase 1 (custom templates are #318) — it is neither sent nor surfaced.
+struct VisitTypeContext: Codable, Sendable, Identifiable {
+    /// Local-only stable identity for SwiftUI `ForEach`. Two freshly added
+    /// contexts both carry `serverID == ""`, so the wire id can't drive
+    /// `Identifiable` until the server has assigned one. Synthesized on
+    /// decode and on the memberwise init; never serialized.
+    let localID: UUID
+    /// Server-assigned id. Empty string for a context the clinician just
+    /// added and hasn't saved yet; preserved verbatim on edit.
+    var serverID: String
+    var label: String
+    /// One of the 8 built-in template keys (``BuiltInTemplate/keys``), or nil
+    /// = use the physician's specialty default.
+    var templateKey: String?
+
+    var id: UUID { localID }
+
+    enum CodingKeys: String, CodingKey {
+        case serverID = "id"
+        case label
+        case templateKey = "template_key"
+    }
+
+    init(serverID: String = "", label: String, templateKey: String? = nil) {
+        self.localID = UUID()
+        self.serverID = serverID
+        self.label = label
+        self.templateKey = templateKey
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        self.localID = UUID()
+        self.serverID = (try? c.decode(String.self, forKey: .serverID)) ?? ""
+        self.label = try c.decode(String.self, forKey: .label)
+        self.templateKey = try c.decodeIfPresent(String.self, forKey: .templateKey)
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(serverID, forKey: .serverID)
+        try c.encode(label, forKey: .label)
+        try c.encodeIfPresent(templateKey, forKey: .templateKey)
+    }
+
+    /// Serialize to the `[String: Any]` shape `updateProfile` expects. An
+    /// empty `id` signals "new" to the backend; a non-empty id is preserved.
+    /// `template_key` is omitted when nil (the backend defaults it to null =
+    /// specialty default); `template_ref` is never sent (always null phase 1).
+    static func encodePayload(_ ctx: VisitTypeContext) -> [String: Any] {
+        var dict: [String: Any] = [
+            "id": ctx.serverID,
+            "label": ctx.label,
+        ]
+        if let tk = ctx.templateKey {
+            dict["template_key"] = tk
+        }
+        return dict
+    }
+}
+
 struct PhysicianProfileResponse: Codable, Sendable {
     let clinicianId: String
     let displayName: String
@@ -1712,6 +1783,9 @@ struct PhysicianProfileResponse: Codable, Sendable {
     let primarySpecialty: String
     let preferredTemplates: [String]
     let consultationTypes: [String]
+    /// Visit-type key → ordered contexts (#313 B1 / #315 I1). Decoded with a
+    /// `[:]` default so a backend on an older schema doesn't break the fetch.
+    let contextsPerVisitType: [String: [VisitTypeContext]]
     let alliedHealthTeam: [AlliedHealthMember]
     let outputLanguage: String
     /// Recording preferences set during onboarding's profile setup. Decoded
@@ -1729,6 +1803,7 @@ struct PhysicianProfileResponse: Codable, Sendable {
         case primarySpecialty = "primary_specialty"
         case preferredTemplates = "preferred_templates"
         case consultationTypes = "consultation_types"
+        case contextsPerVisitType = "contexts_per_visit_type"
         case alliedHealthTeam = "allied_health_team"
         case outputLanguage = "output_language"
         case autoUpload = "auto_upload"
@@ -1744,6 +1819,9 @@ struct PhysicianProfileResponse: Codable, Sendable {
         primarySpecialty = try c.decode(String.self, forKey: .primarySpecialty)
         preferredTemplates = try c.decode([String].self, forKey: .preferredTemplates)
         consultationTypes = try c.decode([String].self, forKey: .consultationTypes)
+        contextsPerVisitType = (try? c.decode(
+            [String: [VisitTypeContext]].self, forKey: .contextsPerVisitType
+        )) ?? [:]
         alliedHealthTeam = (try? c.decode([AlliedHealthMember].self, forKey: .alliedHealthTeam)) ?? []
         outputLanguage = try c.decode(String.self, forKey: .outputLanguage)
         autoUpload = try c.decodeIfPresent(Bool.self, forKey: .autoUpload) ?? true

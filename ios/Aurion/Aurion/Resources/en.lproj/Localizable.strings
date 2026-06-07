@@ -391,6 +391,20 @@
 "setup.visit.custom.error.name" = "Avoid patient names \U2014 use a short label like \"LL fu\".";
 "setup.visit.custom.error.duplicate" = "Already on the list.";
 
+/* ── Per-visit-type contexts (GH-315 / I1) ───────────────── */
+"setup.context.title" = "Contexts";
+"setup.context.titleCount" = "Contexts (%d)";
+"setup.context.add" = "Add context";
+"setup.context.placeholder" = "e.g. LL, breast, right knee";
+"setup.context.commit" = "Add";
+"setup.context.cancel" = "Cancel";
+"setup.context.delete" = "Remove context \"%@\"";
+"setup.context.limit" = "30 contexts maximum.";
+"setup.context.expand" = "Show contexts for %@";
+"setup.context.collapse" = "Hide contexts for %@";
+"setup.context.template.default" = "Use my specialty default";
+"setup.context.template.a11y" = "Template: %@";
+
 /* ── Onboarding ───────────────────────────────────────── */
 "onboarding.getStarted" = "Get Started";
 "onboarding.wearable.title" = "Connect Your Glasses";
@@ -441,6 +455,10 @@
 "specialty.musculoskeletal" = "Musculoskeletal";
 "specialty.emergency_medicine" = "Emergency Medicine";
 "specialty.general" = "General";
+/* Built-in template names not already in the specialty picker (GH-315). */
+"specialty.family_medicine" = "Family Medicine";
+"specialty.internal_medicine" = "Internal Medicine";
+"specialty.pediatrics" = "Pediatrics";
 
 /* ── Visit Types ──────────────────────────────────────── */
 "visitType.new_patient" = "New Patient";
