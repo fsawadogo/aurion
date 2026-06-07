@@ -261,6 +261,12 @@ final class SessionManager: ObservableObject {
         didSet { handleProcessingProgress(from: oldValue, to: uiState) }
     }
     @Published var processingStatus = ""
+    /// Category of the most recent terminal upload failure (nil while healthy
+    /// or after a fresh submit). Lets the processing screen offer the right
+    /// recovery action — "Retry" for transient/server failures vs "Record
+    /// again" for `.noAudio`, where re-uploading the same silent bytes would
+    /// just 422 again.
+    @Published private(set) var lastUploadFailureCategory: AudioUploadErrorCategory?
     /// 0.0–1.0 estimated progress for the processing screen. Animated
     /// 0 → 0.95 over the Stage 1 SLA window (~25s) the moment uiState
     /// becomes ``.processing``; held at 0.95 if the backend runs longer;
@@ -1278,6 +1284,7 @@ final class SessionManager: ObservableObject {
 
         stage1Status = .uploading
         processingStatus = L("processing.uploadingAudio")
+        lastUploadFailureCategory = nil
         let stage1Start = Date()
 
         // ── Step 1: open the push channel BEFORE the upload POST. The
@@ -1656,6 +1663,12 @@ final class SessionManager: ObservableObject {
             detail = L("audio_upload_failed_server")
         case .server5xx:
             detail = L("audio_upload_failed_server")
+        case .noAudio:
+            // 422 — the backend found no usable speech in the recording
+            // (silent / empty / too-short). NOT a server error: tell the
+            // clinician plainly that nothing was heard and to re-record,
+            // instead of the alarming "server error" copy.
+            detail = L("audio_upload_no_speech")
         case .network:
             // Unreachable — guarded above.
             detail = L("audio_upload_failed_network")
@@ -1666,7 +1679,17 @@ final class SessionManager: ObservableObject {
         }
 
         self.error = detail
+        // Record the category so the retry prompt can offer the right action
+        // ("Record again" for .noAudio, "Retry" otherwise).
+        lastUploadFailureCategory = category
         stage1Status = .failed(reason: detail)
+        // Clear the progress subtitle so the screen doesn't keep claiming
+        // "Uploading audio…" underneath the failure card (the spinner label
+        // was never reset on the failure path — the "stuck at 95%" look).
+        // ProcessingView keys its failed presentation off stage1Status, so the
+        // ring + percentage are replaced by a failure glyph; this just stops
+        // the stale subtitle.
+        processingStatus = ""
         // Stay in uiState == .processing so the retry prompt remains reachable.
         _ = isDemoFallback // reserved for a future demo-mode path
         _ = specialty

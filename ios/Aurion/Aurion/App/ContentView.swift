@@ -188,47 +188,72 @@ struct ProcessingView: View {
     }
 
     private var processingBody: some View {
-        VStack(spacing: 24) {
+        // A non-nil retryPrompt means Stage 1 terminally failed. In that state
+        // the progress ring (parked at 95%) and the live "Uploading audio…"
+        // subtitle are stale and contradict the error card — so we swap them
+        // for a static failure glyph and let the retry card carry the message.
+        let isFailed = sessionManager.stage1Status.retryPrompt != nil
+        return VStack(spacing: 24) {
             Spacer()
 
-            ZStack {
-                CircularProgressRing(
-                    progress: sessionManager.processingProgress,
-                    color: .aurionGold,
-                    lineWidth: 6,
-                    size: 80
-                )
-                // Percentage centered inside the ring — visible
-                // confirmation the app is making progress, not
-                // frozen. Time-based estimate (backend doesn't
-                // emit per-step events today).
-                Text("\(Int(sessionManager.processingProgress * 100))%")
-                    .aurionFont(13, weight: .semibold, relativeTo: .footnote)
-                    .foregroundColor(.aurionTextPrimary)
-                    .monospacedDigit()
-                    .accessibilityLabel(
-                        Text(L("processing.a11yProgress",
-                               "\(Int(sessionManager.processingProgress * 100))"))
+            if isFailed {
+                Image(systemName: "exclamationmark.circle")
+                    .font(.system(size: 52, weight: .regular))
+                    .foregroundColor(.aurionGold)
+                    .accessibilityHidden(true)
+            } else {
+                ZStack {
+                    CircularProgressRing(
+                        progress: sessionManager.processingProgress,
+                        color: .aurionGold,
+                        lineWidth: 6,
+                        size: 80
                     )
+                    // Percentage centered inside the ring — visible
+                    // confirmation the app is making progress, not
+                    // frozen. Time-based estimate (backend doesn't
+                    // emit per-step events today).
+                    Text("\(Int(sessionManager.processingProgress * 100))%")
+                        .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                        .foregroundColor(.aurionTextPrimary)
+                        .monospacedDigit()
+                        .accessibilityLabel(
+                            Text(L("processing.a11yProgress",
+                                   "\(Int(sessionManager.processingProgress * 100))"))
+                        )
+                }
+
+                Text(L("processing.title"))
+                    .aurionHeadline()
+
+                Text(status)
+                    .aurionFont(15, relativeTo: .subheadline)
+                    .foregroundColor(.aurionTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
             }
-
-            Text(L("processing.title"))
-                .aurionHeadline()
-
-            Text(status)
-                .aurionFont(15, relativeTo: .subheadline)
-                .foregroundColor(.aurionTextSecondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
 
             // Recorded audio stays in memory while the prompt is
             // visible, so the clinician can re-fire without losing
             // the encounter.
             if let prompt = sessionManager.stage1Status.retryPrompt {
+                // For .noAudio, re-uploading the same silent bytes just 422s
+                // again — offer "Record again" (discard this session, return to
+                // start) instead of a pointless Retry loop. Everything else is
+                // genuinely retryable from the on-disk WAV.
+                let isNoAudio = sessionManager.lastUploadFailureCategory == .noAudio
                 Stage1RetryPrompt(
                     title: prompt.title,
                     detail: prompt.detail,
-                    onRetry: { Task { await sessionManager.retryStage1() } }
+                    actionLabel: isNoAudio ? L("processing.recordAgain") : L("common.retry"),
+                    action: {
+                        if isNoAudio {
+                            sessionManager.endSession()
+                            appState.currentSession = nil
+                        } else {
+                            Task { await sessionManager.retryStage1() }
+                        }
+                    }
                 )
                 .padding(.horizontal, 32)
             }
@@ -250,7 +275,10 @@ struct ProcessingView: View {
 private struct Stage1RetryPrompt: View {
     let title: String
     let detail: String
-    let onRetry: () -> Void
+    /// Action button label — "Retry" for transient/server failures, "Record
+    /// again" for the no-audio case (where re-uploading silence is pointless).
+    let actionLabel: String
+    let action: () -> Void
 
     var body: some View {
         VStack(spacing: 12) {
@@ -261,7 +289,7 @@ private struct Stage1RetryPrompt: View {
                 .aurionFont(13, relativeTo: .footnote)
                 .foregroundColor(.aurionTextSecondary)
                 .multilineTextAlignment(.center)
-            Button(L("common.retry"), action: onRetry)
+            Button(actionLabel, action: action)
                 .buttonStyle(.borderedProminent)
         }
         .padding(16)

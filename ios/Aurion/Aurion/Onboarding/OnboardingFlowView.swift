@@ -95,7 +95,15 @@ struct OnboardingFlowView: View {
                             },
                             // Mic-denied recovery (#296 #10): voice enrollment
                             // is optional, so offer Skip out of the dead-end.
-                            onSkip: { completeOnboarding() }
+                            onSkip: { completeOnboarding() },
+                            // Back to consent — without this the clinician is
+                            // trapped on the record screen (nav-bar back is
+                            // hidden flow-wide; Continue is gated on recording).
+                            onBack: {
+                                withAnimation(AurionAnimation.smooth) {
+                                    currentStep = .biometricConsent
+                                }
+                            }
                         )
                         .transition(AurionTransition.fadeSlide)
                     case .voiceProcessing:

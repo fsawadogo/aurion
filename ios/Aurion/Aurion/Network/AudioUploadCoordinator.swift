@@ -20,6 +20,13 @@ enum AudioUploadErrorCategory: String, Sendable {
     /// backoff; bursting 500s onto an already-broken backend just makes
     /// it worse.
     case server5xx = "server_5xx"
+    /// HTTP 422 — the backend accepted the request but the recording held
+    /// no usable speech (silent / empty / too-short capture). The transcription
+    /// endpoint returns 422 exclusively for the empty-transcript guard, so we
+    /// treat 422 as "no speech detected". Re-uploading the same silent bytes
+    /// can't help, so it's terminal: surface a friendly "no speech — re-record"
+    /// message rather than the generic "server error". Not retryable.
+    case noAudio = "no_audio"
     /// The on-disk WAV the upload chain expected isn't there anymore
     /// (purged mid-flight, sandbox cleared by iOS, etc.). Not retryable
     /// — there's nothing left to upload.
@@ -205,7 +212,7 @@ final class AudioUploadCoordinator: NSObject, @unchecked Sendable {
             } catch let urlError as URLError {
                 lastCategory = classify(urlError: urlError)
             } catch let httpError as HTTPStatusError {
-                lastCategory = classify(httpStatus: httpError.statusCode)
+                lastCategory = classify(httpStatus: httpError.statusCode, body: httpError.body)
             } catch {
                 lastCategory = .unknown
             }
@@ -275,8 +282,23 @@ final class AudioUploadCoordinator: NSObject, @unchecked Sendable {
         }
     }
 
-    static func classify(httpStatus: Int) -> AudioUploadErrorCategory {
+    /// Bounded `reason` strings the backend's empty-transcript guard puts in a
+    /// 422 body (`detail.reason`). ONLY these turn a 422 into the friendly,
+    /// non-retryable no-audio path; any other 422 (e.g. a FastAPI
+    /// request-validation error on a malformed multipart envelope) stays a
+    /// generic 4xx so a recoverable payload glitch isn't mislabeled "no speech".
+    static let noSpeechReasonMarkers = [
+        "transcript_empty_or_missing",
+        "transcript_too_short",
+    ]
+
+    static func classify(httpStatus: Int, body: String? = nil) -> AudioUploadErrorCategory {
         switch httpStatus {
+        case 422:
+            let reason = body ?? ""
+            return noSpeechReasonMarkers.contains(where: reason.contains)
+                ? .noAudio
+                : .server4xx
         case 400..<500: return .server4xx
         case 500..<600: return .server5xx
         default: return .unknown
@@ -287,8 +309,8 @@ final class AudioUploadCoordinator: NSObject, @unchecked Sendable {
         Self.classify(urlError: urlError)
     }
 
-    private func classify(httpStatus: Int) -> AudioUploadErrorCategory {
-        Self.classify(httpStatus: httpStatus)
+    private func classify(httpStatus: Int, body: String?) -> AudioUploadErrorCategory {
+        Self.classify(httpStatus: httpStatus, body: body)
     }
 
     // MARK: - One attempt
@@ -356,8 +378,12 @@ final class AudioUploadCoordinator: NSObject, @unchecked Sendable {
                     return
                 }
                 guard (200..<300).contains(http.statusCode) else {
+                    // Keep the body (bounded) so the classifier can read the
+                    // 422 `reason` — never logged, so no PHI exposure.
+                    let bodyText = String(data: data.prefix(512), encoding: .utf8)
                     continuation.resume(throwing: HTTPStatusError(
-                        statusCode: http.statusCode
+                        statusCode: http.statusCode,
+                        body: bodyText
                     ))
                     return
                 }
@@ -488,6 +514,11 @@ struct AudioUploadError: Error, Sendable {
 /// ``AudioUploadErrorCategory`` via the classifier.
 private struct HTTPStatusError: Error {
     let statusCode: Int
+    /// Response body (UTF-8, may be nil). Lets the classifier distinguish the
+    /// backend's empty-transcript 422 (whose body carries a `reason`) from a
+    /// generic FastAPI request-validation 422 — so a recoverable payload error
+    /// isn't mislabeled "no speech detected".
+    var body: String? = nil
 }
 
 // MARK: - Category helpers
@@ -500,7 +531,7 @@ extension AudioUploadErrorCategory {
     var isRetryable: Bool {
         switch self {
         case .network, .server5xx: return true
-        case .server4xx, .fileMissing, .unknown: return false
+        case .server4xx, .noAudio, .fileMissing, .unknown: return false
         }
     }
 }
