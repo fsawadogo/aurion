@@ -176,6 +176,11 @@ struct SessionNoteView: View {
     @State private var exportFileURL: URL?
     @State private var showShareSheet = false
     @State private var isPreparingExport = false
+    /// Export-failure surface. Distinct from `error` (which only renders
+    /// inside the note==nil EmptyStateView): an export fails while the
+    /// note is loaded, so it needs its own alert that sits OVER the
+    /// document rather than a subtitle that never shows.
+    @State private var exportError: String?
     /// Clamps the note's reading column to a comfortable measure on
     /// iPad. Without this the SOAP section paragraphs run edge-to-edge
     /// at ~1000pt — too wide for sustained reading per HIG.
@@ -188,11 +193,33 @@ struct SessionNoteView: View {
             } else if let note {
                 noteContent(note)
             } else {
-                EmptyStateView(
-                    icon: "doc.questionmark",
-                    title: L("sessionNote.noNote"),
-                    subtitle: error ?? L("sessionNote.noNoteSub")
-                )
+                // Load failed (or returned nothing). EmptyStateView is
+                // presentation-only, so the Retry affordance is appended
+                // below it — mirrors PriorEncountersRail's retry block so
+                // a transient note-fetch failure self-heals on tap.
+                VStack(spacing: AurionSpacing.lg) {
+                    EmptyStateView(
+                        icon: "doc.questionmark",
+                        title: L("sessionNote.noNote"),
+                        subtitle: error ?? L("sessionNote.noNoteSub")
+                    )
+                    Button {
+                        Task { await loadNote() }
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 12, weight: .semibold))
+                            Text(L("common.retry"))
+                                .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                        }
+                        .foregroundColor(.aurionTextPrimary)
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 8)
+                        .background(Color.aurionSurfaceAlt)
+                        .clipShape(Capsule())
+                    }
+                    .disabled(isLoading)
+                }
             }
 
             // Copied toast
@@ -279,6 +306,21 @@ struct SessionNoteView: View {
             if let url = exportFileURL {
                 ShareSheet(items: [url])
             }
+        }
+        // Export-failure alert. Sits over the loaded note (the `error`
+        // EmptyStateView only renders when note==nil, so an export that
+        // fails on a loaded note would otherwise be silent).
+        .alert(
+            L("export.failedShort"),
+            isPresented: Binding(
+                get: { exportError != nil },
+                set: { if !$0 { exportError = nil } }
+            ),
+            presenting: exportError
+        ) { _ in
+            Button(L("common.ok"), role: .cancel) { exportError = nil }
+        } message: { detail in
+            Text(detail)
         }
     }
 
@@ -607,8 +649,12 @@ struct SessionNoteView: View {
                 AurionHaptics.notification(.success)
             } catch {
                 await MainActor.run {
-                    self.error = L("export.failedShort")
+                    // Surface via the dedicated export alert (NOT `self.error`,
+                    // which only paints the note==nil empty state) so the
+                    // failure is visible while the note stays on screen.
+                    self.exportError = L("sessionNote.exportFailedMessage")
                     self.isPreparingExport = false
+                    AurionHaptics.notification(.error)
                 }
             }
         }

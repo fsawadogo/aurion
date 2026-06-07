@@ -145,6 +145,14 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     OfflineStatusBanner()
+                    // Single source of truth for session errors. Previously
+                    // rendered in BOTH resumableSection and quickStartSection,
+                    // so one failure surfaced two identical banners. Hoisted
+                    // here so it shows exactly once regardless of which
+                    // section triggered it.
+                    if let err = sessionManager.error {
+                        ErrorBanner(err, onDismiss: { sessionManager.error = nil })
+                    }
                     greetingHeader
                         .tourAnchor(.greeting)
                         .id(TourAnchor.greeting)
@@ -316,9 +324,6 @@ struct DashboardView: View {
                 }
                 .buttonStyle(.plain)
             }
-            if let err = sessionManager.error {
-                ErrorBanner(err, onDismiss: { sessionManager.error = nil })
-            }
         }
     }
 
@@ -437,9 +442,6 @@ struct DashboardView: View {
                     .accessibilityHint(L("a11y.startEncounterHint"))
                 }
             }
-            if let error = sessionManager.error {
-                ErrorBanner(error, onDismiss: { sessionManager.error = nil })
-            }
         }
     }
 
@@ -477,7 +479,14 @@ struct DashboardView: View {
                 AurionCard(padding: 0) {
                     VStack(spacing: 0) {
                         ForEach(Array(recentSessions.prefix(3).enumerated()), id: \.element.id) { index, session in
-                            recentSessionRow(session: session)
+                            // The row reads as a tappable card but did nothing
+                            // on tap. Mirror `pendingReviewSection` — route the
+                            // tap into the session's note via NavigationLink
+                            // inside the dashboard's own NavigationStack.
+                            NavigationLink(destination: SessionNoteView(session: session)) {
+                                recentSessionRow(session: session)
+                            }
+                            .buttonStyle(.plain)
                             if index < min(recentSessions.count, 3) - 1 {
                                 Rectangle().fill(Color.aurionBorder).frame(height: 1).padding(.leading, 60)
                             }
@@ -526,6 +535,10 @@ struct DashboardView: View {
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
+        // The Spacer between the label stack and the status pill otherwise
+        // swallows taps; make the whole padded row the hit target so the
+        // wrapping NavigationLink fires anywhere on the row.
+        .contentShape(Rectangle())
     }
 
     // MARK: - Encounter Type Sheet (screen 4)

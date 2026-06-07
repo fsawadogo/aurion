@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import Combine
+import UIKit
 
 /// Screen 3 — Voice recording prompt.
 /// Records 30–60 seconds of physician speech to a temp file. The file URL is
@@ -28,8 +29,17 @@ import Combine
 ///     and disables Continue until the user re-records.
 struct VoiceRecordingView: View {
     let onComplete: (URL) -> Void
+    /// Optional skip handler for the mic-permission dead-end. Voice
+    /// enrollment is optional, and when the OS has denied the microphone
+    /// the clinician cannot record at all — so the host flow can pass a
+    /// skip closure to let them proceed past this screen. Defaults to
+    /// `nil` (Skip hidden) so the view still compiles standalone and in
+    /// flows that don't offer a skip; the "Open Settings" recovery is
+    /// always available regardless.
+    var onSkip: (() -> Void)? = nil
 
     @StateObject private var recorder = VoiceRecorder()
+    @Environment(\.scenePhase) private var scenePhase
     /// Index of the active sentence — advances on the 8s sentence-tick
     /// boundary regardless of speech quality so the user sees the prompt
     /// move forward. Quality is evaluated separately per row.
@@ -137,6 +147,25 @@ struct VoiceRecordingView: View {
             VStack(spacing: 12) {
                 recordButton
 
+                // Mic-denied recovery: the record button is disabled, so
+                // without this the clinician is hard-stuck. "Open Settings"
+                // deep-links to the app's privacy page; returning grants
+                // are picked up by the scenePhase re-check below. Skip is
+                // offered when the host flow wires one (enrollment is
+                // optional).
+                if permissionDenied {
+                    AurionGoldButton(label: L("onboarding.voiceRec.openSettings"), full: true) {
+                        openSettings()
+                    }
+                    .transition(.opacity)
+
+                    if let onSkip {
+                        Button(L("common.skip")) { onSkip() }
+                            .aurionFont(12, relativeTo: .caption)
+                            .foregroundColor(.aurionTextPrimary)
+                    }
+                }
+
                 if canProceed, let url = recorder.lastRecordingURL {
                     AurionGoldButton(label: L("setup.continue"), full: true) { onComplete(url) }
                         .transition(.move(edge: .bottom).combined(with: .opacity))
@@ -155,7 +184,15 @@ struct VoiceRecordingView: View {
         .animation(.aurionIOS, value: recorder.isRecording)
         .animation(.aurionIOS, value: canProceed)
         .animation(.aurionIOS, value: qualityCheckFailed)
+        .animation(.aurionIOS, value: permissionDenied)
         .onAppear { Task { await ensurePermission() } }
+        .onChange(of: scenePhase) { _, newPhase in
+            // Returning from Settings (or any foregrounding) — re-read the
+            // mic authorization so a permission granted out-of-app
+            // immediately re-enables the record button instead of leaving
+            // the clinician stuck on the denied state.
+            if newPhase == .active { refreshPermissionStatus() }
+        }
         .onChange(of: recorder.audioLevel) { _, newLevel in
             // Feed each meter tick into the per-sentence accumulator so
             // the quality gate has real data to evaluate when the
@@ -305,6 +342,29 @@ struct VoiceRecordingView: View {
     private func ensurePermission() async {
         let granted = await AVCaptureDevice.requestAccess(for: .audio)
         permissionDenied = !granted
+    }
+
+    /// Re-read the current mic authorization without prompting again.
+    /// Called on foreground so a permission granted in Settings flips the
+    /// UI back to a usable record button. `.notDetermined` is left to the
+    /// initial `ensurePermission()` prompt.
+    private func refreshPermissionStatus() {
+        switch AVCaptureDevice.authorizationStatus(for: .audio) {
+        case .authorized:
+            permissionDenied = false
+        case .denied, .restricted:
+            permissionDenied = true
+        case .notDetermined:
+            break
+        @unknown default:
+            break
+        }
+    }
+
+    private func openSettings() {
+        if let url = URL(string: UIApplication.openSettingsURLString) {
+            UIApplication.shared.open(url)
+        }
     }
 
     private func toggleRecording() {

@@ -1,6 +1,7 @@
 import SwiftUI
 import AVFoundation
 import ReplayKit
+import CoreBluetooth
 
 /// Device management hub — 4th tab.
 /// Audio and video sources are picked independently so a session can mix
@@ -181,12 +182,18 @@ struct DeviceHubView: View {
             permissionCard(
                 icon: "antenna.radiowaves.left.and.right",
                 label: L("devices.permission.bluetooth"),
-                granted: true
+                state: bluetoothTileState
             )
+            // Screen recording isn't a user-grantable permission like
+            // camera/mic — RPScreenRecorder reports system availability,
+            // not an authorization decision. Label it Available/Unavailable
+            // so it doesn't read as a denied permission the user must fix.
             permissionCard(
                 icon: "rectangle.on.rectangle",
                 label: L("devices.permission.screen"),
-                granted: RPScreenRecorder.shared().isAvailable
+                state: RPScreenRecorder.shared().isAvailable ? .granted : .denied,
+                grantedLabel: L("devices.available"),
+                deniedLabel: L("devices.unavailable")
             )
         }
     }
@@ -211,6 +218,84 @@ struct DeviceHubView: View {
                     AurionStatusPill(
                         kind: granted ? .done : .archived,
                         labelOverride: granted ? L("devices.granted") : L("devices.denied")
+                    )
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+        .buttonStyle(.plain)
+    }
+
+    // MARK: - Three-state permission tile
+
+    /// Tri-state so an un-prompted permission (neutral) is distinct from an
+    /// explicit denial — the physician knows whether to grant on first
+    /// prompt or open Settings to flip a previously-denied toggle.
+    private enum PermissionTileState {
+        case granted
+        case denied
+        case unknown
+
+        var pillKind: AurionStatusKind {
+            switch self {
+            case .granted: return .done
+            case .denied:  return .archived
+            case .unknown: return .pending
+            }
+        }
+    }
+
+    /// Bluetooth authorization, read straight from CoreBluetooth — no manager
+    /// instantiation and no permission prompt are triggered by this read.
+    /// `notDetermined` maps to the neutral state because the system hasn't
+    /// asked yet; only `.denied` / `.restricted` are actionable from Settings.
+    private var bluetoothTileState: PermissionTileState {
+        switch CBManager.authorization {
+        case .allowedAlways:        return .granted
+        case .denied, .restricted:  return .denied
+        case .notDetermined:        return .unknown
+        @unknown default:           return .unknown
+        }
+    }
+
+    /// Tri-state variant of `permissionCard`. Mirrors the camera/mic pill
+    /// chrome but distinguishes neutral/unknown from denied.
+    private func permissionCard(
+        icon: String,
+        label: String,
+        state: PermissionTileState,
+        grantedLabel: String = L("devices.granted"),
+        deniedLabel: String = L("devices.denied"),
+        unknownLabel: String = L("devices.permission.notDetermined")
+    ) -> some View {
+        Button {
+            // Only an explicit denial is fixable from Settings; an
+            // un-prompted (unknown) permission resolves on first system
+            // prompt and a granted one needs no action.
+            if state == .denied, let url = URL(string: UIApplication.openSettingsURLString) {
+                UIApplication.shared.open(url)
+            }
+        } label: {
+            AurionCard(padding: 14) {
+                VStack(alignment: .leading, spacing: 10) {
+                    HStack(spacing: 10) {
+                        Image(systemName: icon)
+                            .font(.system(size: 20))
+                            .foregroundColor(.aurionTextPrimary)
+                        Text(label)
+                            .aurionFont(14, weight: .medium, relativeTo: .subheadline)
+                            .foregroundColor(.aurionTextPrimary)
+                            .lineLimit(1)
+                    }
+                    AurionStatusPill(
+                        kind: state.pillKind,
+                        labelOverride: {
+                            switch state {
+                            case .granted: return grantedLabel
+                            case .denied:  return deniedLabel
+                            case .unknown: return unknownLabel
+                            }
+                        }()
                     )
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

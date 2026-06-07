@@ -129,8 +129,17 @@ struct PatientIdentifierSheet: View {
     @Binding var isPresented: Bool
 
     @State private var draft: String = ""
-    @State private var isWorking = false
+    @State private var inFlight: InFlightAction?
     @State private var errorMessage: String?
+
+    /// Which network action is currently in flight, so the spinner
+    /// renders on the tapped button only (#13) — Save and Clear share
+    /// the same roundtrip but must not both show a spinner.
+    private enum InFlightAction { case save, clear }
+
+    /// Any action in flight disables every control to block a
+    /// double-submit.
+    private var isWorking: Bool { inFlight != nil }
 
     var body: some View {
         NavigationStack {
@@ -179,10 +188,15 @@ struct PatientIdentifierSheet: View {
                         Button(role: .destructive) {
                             Task { await clear() }
                         } label: {
-                            Text(L("patientId.clear"))
-                                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
-                                .frame(maxWidth: .infinity)
-                                .padding(.vertical, 14)
+                            HStack {
+                                if inFlight == .clear {
+                                    ProgressView().tint(.aurionRed)
+                                }
+                                Text(L("patientId.clear"))
+                                    .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                            }
+                            .frame(maxWidth: .infinity)
+                            .padding(.vertical, 14)
                         }
                         .buttonStyle(.bordered)
                         .disabled(isWorking)
@@ -192,7 +206,7 @@ struct PatientIdentifierSheet: View {
                         Task { await save() }
                     } label: {
                         HStack {
-                            if isWorking {
+                            if inFlight == .save {
                                 ProgressView().tint(.aurionNavy)
                             }
                             Text(L("patientId.save"))
@@ -230,17 +244,17 @@ struct PatientIdentifierSheet: View {
     private func save() async {
         let trimmed = draft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
-        await runCall(setting: trimmed)
+        await runCall(.save, setting: trimmed)
     }
 
     private func clear() async {
-        await runCall(setting: nil)
+        await runCall(.clear, setting: nil)
     }
 
-    private func runCall(setting value: String?) async {
-        isWorking = true
+    private func runCall(_ action: InFlightAction, setting value: String?) async {
+        inFlight = action
         errorMessage = nil
-        defer { isWorking = false }
+        defer { inFlight = nil }
         do {
             _ = try await APIClient.shared.setSessionIdentifier(
                 sessionId: sessionId,

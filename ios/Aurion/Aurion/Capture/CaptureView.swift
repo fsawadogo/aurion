@@ -98,6 +98,16 @@ struct CaptureView: View {
                         .tracking(0.4)
                         .foregroundColor(Color.aurionOnNavySecondary)
 
+                    // On Stop the side controls fade out and the timer
+                    // freezes; without this the screen reads as hung while
+                    // Stage 1 runs. A brief in-view spinner makes the
+                    // transcribe→assemble wait legible.
+                    if session.state == .processingStage1 {
+                        processingIndicator
+                            .padding(.top, 24)
+                            .transition(.opacity)
+                    }
+
                     if let method = session.consentMethod, let timestamp = session.consentConfirmedAt {
                         consentChip(method: method, at: timestamp)
                             .padding(.top, 6)
@@ -437,6 +447,26 @@ struct CaptureView: View {
         // mid-speech but also can't peg at max constantly.
         let level = CGFloat(min(1.0, max(0.15, Double(builtInSource.audioLevel) * 1.6)))
         return 6 + 30 * level * envelope
+    }
+
+    // MARK: - Processing Indicator
+
+    /// Shown while Stage 1 runs (record_stop → stage1_delivered). The timer
+    /// is intentionally frozen here, so a spinner + label is the only signal
+    /// that work is in flight. Decorative spinner; the label carries the
+    /// meaning for VoiceOver.
+    private var processingIndicator: some View {
+        HStack(spacing: 10) {
+            ProgressView()
+                .tint(.aurionGold)
+            Text(L("capture.processing"))
+                .aurionFont(14, weight: .medium, relativeTo: .subheadline)
+                .foregroundColor(Color.aurionOnNavySecondary)
+        }
+        .padding(.horizontal, 16)
+        .padding(.vertical, 10)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
     }
 
     // MARK: - Collaboration Pill

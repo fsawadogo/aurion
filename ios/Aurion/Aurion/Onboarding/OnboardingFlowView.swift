@@ -83,7 +83,10 @@ struct OnboardingFlowView: View {
                                 withAnimation(AurionAnimation.smooth) {
                                     currentStep = .voiceProcessing
                                 }
-                            }
+                            },
+                            // Mic-denied recovery (#296 #10): voice enrollment
+                            // is optional, so offer Skip out of the dead-end.
+                            onSkip: { completeOnboarding() }
                         )
                         .transition(AurionTransition.fadeSlide)
                     case .voiceProcessing:

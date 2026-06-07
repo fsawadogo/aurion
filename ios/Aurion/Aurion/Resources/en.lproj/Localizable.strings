@@ -886,3 +886,23 @@
 "login.biometricExpired" = "Saved login expired. Please sign in with your password.";
 "login.or" = "or";
 "biometric.passcode" = "Passcode";
+
+/* -- Audit #296 (error/state-handling sweep) -- */
+"onboarding.voiceProc.failedTitle" = "Voice profile couldn't be saved";
+"onboarding.voiceProc.noRecording" = "No recording found.";
+"onboarding.voiceProc.analyzeFailed" = "Could not analyze recording.";
+"onboarding.voiceRec.openSettings" = "Open Settings";
+"setup.saveFailed" = "Failed to save: %@";
+"profile.loadingSessions" = "Loading session history\U2026";
+"profile.sessionLoadFailed" = "Couldn't load your session history.";
+"consent.event.biometric" = "Biometric Consent";
+"consent.event.voiceEnrollment" = "Voice Enrollment";
+"sessionNote.exportFailedMessage" = "We couldn't prepare the document. Please try again.";
+"postEncounter.templatesLoadFailed" = "Couldn't load your templates.";
+"stage2.failedStillReviewable" = "Note still ready to review";
+"devices.available" = "Available";
+"devices.unavailable" = "Unavailable";
+"devices.permission.notDetermined" = "Not requested";
+"frames.decodeFailed" = "Image unavailable";
+"clip.loading" = "Loading clip\U2026";
+"clip.unavailable" = "Clip unavailable";

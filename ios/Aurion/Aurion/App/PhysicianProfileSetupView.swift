@@ -246,6 +246,14 @@ struct PhysicianProfileSetupView: View {
     private var footer: some View {
         VStack(spacing: 0) {
             Rectangle().fill(Color.aurionBorder).frame(height: 1)
+            // saveProfile() failures used to set `error` but the body never
+            // rendered it, so a failed save looked like a silent no-op. Surface
+            // it here, just above the action button, with a dismiss affordance.
+            if let error {
+                ErrorBanner(error, onDismiss: { withAnimation(.aurionIOS) { self.error = nil } })
+                    .aurionScreenEdge()
+                    .padding(.top, 12)
+            }
             AurionGoldButton(
                 label: step == totalSteps - 1
                     ? (isSaving ? L("setup.saving") : L("setup.getStarted"))
@@ -814,7 +822,7 @@ struct PhysicianProfileSetupView: View {
             appState.hasCompletedProfileSetup = true
             AurionHaptics.notification(.success)
         } catch {
-            self.error = "Failed to save: \(error.localizedDescription)"
+            self.error = L("setup.saveFailed", error.localizedDescription)
             AurionHaptics.notification(.error)
         }
     }

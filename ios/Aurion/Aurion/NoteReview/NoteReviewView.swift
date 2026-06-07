@@ -58,6 +58,10 @@ struct NoteReviewView: View {
     let onDismiss: () -> Void
     @StateObject private var wsClient: WebSocketClient
     @State private var note: NoteResponse?
+    /// Captures a failed initial note fetch so the view can show a real
+    /// error + Retry instead of an infinite ProgressView. Cleared on a
+    /// successful (re)load. Never set on the `initialNote` short-circuit.
+    @State private var loadError: String?
     /// Which section's source panel is currently expanded inline. nil = none.
     /// Sections render as continuous prose (one paragraph per section); tapping
     /// the paragraph toggles the per-section citation list.
@@ -171,6 +175,17 @@ struct NoteReviewView: View {
                 } else {
                     approvalBar(n)
                 }
+            } else if let loadError {
+                // Initial fetch failed — give the physician a real error
+                // surface with Retry rather than a spinner that never
+                // resolves. Retry clears the error and re-runs loadNote().
+                Spacer()
+                ErrorBanner(loadError, onRetry: {
+                    self.loadError = nil
+                    loadNote()
+                })
+                .padding(.horizontal, 16)
+                Spacer()
             } else {
                 Spacer()
                 ProgressView(L("noteReview.loading"))
@@ -939,7 +954,15 @@ struct NoteReviewView: View {
         } else {
             wsClient.connect()
             Task {
-                note = try? await APIClient.shared.getFullNote(sessionId: sessionId)
+                do {
+                    note = try await APIClient.shared.getFullNote(sessionId: sessionId)
+                    loadError = nil
+                } catch {
+                    // Surface the failure so the body renders the error +
+                    // Retry state instead of an endless spinner.
+                    loadError = (error as? APIError)?.errorDescription
+                        ?? error.localizedDescription
+                }
             }
         }
         // #61 — fetch the session row in parallel so the prior-encounters

@@ -46,6 +46,9 @@ struct MfaSetupView: View {
     @State private var code: String = ""
     @State private var error: String?
     @State private var copied: Bool = false
+    /// Bumped after a bad code clears the field, so ``TotpCodeField`` can
+    /// re-assert keyboard focus without the user tapping a cell again.
+    @State private var focusResetToken = 0
 
     private var canConfirm: Bool {
         TotpCodeField.isComplete(code) && phase == .confirm
@@ -111,21 +114,58 @@ struct MfaSetupView: View {
         }
     }
 
+    @ViewBuilder
     private var loadingCard: some View {
-        VStack(spacing: 14) {
-            ProgressView().tint(.aurionGold)
-            Text(L("login.mfa.setup.title"))
-                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
-                .foregroundColor(.white)
-            if let error {
+        if let error {
+            // beginMfaSetup() failed — surface the error with a retry path
+            // instead of leaving the spinner running forever.
+            VStack(spacing: 14) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 26))
+                    .foregroundColor(Color.aurionOnNavyError)
+                Text(L("login.mfa.setup.title"))
+                    .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                    .foregroundColor(.white)
                 Text(error)
                     .aurionFont(12, relativeTo: .caption)
                     .foregroundColor(Color.aurionOnNavyError)
                     .multilineTextAlignment(.center)
+
+                Button {
+                    AurionHaptics.impact(.medium)
+                    Task { await retryLoadSecret() }
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "arrow.clockwise")
+                            .font(.system(size: 15, weight: .semibold))
+                        Text(L("common.retry"))
+                    }
+                    .frame(maxWidth: .infinity)
+                }
+                .buttonStyle(AurionPrimaryButtonStyle())
+
+                Button {
+                    AurionHaptics.selection()
+                    onCancel()
+                } label: {
+                    Text(L("common.cancel"))
+                        .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                        .foregroundColor(.white.opacity(0.8))
+                }
+                .padding(.top, 2)
             }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
+        } else {
+            VStack(spacing: 14) {
+                ProgressView().tint(.aurionGold)
+                Text(L("login.mfa.setup.title"))
+                    .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                    .foregroundColor(.white)
+            }
+            .frame(maxWidth: .infinity)
+            .padding(.vertical, 12)
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, 12)
     }
 
     private var displayCard: some View {
@@ -221,7 +261,7 @@ struct MfaSetupView: View {
 
             TotpCodeField(code: $code, onComplete: {
                 if canConfirm { Task { await confirm() } }
-            })
+            }, resetToken: focusResetToken)
             .frame(maxWidth: .infinity)
 
             Button {
@@ -282,6 +322,15 @@ struct MfaSetupView: View {
         }
     }
 
+    /// Re-arm the loading state and re-run ``loadSecret()`` after a failed
+    /// fetch. Clearing `error` first swaps the retry card back to the
+    /// spinner while the request is in flight.
+    @MainActor
+    private func retryLoadSecret() async {
+        error = nil
+        await loadSecret()
+    }
+
     @MainActor
     private func confirm() async {
         guard canConfirm else { return }
@@ -293,6 +342,7 @@ struct MfaSetupView: View {
             case .codeMismatch:
                 phase = .confirm
                 code = ""
+                focusResetToken += 1
                 error = L("login.mfa.setup.codeMismatch")
                 AurionHaptics.notification(.error)
             case .success:
@@ -302,6 +352,7 @@ struct MfaSetupView: View {
         } catch {
             phase = .confirm
             code = ""
+            focusResetToken += 1
             self.error = error.localizedDescription
             AurionHaptics.notification(.error)
         }

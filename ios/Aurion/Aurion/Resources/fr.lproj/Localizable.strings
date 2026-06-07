@@ -876,3 +876,23 @@
 "login.biometricExpired" = "Connexion enregistr\U00E9e expir\U00E9e. Veuillez vous connecter avec votre mot de passe.";
 "login.or" = "ou";
 "biometric.passcode" = "Code";
+
+/* -- Audit #296 (error/state-handling sweep) -- */
+"onboarding.voiceProc.failedTitle" = "\U00C9chec de la cr\U00E9ation du profil vocal";
+"onboarding.voiceProc.noRecording" = "Aucun enregistrement trouv\U00E9.";
+"onboarding.voiceProc.analyzeFailed" = "Impossible d'analyser l'enregistrement.";
+"onboarding.voiceRec.openSettings" = "Ouvrir les r\U00E9glages";
+"setup.saveFailed" = "\U00C9chec de l'enregistrement : %@";
+"profile.loadingSessions" = "Chargement de l'historique des sessions\U2026";
+"profile.sessionLoadFailed" = "Impossible de charger votre historique des sessions.";
+"consent.event.biometric" = "Consentement biom\U00E9trique";
+"consent.event.voiceEnrollment" = "Enr\U00F4lement vocal";
+"sessionNote.exportFailedMessage" = "Impossible de pr\U00E9parer le document. Veuillez r\U00E9essayer.";
+"postEncounter.templatesLoadFailed" = "Impossible de charger vos mod\U00E8les.";
+"stage2.failedStillReviewable" = "Note toujours pr\U00EAte \U00E0 r\U00E9viser";
+"devices.available" = "Disponible";
+"devices.unavailable" = "Indisponible";
+"devices.permission.notDetermined" = "Non demand\U00E9";
+"frames.decodeFailed" = "Image indisponible";
+"clip.loading" = "Chargement du clip\U2026";
+"clip.unavailable" = "Clip indisponible";

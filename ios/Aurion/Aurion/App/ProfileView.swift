@@ -18,8 +18,16 @@ struct ProfileView: View {
     @State private var error: String?
     // appLanguage binding comes from appState
     @State private var showTeamMemberEditor = false
-    @State private var sessionAlertsEnabled = true
-    @State private var noteReadyAlertsEnabled = true
+    // Notification preferences are persisted to UserDefaults (mirrors the
+    // RecordingPreferences load/persist shape) — previously these were
+    // seeded `true` in @State and never read or saved, so flipping the
+    // toggles was a no-op that reset on next launch.
+    @State private var notificationPrefs = NotificationPreferences.load()
+    // Session history is loaded from the real `/sessions` endpoint. These
+    // flags drive the loading spinner + retry affordance so the section
+    // reads as fetching → real data | empty | failed, never fake rows.
+    @State private var isLoadingSessions = false
+    @State private var sessionLoadFailed = false
 
     private var physicianInitials: String {
         if let name = appState.physicianProfile?.displayName, !name.isEmpty {
@@ -250,19 +258,19 @@ struct ProfileView: View {
 
             // ── Notification Preferences ─────────────────────
             Section {
-                Toggle(isOn: $sessionAlertsEnabled) {
+                Toggle(isOn: $notificationPrefs.sessionAlerts) {
                     Label(L("profile.sessionAlerts"), systemImage: "bell.badge")
                         .foregroundColor(.aurionTextPrimary)
                 }
                 .tint(.aurionGold)
-                .sensoryFeedback(.selection, trigger: sessionAlertsEnabled)
+                .sensoryFeedback(.selection, trigger: notificationPrefs.sessionAlerts)
 
-                Toggle(isOn: $noteReadyAlertsEnabled) {
+                Toggle(isOn: $notificationPrefs.noteReadyAlerts) {
                     Label(L("profile.noteReady"), systemImage: "doc.badge.clock")
                         .foregroundColor(.aurionTextPrimary)
                 }
                 .tint(.aurionGold)
-                .sensoryFeedback(.selection, trigger: noteReadyAlertsEnabled)
+                .sensoryFeedback(.selection, trigger: notificationPrefs.noteReadyAlerts)
             } header: {
                 SectionHeader(title: L("profile.sectionNotifications"))
             }
@@ -379,7 +387,22 @@ struct ProfileView: View {
 
             // ── Session History ───────────────────────────────
             Section {
-                if sessionHistory.isEmpty {
+                if isLoadingSessions {
+                    HStack(spacing: AurionSpacing.sm) {
+                        ProgressView()
+                        Text(L("profile.loadingSessions"))
+                            .aurionCaption()
+                        Spacer(minLength: 0)
+                    }
+                } else if sessionLoadFailed {
+                    ErrorBanner(
+                        L("profile.sessionLoadFailed"),
+                        onRetry: { Task { await loadSessionHistory() } },
+                        onDismiss: { sessionLoadFailed = false }
+                    )
+                    .listRowInsets(EdgeInsets())
+                    .listRowBackground(Color.clear)
+                } else if sessionHistory.isEmpty {
                     Text(L("profile.noSessionHistory"))
                         .aurionCaption()
                 } else {
@@ -446,8 +469,12 @@ struct ProfileView: View {
         .navigationTitle(L("profile.title"))
         .navigationBarTitleDisplayMode(.inline)
         .toolbarBackground(.automatic, for: .navigationBar)
-        .onAppear { loadConsentHistory(); loadSessionHistory() }
+        .onAppear { loadConsentHistory() }
         .task { await loadProfile() }
+        .task { await loadSessionHistory() }
+        .onChange(of: notificationPrefs) { _, newValue in
+            newValue.persist()
+        }
         .alert(L("profile.deleteTitle"), isPresented: $showDeleteConfirmation) {
             Button(L("profile.deleteConfirm"), role: .destructive) { deleteAccount() }
             Button(L("profile.deleteCancel"), role: .cancel) {}
@@ -598,18 +625,82 @@ struct ProfileView: View {
     }
 
     private func loadConsentHistory() {
-        // Load from local audit events for now
+        // There is no dedicated consent-history read endpoint in APIClient —
+        // the only consent source is the Law-25 `/privacy/my-data` export,
+        // which is an explicit, user-initiated data-access action (the "View
+        // My Data" button) and inappropriate to auto-fire on every Profile
+        // appear. Until a read endpoint exists, ship an honest empty state in
+        // release so the "no consent records" copy is reachable and pilot
+        // clinicians never see fabricated history. Sample rows are DEBUG-only,
+        // localized, and dated from the active locale so even the dev preview
+        // isn't hard-coded English.
+        #if DEBUG
+        let now = ISO8601DateFormatter().string(from: Date())
         consentEvents = [
-            ConsentEvent(id: "1", type: "biometric_consent_confirmed", displayName: "Biometric Consent", timestamp: "Apr 14, 2026 02:12"),
-            ConsentEvent(id: "2", type: "voice_enrollment_complete", displayName: "Voice Enrollment", timestamp: "Apr 14, 2026 02:13"),
+            ConsentEvent(
+                id: "debug-1",
+                type: "biometric_consent_confirmed",
+                displayName: L("consent.event.biometric"),
+                timestamp: formatRelativeTime(now)
+            ),
+            ConsentEvent(
+                id: "debug-2",
+                type: "voice_enrollment_complete",
+                displayName: L("consent.event.voiceEnrollment"),
+                timestamp: formatRelativeTime(now)
+            ),
         ]
+        #else
+        consentEvents = []
+        #endif
     }
 
-    private func loadSessionHistory() {
-        sessionHistory = [
-            SessionHistoryItem(id: "1", specialty: "orthopedic_surgery", date: "Apr 14, 2026", state: "EXPORTED"),
-            SessionHistoryItem(id: "2", specialty: "plastic_surgery", date: "Apr 13, 2026", state: "PURGED"),
-        ]
+    private func loadSessionHistory() async {
+        isLoadingSessions = true
+        sessionLoadFailed = false
+        defer { isLoadingSessions = false }
+        do {
+            let sessions = try await APIClient.shared.listSessions()
+            // Map to the lightweight display model. Dates are formatted with
+            // the active app locale (formatRelativeTime reads
+            // Localization.locale) so the in-app language picker takes effect.
+            sessionHistory = sessions.map { s in
+                SessionHistoryItem(
+                    id: s.id,
+                    specialty: s.specialty,
+                    date: formatRelativeTime(s.createdAt),
+                    state: s.state
+                )
+            }
+        } catch {
+            sessionLoadFailed = true
+        }
+    }
+}
+
+// MARK: - Notification Preferences
+
+/// Per-physician local notification preferences, persisted to UserDefaults.
+/// Mirrors ``RecordingPreferences`` (JSON-encoded under a single key) so the
+/// load/persist shape is consistent across the app. These gate local UX
+/// alerts only — there is no backend field for them yet.
+struct NotificationPreferences: Codable, Equatable {
+    var sessionAlerts: Bool = true
+    var noteReadyAlerts: Bool = true
+
+    private static let key = "aurion.notification_preferences"
+
+    static func load() -> NotificationPreferences {
+        guard let data = UserDefaults.standard.data(forKey: key),
+              let prefs = try? JSONDecoder().decode(NotificationPreferences.self, from: data) else {
+            return NotificationPreferences()
+        }
+        return prefs
+    }
+
+    func persist() {
+        guard let data = try? JSONEncoder().encode(self) else { return }
+        UserDefaults.standard.set(data, forKey: Self.key)
     }
 }
 

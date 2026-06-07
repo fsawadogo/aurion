@@ -9,6 +9,11 @@ struct PostEncounterView: View {
     @State private var selectedLanguage: String
     @State private var preferredTemplates: [TemplateResponse] = []
     @State private var isLoadingTemplates = false
+    /// `true` when the template fetch threw. We still fall back to the
+    /// current specialty so the physician can proceed, but we surface an
+    /// inline error + Retry rather than silently masking the failure as a
+    /// one-item list.
+    @State private var templatesLoadFailed = false
     @State private var isConfirming = false
     /// Patient identifier (#61). Seeded from the session row on
     /// load; the editor binding writes back here. Stays nil when
@@ -77,6 +82,17 @@ struct PostEncounterView: View {
                         RoundedRectangle(cornerRadius: 16)
                             .stroke(Color.aurionBorder, lineWidth: 1)
                     )
+
+                    // Inline failure surface for the template fetch. The
+                    // list above still shows the current-specialty fallback
+                    // so the physician isn't blocked; this just makes the
+                    // failure honest and offers a Retry.
+                    if templatesLoadFailed {
+                        ErrorBanner(
+                            L("postEncounter.templatesLoadFailed"),
+                            onRetry: { Task { await loadTemplates() } }
+                        )
+                    }
 
                     // Patient identifier section (#61). Optional —
                     // physician can skip it and the note still
@@ -171,10 +187,17 @@ struct PostEncounterView: View {
         isLoadingTemplates = true
         do {
             preferredTemplates = try await APIClient.shared.getPreferredTemplates()
+            templatesLoadFailed = false
         } catch {
-            preferredTemplates = [
-                TemplateResponse(key: selectedTemplate, displayName: selectedTemplate.displayFormatted, sections: [])
-            ]
+            templatesLoadFailed = true
+            // Keep a usable fallback (the current specialty) so Generate
+            // still works, but only seed it if we have nothing yet — a
+            // Retry that fails again shouldn't clobber a prior good list.
+            if preferredTemplates.isEmpty {
+                preferredTemplates = [
+                    TemplateResponse(key: selectedTemplate, displayName: selectedTemplate.displayFormatted, sections: [])
+                ]
+            }
         }
         isLoadingTemplates = false
     }

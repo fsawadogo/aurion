@@ -46,6 +46,24 @@ struct VoiceProcessingView: View {
                     .transition(.opacity)
                     .id(currentStepLabel)
                     .animation(.aurionIOS, value: currentStepLabel)
+            } else if let failureMessage {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 72))
+                    .foregroundColor(.aurionAmber)
+                    .aurionStagger(order: 0, baseDelay: 0.1)
+
+                Text(L("onboarding.voiceProc.failedTitle"))
+                    .font(.title3)
+                    .fontWeight(.semibold)
+                    .foregroundColor(.aurionTextPrimary)
+                    .aurionStagger(order: 1, baseDelay: 0.1)
+
+                Text(failureMessage)
+                    .font(.body)
+                    .foregroundColor(.aurionTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .padding(.horizontal, 40)
+                    .aurionStagger(order: 2, baseDelay: 0.1)
             } else {
                 AurionAnimatedCheck(size: 96, color: .aurionGold)
 
@@ -66,9 +84,20 @@ struct VoiceProcessingView: View {
             Spacer()
 
             if !isProcessing {
-                AurionGoldButton(label: L("onboarding.voiceProc.continue"), full: true) { onComplete() }
+                if failureMessage != nil {
+                    VStack(spacing: 12) {
+                        AurionGoldButton(label: L("common.retry"), full: true) { retryEnrollment() }
+                        Button(L("common.skip")) { skipEnrollment() }
+                            .aurionFont(14, weight: .medium, relativeTo: .body)
+                            .foregroundColor(.aurionTextSecondary)
+                    }
                     .padding(.horizontal, 20)
-                    .aurionStagger(order: 2, baseDelay: 0.5)
+                    .aurionStagger(order: 3, baseDelay: 0.1)
+                } else {
+                    AurionGoldButton(label: L("onboarding.voiceProc.continue"), full: true) { onComplete() }
+                        .padding(.horizontal, 20)
+                        .aurionStagger(order: 2, baseDelay: 0.5)
+                }
             }
 
             Spacer().frame(height: 40)
@@ -104,7 +133,15 @@ struct VoiceProcessingView: View {
         DispatchQueue.main.asyncAfter(deadline: .now() + totalDuration + 0.25) {
             extractAndStoreEmbedding()
             withAnimation(.aurionIOS) { isProcessing = false }
-            AurionHaptics.notification(.success)
+            // Only celebrate when the embedding actually landed in the
+            // Keychain. A failed extraction (no file / unanalyzable audio)
+            // sets `failureMessage` and must fire the error notification,
+            // not the success chime + checkmark.
+            if failureMessage == nil {
+                AurionHaptics.notification(.success)
+            } else {
+                AurionHaptics.notification(.error)
+            }
         }
     }
 
@@ -116,16 +153,34 @@ struct VoiceProcessingView: View {
     /// the device.
     private func extractAndStoreEmbedding() {
         guard let url = audioFileURL else {
-            failureMessage = "No recording found."
+            failureMessage = L("onboarding.voiceProc.noRecording")
             return
         }
         guard let embedding = VoiceEmbeddingExtractor.extract(from: url) else {
-            failureMessage = "Could not analyze recording."
+            failureMessage = L("onboarding.voiceProc.analyzeFailed")
             try? FileManager.default.removeItem(at: url)
             return
         }
         KeychainHelper.shared.saveVoiceEmbedding(embedding)
         try? FileManager.default.removeItem(at: url)
         AuditLogger.log(event: .voiceEnrollmentComplete)
+    }
+
+    /// Re-run enrollment after a failure: reset the progress UI + failure
+    /// state, flip back into the processing branch, and drive the pipeline
+    /// again. The success/error haptic is re-decided at the end of the run.
+    private func retryEnrollment() {
+        failureMessage = nil
+        progress = 0
+        currentStepLabel = stepLabels[0]
+        withAnimation(.aurionIOS) { isProcessing = true }
+        processVoiceEnrollment()
+    }
+
+    /// Voice enrollment is optional — let the clinician proceed without a
+    /// profile rather than trapping them on a failed processing screen.
+    private func skipEnrollment() {
+        AuditLogger.log(event: .voiceEnrollmentSkipped)
+        onComplete()
     }
 }
