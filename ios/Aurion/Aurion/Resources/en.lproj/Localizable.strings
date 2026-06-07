@@ -404,6 +404,10 @@
 "setup.context.collapse" = "Hide contexts for %@";
 "setup.context.template.default" = "Use my specialty default";
 "setup.context.template.a11y" = "Template: %@";
+/* Custom templates in the per-context picker (GH-319 / I3) */
+"setup.context.template.customSection" = "Custom templates";
+"setup.context.template.customPlaceholder" = "Custom template";
+"setup.context.template.unavailable" = "Template unavailable — using default";
 
 /* ── Onboarding ───────────────────────────────────────── */
 "onboarding.getStarted" = "Get Started";
