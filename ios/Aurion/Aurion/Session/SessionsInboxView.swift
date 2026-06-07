@@ -293,7 +293,8 @@ struct SessionsInboxView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(filtered.enumerated()), id: \.element.id) { index, session in
                         Group {
-                            if Self.rowAction(for: session.state) == .resume {
+                            switch Self.rowAction(for: session.state) {
+                            case .resume:
                                 // Resumable capture → re-engage CaptureView via
                                 // the same path the dashboard uses, NOT the note
                                 // view (#276).
@@ -304,7 +305,26 @@ struct SessionsInboxView: View {
                                     sessionRow(session)
                                 }
                                 .buttonStyle(.plain)
-                            } else {
+                            case .review:
+                                // AWAITING_REVIEW → re-enter the approve-capable
+                                // review flow (#322), NOT the read-only
+                                // SessionNoteView (which has no Approve and
+                                // trapped saved-for-later notes as
+                                // non-approvable). resumeReview rebuilds the
+                                // minimal state NoteReviewView needs and flips
+                                // uiState to .reviewing so ContentView mounts it.
+                                Button {
+                                    AurionHaptics.impact(.light)
+                                    Task { await sessionManager.resumeReview(session) }
+                                } label: {
+                                    sessionRow(session)
+                                }
+                                .buttonStyle(.plain)
+                            case .status:
+                                // Terminal / non-actionable states
+                                // (REVIEW_COMPLETE, EXPORTED, PURGED, and the
+                                // transient PROCESSING_STAGE1/2) → read-only
+                                // SessionNoteView. Nothing to approve here.
                                 NavigationLink(value: session.id) {
                                     sessionRow(session)
                                 }

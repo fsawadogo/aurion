@@ -55,7 +55,17 @@ private struct ClipViewerTarget: Identifiable {
 struct NoteReviewView: View {
     let sessionId: String
     var initialNote: NoteResponse?
+    /// Back / defer. Called when the physician backs out WITHOUT approving.
+    /// #322: this is the non-destructive "save for later" path — the session
+    /// stays AWAITING_REVIEW server-side and is re-openable from the inbox.
+    /// It must NOT tear the draft down the way a finalize would.
     let onDismiss: () -> Void
+    /// Finalize. Called once after a successful two-step approval
+    /// (`/approve-stage1` + `/approve`). #322: separated from `onDismiss` so
+    /// approval can run the terminal teardown (`endSession`) while Back only
+    /// defers — the two paths were previously conflated, which destroyed the
+    /// draft on Back.
+    let onApproved: () -> Void
     @StateObject private var wsClient: WebSocketClient
     @State private var note: NoteResponse?
     /// Captures a failed initial note fetch so the view can show a real
@@ -115,10 +125,16 @@ struct NoteReviewView: View {
     /// open, with the identifier baked in so the sheet can refetch.
     @State private var priorEncountersListIdentifier: String?
 
-    init(sessionId: String, initialNote: NoteResponse? = nil, onDismiss: @escaping () -> Void = {}) {
+    init(
+        sessionId: String,
+        initialNote: NoteResponse? = nil,
+        onDismiss: @escaping () -> Void = {},
+        onApproved: @escaping () -> Void = {}
+    ) {
         self.sessionId = sessionId
         self.initialNote = initialNote
         self.onDismiss = onDismiss
+        self.onApproved = onApproved
         _wsClient = StateObject(wrappedValue: WebSocketClient(sessionId: sessionId))
     }
 
@@ -1023,7 +1039,10 @@ struct NoteReviewView: View {
             try? await Task.sleep(nanoseconds: 900_000_000)
             await MainActor.run {
                 isApproving = false
-                onDismiss()
+                // #322 — finalize, not defer. Approval is terminal: run the
+                // terminal teardown path, distinct from the Back/defer path
+                // wired to `onDismiss`.
+                onApproved()
             }
         }
     }

@@ -50,12 +50,26 @@ struct ContentView: View {
                 NoteReadyView()
                     .transition(AurionTransition.fadeSlide)
                     .environmentObject(sessionManager)
-            } else if sessionManager.uiState == .reviewing, let note = sessionManager.note {
-                // Physician chose to review now.
+            } else if sessionManager.uiState == .reviewing, let session = sessionManager.session {
+                // Review flow — entered either by "Review now" off a fresh
+                // Stage 1 note OR by re-opening an AWAITING_REVIEW row from the
+                // inbox (#322, `resumeReview`). Gate on `session` (not `note`)
+                // so a resumed review whose prefetch missed still mounts;
+                // NoteReviewView fetches fresh + shows its own Retry when the
+                // passed `initialNote` is nil.
                 NoteReviewView(
-                    sessionId: sessionManager.session?.id ?? "",
-                    initialNote: note,
+                    sessionId: session.id,
+                    initialNote: sessionManager.note,
                     onDismiss: {
+                        // Back = defer (#322). Non-destructive: the session
+                        // stays AWAITING_REVIEW server-side and is re-openable
+                        // from the inbox. Never destroys the draft.
+                        sessionManager.saveForLater()
+                        appState.currentSession = nil
+                    },
+                    onApproved: {
+                        // Approve = finalize. Terminal teardown after a
+                        // successful two-step approval.
                         sessionManager.endSession()
                         appState.currentSession = nil
                     }
