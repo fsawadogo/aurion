@@ -148,6 +148,15 @@ class AuditEventType(StrEnum):
     # row's existence is the audit signal that someone re-listened to / re-
     # watched retained media during review.
     EVIDENCE_REPLAYED = "evidence_replayed"
+    # An admin/eval reviewer minted DOWNLOAD URLs for a session's retained
+    # media via the admin "Captured Media" page (#338). Distinct from
+    # EVIDENCE_REPLAYED (the in-review clinician audio-replay surface): this
+    # is the cross-clinician admin download surface, ADMIN + EVAL_TEAM only.
+    # Carries the actor UUID, the evidence kind ("session_media"), and the
+    # PHI-free object counts (audio_count + clip_count) — NEVER an S3 key,
+    # signed URL, or any object body. The row's existence is the audit
+    # signal that a reviewer pulled download links for the raw media.
+    EVIDENCE_DOWNLOADED = "evidence_downloaded"
 
     # ── Privacy / account ────────────────────────────────────────────────
     BIOMETRIC_CONSENT_CONFIRMED = "biometric_consent_confirmed"
@@ -565,6 +574,16 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     # the row records THAT replay happened, not WHAT was replayed.
     AuditEventType.EVIDENCE_REPLAYED: frozenset(
         {"actor_id", "evidence_kind", "ttl_seconds"}
+    ),
+    # Windowed media retention (#338) — an ADMIN/EVAL_TEAM reviewer minted
+    # download URLs for a session's retained media via the admin Captured
+    # Media page. ``actor_id`` is the requester UUID; ``evidence_kind`` is
+    # the fixed string "session_media"; ``audio_count`` / ``clip_count`` are
+    # the PHI-free object counts the call presigned. NEVER an S3 key, the
+    # signed URL, or any body — the row records THAT a download happened and
+    # how many objects, not WHAT was downloaded.
+    AuditEventType.EVIDENCE_DOWNLOADED: frozenset(
+        {"actor_id", "evidence_kind", "audio_count", "clip_count"}
     ),
     # Privacy / account — iOS-only voice events stay empty
     AuditEventType.BIOMETRIC_CONSENT_CONFIRMED: frozenset(),

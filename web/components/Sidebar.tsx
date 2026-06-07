@@ -8,6 +8,7 @@ import {
   CircleUser,
   ClipboardList,
   FileText,
+  Film,
   Flag,
   FlaskConical,
   Layers,
@@ -58,6 +59,12 @@ const navigation: {
   // hosted-version, and the corresponding require_role gate rejects
   // every other role.
   { tKey: "featureFlags", href: "/portal/admin/feature-flags", icon: Flag, roles: ["ADMIN"] },
+  // Captured Media (#338) — windowed media-retention review. Visible to the
+  // three roles the backend list gate allows (compliance is view-only; the
+  // download action is hidden for them in-page). The page itself is also
+  // flag-gated (media_review_retention_enabled) and shows a "not enabled"
+  // state when the backend 403s.
+  { tKey: "capturedMedia", href: "/portal/media", icon: Film, roles: ["COMPLIANCE_OFFICER", "EVAL_TEAM", "ADMIN"] },
   { tKey: "eval",       href: "/eval",      icon: FlaskConical,  roles: ["EVAL_TEAM", "ADMIN"] },
   // ── Clinician portal surface (PR-C onward) ──
   // Admin can preview each portal page for support — backend still

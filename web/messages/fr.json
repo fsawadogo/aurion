@@ -17,7 +17,8 @@
       "myProfile": "Mon profil",
       "myActivity": "Mon activité",
       "aiPrompts": "Invites IA",
-      "featureFlags": "Indicateurs"
+      "featureFlags": "Indicateurs",
+      "capturedMedia": "Médias capturés"
     },
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
@@ -413,6 +414,57 @@
         "name": "Renvoi vers le DPI",
         "description": "File d’attente sortante qui envoie la note approuvée vers un système de dossier médical."
       }
+    }
+  },
+  "CapturedMedia": {
+    "eyebrow": "Admin",
+    "title": "Médias capturés",
+    "subtitle": "Sessions dont les médias bruts sont encore dans la fenêtre de conservation.",
+    "retentionNote": "Les médias bruts sont conservés pendant {days} jours, puis supprimés selon la politique de cycle de vie. Aucun identifiant de patient n’est affiché.",
+    "refresh": "Actualiser",
+    "dismiss": "Ignorer",
+    "loadError": "Impossible de charger les médias capturés.",
+    "empty": "Aucune session avec médias conservés dans la fenêtre actuelle.",
+    "notEnabledTitle": "La conservation des médias n’est pas activée",
+    "notEnabledHint": "Activez l’indicateur de conservation des médias pour conserver et examiner les médias bruts des sessions.",
+    "viewOnly": "Consultation seule. Le téléchargement des médias bruts est réservé aux administrateurs et à l’équipe d’évaluation.",
+    "columns": {
+      "physician": "Médecin",
+      "date": "Date",
+      "visit": "Visite / contexte",
+      "encounter": "Rencontre",
+      "state": "État",
+      "media": "Médias",
+      "expires": "Expire dans",
+      "actions": "Actions"
+    },
+    "media": {
+      "audio": "Audio",
+      "clips": "{count, plural, one {# clip} other {# clips}}",
+      "none": "Aucun"
+    },
+    "expires": {
+      "inDays": "{count, plural, one {# jour} other {# jours}}",
+      "inHours": "{count, plural, one {# heure} other {# heures}}",
+      "expired": "Expiré"
+    },
+    "download": {
+      "audio": "Télécharger l’audio",
+      "clips": "Télécharger les clips",
+      "noAudio": "Aucun audio disponible.",
+      "noClips": "Aucun clip disponible.",
+      "error": "Échec du téléchargement. Réessayez."
+    },
+    "stateBadge": {
+      "AWAITING_REVIEW": "À réviser",
+      "PROCESSING_STAGE2": "Étape 2",
+      "REVIEW_COMPLETE": "Approuvée",
+      "EXPORTED": "Exportée"
+    },
+    "encounterType": {
+      "doctor_patient": "Médecin–patient",
+      "doctor_patient_allied": "Médecin–patient + équipe",
+      "doctor_patient_transitory": "Médecin–patient (transitoire)"
     }
   },
   "Specialties": {
