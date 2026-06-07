@@ -823,6 +823,17 @@
       "exportDocx": "Export DOCX",
       "stateLabel": "State: {state}"
     },
+    "recording": {
+      "title": "Encounter audio",
+      "description": "Replay the raw audio captured during this encounter. Playback only — the recording can't be downloaded.",
+      "play": "Play recording",
+      "playerAria": "Encounter audio player",
+      "playerFallback": "Your browser doesn't support audio playback.",
+      "unavailable": "Recording not available for this session.",
+      "notEnabled": "Recording playback isn't enabled.",
+      "wrongState": "Recording isn't available for this session yet.",
+      "error": "Couldn't load the recording. Please try again."
+    },
     "identifier": {
       "addCta": "Add patient identifier",
       "editAria": "Edit patient identifier",

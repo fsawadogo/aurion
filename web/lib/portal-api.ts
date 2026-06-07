@@ -14,6 +14,7 @@
 
 import { fetchWithAuth } from "@/lib/api";
 import type {
+  AudioReplayUrlResponse,
   AuditFilters,
   CodingSuggestion,
   CustomTemplate,
@@ -333,6 +334,40 @@ export async function resolveConflict(
  * WebSocket-based progress flow. */
 export async function getStage2Status(sessionId: string): Promise<Stage2Status> {
   const r = await fetchWithAuth(`/api/v1/notes/${sessionId}/stage2-status`);
+  return r.json();
+}
+
+/* ─── Audio replay (own session, #338) ───────────────────────────────────── */
+
+/** GET /api/v1/notes/{id}/audio-replay-url — mint a short-lived presigned
+ * URL the physician can use to REPLAY the raw audio of their own session in
+ * the browser. Ownership-gated server-side (404 when the caller doesn't own
+ * the session), so it lives here beside the other `/notes/*` own-session
+ * calls rather than in the admin client.
+ *
+ * Outcomes the caller distinguishes:
+ *   - 200 with `audio_url` set  → playable presigned URL (≈1h TTL).
+ *   - 200 with `audio_url` null → no audio retained / transient mint error.
+ *   - 403 → `media_review_retention_enabled` feature flag is OFF.
+ *   - 409 → session isn't in a state that retains audio (only
+ *           AWAITING_REVIEW / PROCESSING_STAGE2 / REVIEW_COMPLETE).
+ *   - 404 → caller doesn't own the session.
+ * The 4xx cases surface through fetchWithAuth's thrown `API {status}: …`
+ * Error (same convention as every other call in this file); the caller maps
+ * the status to a localized message.
+ *
+ * SIDE EFFECT: each successful call mints a URL AND writes an
+ * EVIDENCE_REPLAYED audit row server-side. Call this ONLY on an explicit
+ * user action (a button click), never automatically on page load, or the
+ * audit trail fills with spurious replay rows. The returned URL is for
+ * playback only — never offer it as a download and never log it.
+ */
+export async function getAudioReplayUrl(
+  sessionId: string,
+): Promise<AudioReplayUrlResponse> {
+  const r = await fetchWithAuth(
+    `/api/v1/notes/${encodeURIComponent(sessionId)}/audio-replay-url`,
+  );
   return r.json();
 }
 
