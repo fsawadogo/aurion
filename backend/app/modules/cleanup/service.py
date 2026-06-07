@@ -591,14 +591,15 @@ async def verify_purge(session_id: str) -> bool:
 async def purge_session_media(session_id: str) -> None:
     """Orchestrate the full media purge for a session.
 
-    Single entrypoint used by purge-on-approval
-    (``notes.approve_final_note``, gated behind
-    ``feature_flags.media_review_retention_enabled``) and any future
-    retention-window sweep. Each leg runs independently inside its own
-    non-fatal ``try/except`` that only logs — mirroring the
-    ``export/service.py`` cleanup block — so one failed leg never blocks
-    the others and never bubbles to the caller. The S3 lifecycle TTL is
-    the backstop for anything that fails here.
+    Single entrypoint for on-demand media erasure (Law 25 right-to-erasure
+    requests, a future retention-window sweep, or a possible admin
+    manual-purge). NOTE: under the keep-full-window retention model this is
+    NOT called on final-note approval — approval retains media for the full
+    window; the S3 lifecycle TTL or an explicit erasure removes it. Each leg
+    runs independently inside its own non-fatal ``try/except`` that only
+    logs — mirroring the ``export/service.py`` cleanup block — so one failed
+    leg never blocks the others and never bubbles to the caller. The S3
+    lifecycle TTL is the backstop for anything that fails here.
 
     Legs, in order:
       1. ``migrate_eval_frames``     — move masked eval frames to EVAL_BUCKET

@@ -31,7 +31,6 @@ from app.core.s3 import (
 from app.core.types import SessionState, Transcript
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
-from app.modules.cleanup.service import purge_session_media
 from app.modules.config.appconfig_client import get_config
 from app.modules.note_gen.service import (
     approve_note,
@@ -179,10 +178,11 @@ class AudioReplayUrlResponse(BaseModel):
     during review (#338).
 
     `audio_url` is null when media-review retention is on but no audio
-    object exists for the session (already purged on approval, or never
-    uploaded) or when the list/presign degrades — the client shows its
-    "audio not available" state instead of erroring. `expires_in` is the
-    signed-URL validity window in seconds.
+    object exists for the session (already removed by the S3 lifecycle TTL
+    or an on-demand Law 25 erasure, or never uploaded) or when the
+    list/presign degrades — the client shows its "audio not available"
+    state instead of erroring. `expires_in` is the signed-URL validity
+    window in seconds.
     """
 
     audio_url: Optional[str] = None
@@ -507,22 +507,13 @@ async def approve_final_note(
         completeness_score=approved_note.completeness_score,
     )
 
-    # Windowed media retention (#338): purge raw session media on the FIRST
-    # final-note approval. The already-approved re-entry above returns early,
-    # so re-approval never re-purges. Flag-gated and DEFAULT OFF — when the
-    # flag is off this block is skipped entirely and behavior is byte-
-    # identical to today (the S3 lifecycle TTL remains the only backstop).
-    # Non-fatal: a purge failure must never fail the approval the clinician
-    # just performed; the S3 TTL backstop catches anything that slips.
-    if get_config().feature_flags.media_review_retention_enabled:
-        try:
-            await purge_session_media(str(session_id))
-        except Exception:
-            logger.error(
-                "media purge on approval failed: session=%s",
-                str(session_id),
-                exc_info=True,
-            )
+    # Windowed media retention (#338) — keep-full-window model: approval does
+    # NOT purge session media. Raw media is retained for the full window so a
+    # clinician can replay the encounter audio (and, soon, an admin can
+    # download it) during review, and is removed only by the S3 lifecycle TTL
+    # (the max-window backstop) or by an on-demand Law 25 erasure. The
+    # `media_review_retention_enabled` flag now purely exposes the
+    # replay/download surfaces; it triggers no purge here.
 
     return NoteApprovalResponse(
         session_id=str(session_id),

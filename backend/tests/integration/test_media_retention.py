@@ -11,10 +11,13 @@ Two surfaces:
      genuine SigV4 presign scoped to the ca-central-1 signing region
      (``.../ca-central-1/s3/aws4_request`` in the credential scope) holds.
 
-  2. Purge-on-approval wiring in ``approve_final_note`` — exercised by
-     calling the route coroutine directly with its collaborators patched,
-     so we can assert the flag gate + the first-approval-only contract
-     without standing up the note-gen / transition machinery.
+  2. Keep-full-window approval contract in ``approve_final_note`` —
+     exercised by calling the route coroutine directly with its
+     collaborators patched, so we can assert that approval NEVER purges
+     session media (the CTO's keep-full-window decision: media is removed
+     only by the S3 lifecycle TTL or an on-demand Law 25 erasure, never on
+     approval) — flag ON or OFF — without standing up the note-gen /
+     transition machinery.
 
 These run with no LocalStack / Postgres; CI runs the same suite against
 the live stack.
@@ -274,7 +277,7 @@ async def test_audio_replay_url_no_audio_degrades_to_null(
     assert resp.json()["expires_in"] == 3600
 
 
-# ── Purge-on-approval wiring ─────────────────────────────────────────────────
+# ── Keep-full-window approval contract ───────────────────────────────────────
 
 
 def _approvable_note(session_uuid: uuid.UUID) -> Note:
@@ -298,7 +301,13 @@ async def _call_approve(
     already_approved: bool,
 ) -> tuple[object, AsyncMock]:
     """Invoke approve_final_note with collaborators patched; return the
-    response + the purge mock."""
+    response + the purge mock.
+
+    The purge mock is patched at the cleanup-module source
+    (``app.modules.cleanup.service.purge_session_media``) rather than on
+    ``notes`` — under the keep-full-window model ``notes`` no longer
+    imports the symbol at all, so patching the source is the guard that
+    proves approval never reaches into the purge path by any route."""
     user = MagicMock(user_id=session.clinician_id, role=UserRole.CLINICIAN)
     purge_mock = AsyncMock()
     with (
@@ -319,7 +328,9 @@ async def _call_approve(
         patch.object(
             notes_module, "get_config", return_value=_config(retention=retention)
         ),
-        patch.object(notes_module, "purge_session_media", new=purge_mock),
+        patch(
+            "app.modules.cleanup.service.purge_session_media", new=purge_mock
+        ),
     ):
         resp = await notes_module.approve_final_note(
             session_id=session.id, user=user, db=MagicMock()
@@ -328,16 +339,20 @@ async def _call_approve(
 
 
 @pytest.mark.asyncio
-async def test_approve_purges_on_first_approval_when_flag_on(
+async def test_approve_does_not_purge_on_first_approval_when_flag_on(
     session_uuid: uuid.UUID, clinician_id: uuid.UUID
 ) -> None:
+    """Keep-full-window: a first final-note approval does NOT purge media
+    even with the retention flag ON. Media is retained for the full window
+    and removed only by the S3 lifecycle TTL or an on-demand Law 25
+    erasure — approval never deletes it early."""
     session = _session(session_uuid, clinician_id, SessionState.PROCESSING_STAGE2)
     note = _approvable_note(session_uuid)
     resp, purge_mock = await _call_approve(
         session, note, retention=True, already_approved=False
     )
     assert resp.approved is True
-    purge_mock.assert_awaited_once_with(str(session_uuid))
+    purge_mock.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -354,11 +369,12 @@ async def test_approve_does_not_purge_when_flag_off(
 
 
 @pytest.mark.asyncio
-async def test_reapproval_does_not_repurge(
+async def test_reapproval_does_not_purge(
     session_uuid: uuid.UUID, clinician_id: uuid.UUID
 ) -> None:
-    """Already-approved + REVIEW_COMPLETE returns early BEFORE the purge
-    block, so re-approval never re-purges even with the flag on."""
+    """Already-approved + REVIEW_COMPLETE returns early with the
+    already-approved message, and (like every approval path under the
+    keep-full-window model) never purges — flag on."""
     session = _session(session_uuid, clinician_id, SessionState.REVIEW_COMPLETE)
     note = _approvable_note(session_uuid)
     resp, purge_mock = await _call_approve(
