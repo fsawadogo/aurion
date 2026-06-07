@@ -158,6 +158,10 @@ struct SessionNoteView: View {
     @State private var note: NoteResponse?
     @State private var isLoading = true
     @State private var showCopiedToast = false
+    /// Cancellable auto-dismiss for the "Copied" toast. Replacing it on
+    /// each copy prevents an earlier 2s timer from dismissing a toast the
+    /// physician just re-triggered.
+    @State private var toastDismissTask: Task<Void, Never>?
     @State private var error: String?
     // Live AppConfig snapshot — gates the four post-pilot cards below.
     // When a card's flag is `false` we don't render it AT ALL: no
@@ -565,7 +569,12 @@ struct SessionNoteView: View {
         AurionHaptics.notification(.success)
 
         withAnimation { showCopiedToast = true }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
+        // Cancel any in-flight dismiss so a rapid second copy doesn't get
+        // hidden early by the previous timer, then schedule a fresh one.
+        toastDismissTask?.cancel()
+        toastDismissTask = Task {
+            try? await Task.sleep(nanoseconds: 2_000_000_000)
+            guard !Task.isCancelled else { return }
             withAnimation { showCopiedToast = false }
         }
     }

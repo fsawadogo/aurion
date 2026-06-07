@@ -72,7 +72,7 @@ struct OrdersCard: View {
             if let msg = errorMessage {
                 Text(msg)
                     .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(.red)
+                    .foregroundColor(.aurionRed)
             }
         }
         .padding(16)
@@ -324,7 +324,9 @@ struct OrdersCard: View {
     }
 
     private func actionStack(for order: NoteOrderResponse) -> some View {
-        HStack(spacing: 6) {
+        // Slightly wider gap so the destructive cancel isn't an
+        // adjacent fat-finger target to confirm.
+        HStack(spacing: 8) {
             Button {
                 Task { await confirmOrder(order) }
             } label: {
@@ -343,6 +345,9 @@ struct OrdersCard: View {
                 .padding(.vertical, 6)
                 .background(Color.aurionGold)
                 .clipShape(Capsule())
+                // 44pt minimum tap target (HIG).
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
             }
             .disabled(busyOrderId == order.id)
 
@@ -360,7 +365,10 @@ struct OrdersCard: View {
                 .padding(6)
                 .background(Color.aurionSurfaceAlt)
                 .clipShape(Circle())
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
         }
+        .accessibilityLabel(L("orders.cancel.a11y"))
         .disabled(busyOrderId == order.id)
     }
 
@@ -511,7 +519,9 @@ struct OrdersCard: View {
                 sessionId: sessionId,
                 orderId: order.id
             )
-            orders = orders.map { $0.id == updated.id ? updated : $0 }
+            withAnimation(AurionAnimation.smooth) {
+                orders = orders.map { $0.id == updated.id ? updated : $0 }
+            }
             AurionHaptics.notification(.success)
         } catch {
             AurionHaptics.notification(.error)
@@ -529,7 +539,9 @@ struct OrdersCard: View {
                 sessionId: sessionId,
                 orderId: order.id
             )
-            orders = orders.map { $0.id == updated.id ? updated : $0 }
+            withAnimation(AurionAnimation.smooth) {
+                orders = orders.map { $0.id == updated.id ? updated : $0 }
+            }
             AurionHaptics.notification(.success)
         } catch {
             AurionHaptics.notification(.error)

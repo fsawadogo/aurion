@@ -594,7 +594,7 @@ struct NoteReviewView: View {
                     .foregroundColor(.aurionTextPrimary)
                 if s.hasConflicts {
                     Text(L("noteReview.conflictBadge"))
-                        .font(.system(size: 10, weight: .bold))
+                        .aurionFont(10, weight: .bold, relativeTo: .caption2)
                         .tracking(0.6)
                         .foregroundColor(.aurionStatusConflict)
                         .padding(.horizontal, 6)
@@ -606,7 +606,7 @@ struct NoteReviewView: View {
                     // block approval; Stage 2 vision fills them only if
                     // imaging was actually reviewed during the encounter.
                     Text(L("noteReview.optionalBadge"))
-                        .font(.system(size: 10, weight: .bold))
+                        .aurionFont(10, weight: .bold, relativeTo: .caption2)
                         .tracking(0.6)
                         .foregroundColor(.aurionTextSecondary)
                         .padding(.horizontal, 6)
@@ -669,7 +669,7 @@ struct NoteReviewView: View {
             Rectangle().fill(Color.aurionGold).frame(width: 2)
             VStack(alignment: .leading, spacing: 10) {
                 Text(L("noteReview.sources"))
-                    .font(.system(size: 10, weight: .semibold))
+                    .aurionFont(10, weight: .semibold, relativeTo: .caption2)
                     .tracking(0.6)
                     .foregroundColor(.aurionTextSecondary)
                 ForEach(claims, id: \.id) { claim in
@@ -732,7 +732,7 @@ struct NoteReviewView: View {
                     .padding(.top, 2)
                 VStack(alignment: .leading, spacing: 4) {
                     Text(L("noteReview.conflictHint"))
-                        .font(.system(size: 11, weight: .semibold))
+                        .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                         .tracking(0.4)
                         .foregroundColor(.aurionStatusConflict)
                     Text(claim.text)
@@ -775,6 +775,10 @@ struct NoteReviewView: View {
                     RoundedRectangle(cornerRadius: 6)
                         .stroke(Color.aurionBorder, lineWidth: 1)
                 )
+                // Mandatory conflict-resolution controls gate approval —
+                // guarantee the 44pt minimum tap target.
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
         }
         .disabled(inFlight)
         .opacity(inFlight ? 0.5 : 1)

@@ -172,7 +172,10 @@ struct TeamMemberEditorView: View {
 
     private func memberRow(_ member: AlliedHealthMember) -> some View {
         HStack(spacing: 12) {
+            // Decorative — the role/name text already conveys the entry, so
+            // hide the bubble from VoiceOver to avoid a stray focus stop.
             AurionIconBubble(symbol: "person.fill", tint: .aurionBlue, size: 36)
+                .accessibilityHidden(true)
             VStack(alignment: .leading, spacing: 2) {
                 Text(member.name)
                     .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
@@ -189,6 +192,25 @@ struct TeamMemberEditorView: View {
             Spacer()
         }
         .padding(.vertical, 4)
+        // Read the whole row as one coherent member entry instead of three
+        // separate fragments (name, role, email).
+        .accessibilityElement(children: .combine)
+    }
+
+    /// Subtle "NN/60" counter that fades in only as a field nears the hard
+    /// cap, so the silent truncation at 60 chars has visible feedback —
+    /// mirrors the inline validation copy used for custom visit types in
+    /// `PhysicianProfileSetupView`. Turns gold once the cap is reached.
+    @ViewBuilder
+    private func charCountHint(_ count: Int) -> some View {
+        if count >= Self.fieldCharLimit - 10 {
+            Text("\(count)/\(Self.fieldCharLimit)")
+                .aurionFont(11, relativeTo: .caption2)
+                .monospacedDigit()
+                .foregroundColor(count >= Self.fieldCharLimit ? .aurionGold : .aurionTextSecondary)
+                .frame(maxWidth: .infinity, alignment: .trailing)
+                .accessibilityLabel(L("profile.teamEditor.charCount", count, Self.fieldCharLimit))
+        }
     }
 
     private var addMemberForm: some View {
@@ -207,6 +229,7 @@ struct TeamMemberEditorView: View {
                             draftName = String(new.prefix(Self.fieldCharLimit))
                         }
                     }
+                charCountHint(draftName.count)
             }
 
             // Role
@@ -222,6 +245,7 @@ struct TeamMemberEditorView: View {
                             draftRole = String(new.prefix(Self.fieldCharLimit))
                         }
                     }
+                charCountHint(draftRole.count)
             }
 
             // Email (optional)

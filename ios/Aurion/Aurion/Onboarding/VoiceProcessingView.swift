@@ -22,87 +22,100 @@ struct VoiceProcessingView: View {
     ]
 
     var body: some View {
-        VStack(spacing: 32) {
-            Spacer()
+        // Two-zone layout mirroring VoiceRecordingView's #268/#271 sweep:
+        // the status content lives in a ScrollView so the ring + copy can
+        // grow at AX4/AX5 without pushing the action off-screen, and the
+        // Continue / Retry footer rides in a .safeAreaInset(.bottom) so it
+        // stays reachable at every Dynamic Type size.
+        ScrollView {
+            VStack(spacing: 32) {
+                Spacer(minLength: 12)
 
-            if isProcessing {
-                ZStack {
-                    AurionOrbitArc(size: 116, arcLength: 0.18, lineWidth: 2.5)
-                    CircularProgressRing(progress: progress, color: .aurionGold, lineWidth: 6, size: 100)
-                    Text("\(Int(progress * 100))%")
+                if isProcessing {
+                    ZStack {
+                        AurionOrbitArc(size: 116, arcLength: 0.18, lineWidth: 2.5)
+                        CircularProgressRing(progress: progress, color: .aurionGold, lineWidth: 6, size: 100)
+                        Text("\(Int(progress * 100))%")
+                            .font(.title3)
+                            .monospacedDigit()
+                            .fontWeight(.semibold)
+                            .foregroundColor(.aurionTextPrimary)
+                    }
+
+                    Text(L("onboarding.voiceProc.creating"))
                         .font(.title3)
-                        .monospacedDigit()
+                        .foregroundColor(.aurionTextPrimary)
+
+                    Text(currentStepLabel)
+                        .font(.subheadline)
+                        .foregroundColor(.secondary)
+                        .transition(.opacity)
+                        .id(currentStepLabel)
+                        .animation(.aurionIOS, value: currentStepLabel)
+                } else if let failureMessage {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 72))
+                        .foregroundColor(.aurionAmber)
+                        .aurionStagger(order: 0, baseDelay: 0.1)
+
+                    Text(L("onboarding.voiceProc.failedTitle"))
+                        .font(.title3)
                         .fontWeight(.semibold)
                         .foregroundColor(.aurionTextPrimary)
+                        .aurionStagger(order: 1, baseDelay: 0.1)
+
+                    Text(failureMessage)
+                        .font(.body)
+                        .foregroundColor(.aurionTextSecondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                        .aurionStagger(order: 2, baseDelay: 0.1)
+                } else {
+                    AurionAnimatedCheck(size: 96, color: .aurionGold)
+
+                    Text(L("onboarding.voiceProc.saved"))
+                        .font(.title3)
+                        .fontWeight(.semibold)
+                        .foregroundColor(.aurionTextPrimary)
+                        .aurionStagger(order: 0, baseDelay: 0.5)
+
+                    Text(L("onboarding.voiceProc.savedSub"))
+                        .font(.body)
+                        .foregroundColor(.secondary)
+                        .multilineTextAlignment(.center)
+                        .padding(.horizontal, 40)
+                        .aurionStagger(order: 1, baseDelay: 0.5)
                 }
 
-                Text(L("onboarding.voiceProc.creating"))
-                    .font(.title3)
-                    .foregroundColor(.aurionTextPrimary)
-
-                Text(currentStepLabel)
-                    .font(.subheadline)
-                    .foregroundColor(.secondary)
-                    .transition(.opacity)
-                    .id(currentStepLabel)
-                    .animation(.aurionIOS, value: currentStepLabel)
-            } else if let failureMessage {
-                Image(systemName: "exclamationmark.triangle.fill")
-                    .font(.system(size: 72))
-                    .foregroundColor(.aurionAmber)
-                    .aurionStagger(order: 0, baseDelay: 0.1)
-
-                Text(L("onboarding.voiceProc.failedTitle"))
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.aurionTextPrimary)
-                    .aurionStagger(order: 1, baseDelay: 0.1)
-
-                Text(failureMessage)
-                    .font(.body)
-                    .foregroundColor(.aurionTextSecondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-                    .aurionStagger(order: 2, baseDelay: 0.1)
-            } else {
-                AurionAnimatedCheck(size: 96, color: .aurionGold)
-
-                Text(L("onboarding.voiceProc.saved"))
-                    .font(.title3)
-                    .fontWeight(.semibold)
-                    .foregroundColor(.aurionTextPrimary)
-                    .aurionStagger(order: 0, baseDelay: 0.5)
-
-                Text(L("onboarding.voiceProc.savedSub"))
-                    .font(.body)
-                    .foregroundColor(.secondary)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-                    .aurionStagger(order: 1, baseDelay: 0.5)
+                Spacer(minLength: 12)
             }
-
-            Spacer()
-
+            .frame(maxWidth: .infinity)
+            .padding(.horizontal, 20)
+            .padding(.top, 12)
+            .padding(.bottom, 12)
+        }
+        .safeAreaInset(edge: .bottom) {
             if !isProcessing {
-                if failureMessage != nil {
-                    VStack(spacing: 12) {
+                VStack(spacing: 12) {
+                    if failureMessage != nil {
                         AurionGoldButton(label: L("common.retry"), full: true) { retryEnrollment() }
+                            .aurionStagger(order: 3, baseDelay: 0.1)
                         Button(L("common.skip")) { skipEnrollment() }
                             .aurionFont(14, weight: .medium, relativeTo: .body)
                             .foregroundColor(.aurionTextSecondary)
+                            .frame(minHeight: 44)
+                            .aurionStagger(order: 4, baseDelay: 0.1)
+                    } else {
+                        AurionGoldButton(label: L("onboarding.voiceProc.continue"), full: true) { onComplete() }
+                            .aurionStagger(order: 2, baseDelay: 0.5)
                     }
-                    .padding(.horizontal, 20)
-                    .aurionStagger(order: 3, baseDelay: 0.1)
-                } else {
-                    AurionGoldButton(label: L("onboarding.voiceProc.continue"), full: true) { onComplete() }
-                        .padding(.horizontal, 20)
-                        .aurionStagger(order: 2, baseDelay: 0.5)
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 12)
+                .padding(.bottom, 8)
+                .background(.ultraThinMaterial)
             }
-
-            Spacer().frame(height: 40)
         }
-        .padding(20)
         .animation(.aurionIOS, value: isProcessing)
         .onAppear { processVoiceEnrollment() }
     }

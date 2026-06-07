@@ -128,7 +128,7 @@ struct VoiceRecordingView: View {
 
                 Text(statusText)
                     .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(.secondary)
+                    .foregroundColor(statusColor)
                     .multilineTextAlignment(.center)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 20)
@@ -174,7 +174,12 @@ struct VoiceRecordingView: View {
                 Button(L("onboarding.voiceRec.rerecord")) { resetRecording() }
                     .aurionFont(12, relativeTo: .caption)
                     .foregroundColor(.aurionTextPrimary)
+                    .frame(minHeight: 44)
                     .opacity(canProceed || qualityCheckFailed ? 1 : 0)
+                    // An opacity-0 view still receives taps; gate hit-testing
+                    // so the hidden re-record link can't silently reset the
+                    // recording mid-capture.
+                    .allowsHitTesting(canProceed || qualityCheckFailed)
             }
             .padding(.horizontal, 20)
             .padding(.top, 12)
@@ -260,6 +265,12 @@ struct VoiceRecordingView: View {
                         }
                     }
                 }
+                // The pass/fail/active state is conveyed only by icon
+                // color+shape, which carries no VoiceOver label. Collapse
+                // the row into one element and speak the state alongside
+                // the sentence so the core feedback loop is audible.
+                .accessibilityElement(children: .ignore)
+                .accessibilityLabel(rowAccessibilityLabel(sentence: sentence, pass: pass, fail: fail, active: active))
             }
         }
         .padding(16)
@@ -292,6 +303,22 @@ struct VoiceRecordingView: View {
                 .font(.system(size: 16))
                 .foregroundColor(active ? .aurionNavy.opacity(0.6) : .aurionNavy.opacity(0.3))
         }
+    }
+
+    /// VoiceOver label for a sentence row: the sentence text followed by
+    /// its capture state. Mirrors the icon states in `sentenceIcon`.
+    private func rowAccessibilityLabel(sentence: String, pass: Bool, fail: Bool, active: Bool) -> String {
+        let state: String
+        if pass {
+            state = L("onboarding.voiceRec.a11yRowCaptured")
+        } else if fail {
+            state = L("onboarding.voiceRec.a11yRowNotHeard")
+        } else if active {
+            state = L("onboarding.voiceRec.a11yRowCurrent")
+        } else {
+            state = ""
+        }
+        return state.isEmpty ? sentence : "\(sentence) \(state)"
     }
 
     // MARK: - Record button (gold disc with breathing halo on press)
@@ -327,6 +354,16 @@ struct VoiceRecordingView: View {
         .disabled(permissionDenied)
         .scaleEffect(permissionDenied ? 0.95 : 1)
         .opacity(permissionDenied ? 0.55 : 1)
+        // VoiceOver: the disc is shape-only, so spell out what it does and
+        // mirror the recording state in the label. `.startsMediaSession`
+        // tells VoiceOver tapping begins capture (dropped while recording).
+        .accessibilityLabel(recorder.isRecording
+            ? L("onboarding.voiceRec.a11yStop")
+            : L("onboarding.voiceRec.a11yStart"))
+        .accessibilityHint(recorder.isRecording
+            ? L("onboarding.voiceRec.a11yStopHint")
+            : L("onboarding.voiceRec.a11yStartHint"))
+        .accessibilityAddTraits(recorder.isRecording ? [] : .startsMediaSession)
     }
 
     private var statusText: String {
@@ -335,6 +372,15 @@ struct VoiceRecordingView: View {
         if qualityCheckFailed { return L("onboarding.voiceRec.qualityCheckFailed") }
         if canProceed { return L("onboarding.voiceRec.captured") }
         return L("onboarding.voiceRec.tapStart")
+    }
+
+    /// Error/blocked status copy reads in amber to match the per-row
+    /// `.aurionGold` signal it summarizes, so the headline explaining WHY
+    /// Continue is disabled isn't visually weaker than the rows below it.
+    /// Neutral hints stay low-emphasis secondary.
+    private var statusColor: Color {
+        if permissionDenied || qualityCheckFailed { return .aurionGold }
+        return .secondary
     }
 
     // MARK: - Recording control

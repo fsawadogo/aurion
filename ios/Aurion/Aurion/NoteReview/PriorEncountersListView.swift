@@ -108,13 +108,31 @@ struct PriorEncountersListView: View {
 
     // MARK: - States
 
+    /// Shimmer placeholder shaped like the real list — six rows that
+    /// mirror ``PriorEncounterRow`` — so the loading treatment matches
+    /// the rail and the rest of the app (AurionSkeleton everywhere)
+    /// rather than a bare top-anchored spinner.
     private var loadingState: some View {
-        VStack {
-            ProgressView()
+        VStack(spacing: 0) {
+            ForEach(0..<6, id: \.self) { i in
+                HStack(spacing: 12) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        AurionSkeleton().frame(width: 150, height: 15)
+                        AurionSkeleton().frame(width: 90, height: 12)
+                    }
+                    Spacer()
+                    AurionSkeleton(cornerRadius: 11).frame(width: 64, height: 22)
+                }
+                .padding(.horizontal, 16)
+                .padding(.vertical, 14)
+                if i < 5 {
+                    Rectangle().fill(Color.aurionBorder).frame(height: 1)
+                }
+            }
             Spacer()
         }
         .frame(maxWidth: .infinity)
-        .padding(.top, 32)
+        .padding(.top, 8)
     }
 
     private var emptyState: some View {
@@ -151,6 +169,7 @@ struct PriorEncountersListView: View {
                     } else {
                         Image(systemName: "arrow.clockwise")
                             .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.aurionNavy)
                     }
                     Text(L("priorEncounters.retry"))
                         .aurionFont(13, weight: .semibold, relativeTo: .footnote)
@@ -225,5 +244,9 @@ private struct PriorEncounterRow: View {
         }
         .padding(.vertical, 6)
         .contentShape(Rectangle())
+        // Combine specialty + identifier + time + state into a single
+        // VoiceOver announcement (mirrors PriorEncounterCard) instead of
+        // reading the row piecemeal.
+        .accessibilityElement(children: .combine)
     }
 }

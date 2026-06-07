@@ -64,12 +64,17 @@ struct TotpCodeField: View {
             .opacity(0.001)   // present but invisible — keeps the keyboard wired
             .frame(width: 1, height: 1)
             .accessibilityLabel(L("login.mfa.challenge.codeLabel"))
+            // The six visible cells are decorative duplicates of this
+            // field's value — report progress here so VoiceOver lands on a
+            // single meaningful element instead of six empty cells.
+            .accessibilityValue(L("login.mfa.challenge.codeProgress", code.count, Self.codeLength))
 
             HStack(spacing: 10) {
                 ForEach(0..<Self.codeLength, id: \.self) { idx in
                     cell(at: idx)
                 }
             }
+            .accessibilityHidden(true)
         }
         .contentShape(Rectangle())
         .onTapGesture { focused = true }
@@ -89,6 +94,8 @@ struct TotpCodeField: View {
         let isCursor = (index == chars.count) && focused
         return Text(char.isEmpty ? " " : char)
             .aurionFont(22, weight: .semibold, relativeTo: .title3)
+            .lineLimit(1)
+            .minimumScaleFactor(0.6)
             .frame(width: 44, height: 54)
             .foregroundColor(digitColor)
             .background(Color.white.opacity(0.08))

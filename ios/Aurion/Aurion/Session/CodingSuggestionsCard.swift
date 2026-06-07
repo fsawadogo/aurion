@@ -74,7 +74,7 @@ struct CodingSuggestionsCard: View {
             if let msg = errorMessage {
                 Text(msg)
                     .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(.red)
+                    .foregroundColor(.aurionRed)
             }
         }
         .padding(16)
@@ -339,18 +339,27 @@ struct CodingSuggestionsCard: View {
                 systemChip(for: item.codeSystem)
                 VStack(alignment: .leading, spacing: 4) {
                     Button {
-                        toggleExpansion(id: item.id, defaultExpanded: defaultExpanded)
+                        withAnimation(AurionAnimation.smooth) {
+                            toggleExpansion(id: item.id, defaultExpanded: defaultExpanded)
+                        }
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
                             HStack(spacing: 6) {
                                 Text(item.code)
-                                    .font(.system(size: 14, weight: .semibold, design: .monospaced))
+                                    .monospaced()
+                                    .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
                                     .foregroundColor(.aurionTextPrimary)
                                 Text(item.description)
                                     .aurionFont(12, relativeTo: .caption)
                                     .foregroundColor(.aurionTextSecondary)
                                     .lineLimit(2)
                                     .multilineTextAlignment(.leading)
+                                // Disclosure affordance — signals the row
+                                // expands to reveal the justification.
+                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                                    .font(.system(size: 9, weight: .semibold))
+                                    .foregroundColor(.aurionTextSecondary)
+                                    .accessibilityHidden(true)
                             }
                             HStack(spacing: 5) {
                                 confidenceBadge(for: item.confidence)
@@ -428,6 +437,10 @@ struct CodingSuggestionsCard: View {
                     .padding(.vertical, 5)
                     .background(Color.aurionGold)
                     .clipShape(Capsule())
+                    // 44pt minimum tap target (HIG) without enlarging
+                    // the visible capsule.
+                    .frame(minHeight: 44)
+                    .contentShape(Rectangle())
                 }
                 .disabled(busyId == item.id)
                 Button {
@@ -439,7 +452,10 @@ struct CodingSuggestionsCard: View {
                         .padding(5)
                         .background(Color.aurionSurfaceAlt)
                         .clipShape(Circle())
+                        .frame(minWidth: 44, minHeight: 44)
+                        .contentShape(Rectangle())
                 }
+                .accessibilityLabel(L("coding.reject.a11y"))
                 .disabled(busyId == item.id)
             }
         } else if item.status == "confirmed" {
@@ -461,7 +477,10 @@ struct CodingSuggestionsCard: View {
                 .padding(5)
                 .background(Color.aurionSurfaceAlt)
                 .clipShape(Circle())
+                .frame(minWidth: 44, minHeight: 44)
+                .contentShape(Rectangle())
         }
+        .accessibilityLabel(L("coding.editCode.a11y"))
         .disabled(busyId == item.id)
     }
 
@@ -567,23 +586,24 @@ struct CodingSuggestionsCard: View {
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Code")
+                    Text(L("coding.field.code"))
                         .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                         .foregroundColor(.aurionTextSecondary)
-                    TextField("Code", text: $editingCode)
+                    TextField(L("coding.field.code"), text: $editingCode)
                         .autocorrectionDisabled(true)
                         .textInputAutocapitalization(.characters)
-                        .font(.system(size: 16, weight: .semibold, design: .monospaced))
+                        .monospaced()
+                        .aurionFont(16, weight: .semibold, relativeTo: .body)
                         .padding(10)
                         .background(Color.aurionSurfaceAlt)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
                 }
 
                 VStack(alignment: .leading, spacing: 6) {
-                    Text("Description")
+                    Text(L("coding.field.description"))
                         .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                         .foregroundColor(.aurionTextSecondary)
-                    TextField("Description", text: $editingDescription)
+                    TextField(L("coding.field.description"), text: $editingDescription)
                         .aurionFont(15, relativeTo: .body)
                         .padding(10)
                         .background(Color.aurionSurfaceAlt)
@@ -654,7 +674,9 @@ struct CodingSuggestionsCard: View {
                 sessionId: sessionId,
                 suggestionId: item.id
             )
-            items = items.map { $0.id == updated.id ? updated : $0 }
+            withAnimation(AurionAnimation.smooth) {
+                items = items.map { $0.id == updated.id ? updated : $0 }
+            }
             AurionHaptics.notification(.success)
         } catch {
             AurionHaptics.notification(.error)
@@ -672,7 +694,9 @@ struct CodingSuggestionsCard: View {
                 sessionId: sessionId,
                 suggestionId: item.id
             )
-            items = items.map { $0.id == updated.id ? updated : $0 }
+            withAnimation(AurionAnimation.smooth) {
+                items = items.map { $0.id == updated.id ? updated : $0 }
+            }
             AurionHaptics.notification(.success)
         } catch {
             AurionHaptics.notification(.error)
@@ -694,7 +718,9 @@ struct CodingSuggestionsCard: View {
                 code: code,
                 description: description
             )
-            items = items.map { $0.id == updated.id ? updated : $0 }
+            withAnimation(AurionAnimation.smooth) {
+                items = items.map { $0.id == updated.id ? updated : $0 }
+            }
             editing = nil
             AurionHaptics.notification(.success)
         } catch {

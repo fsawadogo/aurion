@@ -11,7 +11,7 @@ import SwiftUI
 struct WearableSetupView: View {
     let onComplete: () -> Void
     @StateObject private var ble = BLEPairingManager.shared
-    @State private var didAutoComplete = false
+    @State private var didFireSuccessHaptic = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -56,9 +56,18 @@ struct WearableSetupView: View {
             .aurionStagger(order: 4)
 
             if ble.isPaired {
-                pairedCard
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
-                    .onAppear { handlePairedAppearance() }
+                VStack(spacing: 12) {
+                    pairedCard
+                    // Explicit Continue instead of a timed auto-advance:
+                    // gives the clinician a beat to confirm the device name
+                    // shown in pairedCard (and to re-scan if the wrong
+                    // nearby device was tapped) before leaving the screen.
+                    AurionGoldButton(label: L("setup.continue"), full: true) {
+                        onComplete()
+                    }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
+                .onAppear { handlePairedAppearance() }
             }
 
             if let err = ble.error, !ble.isPaired {
@@ -167,11 +176,11 @@ struct WearableSetupView: View {
     private func rssiLabel(_ rssi: Int) -> String {
         let strength: String
         switch rssi {
-        case ..<(-80): strength = "Weak"
-        case (-80)..<(-65): strength = "Fair"
-        default: strength = "Strong"
+        case ..<(-80): strength = L("onboarding.wearable.signalWeak")
+        case (-80)..<(-65): strength = L("onboarding.wearable.signalFair")
+        default: strength = L("onboarding.wearable.signalStrong")
         }
-        return "\(strength) signal · \(rssi) dBm"
+        return L("onboarding.wearable.signalFormat", strength, rssi)
     }
 
     // MARK: - Paired Card
@@ -204,12 +213,12 @@ struct WearableSetupView: View {
         return L("onboarding.wearable.scanAgain")
     }
 
+    /// Fire the success haptic exactly once when the paired card appears.
+    /// Advancing is now driven by the explicit Continue button rather than
+    /// a timer, so the clinician confirms the device before moving on.
     private func handlePairedAppearance() {
-        guard !didAutoComplete else { return }
-        didAutoComplete = true
+        guard !didFireSuccessHaptic else { return }
+        didFireSuccessHaptic = true
         AurionHaptics.notification(.success)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.4) {
-            onComplete()
-        }
     }
 }

@@ -22,6 +22,20 @@ struct ErrorBanner: View {
     private var hasActions: Bool { onRetry != nil || onDismiss != nil }
 
     var body: some View {
+        if hasActions {
+            // Leave the Retry / Dismiss buttons as individually focusable
+            // elements — combining the whole banner would merge them away
+            // and VoiceOver users could no longer operate them.
+            bannerCard
+        } else {
+            // Pure message banner: flatten into a single spoken element.
+            bannerCard
+                .accessibilityElement(children: .combine)
+                .accessibilityLabel(message)
+        }
+    }
+
+    private var bannerCard: some View {
         HStack(alignment: .top, spacing: 12) {
             Image(systemName: "exclamationmark.triangle.fill")
                 .font(.system(size: 16, weight: .semibold))
@@ -63,7 +77,5 @@ struct ErrorBanner: View {
             RoundedRectangle(cornerRadius: AurionRadius.md, style: .continuous)
                 .stroke(Color.aurionRed.opacity(0.3), lineWidth: 1)
         )
-        .accessibilityElement(children: .combine)
-        .accessibilityLabel(message)
     }
 }

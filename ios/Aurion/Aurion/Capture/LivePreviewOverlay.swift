@@ -150,7 +150,7 @@ struct LivePreviewOverlay: View {
         if let msg = errorMessage {
             Text(msg)
                 .aurionFont(10, relativeTo: .caption2)
-                .foregroundColor(.red)
+                .foregroundColor(.aurionRed)
                 .padding(.vertical, 2)
         }
 

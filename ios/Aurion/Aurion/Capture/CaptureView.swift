@@ -329,6 +329,11 @@ struct CaptureView: View {
                     }
                 }
             }
+            // Keep the 24pt visual circle but expand the touch region to the
+            // HIG-minimum 44pt so it isn't easy to miss-tap during a live
+            // encounter.
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
             .buttonStyle(.plain)
             .accessibilityLabel(L("capture.a11yViewFrames"))
         }
@@ -354,10 +359,14 @@ struct CaptureView: View {
                 .background(Color.white.opacity(0.10))
                 .clipShape(Circle())
         }
+        // Expand the tap target to the HIG-minimum 44pt while keeping the
+        // 24pt visual circle.
+        .frame(minWidth: 44, minHeight: 44)
+        .contentShape(Rectangle())
         .buttonStyle(.plain)
         .accessibilityLabel(
-            showCameraPreview ? "Hide camera preview (background recording)"
-                              : "Show camera preview"
+            showCameraPreview ? L("capture.a11yHidePreview")
+                              : L("capture.a11yShowPreview")
         )
     }
 
@@ -693,7 +702,6 @@ struct CaptureView: View {
 
             // Left button: Pause/Resume (56px circle)
             Button(action: {
-                print("[AURION] pause/resume tapped. state=\(session.state) consent=\(session.isConsentConfirmed)")
                 AurionHaptics.impact(.light)
                 if session.state == .recording { sessionManager.pauseRecording() }
                 else if session.state == .paused { sessionManager.resumeRecording() }
@@ -717,7 +725,6 @@ struct CaptureView: View {
 
             // Center: Gold record/stop button (78px)
             Button(action: {
-                print("[AURION] record/stop tapped. state=\(session.state) consent=\(session.isConsentConfirmed) enabled=\(session.recordButtonEnabled)")
                 AurionHaptics.impact(.medium)
                 Task {
                     if session.state == .consentPending && session.isConsentConfirmed {
@@ -789,7 +796,6 @@ struct CaptureView: View {
 
             // Right button: Stop (56px circle)
             Button(action: {
-                print("[AURION] stop tapped. state=\(session.state)")
                 AurionHaptics.impact(.medium)
                 Task { await sessionManager.stopRecording() }
             }) {

@@ -229,8 +229,8 @@ struct ProfileView: View {
             // ── Language ─────────────────────────────────────
             Section {
                 Picker(selection: $appState.appLanguage) {
-                    Text("🇬🇧 English").tag("en")
-                    Text("🇫🇷 Fran\u{00E7}ais").tag("fr")
+                    Text("🇨🇦 English").tag("en")
+                    Text("🇨🇦 Fran\u{00E7}ais").tag("fr")
                 } label: {
                     Label(L("profile.appLanguage"), systemImage: "textformat")
                         .foregroundColor(.aurionTextPrimary)
@@ -242,8 +242,8 @@ struct ProfileView: View {
                         Task { await updateLanguage(newLang) }
                     }
                 )) {
-                    Text("🇬🇧 English").tag("en")
-                    Text("🇫🇷 Fran\u{00E7}ais").tag("fr")
+                    Text("🇨🇦 English").tag("en")
+                    Text("🇨🇦 Fran\u{00E7}ais").tag("fr")
                 } label: {
                     Label(L("profile.noteLanguage"), systemImage: "doc.text")
                         .foregroundColor(.aurionTextPrimary)
@@ -445,14 +445,17 @@ struct ProfileView: View {
                         Text(L("profile.version"))
                             .foregroundColor(.aurionTextPrimary)
                         Spacer()
-                        Text("0.1.0")
+                        // Read from the bundle so the displayed values
+                        // always track the installed binary instead of
+                        // drifting from a hardcoded literal in TestFlight.
+                        Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
                             .foregroundColor(.secondary)
                     }
                     HStack {
                         Text(L("profile.build"))
                             .foregroundColor(.aurionTextPrimary)
                         Spacer()
-                        Text("1")
+                        Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—")
                             .foregroundColor(.secondary)
                     }
                     HStack {
@@ -518,19 +521,6 @@ struct ProfileView: View {
                     .cornerRadius(AurionSpacing.md)
                 }
             }
-        }
-    }
-
-    // MARK: - State Display
-
-    private func displayState(_ state: String) -> (text: String, color: Color) {
-        switch state {
-        case "EXPORTED": return ("Exported", .clinicalNormal)
-        case "REVIEW_COMPLETE": return ("Ready", .clinicalInfo)
-        case "PURGED": return ("Archived", .clinicalNeutral)
-        case "AWAITING_REVIEW": return ("Review", .aurionGold)
-        case "PROCESSING_STAGE1": return ("Processing", .clinicalWarning)
-        default: return (state, .clinicalNeutral)
         }
     }
 

@@ -34,6 +34,9 @@ struct SessionsInboxView: View {
         case pending = "Pending"
         case completed = "Completed"
         case exported = "Exported"
+        /// Localized chip label — mirrors ``DateRange.labelKey`` so the
+        /// pill never renders the bare English rawValue in French.
+        var labelKey: String { "sessions.filter.\(rawValue.lowercased())" }
     }
 
     /// Preset date windows for the inbox. `since == nil` means no lower
@@ -117,8 +120,8 @@ struct SessionsInboxView: View {
                         Spacer()
                         EmptyStateView(
                             icon: "tray",
-                            title: filter == .all ? "No sessions yet" : "No \(filter.rawValue.lowercased()) sessions",
-                            subtitle: filter == .all ? "Start one from the Dashboard" : "Try a different filter"
+                            title: filter == .all ? L("sessions.noSessions") : L("sessions.noFiltered", L(filter.labelKey).lowercased()),
+                            subtitle: filter == .all ? L("sessions.noSessionsSub") : L("sessions.tryFilter")
                         )
                         .frame(maxWidth: .infinity)
                         Spacer()
@@ -142,8 +145,8 @@ struct SessionsInboxView: View {
                 } else {
                     EmptyStateView(
                         icon: "tray.slash",
-                        title: "Session not available",
-                        subtitle: "This note may have been purged or signed out from another device."
+                        title: L("sessions.tombstone.title"),
+                        subtitle: L("sessions.tombstone.subtitle")
                     )
                     .padding()
                 }
@@ -186,6 +189,10 @@ struct SessionsInboxView: View {
                     .font(.system(size: 14, weight: .semibold))
                     .foregroundColor(dateRange == .all ? .aurionTextSecondary : .aurionGold)
                     .padding(8)
+                    // Keep the 14pt glyph but guarantee a 44pt minimum
+                    // touch target (HIG).
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .accessibilityLabel(L("sessions.dateFilter"))
             .accessibilityValue(L(dateRange.labelKey))
@@ -201,6 +208,9 @@ struct SessionsInboxView: View {
                     // Direction flip animates the same arrow rather than
                     // swapping symbols — feels intentional, not flickery.
                     .contentTransition(.symbolEffect(.replace))
+                    // 14pt glyph, but a 44pt minimum touch target (HIG).
+                    .frame(minWidth: 44, minHeight: 44)
+                    .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
             .accessibilityLabel(L("a11y.sortSessions"))
@@ -216,7 +226,7 @@ struct SessionsInboxView: View {
         ScrollView(.horizontal, showsIndicators: false) {
             HStack(spacing: 8) {
                 ForEach(Filter.allCases, id: \.self) { f in
-                    AurionFilterChip(label: f.rawValue, count: count(for: f), active: filter == f) {
+                    AurionFilterChip(label: L(f.labelKey), count: count(for: f), active: filter == f) {
                         withAnimation(.aurionIOS) { filter = f }
                     }
                 }

@@ -216,8 +216,8 @@ struct ProcessingView: View {
                 .aurionHeadline()
 
             Text(status)
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                .aurionFont(15, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 40)
 
@@ -255,11 +255,11 @@ private struct Stage1RetryPrompt: View {
     var body: some View {
         VStack(spacing: 12) {
             Text(title)
-                .font(.subheadline.weight(.semibold))
-                .foregroundColor(.primary)
+                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextPrimary)
             Text(detail)
-                .font(.footnote)
-                .foregroundColor(.secondary)
+                .aurionFont(13, relativeTo: .footnote)
+                .foregroundColor(.aurionTextSecondary)
                 .multilineTextAlignment(.center)
             Button(L("common.retry"), action: onRetry)
                 .buttonStyle(.borderedProminent)
@@ -285,8 +285,8 @@ private struct MaskingRetryPrompt: View {
     var body: some View {
         VStack(spacing: 12) {
             Text(Lplural("masking.notUploaded", failedCount))
-                .font(.subheadline)
-                .foregroundColor(.primary)
+                .aurionFont(15, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextPrimary)
                 .multilineTextAlignment(.center)
 
             HStack(spacing: 12) {
@@ -320,8 +320,8 @@ private struct OfflineQueuedPanel: View {
             Text(L("offline.queued.title"))
                 .aurionHeadline()
             Text(L("offline.queued.detail"))
-                .font(.subheadline)
-                .foregroundColor(.secondary)
+                .aurionFont(15, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextSecondary)
                 .multilineTextAlignment(.center)
                 .padding(.horizontal, 16)
             Button(L("common.done"), action: onDone)
@@ -546,9 +546,10 @@ struct LoginView: View {
                         Text(L("login.forgotPassword.linkText"))
                             .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                             .foregroundColor(.aurionGold)
+                            .frame(maxWidth: .infinity, minHeight: AurionSpacing.hitMin, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .disabled(isSigningIn || signInSucceeded)
-                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     // AUTH-UNIVERSAL-LINKS — manual fallback for the
                     // case where the email-tapped Universal Link doesn't
@@ -567,9 +568,10 @@ struct LoginView: View {
                             .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                             .foregroundColor(.aurionGold)
                             .underline()
+                            .frame(maxWidth: .infinity, minHeight: AurionSpacing.hitMin, alignment: .leading)
+                            .contentShape(Rectangle())
                     }
                     .disabled(isSigningIn || signInSucceeded)
-                    .frame(maxWidth: .infinity, alignment: .leading)
 
                     if hasSavedLogin {
                         biometricSignInSection
@@ -739,9 +741,15 @@ struct LoginView: View {
             }
             .disabled(isSigningIn || signInSucceeded)
 
-            Button(L("login.forgetSaved")) { forgetSavedLogin() }
-                .aurionFont(12, relativeTo: .caption)
-                .foregroundColor(Color.aurionOnNavyFootnote)
+            Button {
+                forgetSavedLogin()
+            } label: {
+                Text(L("login.forgetSaved"))
+                    .aurionFont(12, relativeTo: .caption)
+                    .foregroundColor(Color.aurionOnNavyFootnote)
+                    .frame(minHeight: AurionSpacing.hitMin)
+                    .contentShape(Rectangle())
+            }
         }
     }
 

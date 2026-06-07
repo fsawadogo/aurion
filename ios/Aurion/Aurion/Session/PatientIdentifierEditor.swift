@@ -143,45 +143,56 @@ struct PatientIdentifierSheet: View {
 
     var body: some View {
         NavigationStack {
-            VStack(alignment: .leading, spacing: 16) {
-                Text(L("patientId.subtitle"))
-                    .aurionFont(13, relativeTo: .footnote)
-                    .foregroundColor(.aurionTextSecondary)
-                    .padding(.horizontal, 4)
+            // Scrollable form + a pinned action bar. At larger Dynamic
+            // Type (or with the keyboard raised) the subtitle, field,
+            // error, and privacy hint can grow past the medium detent;
+            // scrolling the form while keeping Save/Clear docked at the
+            // bottom keeps the actions reachable (#271).
+            VStack(spacing: 0) {
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 16) {
+                        Text(L("patientId.subtitle"))
+                            .aurionFont(13, relativeTo: .footnote)
+                            .foregroundColor(.aurionTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 4)
 
-                // Text field — disables QuickType, auto-correct,
-                // auto-cap. We don't want the identifier surfacing
-                // in the predictive bar or being autocorrected to
-                // a similar-looking word.
-                TextField(L("patientId.placeholder"), text: $draft)
-                    .textInputAutocapitalization(.never)
-                    .autocorrectionDisabled(true)
-                    .keyboardType(.asciiCapable)
-                    .font(.system(size: 16, weight: .regular, design: .monospaced))
-                    .padding(.horizontal, 12)
-                    .padding(.vertical, 12)
-                    .background(Color.aurionSurfaceAlt)
-                    .cornerRadius(12)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 12)
-                            .stroke(Color.aurionBorder, lineWidth: 1)
-                    )
-                    .disabled(isWorking)
+                        // Text field — disables QuickType, auto-correct,
+                        // auto-cap. We don't want the identifier surfacing
+                        // in the predictive bar or being autocorrected to
+                        // a similar-looking word.
+                        TextField(L("patientId.placeholder"), text: $draft)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled(true)
+                            .keyboardType(.asciiCapable)
+                            .font(.system(size: 16, weight: .regular, design: .monospaced))
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 12)
+                            .background(Color.aurionSurfaceAlt)
+                            .cornerRadius(12)
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 12)
+                                    .stroke(Color.aurionBorder, lineWidth: 1)
+                            )
+                            .disabled(isWorking)
 
-                if let msg = errorMessage {
-                    Text(msg)
-                        .aurionFont(12, relativeTo: .caption)
-                        .foregroundColor(.red)
-                        .padding(.horizontal, 4)
+                        if let msg = errorMessage {
+                            Text(msg)
+                                .aurionFont(12, relativeTo: .caption)
+                                .foregroundColor(.aurionRed)
+                                .fixedSize(horizontal: false, vertical: true)
+                                .padding(.horizontal, 4)
+                        }
+
+                        Text(L("patientId.privacyHint"))
+                            .aurionFont(11, relativeTo: .caption2)
+                            .foregroundColor(.aurionTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .padding(.horizontal, 4)
+                            .padding(.top, 4)
+                    }
+                    .padding(20)
                 }
-
-                Text(L("patientId.privacyHint"))
-                    .aurionFont(11, relativeTo: .caption2)
-                    .foregroundColor(.aurionTextSecondary)
-                    .padding(.horizontal, 4)
-                    .padding(.top, 4)
-
-                Spacer()
 
                 HStack(spacing: 12) {
                     if identifier != nil {
@@ -202,26 +213,18 @@ struct PatientIdentifierSheet: View {
                         .disabled(isWorking)
                     }
 
-                    Button {
+                    AurionGoldButton(
+                        label: inFlight == .save ? L("patientId.saving") : L("patientId.save"),
+                        full: true,
+                        disabled: isWorking || draft.trimmingCharacters(in: .whitespaces).isEmpty
+                    ) {
                         Task { await save() }
-                    } label: {
-                        HStack {
-                            if inFlight == .save {
-                                ProgressView().tint(.aurionNavy)
-                            }
-                            Text(L("patientId.save"))
-                                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
-                                .foregroundColor(.aurionNavy)
-                        }
-                        .frame(maxWidth: .infinity)
-                        .padding(.vertical, 14)
-                        .background(Color.aurionGold)
-                        .cornerRadius(12)
                     }
-                    .disabled(isWorking || draft.trimmingCharacters(in: .whitespaces).isEmpty)
                 }
+                .padding(.horizontal, 20)
+                .padding(.top, 4)
+                .padding(.bottom, 20)
             }
-            .padding(20)
             .navigationTitle(L("patientId.editTitle"))
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -238,7 +241,7 @@ struct PatientIdentifierSheet: View {
             // user can edit-in-place vs retyping from scratch.
             draft = identifier ?? ""
         }
-        .presentationDetents([.medium])
+        .presentationDetents([.medium, .large])
     }
 
     private func save() async {

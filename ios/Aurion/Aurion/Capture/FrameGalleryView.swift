@@ -42,6 +42,11 @@ struct FrameGalleryView: View {
                                     frameThumbnail(frame)
                                 }
                                 .buttonStyle(.plain)
+                                .accessibilityElement(children: .ignore)
+                                .accessibilityLabel(
+                                    L("frames.a11yFrame", formatTimestamp(frame.timestamp))
+                                )
+                                .accessibilityHint(L("frames.a11yFrameHint"))
                                 .transition(
                                     .scale(scale: 0.85)
                                         .combined(with: .opacity)
@@ -116,7 +121,9 @@ struct FrameGalleryView: View {
                 }
             }
 
-            // Timestamp pill — bottom-left over the image for context
+            // Timestamp pill — bottom-left over the image for context.
+            // Decorative: the timestamp is already spoken via the button's
+            // accessibilityLabel, so hide it from VoiceOver here.
             Text(formatTimestamp(frame.timestamp))
                 .aurionFont(10, weight: .semibold, relativeTo: .caption2)
                 .monospacedDigit()
@@ -126,6 +133,7 @@ struct FrameGalleryView: View {
                 .background(.ultraThinMaterial)
                 .clipShape(Capsule())
                 .padding(6)
+                .accessibilityHidden(true)
         }
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(

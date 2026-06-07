@@ -660,6 +660,7 @@ struct DashboardView: View {
                                     Image(systemName: "checkmark")
                                         .font(.system(size: 10, weight: .bold))
                                         .foregroundColor(.aurionTextPrimary)
+                                        .accessibilityHidden(true)
                                 }
                             }
                             Text("\(member.role.displayFormatted) \u{2014} \(member.name)")
@@ -667,8 +668,11 @@ struct DashboardView: View {
                                 .foregroundColor(.aurionTextPrimary)
                             Spacer()
                         }
+                        .frame(minHeight: 44)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    .accessibilityAddTraits(isChecked ? .isSelected : [])
                 }
             }
         }
@@ -710,6 +714,7 @@ struct DashboardView: View {
                         .foregroundColor(.aurionGold)
                 }
                 .disabled(traineeName.isEmpty || selectedParticipants.count >= 3)
+                .accessibilityHint(selectedParticipants.count >= 3 ? L("encounter.participantCapReached") : "")
             }
         }
         .padding(.leading, 56)

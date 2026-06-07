@@ -189,7 +189,7 @@ struct MfaSetupView: View {
                     .background(Color.white)
                     .cornerRadius(12)
                     .frame(maxWidth: .infinity, alignment: .center)
-                    .accessibilityLabel(L("login.mfa.setup.title"))
+                    .accessibilityLabel(L("login.mfa.setup.qrA11y"))
             }
 
             VStack(alignment: .leading, spacing: 6) {
@@ -204,9 +204,19 @@ struct MfaSetupView: View {
                         .lineLimit(1)
                         .minimumScaleFactor(0.7)
                         .frame(maxWidth: .infinity, alignment: .leading)
+                        // Spell the base32 out so VoiceOver reads it one
+                        // character at a time for manual authenticator entry,
+                        // instead of one run-on token.
+                        .accessibilityLabel(spelledOutSecret)
                     Button {
                         AurionHaptics.selection()
                         UIPasteboard.general.string = secret
+                        // VoiceOver gets no visual cue from the inline label
+                        // swap, so announce the copy explicitly.
+                        UIAccessibility.post(
+                            notification: .announcement,
+                            argument: L("login.mfa.setup.copied")
+                        )
                         withAnimation(AurionAnimation.smooth) { copied = true }
                         Task {
                             try? await Task.sleep(nanoseconds: 1_500_000_000)
@@ -222,6 +232,8 @@ struct MfaSetupView: View {
                             .padding(.vertical, 6)
                             .background(Color.aurionGold)
                             .cornerRadius(8)
+                            .frame(minHeight: AurionSpacing.hitMin)
+                            .contentShape(Rectangle())
                     }
                 }
                 .padding(12)
@@ -304,6 +316,13 @@ struct MfaSetupView: View {
             let end = secret.index(start, offsetBy: min(4, secret.count - offset))
             return String(secret[start..<end])
         }.joined(separator: " ")
+    }
+
+    /// The secret with each character separated so VoiceOver dictates it
+    /// letter-by-letter — the only practical way to enter a base32 key by
+    /// hand under VoiceOver, since the QR code itself is unreadable to it.
+    private var spelledOutSecret: String {
+        secret.map(String.init).joined(separator: " ")
     }
 
     @MainActor
