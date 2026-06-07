@@ -61,6 +61,8 @@ def _all_flags_response(**overrides) -> FeatureFlagsResponse:
         "per_session_provider_override": True,
         "meta_wearables_enabled": False,
         "per_session_visual_evidence_mode_override": True,
+        "clip_video_interpretation_enabled": True,
+        "frame_by_frame_video_enabled": True,
         "orders_card_enabled": False,
         "coding_card_enabled": False,
         "patient_summary_card_enabled": False,
@@ -132,6 +134,26 @@ class TestGetFeatureFlags:
         assert resp.coding_card_enabled is False
         assert resp.patient_summary_card_enabled is False
         assert resp.emr_writeback_card_enabled is False
+
+    @pytest.mark.asyncio
+    async def test_get_response_includes_video_vision_master_flags(self) -> None:
+        """The two video-vision master gates surface in the GET response
+        (default True) so the portal can render + toggle them."""
+        live = AppConfigSchema(
+            feature_flags=FeatureFlagsConfig(
+                clip_video_interpretation_enabled=True,
+                frame_by_frame_video_enabled=False,
+            )
+        )
+        with patch(
+            "app.api.v1.admin.feature_flags.get_config", return_value=live
+        ):
+            resp = await get_feature_flags(_=_admin_user())
+        dumped = resp.model_dump()
+        assert "clip_video_interpretation_enabled" in dumped
+        assert "frame_by_frame_video_enabled" in dumped
+        assert resp.clip_video_interpretation_enabled is True
+        assert resp.frame_by_frame_video_enabled is False
 
 
 # ── POST /admin/feature-flags ──────────────────────────────────────────────

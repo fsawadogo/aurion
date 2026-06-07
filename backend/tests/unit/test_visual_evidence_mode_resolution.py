@@ -23,6 +23,7 @@ import pytest
 
 from app.modules.config.schema import (
     AppConfigSchema,
+    FeatureFlagsConfig,
     PipelineConfig,
     VisualEvidenceMode,
 )
@@ -35,8 +36,19 @@ def _stub_session(provider_overrides: str | None):
     return SimpleNamespace(provider_overrides=provider_overrides)
 
 
-def _config(mode: VisualEvidenceMode = VisualEvidenceMode.FRAMES_ONLY) -> AppConfigSchema:
-    return AppConfigSchema(pipeline=PipelineConfig(visual_evidence_mode=mode))
+def _config(
+    mode: VisualEvidenceMode = VisualEvidenceMode.FRAMES_ONLY,
+    *,
+    clip_enabled: bool = True,
+    frame_enabled: bool = True,
+) -> AppConfigSchema:
+    return AppConfigSchema(
+        pipeline=PipelineConfig(visual_evidence_mode=mode),
+        feature_flags=FeatureFlagsConfig(
+            clip_video_interpretation_enabled=clip_enabled,
+            frame_by_frame_video_enabled=frame_enabled,
+        ),
+    )
 
 
 # ── Resolution order ────────────────────────────────────────────────────────
@@ -132,6 +144,80 @@ def test_config_arg_optional_falls_back_to_get_config(monkeypatch):
     session = _stub_session(None)
 
     assert resolve_evidence_mode(session) == VisualEvidenceMode.HYBRID
+
+
+# ── Feature-flag clamp (step 0 — highest precedence) ────────────────────────
+
+
+def test_flag_clip_on_frame_off_forces_clips_only():
+    """clip on & frame off → CLIPS_ONLY regardless of the base mode."""
+    session = _stub_session(None)
+    cfg = _config(
+        VisualEvidenceMode.FRAMES_ONLY, clip_enabled=True, frame_enabled=False
+    )
+
+    assert resolve_evidence_mode(session, cfg) == VisualEvidenceMode.CLIPS_ONLY
+
+
+def test_flag_frame_on_clip_off_forces_frames_only():
+    """frame on & clip off → FRAMES_ONLY regardless of the base mode."""
+    session = _stub_session(None)
+    cfg = _config(
+        VisualEvidenceMode.HYBRID, clip_enabled=False, frame_enabled=True
+    )
+
+    assert resolve_evidence_mode(session, cfg) == VisualEvidenceMode.FRAMES_ONLY
+
+
+def test_flag_both_on_preserves_base_mode():
+    """Both gates on → no clamp; the base mode (here HYBRID) is preserved."""
+    session = _stub_session(None)
+    cfg = _config(
+        VisualEvidenceMode.HYBRID, clip_enabled=True, frame_enabled=True
+    )
+
+    assert resolve_evidence_mode(session, cfg) == VisualEvidenceMode.HYBRID
+
+
+def test_flag_both_on_preserves_session_override():
+    """Both gates on → a per-session override still wins (step 1 base
+    mode survives the no-op clamp)."""
+    session = _stub_session('{"visual_evidence_mode": "clips_only"}')
+    cfg = _config(
+        VisualEvidenceMode.FRAMES_ONLY, clip_enabled=True, frame_enabled=True
+    )
+
+    assert resolve_evidence_mode(session, cfg) == VisualEvidenceMode.CLIPS_ONLY
+
+
+def test_flag_both_off_logs_warning_and_returns_base_mode(caplog):
+    """Both gates off → WARNING + base mode unchanged (no new enum case)."""
+    import logging
+
+    session = _stub_session(None)
+    cfg = _config(
+        VisualEvidenceMode.HYBRID, clip_enabled=False, frame_enabled=False
+    )
+
+    with caplog.at_level(logging.WARNING, logger="aurion.vision"):
+        result = resolve_evidence_mode(session, cfg)
+
+    assert result == VisualEvidenceMode.HYBRID
+    assert any(
+        "both video-evidence paths disabled" in r.getMessage()
+        for r in caplog.records
+    )
+
+
+def test_flag_clamp_outranks_session_override():
+    """Step 0 clamp is highest precedence: a session override of
+    frames_only is overridden to CLIPS_ONLY when only clip is enabled."""
+    session = _stub_session('{"visual_evidence_mode": "frames_only"}')
+    cfg = _config(
+        VisualEvidenceMode.FRAMES_ONLY, clip_enabled=True, frame_enabled=False
+    )
+
+    assert resolve_evidence_mode(session, cfg) == VisualEvidenceMode.CLIPS_ONLY
 
 
 # ── PHI scan ────────────────────────────────────────────────────────────────

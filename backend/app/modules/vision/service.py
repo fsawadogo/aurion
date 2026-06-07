@@ -118,7 +118,18 @@ def resolve_evidence_mode(
 ) -> VisualEvidenceMode:
     """Return the active VisualEvidenceMode for a session.
 
-    Resolution order:
+    Resolution order (highest precedence first):
+      0. Feature-flag clamp (``feature_flags.clip_video_interpretation_enabled``
+         + ``feature_flags.frame_by_frame_video_enabled``). Two master
+         on/off gates for the two video-vision paths. After the base mode
+         is computed (steps 1–2), the clamp forces a single path when only
+         one of the two flags is on:
+           - clip on  & frame off → CLIPS_ONLY
+           - frame on & clip off  → FRAMES_ONLY
+           - both on              → base mode unchanged (HYBRID + per-
+             session overrides preserved)
+           - both off             → WARNING + base mode unchanged (the
+             pilot won't set both off — screen capture is its own flag).
       1. Session-level override (``session.provider_overrides``,
          JSON-encoded dict, key ``visual_evidence_mode``). Eval-team
          per-session flip.
@@ -137,6 +148,9 @@ def resolve_evidence_mode(
     transcript content.
     """
     app_config = app_config if app_config is not None else get_config()
+
+    # ── Steps 1–2: compute the base mode (override → pipeline default) ──
+    base_mode = app_config.pipeline.visual_evidence_mode
     overrides_raw = getattr(session, "provider_overrides", None)
     if overrides_raw:
         try:
@@ -152,8 +166,28 @@ def resolve_evidence_mode(
             if session_mode is not None:
                 # Will raise ValueError on an unknown enum value; the
                 # caller catches + falls back.
-                return VisualEvidenceMode(session_mode)
-    return app_config.pipeline.visual_evidence_mode
+                base_mode = VisualEvidenceMode(session_mode)
+
+    # ── Step 0: feature-flag clamp (highest precedence) ────────────────
+    # Two master gates collapse the base mode onto a single path when
+    # exactly one is enabled. Both-on is the no-clamp case (HYBRID and
+    # per-session overrides survive). Both-off is not a configuration the
+    # pilot ships (screen capture is a separate flag) — we log a WARNING
+    # and keep the base mode rather than inventing a new "no video" enum
+    # case.
+    flags = app_config.feature_flags
+    clip_on = flags.clip_video_interpretation_enabled
+    frame_on = flags.frame_by_frame_video_enabled
+    if clip_on and not frame_on:
+        return VisualEvidenceMode.CLIPS_ONLY
+    if frame_on and not clip_on:
+        return VisualEvidenceMode.FRAMES_ONLY
+    if not clip_on and not frame_on:
+        logger.warning(
+            "both video-evidence paths disabled via feature flags; "
+            "falling back to base mode"
+        )
+    return base_mode
 
 
 # ── Frame Extraction ─────────────────────────────────────────────────────

@@ -142,6 +142,13 @@ class TestFeatureFlagsPerSessionOverride:
         flags = FeatureFlagsConfig()
         assert flags.per_session_visual_evidence_mode_override is True
 
+    def test_video_vision_master_gates_default_true(self) -> None:
+        """Both master gates default True so current behavior is preserved;
+        the operator flips them via AppConfig, not the schema default."""
+        flags = FeatureFlagsConfig()
+        assert flags.clip_video_interpretation_enabled is True
+        assert flags.frame_by_frame_video_enabled is True
+
 
 # ── AppConfigSchema integration ─────────────────────────────────────────
 
