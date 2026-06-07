@@ -17,7 +17,8 @@
       "myProfile": "My Profile",
       "myActivity": "My Activity",
       "aiPrompts": "AI Prompts",
-      "featureFlags": "Feature Flags"
+      "featureFlags": "Feature Flags",
+      "capturedMedia": "Captured Media"
     },
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
@@ -413,6 +414,57 @@
         "name": "EMR Write-Back",
         "description": "Outbound queue that sends the approved note to a chart system."
       }
+    }
+  },
+  "CapturedMedia": {
+    "eyebrow": "Admin",
+    "title": "Captured media",
+    "subtitle": "Sessions whose raw media is still inside the retention window.",
+    "retentionNote": "Raw media is retained for {days} days, then removed by lifecycle policy. No patient identifiers are shown.",
+    "refresh": "Refresh",
+    "dismiss": "Dismiss",
+    "loadError": "Couldn't load captured media.",
+    "empty": "No sessions with retained media in the current window.",
+    "notEnabledTitle": "Media retention is not enabled",
+    "notEnabledHint": "Turn on the media review retention flag to retain and review raw session media.",
+    "viewOnly": "View only. Downloading raw media is restricted to admins and the eval team.",
+    "columns": {
+      "physician": "Physician",
+      "date": "Date",
+      "visit": "Visit / context",
+      "encounter": "Encounter",
+      "state": "State",
+      "media": "Media",
+      "expires": "Expires in",
+      "actions": "Actions"
+    },
+    "media": {
+      "audio": "Audio",
+      "clips": "{count, plural, one {# clip} other {# clips}}",
+      "none": "None"
+    },
+    "expires": {
+      "inDays": "{count, plural, one {# day} other {# days}}",
+      "inHours": "{count, plural, one {# hour} other {# hours}}",
+      "expired": "Expired"
+    },
+    "download": {
+      "audio": "Download audio",
+      "clips": "Download clips",
+      "noAudio": "No audio available.",
+      "noClips": "No clips available.",
+      "error": "Download failed. Try again."
+    },
+    "stateBadge": {
+      "AWAITING_REVIEW": "Review",
+      "PROCESSING_STAGE2": "Stage 2",
+      "REVIEW_COMPLETE": "Approved",
+      "EXPORTED": "Exported"
+    },
+    "encounterType": {
+      "doctor_patient": "Doctor–patient",
+      "doctor_patient_allied": "Doctor–patient + allied",
+      "doctor_patient_transitory": "Doctor–patient (transitory)"
     }
   },
   "Specialties": {

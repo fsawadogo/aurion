@@ -98,6 +98,9 @@ EXPECTED_VALUES: dict[str, str] = {
     "CLEANUP_PARTIAL_FAILURE": "cleanup_partial_failure",
     # Windowed media retention (#338) — replay URL minted for a reviewer.
     "EVIDENCE_REPLAYED": "evidence_replayed",
+    # Windowed media retention (#338) — download URLs minted for an
+    # ADMIN/EVAL_TEAM reviewer via the admin Captured Media page.
+    "EVIDENCE_DOWNLOADED": "evidence_downloaded",
     # Privacy / account
     "BIOMETRIC_CONSENT_CONFIRMED": "biometric_consent_confirmed",
     "VOICE_ENROLLMENT_COMPLETE": "voice_enrollment_complete",
@@ -257,6 +260,23 @@ def test_evidence_replayed_accepts_its_three_kwargs() -> None:
     # An S3 key must NOT be accepted — it would leak the object location.
     assert validate_audit_kwargs(
         AuditEventType.EVIDENCE_REPLAYED, ["actor_id", "s3_key"]
+    ) == {"s3_key"}
+
+
+def test_evidence_downloaded_accepts_its_count_kwargs() -> None:
+    """#338 — EVIDENCE_DOWNLOADED carries actor_id + evidence_kind +
+    audio_count + clip_count and nothing else (no S3 key, no signed URL)."""
+    assert (
+        validate_audit_kwargs(
+            AuditEventType.EVIDENCE_DOWNLOADED,
+            ["actor_id", "evidence_kind", "audio_count", "clip_count"],
+        )
+        == set()
+    )
+    # An S3 key / signed URL must NOT be accepted — it would leak the
+    # object location / grant a TTL-bounded read.
+    assert validate_audit_kwargs(
+        AuditEventType.EVIDENCE_DOWNLOADED, ["actor_id", "s3_key"]
     ) == {"s3_key"}
 
 

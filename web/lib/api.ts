@@ -2,6 +2,7 @@ import type {
   AuditEvent,
   AuditFilters,
   AuthResponse,
+  CapturedMediaList,
   ConfigChangeEvent,
   CreateUserPayload,
   CurrentUser,
@@ -11,6 +12,7 @@ import type {
   EvalSessionDetail,
   FeatureFlags,
   MaskingReport,
+  MediaDownloadUrls,
   MetricFilters,
   MetricTimeseriesFilters,
   MetricTimeseriesResponse,
@@ -319,6 +321,32 @@ export async function updateFeatureFlags(
     method: "POST",
     body: JSON.stringify(payload),
   });
+  return res.json();
+}
+
+/* ─── Captured Media (admin, #338) ───────────────────────────────────────── */
+//
+// Windowed media-retention review surface. GET /admin/media lists sessions
+// whose raw media is still inside the retention window (ADMIN/EVAL_TEAM/
+// COMPLIANCE_OFFICER); GET /admin/media/{id}/download-urls mints presigned
+// download URLs (ADMIN/EVAL_TEAM only — compliance is view-only). Both are
+// gated behind media_review_retention_enabled: when the flag is off the
+// backend returns 403, which the page surfaces as a "not enabled" state.
+// See backend/app/api/v1/admin/media.py.
+
+export async function getCapturedMedia(
+  params: { page?: number; page_size?: number } = {},
+): Promise<CapturedMediaList> {
+  const res = await fetchWithAuth(`/api/v1/admin/media${buildQuery(params)}`);
+  return res.json();
+}
+
+export async function getMediaDownloadUrls(
+  sessionId: string,
+): Promise<MediaDownloadUrls> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/media/${encodeURIComponent(sessionId)}/download-urls`,
+  );
   return res.json();
 }
 

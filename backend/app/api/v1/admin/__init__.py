@@ -18,6 +18,7 @@ from app.api.v1.admin import (
     emr,
     eval,
     feature_flags,
+    media,
     metrics,
     probe,
     providers,
@@ -40,3 +41,4 @@ router.include_router(compliance.router)
 router.include_router(emr.router)
 router.include_router(probe.router)
 router.include_router(feature_flags.router)
+router.include_router(media.router)

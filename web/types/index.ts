@@ -411,6 +411,44 @@ export interface UpdateFeatureFlagsResponse {
   changed_fields: string[];
 }
 
+/* ─── Captured Media (admin, #338) ───────────────────────────────────────── */
+// Mirrors backend/app/api/v1/admin/media.py response models. The list +
+// download surfaces are gated behind the media_review_retention_enabled flag
+// AND a role check (ADMIN/EVAL_TEAM/COMPLIANCE_OFFICER for the list;
+// ADMIN/EVAL_TEAM only for the download URLs). The list carries NO patient
+// identifier — only physician/session/context metadata + media availability.
+export interface CapturedMediaItem {
+  session_id: string;
+  physician_name: string;
+  started_at: string;
+  visit_type: string | null;
+  context_label: string | null;
+  encounter_type: string;
+  state: string;
+  has_audio: boolean;
+  clip_count: number;
+  retention_expires_at: string;
+}
+
+export interface CapturedMediaList {
+  items: CapturedMediaItem[];
+  total: number;
+  page: number;
+  page_size: number;
+  retention_days: number;
+}
+
+export interface MediaClipDownloadUrl {
+  clip_id: string;
+  url: string;
+}
+
+export interface MediaDownloadUrls {
+  audio_url: string | null;
+  clips: MediaClipDownloadUrl[];
+  expires_in: number;
+}
+
 /* ─── Pilot Metrics ──────────────────────────────────────────────────────── */
 
 export interface PilotMetric {
