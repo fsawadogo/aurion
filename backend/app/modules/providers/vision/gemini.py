@@ -149,6 +149,14 @@ class GeminiVisionProvider(VisionProvider):
             mp4_bytes = b"placeholder"
         video_data = base64.b64encode(mp4_bytes).decode("utf-8")
 
+        # Gemini samples inline video at 1 fps by DEFAULT, which would throw
+        # away the extra frames a higher capture rate produces. Pin the sampling
+        # rate to the configured video-capture fps so a denser clip actually
+        # yields finer motion detail (gait / ROM / procedural). Token cost and
+        # latency scale ~linearly with fps, so this is bounded by the same
+        # AppConfig knob that bounds capture (pipeline.video_capture_fps, 1-10).
+        sampling_fps = get_config().pipeline.video_capture_fps
+
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
@@ -164,7 +172,10 @@ class GeminiVisionProvider(VisionProvider):
                                         "inline_data": {
                                             "mime_type": "video/mp4",
                                             "data": video_data,
-                                        }
+                                        },
+                                        # Sample at the capture rate, not the
+                                        # 1-fps default (see sampling_fps above).
+                                        "video_metadata": {"fps": sampling_fps},
                                     },
                                     {
                                         "text": (
