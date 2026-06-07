@@ -87,10 +87,11 @@ final class CaptureManager: NSObject, ObservableObject {
 
     // MARK: - Audio Recording State
 
-    /// Raw PCM audio samples accumulated during recording.
-    /// Protected by audioPCMLock — accessed from audio delegate queue.
-    private nonisolated(unsafe) var audioPCMData = Data()
-    private let audioPCMLock = NSLock()
+    /// Raw PCM audio accumulated during recording. Thread-safe and gated on
+    /// the capture-active state so paused / pre-start / post-stop buffers
+    /// never reach the WAV (#281) — written from the nonisolated audio
+    /// delegate queue, controlled from the main actor.
+    private let audioBuffer = AudioCaptureBuffer()
 
     // MARK: - Video Frame Extraction
 
@@ -297,10 +298,9 @@ final class CaptureManager: NSObject, ObservableObject {
             return
         }
 
-        // Reset state
-        audioPCMLock.lock()
-        audioPCMData = Data()
-        audioPCMLock.unlock()
+        // Reset state — clears the buffer and leaves it inactive until
+        // capture actually starts below (so no pre-start buffers leak).
+        audioBuffer.reset()
         // Drop the converter's lazy state so it picks up the current input
         // format (handles mic route changes between sessions, e.g. AirPods
         // unplugged before recording starts).
@@ -359,6 +359,9 @@ final class CaptureManager: NSObject, ObservableObject {
                       self.captureSession.inputs.count,
                       self.captureSession.outputs.count)
             }
+            // Open the audio gate now that the session is running so the
+            // recorded PCM tracks the live capture window.
+            self.audioBuffer.activate()
             Task { @MainActor in
                 self.isCapturing = true
                 self.isPaused = false
@@ -373,6 +376,9 @@ final class CaptureManager: NSObject, ObservableObject {
             if self.captureSession.isRunning {
                 self.captureSession.stopRunning()
             }
+            // Close the audio gate — no more samples accepted. The buffered
+            // PCM is retained for getRecordedAudioData() to build the WAV.
+            self.audioBuffer.deactivate()
             // Release the audio session so other apps (Music, FaceTime, etc.)
             // regain priority. `notifyOthersOnDeactivation` lets paused apps
             // automatically resume playback. Non-fatal if it fails.
@@ -399,12 +405,16 @@ final class CaptureManager: NSObject, ObservableObject {
     func pauseCapture() {
         guard isCapturing, !isPaused else { return }
         isPaused = true
+        // Close the audio gate so paused audio is genuinely not recorded
+        // (#281) — pause is a consent boundary, not just a UI state.
+        audioBuffer.deactivate()
     }
 
     /// Resumes capture after a pause.
     func resumeCapture() {
         guard isCapturing, isPaused else { return }
         isPaused = false
+        audioBuffer.activate()
     }
 
     // MARK: - Audio Data Retrieval
@@ -412,9 +422,7 @@ final class CaptureManager: NSObject, ObservableObject {
     /// Returns the recorded audio as a WAV file Data blob.
     /// Call after `stopCapture()`. Returns nil if no audio was recorded.
     func getRecordedAudioData() -> Data? {
-        audioPCMLock.lock()
-        let pcmData = audioPCMData
-        audioPCMLock.unlock()
+        let pcmData = audioBuffer.snapshot()
 
         guard !pcmData.isEmpty else { return nil }
         return WAVBuilder.build(
@@ -428,27 +436,20 @@ final class CaptureManager: NSObject, ObservableObject {
     /// Drop the in-memory audio PCM. Called by `LocalDataPurger` after
     /// export — the WAV bytes never need to outlive the upload + export.
     func discardRecordedAudio() {
-        audioPCMLock.lock()
-        audioPCMData = Data()
-        audioPCMLock.unlock()
+        audioBuffer.reset()
     }
 
     /// Cheap byte-count for the audit log — no WAV construction, no
     /// PCM copy. The lock protects against concurrent writes from the
     /// audio delegate queue.
     func getRecordedAudioByteCount() -> Int {
-        audioPCMLock.lock()
-        let count = audioPCMData.count
-        audioPCMLock.unlock()
-        return count
+        audioBuffer.byteCount
     }
 
     /// Recorded audio as an `AVAudioPCMBuffer` of floats so downstream
     /// consumers can slice by timestamps without re-parsing WAV bytes.
     func getRecordedPCMBuffer() -> AVAudioPCMBuffer? {
-        audioPCMLock.lock()
-        let pcmData = audioPCMData
-        audioPCMLock.unlock()
+        let pcmData = audioBuffer.snapshot()
 
         guard !pcmData.isEmpty,
               let format = AVAudioFormat(
@@ -547,9 +548,9 @@ extension CaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptur
             self.audioLevel = result.rms
         }
 
-        audioPCMLock.lock()
-        audioPCMData.append(result.pcm)
-        audioPCMLock.unlock()
+        // Gated append — a no-op while paused / before start / after stop,
+        // so non-consented audio never reaches the WAV (#281).
+        audioBuffer.append(result.pcm)
     }
 
     // MARK: Video Processing
