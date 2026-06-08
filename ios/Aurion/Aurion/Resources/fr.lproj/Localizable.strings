@@ -498,6 +498,12 @@
 "profile.teamEditor.emailPlaceholder" = "nom@exemple.com";
 "profile.teamEditor.done" = "Termin\U00E9";
 "profile.teamEditor.cancel" = "Annuler";
+"profile.teamEditor.save" = "Enregistrer";
+/* #275 / I3 — titre de la feuille d\U2019\U00E9dition + indice de la ligne. */
+"profile.teamEditor.editTitle" = "Modifier le membre";
+"profile.teamEditor.editHint" = "Toucher deux fois pour modifier ce membre";
+/* #275 / I2 — interrupteur \U00AB pr\U00E9sent aujourd\U2019hui \U00BB par ligne (libell\U00E9 VoiceOver). */
+"profile.teamEditor.workingToday" = "Pr\U00E9sent aujourd\U2019hui";
 "profile.teamEditor.footer" = "Voici les personnes qui travaillent habituellement avec vous pendant les visites \U2014 infirmi\U00E8res, scribes, r\U00E9sidents, secr\U00E9taires m\U00E9dicales. Aurion utilise cette liste pour attribuer les paroles non m\U00E9dicales dans vos transcriptions.";
 "profile.teamEditor.saveFailed" = "Impossible d\U2019enregistrer les membres. V\U00E9rifiez votre connexion et r\U00E9essayez.";
 "profile.signOut" = "Se d\U00E9connecter";
@@ -713,9 +719,14 @@
 "encounter.trainee.title" = "Avec un stagiaire";
 "encounter.trainee.sub" = "R\U00E9sident, fellow ou \U00E9tudiant";
 "encounter.noTeam" = "Aucun membre d\U2019\U00E9quipe configur\U00E9. Ajoutez-les dans les param\U00E8tres du profil.";
+/* #275 — affich\U00E9 quand une \U00E9quipe existe mais personne n\U2019est marqu\U00E9 pr\U00E9sent aujourd\U2019hui. */
+"encounter.noneToday" = "Aucun membre marqu\U00E9 pr\U00E9sent aujourd\U2019hui. Ajoutez-les par nom ou par r\U00F4le ci-dessous.";
+/* #275 — en-t\U00EAte au-dessus des puces de r\U00F4le anonymes (sans nom, aucune donn\U00E9e personnelle). */
+"encounter.anonRoles" = "Ou ajouter par r\U00F4le (sans nom)";
 "encounter.name" = "Nom";
 "encounter.namePlaceholder" = "J. Lee";
 "encounter.role" = "R\U00F4le";
+"encounter.role.nurse" = "Infirmi\U00E8re";
 "encounter.role.resident" = "R\U00E9sident";
 "encounter.role.fellow" = "Fellow";
 "encounter.role.student" = "\U00C9tudiant";

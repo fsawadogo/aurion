@@ -510,6 +510,12 @@
 "profile.teamEditor.emailPlaceholder" = "name@example.com";
 "profile.teamEditor.done" = "Done";
 "profile.teamEditor.cancel" = "Cancel";
+"profile.teamEditor.save" = "Save";
+/* #275 / I3 — edit-in-place sheet title + row hint. */
+"profile.teamEditor.editTitle" = "Edit Member";
+"profile.teamEditor.editHint" = "Double tap to edit this member";
+/* #275 / I2 — per-row "working today" roster toggle (VoiceOver label). */
+"profile.teamEditor.workingToday" = "Working today";
 "profile.teamEditor.footer" = "These are the people who typically work alongside you during visits — nurses, scribes, residents, MOAs. Aurion uses this list to attribute non-physician speech in your transcripts.";
 "profile.teamEditor.saveFailed" = "Couldn't save team members. Check your connection and try again.";
 "profile.signOut" = "Sign Out";
@@ -725,9 +731,14 @@
 "encounter.trainee.title" = "With Trainee";
 "encounter.trainee.sub" = "Resident, fellow, or student";
 "encounter.noTeam" = "No team members configured. Add them in Profile settings.";
+/* #275 — shown when a roster exists but nobody is marked working today. */
+"encounter.noneToday" = "No team members marked as working today. Add them by name or role below.";
+/* #275 — header above the anonymous role chips (zero-PHI, no name). */
+"encounter.anonRoles" = "Or add by role (no name)";
 "encounter.name" = "Name";
 "encounter.namePlaceholder" = "J. Lee";
 "encounter.role" = "Role";
+"encounter.role.nurse" = "Nurse";
 "encounter.role.resident" = "Resident";
 "encounter.role.fellow" = "Fellow";
 "encounter.role.student" = "Student";

@@ -715,29 +715,46 @@ struct DashboardView: View {
     private var teamMemberEntry: some View {
         VStack(alignment: .leading, spacing: 14) {
             alliedHealthPicker
+            roleChips
             traineeForm
         }
     }
 
     private var alliedHealthPicker: some View {
-        let team = appState.physicianProfile?.alliedHealthTeam ?? []
+        let allTeam = appState.physicianProfile?.alliedHealthTeam ?? []
+        // #275 / I2 — only today's roster is selectable. Effective presence
+        // is computed server-side (stale dates auto-reset to absent); we
+        // filter on it here so combos 2 & 3 show who's actually in the clinic
+        // today. When nobody is marked working today we still let the
+        // clinician add ad-hoc named members and anonymous role chips below.
+        let team = allTeam.filter(\.isWorkingToday)
         return VStack(alignment: .leading, spacing: 10) {
-            if team.isEmpty {
+            if allTeam.isEmpty {
                 Text(L("encounter.noTeam"))
                     .aurionFont(13, relativeTo: .footnote)
                     .foregroundColor(.aurionTextSecondary)
                     .padding(.horizontal, 12)
+            } else if team.isEmpty {
+                Text(L("encounter.noneToday"))
+                    .aurionFont(13, relativeTo: .footnote)
+                    .foregroundColor(.aurionTextSecondary)
+                    .padding(.horizontal, 12)
             } else {
-                ForEach(team, id: \.name) { member in
-                    let isChecked = selectedParticipants.contains { ($0["name"] as? String) == member.name }
+                ForEach(team) { member in
+                    let isChecked = selectedParticipants.contains {
+                        ($0["source"] as? String) == "profile" && ($0["name"] as? String) == member.name
+                    }
                     Button {
                         AurionHaptics.selection()
                         if isChecked {
-                            selectedParticipants.removeAll { ($0["name"] as? String) == member.name }
+                            selectedParticipants.removeAll {
+                                ($0["source"] as? String) == "profile" && ($0["name"] as? String) == member.name
+                            }
                         } else {
                             selectedParticipants.append([
                                 "name": member.name,
                                 "role": member.role,
+                                "source": "profile",
                                 "is_persistent": true,
                             ])
                         }
@@ -778,6 +795,76 @@ struct DashboardView: View {
         .padding(.leading, 56)
     }
 
+    /// Anonymous role chips (#275 — "choose who" item 2). Each toggles a
+    /// name-less participant ("a nurse was present") tagged
+    /// `source: adhoc_role`, which carries zero PHI. Toggling is idempotent
+    /// per role; the existing 3-participant cap still applies — a selected
+    /// chip can always be removed, but a new one is blocked at three.
+    private struct AnonymousRoleChip: Identifiable {
+        let role: String
+        let labelKey: String
+        var id: String { role }
+    }
+
+    private static let anonymousRoleChips: [AnonymousRoleChip] = [
+        AnonymousRoleChip(role: "nurse", labelKey: "encounter.role.nurse"),
+        AnonymousRoleChip(role: "resident", labelKey: "encounter.role.resident"),
+        AnonymousRoleChip(role: "medical_student", labelKey: "encounter.role.student"),
+    ]
+
+    private func isRoleChipSelected(_ role: String) -> Bool {
+        selectedParticipants.contains {
+            ($0["source"] as? String) == "adhoc_role" && ($0["role"] as? String) == role
+        }
+    }
+
+    private var roleChips: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(L("encounter.anonRoles"))
+                .aurionFont(13, weight: .medium, relativeTo: .footnote)
+                .foregroundColor(.aurionTextSecondary)
+            HStack(spacing: 8) {
+                ForEach(Self.anonymousRoleChips) { entry in
+                    let selected = isRoleChipSelected(entry.role)
+                    let capReached = !selected && selectedParticipants.count >= 3
+                    Button {
+                        AurionHaptics.selection()
+                        if selected {
+                            selectedParticipants.removeAll {
+                                ($0["source"] as? String) == "adhoc_role"
+                                    && ($0["role"] as? String) == entry.role
+                            }
+                        } else if !capReached {
+                            selectedParticipants.append([
+                                "role": entry.role,
+                                "source": "adhoc_role",
+                                "is_persistent": false,
+                            ])
+                        }
+                    } label: {
+                        Text(L(entry.labelKey))
+                            .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                            .foregroundColor(selected ? .white : .aurionTextPrimary)
+                            .padding(.horizontal, 14)
+                            .padding(.vertical, 7)
+                            .background(selected ? Color.aurionNavy : Color.aurionCardBackground)
+                            .clipShape(Capsule())
+                            .overlay(
+                                Capsule().stroke(selected ? .clear : Color.aurionBorder, lineWidth: 1)
+                            )
+                            .opacity(capReached ? 0.4 : 1)
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(capReached)
+                    .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
+                    .accessibilityHint(capReached ? L("encounter.participantCapReached") : "")
+                }
+                Spacer(minLength: 0)
+            }
+        }
+        .padding(.leading, 56)
+    }
+
     @State private var traineeName = ""
     @State private var traineeRole = "resident"
 
@@ -801,9 +888,11 @@ struct DashboardView: View {
                 Spacer()
                 Button {
                     guard !traineeName.isEmpty else { return }
+                    // #275 — a typed-in trainee is an ad-hoc NAMED participant.
                     selectedParticipants.append([
                         "name": traineeName,
                         "role": traineeRole,
+                        "source": "adhoc_named",
                         "is_persistent": false,
                     ])
                     traineeName = ""

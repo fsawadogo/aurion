@@ -722,7 +722,10 @@ struct CaptureView: View {
     /// nurses, residents, and PAs see themselves on the capture screen
     /// and the room understands they're part of one unified note.
     private var collaborationPill: some View {
-        let names = session.participants.map { $0.name }
+        // `displayLabel` resolves to the name when present and to the role
+        // label for an anonymous role chip (#275), so the pill never renders
+        // an empty fragment for a name-less participant.
+        let names = session.participants.map { $0.displayLabel }
         // When participants are named (allied or trainee), show the names
         // after a separator. With no named participants (encounter type set
         // but list empty), the pill falls back to just the static label so

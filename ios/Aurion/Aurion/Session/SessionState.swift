@@ -91,9 +91,26 @@ enum ConsentMethod: String, Codable, CaseIterable, Identifiable {
 /// resident, fellow, or student. The capture screen renders names so every
 /// person in the room sees themselves on the shared encounter pill.
 struct SessionParticipant: Identifiable, Hashable {
-    let name: String
+    /// `nil` for an anonymous role chip ("a nurse was present" — zero PHI,
+    /// `source == "adhoc_role"`). Present for roster-picked (`profile`) and
+    /// ad-hoc named (`adhoc_named`) participants.
+    let name: String?
     let role: String
-    var id: String { "\(role)-\(name)" }
+    /// How the chip was added — mirrors the backend `source` enum
+    /// (`profile` | `adhoc_named` | `adhoc_role`, #275 / PR #348). Drives
+    /// whether a name is expected and keeps the participant round-trippable
+    /// when a recovered `SessionResponse` re-hydrates the roster.
+    let source: String
+
+    init(name: String?, role: String, source: String = "adhoc_named") {
+        self.name = name
+        self.role = role
+        self.source = source
+    }
+
+    /// Stable across the three sources AND distinguishes an anonymous role
+    /// chip from a same-role named one (both can be present at once).
+    var id: String { "\(source)-\(role)-\(name ?? "")" }
 
     /// Title-cased role label for UI display ("nurse" → "Nurse").
     var displayRole: String {
@@ -102,6 +119,13 @@ struct SessionParticipant: Identifiable, Hashable {
             .split(separator: " ")
             .map { $0.prefix(1).uppercased() + $0.dropFirst() }
             .joined(separator: " ")
+    }
+
+    /// What the capture pill shows: the name when we have one, else the
+    /// role label so an anonymous chip never renders as an empty string.
+    var displayLabel: String {
+        if let name, !name.isEmpty { return name }
+        return displayRole
     }
 }
 
