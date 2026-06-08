@@ -318,10 +318,18 @@ final class AurionAuth {
             return parsed ?? [:]
         case 401, 403:
             // Generic shape — backend deliberately returns identical
-            // detail for every failure mode (wrong password, unknown
-            // user, locked, MFA mismatch) to defeat account enumeration.
-            // The UI maps this to "Invalid email or password."
+            // detail for wrong password / unknown user / MFA mismatch to
+            // defeat account enumeration. The UI maps this to "Invalid
+            // email or password."
             throw AuthError.invalidCredentials
+        case 429:
+            // Account lockout. The backend returns a DISTINCT 429 once an
+            // account is locked (too many failed attempts) so the user
+            // knows re-trying — even with a corrected password — won't
+            // help right now. Distinct from invalidCredentials on purpose;
+            // the backend accepts the small enumeration tradeoff for an
+            // already-locked, known account.
+            throw AuthError.accountLocked
         case 400..<500:
             // Other client errors (e.g. 400 reset-token-expired,
             // 400 MFA-code-mismatch). The caller layer (resetPassword,
@@ -353,13 +361,17 @@ struct AuthSession: Sendable {
 /// can stay PHI-free and account-enumeration-safe.
 ///
 /// `invalidCredentials` deliberately collapses every "wrong-password /
-/// unknown-user / locked / inactive" branch into the same message — the
-/// backend does the same in its response body. Distinct categories exist
-/// for state where revealing the specific failure mode is safe
+/// unknown-user / inactive" branch into the same message — the backend
+/// does the same in its response body. Distinct categories exist for
+/// state where revealing the specific failure mode is safe
 /// (mfaCodeMismatch when the caller already passed the password gate,
-/// passwordTooWeak when the caller is rotating their own password).
+/// passwordTooWeak when the caller is rotating their own password,
+/// accountLocked when the backend has already locked the account and a
+/// distinct "wait and retry" message is more useful than the generic
+/// line).
 enum AuthError: LocalizedError, Equatable {
     case invalidCredentials
+    case accountLocked
     case mfaCodeMismatch
     case passwordTooWeak
     case invalidResetToken
@@ -370,6 +382,8 @@ enum AuthError: LocalizedError, Equatable {
         switch self {
         case .invalidCredentials:
             return L("login.error.invalidCredentials")
+        case .accountLocked:
+            return L("login.error.accountLocked")
         case .mfaCodeMismatch:
             return L("login.mfa.challenge.invalidCode")
         case .passwordTooWeak:

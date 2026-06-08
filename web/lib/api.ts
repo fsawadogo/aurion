@@ -126,8 +126,19 @@ export async function login(
     body: JSON.stringify({ email, password }),
   });
   if (!res.ok) {
+    // Surface the backend `detail` string when present (FastAPI wraps
+    // errors as { detail: "..." }) so callers can match on clean copy —
+    // e.g. the 429 lockout message — rather than raw JSON. Falls back to
+    // the raw body for non-JSON responses.
     const body = await res.text();
-    throw new Error(`Login failed: ${body}`);
+    let detail = body;
+    try {
+      const parsed = JSON.parse(body) as { detail?: unknown };
+      if (parsed && typeof parsed.detail === "string") detail = parsed.detail;
+    } catch {
+      /* non-JSON body — keep the raw text */
+    }
+    throw new Error(`Login failed: ${detail}`);
   }
   const data: AuthResponse = await res.json();
   document.cookie = `aurion_token=${encodeURIComponent(data.access_token)}; path=/; SameSite=Strict; max-age=86400`;

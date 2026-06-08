@@ -191,6 +191,24 @@ struct AurionAuthTests {
         }
     }
 
+    @Test func signIn_locked429_throwsAccountLocked() async throws {
+        // Backend returns a DISTINCT 429 once an account is locked. The
+        // client must surface .accountLocked (not the generic
+        // .invalidCredentials) so the user knows it's a lockout.
+        let client = Self.makeAuthClient()
+        AurionAuthURLProtocol.responses[Self.loginPath] = (429, [
+            "detail": "Too many failed sign-in attempts. Please wait about 15 minutes and try again.",
+        ])
+
+        do {
+            _ = try await client.signIn(email: "x@y.com", password: "wrong")
+            Issue.record("expected throw")
+        } catch let error as AuthError {
+            #expect(error == .accountLocked)
+            #expect(error.errorDescription?.contains("wrong") == false)
+        }
+    }
+
     // MARK: - verifyLoginMfa
 
     @Test func verifyLoginMfa_postsCorrectShape_parsesSession() async throws {
@@ -439,5 +457,16 @@ struct AurionAuthTests {
         let a = AuthError.invalidResetToken.errorDescription ?? ""
         let b = AuthError.invalidCredentials.errorDescription ?? ""
         #expect(a != b)
+    }
+
+    @Test func authError_accountLocked_distinctFromCredentials() {
+        // .accountLocked must read differently from the generic
+        // wrong-password line so a locked-out user understands re-trying
+        // won't help right now.
+        let locked = AuthError.accountLocked.errorDescription ?? ""
+        let generic = AuthError.invalidCredentials.errorDescription ?? ""
+        #expect(locked != "login.error.accountLocked")  // wired, not raw key
+        #expect(!locked.isEmpty)
+        #expect(locked != generic)
     }
 }
