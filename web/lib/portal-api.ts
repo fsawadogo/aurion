@@ -2,9 +2,9 @@
  * Clinician-portal API client.
  *
  * Extends `web/lib/api.ts` for the `/api/v1/me/*` endpoint family
- * shipped in backend PR-B. Shares the `fetchWithAuth` wrapper (so
- * Cognito token refresh + 401-retry behaviour is identical to the
- * admin surface) but groups portal-only call sites here to keep
+ * shipped in backend PR-B. Shares the `fetchWithAuth` wrapper (so the
+ * bearer-token attach + silent-refresh + 401-retry behaviour is identical
+ * to the admin surface) but groups portal-only call sites here to keep
  * `api.ts` from sprawling.
  *
  * Pure typed wrappers around the JSON responses; no caching, no

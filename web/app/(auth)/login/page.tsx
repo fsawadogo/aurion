@@ -71,7 +71,7 @@ function LoginContent() {
     router.refresh();
   }
 
-  function describeError(err: unknown): string {
+  function describeError(err: unknown, opts?: { mfa?: boolean }): string {
     const msg = err instanceof Error ? err.message : "Sign-in failed";
     if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
       return IS_LOCAL
@@ -84,9 +84,21 @@ function LoginContent() {
       return msg.replace(/^Login failed:\s*/, "");
     }
     if (/401|Invalid email or password/i.test(msg)) {
-      return "Invalid email or password.";
+      // On the 2FA step the backend reuses the generic credentials detail
+      // for a bad/expired code — reword it for the code context.
+      return opts?.mfa
+        ? "Incorrect or expired code. Try again, or go back to sign in."
+        : "Invalid email or password.";
     }
     return msg.replace(/^Login failed:\s*/, "");
+  }
+
+  // Abandon the MFA step and return to the email/password form (e.g. the
+  // 5-minute challenge token expired, or the user picked the wrong account).
+  function backToSignIn() {
+    setMfaChallenge(null);
+    setMfaCode("");
+    setError(null);
   }
 
   async function handleSubmit(e: React.FormEvent) {
@@ -117,7 +129,7 @@ function LoginContent() {
       const auth = await verifyMfaLogin(mfaChallenge, mfaCode.trim());
       routeAfterAuth(auth.user.role);
     } catch (err) {
-      setError(describeError(err));
+      setError(describeError(err, { mfa: true }));
       setLoading(false);
     }
   }
@@ -189,6 +201,14 @@ function LoginContent() {
           >
             Verify
           </Button>
+          <button
+            type="button"
+            onClick={backToSignIn}
+            disabled={loading}
+            className="mx-auto block text-[12.5px] font-medium text-navy-500 hover:text-navy-800 transition-colors duration-short disabled:opacity-50"
+          >
+            Back to sign in
+          </button>
         </form>
       ) : (
       <form onSubmit={handleSubmit} className="space-y-4">
