@@ -43,6 +43,7 @@ from app.modules.note_gen.critique import critique_note
 from app.modules.note_gen.few_shot import get_few_shot_examples, render_examples_block
 from app.modules.note_gen.specialty_style import get_specialty_style
 from app.modules.prompts import assemble_prompt_for_session
+from app.modules.providers.note_gen.shared import render_participants_block
 from app.modules.providers.usage_service import get_provider_usage_service
 
 logger = logging.getLogger("aurion.note_gen")
@@ -331,22 +332,14 @@ def build_stage1_user_prompt(
             f"Keep JSON keys, source_id references, and status values in English.\n\n"
         )
 
-    participants_block = ""
-    multi_participant = participants and len(participants) > 1
-    if multi_participant:
-        roles_list = "\n".join(
-            f"- {p['name']} ({p['role'].replace('_', ' ').title()})"
-            for p in participants
-        )
-        participants_block = (
-            f"ENCOUNTER PARTICIPANTS:\n{roles_list}\n\n"
-            "Since multiple people are present, attribute statements to the "
-            "appropriate role when identifiable from context (e.g., "
-            "'Nurse noted...', 'Resident reported...'). When the speaker is "
-            "ambiguous, use 'It was noted...' rather than attributing to a "
-            "specific person.\n\n"
-        )
-
+    # #275 — render via the shared helper so the anonymous-chip
+    # (`name: null`) case is handled identically to the live provider
+    # path (no KeyError on a missing name; role-only attribution for
+    # unnamed speakers). The gate fires whenever ANY participant is
+    # present — the enrolling clinician is an implicit second speaker, so
+    # the old ``len(...) > 1`` test misfired for a single team member.
+    participants_block = render_participants_block(participants)
+    multi_participant = bool(participants)
     if multi_participant:
         attribution_instruction = (
             '- "text": the documented observation, attributed to the appropriate '
@@ -678,6 +671,7 @@ async def generate_stage1_note(
     output_language: str = "en",
     template_key: Optional[str] = None,
     custom_template_id: Optional[uuid.UUID] = None,
+    participants: Optional[list[dict]] = None,
 ) -> Note:
     """Generate a Stage 1 note from a transcript.
 
@@ -724,6 +718,14 @@ async def generate_stage1_note(
     # Fires BEFORE template loading + registry lookup so we don't pay
     # those costs for a session we already know we won't process.
     await _enforce_transcript_guard(transcript, session_id)
+
+    # #275 — encounter participants drive role/name attribution in the
+    # prompt. The caller (transcription route) passes them in already
+    # deserialized; for any other caller / tests that don't, fall back to
+    # loading the snapshot off the session row so attribution is never
+    # silently dropped.
+    if participants is None:
+        participants = await _load_session_participants(session_id, db)
 
     # #314 / #318 — resolve the Stage-1 template: a custom snapshot wins
     # when present (load + validate its content), else the snapshotted
@@ -786,6 +788,7 @@ async def generate_stage1_note(
             output_language=output_language,
             system_prompt=system_prompt,
             prior_context_text=prior_context_text or None,
+            participants=participants or None,
         )
         await _record_provider_usage(
             db=db,
@@ -850,6 +853,45 @@ async def generate_stage1_note(
     await create_note_version(session_id, note, db)
 
     return note
+
+
+async def _load_session_participants(
+    session_id: str, db: AsyncSession
+) -> list[dict]:
+    """Load the encounter participant snapshot off the session row (#275).
+
+    Defensive on every axis — a bad ``session_id``, a missing row, a NULL
+    or malformed ``participants_json``, or anything that isn't a JSON list
+    degrades to ``[]`` so Stage 1 never crashes over participant
+    attribution. Returns the raw stored dicts ({name, role, source,
+    is_persistent}); the renderer guards the anonymous-chip (`name: null`)
+    case itself.
+    """
+    try:
+        sid = uuid.UUID(str(session_id))
+    except (ValueError, TypeError):
+        return []
+    try:
+        row = (
+            await db.execute(
+                select(SessionModel.participants_json).where(
+                    SessionModel.id == sid
+                )
+            )
+        ).scalar_one_or_none()
+    except Exception:  # noqa: BLE001 — never crash Stage 1 over a lookup
+        logger.warning(
+            "Failed to load participants for session=%s", session_id,
+            exc_info=True,
+        )
+        return []
+    if not row:
+        return []
+    try:
+        parsed = json.loads(row)
+    except (TypeError, ValueError):
+        return []
+    return parsed if isinstance(parsed, list) else []
 
 
 # ── Prior-context wiring helpers ────────────────────────────────────────

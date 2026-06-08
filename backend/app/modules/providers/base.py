@@ -55,6 +55,7 @@ class NoteGenerationProvider(ABC):
         output_language: str = "en",
         system_prompt: str | None = None,
         prior_context_text: str | None = None,
+        participants: list[dict] | None = None,
     ) -> Note:
         """Generate a structured SOAP note from a transcript and template.
 
@@ -78,6 +79,13 @@ class NoteGenerationProvider(ABC):
         cold-start sessions render unchanged. Additive optional kwarg
         on the base — every concrete provider forwards it into
         ``build_user_prompt``.
+
+        ``participants`` (#275) — encounter participant chips
+        ({name, role, source, is_persistent}). When non-empty an
+        ENCOUNTER PARTICIPANTS block is rendered into the user prompt so
+        the model can attribute statements by role/name. ``None`` / empty
+        renders unchanged. Additive optional kwarg; every concrete
+        provider forwards it into ``build_user_prompt``.
         """
         ...
 

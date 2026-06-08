@@ -80,12 +80,29 @@ export interface Session {
   sections_populated: number;
   sections_required: number;
   provider_used: string;
+  /** Who/what was being recorded — "doctor_patient" by default. */
+  encounter_type?: string;
+  /** Participants present at the encounter (#275). Owner-gated, same as
+   * external_reference_id. Anonymous role chips carry `name: null` and
+   * no PHI. Absent when none were set or the caller isn't the owner. */
+  participants?: SessionParticipant[] | null;
   /** PHI patient identifier (MRN, encounter id, free text). Encrypted
    * at rest server-side; decrypted only for the owner of the row.
    * Absent when not set or when the caller isn't the owner. */
   external_reference_id?: string | null;
   created_at: string;
   updated_at: string;
+}
+
+/** One participant chip on a session (#275). `name` is null for
+ * anonymous role chips (`source: "adhoc_role"`). `is_persistent` is true
+ * only for members drawn from the clinician's saved roster
+ * (`source: "profile"`). */
+export interface SessionParticipant {
+  name: string | null;
+  role: string;
+  source: "profile" | "adhoc_named" | "adhoc_role";
+  is_persistent: boolean;
 }
 
 /** One match from GET /api/v1/me/patients/{identifier}/sessions —

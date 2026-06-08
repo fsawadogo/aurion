@@ -159,6 +159,26 @@ async def submit_transcription(
     # /transcription/{id} can pick up where it left off — EXCEPT for the
     # empty-transcript guard branch, which is a terminal failure (no audio
     # ever reached the backend; re-uploading wouldn't help).
+    # #275 — deserialize the encounter participant snapshot off the row so
+    # Stage 1 can attribute statements by role/name. Defensive parse: a
+    # NULL or malformed column degrades to an empty list (no participants
+    # block, byte-identical pre-#275 prompt) rather than crashing the
+    # route. We always pass a concrete list so generate_stage1_note's
+    # own DB fallback (for callers that omit the arg) stays a no-op here.
+    participants: list[dict] = []
+    raw_participants = getattr(session, "participants_json", None)
+    if raw_participants:
+        try:
+            decoded = json.loads(raw_participants)
+            if isinstance(decoded, list):
+                participants = decoded
+        except (TypeError, ValueError):
+            logger.warning(
+                "Failed to decode participants_json for session=%s — "
+                "Stage 1 proceeds without participant attribution",
+                session_id,
+            )
+
     try:
         stage1_note = await generate_stage1_note(
             transcript=transcript,
@@ -173,6 +193,8 @@ async def submit_transcription(
             # is snapshotted here; Stage 1 loads + validates that content.
             # None (built-in / no context) keeps the pre-#318 path.
             custom_template_id=getattr(session, "custom_template_id", None),
+            # #275 — encounter participants for role/name attribution.
+            participants=participants,
         )
     except EmptyTranscriptError as exc:
         # lane-backend/empty-transcript-guard: the service already wrote

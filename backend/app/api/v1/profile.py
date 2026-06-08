@@ -9,6 +9,7 @@ import json
 import re
 import secrets
 import uuid
+from datetime import date
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -236,6 +237,11 @@ class ProfileResponse(BaseModel):
     # stored dicts (not re-validated through ``VisitTypeContext``) so a
     # built-in template later removed from disk can't make a GET 500.
     contexts_per_visit_type: dict[str, list[dict]] = {}
+    # Allied-health roster (#275). Raw stored dicts ({name, role, ...})
+    # plus an injected ``present_today_effective`` bool computed on READ
+    # from the stored ``present_today`` / ``present_today_date`` keys —
+    # the day-roster auto-reset (stale date ⇒ absent). The iOS picker
+    # filters on ``present_today_effective``. No PHI in any presence field.
     allied_health_team: list[dict] = []
     output_language: str
     # Portal/iOS chrome preferences (Phase A1). Distinct from
@@ -710,6 +716,36 @@ def _diff_contexts(
     }
 
 
+def _annotate_team_presence(team: list[dict]) -> list[dict]:
+    """Annotate each allied-health member with an effective "present
+    today" flag (#275 / B4).
+
+    Effective presence is ``present_today is True AND present_today_date
+    == today`` (server-local date). A stale ``present_today_date`` (a flag
+    left on from a previous day) reads as absent — this IS the daily
+    auto-reset: no cron, the staleness check does it on every READ. The
+    derived flag is surfaced as ``present_today_effective`` so the iOS
+    picker can filter the day roster while the raw stored ``present_today``
+    / ``present_today_date`` keys remain round-trippable for the editor.
+
+    Non-dict entries (defensive against a malformed legacy row) pass
+    through untouched. No PHI is read or written here.
+    """
+    today = date.today().isoformat()
+    annotated: list[dict] = []
+    for member in team:
+        if not isinstance(member, dict):
+            annotated.append(member)
+            continue
+        m = dict(member)
+        m["present_today_effective"] = (
+            bool(m.get("present_today"))
+            and m.get("present_today_date") == today
+        )
+        annotated.append(m)
+    return annotated
+
+
 def _to_response(profile) -> ProfileResponse:
     return ProfileResponse(
         clinician_id=str(profile.clinician_id),
@@ -721,7 +757,9 @@ def _to_response(profile) -> ProfileResponse:
         contexts_per_visit_type=json.loads(
             getattr(profile, "contexts_per_visit_type", None) or "{}"
         ),
-        allied_health_team=json.loads(profile.allied_health_team),
+        allied_health_team=_annotate_team_presence(
+            json.loads(profile.allied_health_team)
+        ),
         output_language=profile.output_language,
         ui_theme=getattr(profile, "ui_theme", "system"),
         ui_language=getattr(profile, "ui_language", "en"),
