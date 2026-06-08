@@ -8,6 +8,7 @@ import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { getUsers, createUser, updateUser, humanizeError} from "@/lib/api";
+import { nameInitials } from "@/lib/session-format";
 import type { User, UserRole, CreateUserPayload } from "@/types";
 
 const roleBadgeVariant: Record<UserRole, "success" | "warning" | "error" | "info" | "neutral"> = {
@@ -17,6 +18,22 @@ const roleBadgeVariant: Record<UserRole, "success" | "warning" | "error" | "info
   COMPLIANCE_OFFICER: "neutral",
   CLINICAL_ADMIN: "info",
 };
+
+// Human-readable role labels — the API returns raw enum values
+// (EVAL_TEAM, COMPLIANCE_OFFICER) which shouldn't surface verbatim.
+const roleLabel: Record<string, string> = {
+  ADMIN: "Admin",
+  CLINICIAN: "Clinician",
+  EVAL_TEAM: "Eval Team",
+  COMPLIANCE_OFFICER: "Compliance Officer",
+  CLINICAL_ADMIN: "Clinical Admin",
+};
+
+/** Display name with a graceful fallback to the email local-part when a
+ * user has no full_name set (avoids a blank Name cell). */
+function displayName(user: User): string {
+  return user.full_name?.trim() || user.email.split("@")[0];
+}
 
 function relativeTime(dateStr: string | null): string {
   if (!dateStr) return "Never";
@@ -166,10 +183,10 @@ export default function UsersPage() {
                     <tr key={user.id} className="transition-colors hover:bg-gray-50/80">
                       <td className="whitespace-nowrap px-4 py-3">
                         <div className="flex items-center gap-2.5">
-                          <div className="flex h-7 w-7 items-center justify-center rounded-full bg-navy-50 text-[11px] font-semibold text-navy-600">
-                            {user.full_name.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase()}
-                          </div>
-                          <span className="text-sm font-medium text-gray-900">{user.full_name}</span>
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-50 text-[11px] font-semibold text-navy-700 ring-1 ring-inset ring-navy-100">
+                            {nameInitials(displayName(user))}
+                          </span>
+                          <span className="text-sm font-medium text-navy-800">{displayName(user)}</span>
                         </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
@@ -177,7 +194,7 @@ export default function UsersPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
                         <Badge variant={roleBadgeVariant[user.role as UserRole] ?? "neutral"}>
-                          {user.role}
+                          {roleLabel[user.role] ?? user.role}
                         </Badge>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
@@ -189,9 +206,15 @@ export default function UsersPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
                         {user.voice_enrolled ? (
-                          <CheckCircle2 className="h-4.5 w-4.5 text-emerald-500" />
+                          <span className="inline-flex items-center gap-1.5 text-xs font-medium text-emerald-600">
+                            <CheckCircle2 className="h-4 w-4" aria-hidden />
+                            Enrolled
+                          </span>
                         ) : (
-                          <XCircle className="h-4.5 w-4.5 text-gray-300" />
+                          <span className="inline-flex items-center gap-1.5 text-xs text-gray-400">
+                            <XCircle className="h-4 w-4 text-gray-300" aria-hidden />
+                            Not enrolled
+                          </span>
                         )}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-xs text-gray-400">
