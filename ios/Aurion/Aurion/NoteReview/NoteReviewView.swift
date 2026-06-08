@@ -124,6 +124,11 @@ struct NoteReviewView: View {
     /// Drives the full-list sheet for "See all (N)" — non-nil when
     /// open, with the identifier baked in so the sheet can refetch.
     @State private var priorEncountersListIdentifier: String?
+    /// Drives the accessibility-size reflows — the mandatory CONFLICT action
+    /// row wraps (AurionFlowLayout) and the approval bar stacks vertically so
+    /// the Accept/Reject/Edit buttons and the Approve button stay reachable at
+    /// AX text sizes instead of clipping (#271 DT).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     init(
         sessionId: String,
@@ -777,15 +782,18 @@ struct NoteReviewView: View {
                         .lineSpacing(3)
                 }
             }
-            HStack(spacing: 8) {
-                conflictActionButton(L("noteReview.acceptVisual"), inFlight: inFlight) {
-                    Task { await resolveConflict(claim, action: .acceptVisual) }
+            // Accept / Reject / Edit — these gate note approval, so they MUST
+            // stay reachable. A flat HStack squeezes the three labels past the
+            // screen edge at accessibility text sizes (worse in FR), so we wrap
+            // them into AurionFlowLayout there: the buttons flow onto extra rows
+            // instead of clipping (#271 DT).
+            if dynamicTypeSize.isAccessibilitySize {
+                AurionFlowLayout(spacing: 8, lineSpacing: 8) {
+                    conflictActions(claim, inFlight: inFlight)
                 }
-                conflictActionButton(L("noteReview.rejectVisual"), inFlight: inFlight) {
-                    Task { await resolveConflict(claim, action: .rejectVisual) }
-                }
-                conflictActionButton(L("common.edit"), inFlight: inFlight) {
-                    conflictBeingEdited = ConflictEditTarget(claimId: claim.id, draft: claim.text)
+            } else {
+                HStack(spacing: 8) {
+                    conflictActions(claim, inFlight: inFlight)
                 }
             }
         }
@@ -798,10 +806,31 @@ struct NoteReviewView: View {
         )
     }
 
+    /// The three conflict-resolution buttons, shared between the inline
+    /// HStack (default sizes) and the wrapping AurionFlowLayout (accessibility
+    /// sizes) so the Accept/Reject/Edit set is defined once (#271 DT).
+    @ViewBuilder
+    private func conflictActions(_ claim: NoteClaimResponse, inFlight: Bool) -> some View {
+        conflictActionButton(L("noteReview.acceptVisual"), inFlight: inFlight) {
+            Task { await resolveConflict(claim, action: .acceptVisual) }
+        }
+        conflictActionButton(L("noteReview.rejectVisual"), inFlight: inFlight) {
+            Task { await resolveConflict(claim, action: .rejectVisual) }
+        }
+        conflictActionButton(L("common.edit"), inFlight: inFlight) {
+            conflictBeingEdited = ConflictEditTarget(claimId: claim.id, draft: claim.text)
+        }
+    }
+
     private func conflictActionButton(_ label: String, inFlight: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             Text(label)
                 .aurionFont(12, weight: .semibold, relativeTo: .caption)
+                // Keep each label on one line and let it shrink a touch before
+                // the button itself grows — prevents mid-word truncation while
+                // the row flows at accessibility sizes (#271 DT).
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
                 .padding(.horizontal, 10)
                 .padding(.vertical, 6)
                 .background(Color.aurionBackground)
@@ -935,45 +964,72 @@ struct NoteReviewView: View {
         let ringColor: Color = stage2Running ? .aurionGold
             : (conflicts > 0 ? .aurionAmber : .aurionGreen)
 
-        return HStack(spacing: 14) {
-            ZStack {
-                // `displayedCompleteness` is driven by onAppear/onChange so
-                // the ring sweeps from 0% up to the note's actual score
-                // rather than snapping.
-                CircularProgressRing(
-                    progress: displayedCompleteness,
-                    color: ringColor,
-                    lineWidth: 4,
-                    size: 48
-                )
-                Text("\(Int(displayedCompleteness * 100))%")
-                    .aurionFont(12, weight: .bold, relativeTo: .caption)
-                    .foregroundColor(.aurionTextPrimary)
-                    .contentTransition(.numericText())
-                    .animation(AurionAnimation.smooth, value: displayedCompleteness)
-            }
-            VStack(alignment: .leading, spacing: 2) {
-                // Numerator/denominator — the missing "5 of 6 sections" hint
-                // so the percentage isn't the only signal.
-                Text(L("noteReview.sectionsCount", populated, totalSections))
-                    .aurionFont(13, weight: .semibold, relativeTo: .footnote)
-                    .foregroundColor(.aurionTextPrimary)
-                Text(helpText)
-                    .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(.aurionTextSecondary)
-                    .lineSpacing(2)
-                    .contentTransition(.opacity)
-                    .animation(AurionAnimation.smooth, value: helpText)
-            }
-            .frame(maxWidth: .infinity, alignment: .leading)
-            AurionGoldButton(
-                label: stage2Running
-                    ? L("noteReview.finishingShort")
-                    : (isApproving ? L("noteReview.signing") : L("noteReview.approveSign")),
-                size: .sm,
-                disabled: blocked || isApproving
-            ) {
-                approveNote()
+        let ring = ZStack {
+            // `displayedCompleteness` is driven by onAppear/onChange so
+            // the ring sweeps from 0% up to the note's actual score
+            // rather than snapping.
+            CircularProgressRing(
+                progress: displayedCompleteness,
+                color: ringColor,
+                lineWidth: 4,
+                size: 48
+            )
+            Text("\(Int(displayedCompleteness * 100))%")
+                // In-ring HUD readout — fixed to the 48pt dial (not relative
+                // type) so it can't outgrow the ring at accessibility text
+                // sizes; minimumScaleFactor is a belt-and-braces guard (#271 DT).
+                .font(.system(size: 13, weight: .bold))
+                .minimumScaleFactor(0.5)
+                .lineLimit(1)
+                .foregroundColor(.aurionTextPrimary)
+                .contentTransition(.numericText())
+                .animation(AurionAnimation.smooth, value: displayedCompleteness)
+        }
+        let counts = VStack(alignment: .leading, spacing: 2) {
+            // Numerator/denominator — the missing "5 of 6 sections" hint
+            // so the percentage isn't the only signal.
+            Text(L("noteReview.sectionsCount", populated, totalSections))
+                .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                .foregroundColor(.aurionTextPrimary)
+            Text(helpText)
+                .aurionFont(12, relativeTo: .caption)
+                .foregroundColor(.aurionTextSecondary)
+                .lineSpacing(2)
+                .contentTransition(.opacity)
+                .animation(AurionAnimation.smooth, value: helpText)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        let approveButton = AurionGoldButton(
+            label: stage2Running
+                ? L("noteReview.finishingShort")
+                : (isApproving ? L("noteReview.signing") : L("noteReview.approveSign")),
+            size: .sm,
+            // Full-width when stacked below the ring/counts at accessibility
+            // sizes so the tap target spans the row (#271 DT).
+            full: dynamicTypeSize.isAccessibilitySize,
+            disabled: blocked || isApproving
+        ) {
+            approveNote()
+        }
+
+        return Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // Ring + counts ABOVE a full-width Approve button — a single
+                // HStack would crush the help text into a sliver and clip the
+                // Approve label at accessibility sizes (#271 DT).
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(spacing: 14) {
+                        ring
+                        counts
+                    }
+                    approveButton
+                }
+            } else {
+                HStack(spacing: 14) {
+                    ring
+                    counts
+                    approveButton
+                }
             }
         }
         .aurionScreenEdge()

@@ -48,6 +48,10 @@ struct PriorEncountersRail: View {
     /// default this to a no-op so the rail compiles standalone in tests.
     var onSeeAll: () -> Void
 
+    /// At accessibility text sizes the header moves "See all" onto its own
+    /// line so the title isn't squeezed flat against it (#271 DT).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     /// Convenience initializer used by `NoteReviewView`. Wraps the model
     /// construction so callers don't have to allocate it explicitly.
     /// The `fetch` parameter stays open so the SwiftUI preview / smoke
@@ -110,6 +114,29 @@ struct PriorEncountersRail: View {
     // MARK: - Header
 
     private var header: some View {
+        // At accessibility sizes "See all" drops to its own line below the
+        // title row so the inline identifier title isn't crushed flat (#271 DT).
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 6) {
+                    titleRow
+                    if model.totalRelevant > PriorEncountersModel.maxRailCards {
+                        seeAllButton
+                    }
+                }
+            } else {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    titleRow
+                    Spacer()
+                    if model.totalRelevant > PriorEncountersModel.maxRailCards {
+                        seeAllButton
+                    }
+                }
+            }
+        }
+    }
+
+    private var titleRow: some View {
         HStack(alignment: .firstTextBaseline, spacing: 8) {
             Image(systemName: "clock.arrow.circlepath")
                 .font(.system(size: 13, weight: .semibold))
@@ -121,25 +148,26 @@ struct PriorEncountersRail: View {
                 .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                 .foregroundColor(.aurionTextPrimary)
                 .lineLimit(1)
+                .minimumScaleFactor(0.8)
                 .truncationMode(.tail)
-            Spacer()
-            if model.totalRelevant > PriorEncountersModel.maxRailCards {
-                Button {
-                    AurionHaptics.selection()
-                    onSeeAll()
-                } label: {
-                    Text(L("priorEncounters.seeAll", model.totalRelevant))
-                        .aurionFont(12, weight: .semibold, relativeTo: .caption)
-                        .foregroundColor(.aurionGold)
-                        // Enlarge the tap target to the 44pt minimum
-                        // without inflating the visible glyph.
-                        .padding(.leading, 8)
-                        .frame(minHeight: 44)
-                        .contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-            }
         }
+    }
+
+    private var seeAllButton: some View {
+        Button {
+            AurionHaptics.selection()
+            onSeeAll()
+        } label: {
+            Text(L("priorEncounters.seeAll", model.totalRelevant))
+                .aurionFont(12, weight: .semibold, relativeTo: .caption)
+                .foregroundColor(.aurionGold)
+                // Enlarge the tap target to the 44pt minimum
+                // without inflating the visible glyph.
+                .padding(.leading, 8)
+                .frame(minHeight: 44)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 
     // MARK: - Body content (loading / populated / empty / failure)
@@ -179,7 +207,9 @@ struct PriorEncountersRail: View {
 
     private var cardRow: some View {
         ScrollView(.horizontal, showsIndicators: false) {
-            HStack(spacing: 10) {
+            // Top-align so cards that grow taller at accessibility sizes don't
+            // drag the shorter ones off-centre (#271 DT).
+            HStack(alignment: .top, spacing: 10) {
                 ForEach(model.railMatches) { match in
                     PriorEncounterCard(match: match) {
                         AurionHaptics.selection()
@@ -286,7 +316,12 @@ private struct PriorEncounterCard: View {
                     labelOverride: sessionStateLabel(match.state)
                 )
             }
-            .frame(width: 180, height: 78, alignment: .leading)
+            // Width stays fixed (horizontal rail), but the height is a FLOOR,
+            // not a cap — a hard `height: 78` clipped the status pill out of
+            // the card once the time + specialty text grew at accessibility
+            // sizes. minHeight lets the card grow so the pill stays in (#271 DT).
+            .frame(width: 180, alignment: .topLeading)
+            .frame(minHeight: 78)
             .padding(.horizontal, 10)
             .padding(.vertical, 8)
             .background(Color.aurionCardBackground)

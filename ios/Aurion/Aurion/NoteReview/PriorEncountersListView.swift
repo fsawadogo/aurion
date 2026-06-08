@@ -227,6 +227,10 @@ private struct PriorEncounterRow: View {
                         .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                         .foregroundColor(.aurionTextPrimary)
                         .lineLimit(1)
+                        // Shrink slightly before truncating so the specialty
+                        // stays legible beside the identifier chip + status
+                        // pill at accessibility sizes (#271 DT).
+                        .minimumScaleFactor(0.8)
                     // Identifier chip — reused from the inbox row so
                     // the visual contract stays in one place (DRY).
                     InboxIdentifierChip(value: identifier)

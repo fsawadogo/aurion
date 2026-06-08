@@ -427,6 +427,10 @@ struct SessionsInboxView: View {
                         .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                         .foregroundColor(.aurionTextPrimary)
                         .lineLimit(1)
+                        // Shrink slightly before truncating so the specialty
+                        // stays readable beside the identifier chip + pill at
+                        // accessibility sizes (#271 DT).
+                        .minimumScaleFactor(0.8)
                     // Patient identifier chip (#61). Only visible when
                     // the physician has actually set one. Monospaced so
                     // visually-similar codes (1/l, 0/O) read cleanly
@@ -518,7 +522,12 @@ struct InboxIdentifierChip: View {
 
     var body: some View {
         Text(value)
-            .font(.system(size: 11, weight: .semibold, design: .monospaced))
+            // Scale with Dynamic Type but keep the monospaced design so
+            // look-alike codes (1/l, 0/O) stay disambiguated; shrink a touch
+            // before truncating (#271 DT).
+            .monospaced()
+            .aurionFont(11, weight: .semibold, relativeTo: .caption2)
+            .minimumScaleFactor(0.8)
             .foregroundColor(.aurionGold)
             .lineLimit(1)
             .truncationMode(.tail)
