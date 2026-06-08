@@ -580,6 +580,7 @@
 
 /* ── Erreurs de connexion (anti-\U00E9num\U00E9ration) ────────── */
 "login.error.invalidCredentials" = "Identifiant ou mot de passe incorrect.";
+"login.error.accountLocked" = "Trop de tentatives de connexion \U00E9chou\U00E9es. Veuillez patienter environ 15 minutes, puis r\U00E9essayer.";
 "login.error.passwordTooWeak" = "Ce mot de passe ne respecte pas la politique. Utilisez 12\U00A0caract\U00E8res ou plus, avec majuscules, minuscules, un chiffre et un symbole.";
 "login.error.invalidResetToken" = "Ce lien de r\U00E9initialisation est expir\U00E9 ou d\U00E9j\U00E0 utilis\U00E9. Demandez-en un nouveau.";
 "login.error.network" = "Impossible de joindre Aurion. V\U00E9rifiez votre connexion et r\U00E9essayez.";

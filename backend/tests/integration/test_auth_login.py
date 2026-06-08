@@ -150,20 +150,89 @@ async def test_five_failures_locks_user(
     assert locks[0]["target_user_id"] == str(user_id)
     assert locks[0]["failed_count"] == 5
 
-    # 6th attempt — same 401 shape, no extra LOGIN_LOCKED audit.
+    # 6th attempt — DISTINCT lockout response, no extra LOGIN_LOCKED audit.
     db_session.expire_all()
     user = await db_session.get(UserModel, user_id)
     assert user is not None
     assert user.locked_until is not None
     assert user.failed_login_count == 5
+    locked_until_before = user.locked_until
 
     response = await app_client.post(
         "/api/v1/auth/login",
         json={"email": email, "password": "Sup3rSecret!"},  # correct now
     )
-    # Locked → same 401 even with the right password.
-    assert response.status_code == 401
-    assert response.json()["detail"] == "Invalid email or password."
+    # Locked → distinct 429 "too many attempts" even with the right
+    # password, so the user knows it's a lockout (not a bad password).
+    assert response.status_code == 429
+    detail = response.json()["detail"]
+    assert detail != "Invalid email or password."
+    assert "Too many failed sign-in attempts" in detail
+    assert "minute" in detail
+
+    # The lockout path must NOT extend the lock or bump the counter
+    # (no record_failure). Duration + accounting unchanged.
+    db_session.expire_all()
+    user = await db_session.get(UserModel, user_id)
+    assert user is not None
+    assert user.failed_login_count == 5
+    assert user.locked_until == locked_until_before
+
+    # Still exactly one LOGIN_LOCKED audit — the 6th attempt emitted none.
+    locks_after = [
+        c.kwargs
+        for c in mock_audit_log.write_event.call_args_list
+        if c.kwargs["event_type"] == AuditEventType.LOGIN_LOCKED
+    ]
+    assert len(locks_after) == 1
+
+
+async def test_locked_user_wrong_password_returns_distinct_lockout(
+    app_client, db_session, mock_audit_log
+) -> None:
+    """A KNOWN, ACTIVE, currently-locked account must surface the distinct
+    lockout response EVEN when the submitted password is wrong — that is
+    the trap the fix removes (autofilled/stale password masking a lockout
+    behind the generic wrong-password message). The lockout path must not
+    re-count the failure or extend the lock."""
+    from datetime import timedelta
+
+    from app.core.clock import utcnow
+    from app.core.models import UserModel
+
+    user_id, email = await seed_user(db_session)
+
+    # Force the account into a locked state directly (failed_login_count
+    # at threshold, locked_until in the future).
+    user = await db_session.get(UserModel, user_id)
+    assert user is not None
+    locked_until_before = utcnow() + timedelta(minutes=15)
+    user.failed_login_count = 5
+    user.locked_until = locked_until_before
+    await db_session.flush()
+
+    # Count audit events emitted BEFORE this attempt so we can prove the
+    # lockout path adds none.
+    audits_before = len(mock_audit_log.write_event.call_args_list)
+
+    response = await app_client.post(
+        "/api/v1/auth/login",
+        json={"email": email, "password": "still-WRONG-1!"},  # wrong pw
+    )
+    assert response.status_code == 429
+    detail = response.json()["detail"]
+    assert detail != "Invalid email or password."
+    assert "Too many failed sign-in attempts" in detail
+
+    # Lock NOT extended and counter NOT bumped (no record_failure ran).
+    db_session.expire_all()
+    user = await db_session.get(UserModel, user_id)
+    assert user is not None
+    assert user.failed_login_count == 5
+    assert user.locked_until == locked_until_before
+
+    # The lockout path emits no audit (no LOGIN_FAILURE, no LOGIN_LOCKED).
+    assert len(mock_audit_log.write_event.call_args_list) == audits_before
 
 
 async def test_login_with_mfa_enrolled_returns_mfa_required(

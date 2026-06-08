@@ -33,6 +33,7 @@ Critical hygiene (see CLAUDE.md):
 from __future__ import annotations
 
 import logging
+import math
 import os
 import secrets
 import string
@@ -224,6 +225,35 @@ class CurrentUserResponse(BaseModel):
 _GENERIC_LOGIN_FAILURE = "Invalid email or password."
 
 
+def _lockout_minutes_remaining(user: UserModel) -> int:
+    """Whole minutes until ``user.locked_until``, rounded UP, floored at 1.
+
+    Falls back to the full policy window if ``locked_until`` is somehow
+    unset (defensive — callers only reach here when ``is_locked`` is True).
+    PHI-free: only a small integer leaves this function.
+    """
+    if user.locked_until is None:
+        return max(1, int(lockout.LOCKOUT_DURATION.total_seconds() // 60))
+    remaining_seconds = (user.locked_until - utcnow()).total_seconds()
+    return max(1, math.ceil(remaining_seconds / 60))
+
+
+def _lockout_message(user: UserModel) -> str:
+    """Distinct, non-generic lockout copy with an approximate wait.
+
+    Deliberately different from ``_GENERIC_LOGIN_FAILURE`` so a locked-out
+    user understands re-trying won't help (and, on autofill, that a stale
+    password is NOT the problem). See ``login`` for the enumeration
+    tradeoff this distinct response accepts.
+    """
+    minutes = _lockout_minutes_remaining(user)
+    unit = "minute" if minutes == 1 else "minutes"
+    return (
+        f"Too many failed sign-in attempts. Please wait about "
+        f"{minutes} {unit} and try again."
+    )
+
+
 # ── /login ──────────────────────────────────────────────────────────────────
 
 
@@ -238,12 +268,17 @@ async def login(
     Resolution:
       1. Look up user by lower-cased email; constant-time bcrypt verify
          on success OR on a dummy hash on miss (matches response time).
-      2. If account inactive or locked, return the same 401 as wrong
-         password. Lockouts emit a LOGIN_LOCKED audit, not visible to
-         the attacker.
-      3. If MFA enrolled, return mfa_required + a 5-minute challenge
+      2. If the account is KNOWN, ACTIVE, and currently locked, return a
+         DISTINCT 429 ("too many attempts") regardless of whether the
+         submitted password is right or wrong — so a user re-trying with
+         an autofilled, now-stale password isn't trapped behind the
+         generic wrong-password message. (Tradeoff noted inline.)
+      3. Otherwise, an inactive account / unknown email / wrong password
+         on an UNLOCKED account returns the same generic 401 — no account
+         enumeration. Lockouts still emit a LOGIN_LOCKED audit.
+      4. If MFA enrolled, return mfa_required + a 5-minute challenge
          token; the login is NOT yet complete.
-      4. Otherwise, mint access + refresh, persist the refresh-hash row,
+      5. Otherwise, mint access + refresh, persist the refresh-hash row,
          emit LOGIN_SUCCESS + REFRESH_TOKEN_ISSUED.
     """
     user = await _find_user_by_email(db, body.email)
@@ -253,6 +288,30 @@ async def login(
         body.password,
         user.password_hash if user else _DUMMY_PASSWORD_HASH,
     )
+
+    # Distinct lockout signal. A KNOWN, ACTIVE account that is currently
+    # locked gets a clear "too many attempts" 429 instead of the generic
+    # 401 — otherwise a clinician re-submitting an autofilled (now stale)
+    # password just keeps re-tripping the wrong-password message with no
+    # idea they're actually locked, and each retry re-locks them. We
+    # surface this whether or not the submitted password matches.
+    #
+    # We deliberately do NOT call record_failure on this path: retrying
+    # while already locked must not push ``locked_until`` further out. A
+    # locked user submitting the *correct* password was never re-counted
+    # before either, so this preserves the existing lock accounting and
+    # duration.
+    #
+    # TRADEOFF (accepted for the pilot): this reveals lockout state for an
+    # already-locked, known account and adds a small timing difference for
+    # that one case, weakening anti-enumeration for already-locked users.
+    # Unknown email and wrong-password-on-an-unlocked-account stay on the
+    # generic, enumeration-safe 401 below.
+    if user is not None and user.is_active and lockout.is_locked(user):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail=_lockout_message(user),
+        )
 
     if user is None or not password_ok or not user.is_active:
         if user is not None:
@@ -279,14 +338,9 @@ async def login(
             detail=_GENERIC_LOGIN_FAILURE,
         )
 
-    # Lockout gate AFTER password verify — we don't want to short-circuit
-    # before verifying the password, otherwise the response time of a
-    # locked vs unlocked user differs by a bcrypt round.
-    if lockout.is_locked(user):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail=_GENERIC_LOGIN_FAILURE,
-        )
+    # (Lockout was handled above: any KNOWN, ACTIVE, currently-locked user
+    # returned a 429 before reaching the generic-fail branch, so a user
+    # arriving here is guaranteed not locked.)
 
     # MFA gate — if enrolled, return the challenge token instead of
     # finishing the login. The challenge wraps user_id + 5-minute exp.

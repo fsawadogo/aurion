@@ -104,6 +104,12 @@ function LoginContent() {
             ? `Cannot reach the backend at ${API_BASE}. Is \`docker-compose up\` running?`
             : "Couldn't reach Aurion. Check your network and try again.",
         );
+      } else if (/Too many failed sign-in attempts/i.test(msg)) {
+        // Backend 429 account lockout — surface the distinct message
+        // (incl. its "~N minutes" hint) rather than collapsing it into
+        // the generic invalid-credentials line, so the user knows
+        // re-trying won't help right now.
+        setError(msg.replace(/^Login failed:\s*/, ""));
       } else if (
         /401|Invalid email or password|Incorrect username or password|NotAuthorizedException/i.test(
           msg,

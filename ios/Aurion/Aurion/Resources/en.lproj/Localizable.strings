@@ -592,6 +592,7 @@
 
 /* ── Login errors (account-enumeration safe) ──────────── */
 "login.error.invalidCredentials" = "Invalid email or password.";
+"login.error.accountLocked" = "Too many failed sign-in attempts. Please wait about 15 minutes and try again.";
 "login.error.passwordTooWeak" = "That password doesn\U2019t meet the policy. Use 12+ characters with mixed case, a digit, and a symbol.";
 "login.error.invalidResetToken" = "That reset link has expired or already been used. Request a new one.";
 "login.error.network" = "Couldn\U2019t reach Aurion. Check your connection and try again.";
