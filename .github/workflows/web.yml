@@ -28,6 +28,12 @@ on:
   pull_request:
     branches: [main]
     paths: ["web/**", ".github/workflows/web.yml"]
+  # Manual redeploy — needed to flush the Amplify/CloudFront CDN after an
+  # infra-only change (e.g. amplify.tf custom rewrite rules), since those
+  # don't publish new artifacts and Amplify only invalidates the CDN on a
+  # deployment. A fresh deploy re-applies edge rules and busts stale HTML
+  # (HTML is served with s-maxage=1y). See docs/dev/web-deploy.md.
+  workflow_dispatch: {}
 
 # OIDC needs id-token: write at the workflow or job level.
 permissions:
@@ -92,7 +98,7 @@ jobs:
     # but don't ship — Amplify has no preview-deploy concept under
     # platform = WEB, and we don't want a half-tested branch hitting
     # the dev URL the pilot physicians see.
-    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    if: github.ref == 'refs/heads/main' && (github.event_name == 'push' || github.event_name == 'workflow_dispatch')
     needs: build
     runs-on: ubuntu-latest
     steps:
