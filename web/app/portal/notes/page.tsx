@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowRight, Download, Search } from "lucide-react";
+import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Badge from "@/components/ui/Badge";
@@ -59,7 +60,7 @@ export default function PortalSessionsInboxPage() {
       list.sort((a, b) => b.created_at.localeCompare(a.created_at));
       setSessions(list);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("loadError"));
+      setError(humanizeError(e, t("loadError")));
     } finally {
       setLoading(false);
     }
@@ -119,7 +120,7 @@ export default function PortalSessionsInboxPage() {
       URL.revokeObjectURL(url);
       clearSelected();
     } catch (e) {
-      setExportError(e instanceof Error ? e.message : t("exportError"));
+      setExportError(humanizeError(e, t("exportError")));
     } finally {
       setExporting(false);
     }

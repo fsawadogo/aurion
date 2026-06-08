@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, BadgeCheck, Download } from "lucide-react";
+import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouteSegment } from "@/lib/use-route-segment";
@@ -160,7 +161,7 @@ export default function NoteReviewPage() {
       await approveAll(sessionId);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("approvalError"));
+      setError(humanizeError(e, t("approvalError")));
     } finally {
       setApproving(false);
     }
@@ -182,7 +183,7 @@ export default function NoteReviewPage() {
       URL.revokeObjectURL(url);
       await load();
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("exportError"));
+      setError(humanizeError(e, t("exportError")));
     } finally {
       setExporting(false);
     }

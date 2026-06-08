@@ -30,7 +30,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
-import { getFeatureFlags, updateFeatureFlags } from "@/lib/api";
+import { getFeatureFlags, updateFeatureFlags, humanizeError} from "@/lib/api";
 import type { FeatureFlags } from "@/types";
 
 /** The four flags this page actually mutates. Order = display order. */
@@ -101,7 +101,7 @@ export default function FeatureFlagsPage() {
         setDraft(data);
       } catch (e) {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : t("loadError"));
+          setError(humanizeError(e, t("loadError")));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -148,7 +148,7 @@ export default function FeatureFlagsPage() {
       setSavedVersion(resp.appconfig_version);
     } catch (e) {
       setLoaded(prior);
-      setError(e instanceof Error ? e.message : t("saveError"));
+      setError(humanizeError(e, t("saveError")));
     } finally {
       setSaving(false);
     }

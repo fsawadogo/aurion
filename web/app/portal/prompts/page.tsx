@@ -1,6 +1,7 @@
 "use client";
 
 import { Info, Search, Sparkles } from "lucide-react";
+import { humanizeError } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import Card from "@/components/ui/Card";
@@ -50,7 +51,7 @@ export default function AIPromptsPage() {
       const xs = await listMyPrompts();
       setPrompts(xs);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("loadError"));
+      setError(humanizeError(e, t("loadError")));
     } finally {
       setLoading(false);
     }

@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { getConfig, getConfigHistory } from "@/lib/api";
+import { getConfig, getConfigHistory, humanizeError} from "@/lib/api";
 import type { ProviderConfig, ConfigChangeEvent } from "@/types";
 
 const defaultConfig: ProviderConfig = {
@@ -78,7 +78,7 @@ export default function ConfigPage() {
         setHistory(historyData);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Failed to load configuration",
+          humanizeError(err, "Failed to load configuration"),
         );
       } finally {
         setLoading(false);

@@ -1,6 +1,7 @@
 "use client";
 
 import { Check } from "lucide-react";
+import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { Suspense, useCallback, useEffect, useState } from "react";
 import { useSearchParams } from "next/navigation";
@@ -60,7 +61,7 @@ function NewTemplateInner() {
         : await startTemplateAuthoring();
       setAuthSession(s);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("loadError"));
+      setError(humanizeError(e, t("loadError")));
     } finally {
       setBootstrapping(false);
     }
@@ -85,7 +86,7 @@ function NewTemplateInner() {
       const updated = await continueTemplateAuthoring(authSession.id, message);
       setAuthSession(updated);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("replyError"));
+      setError(humanizeError(e, t("replyError")));
       // Roll back the optimistic message so the user can retry.
       void getTemplateAuthoring(authSession.id).then(setAuthSession).catch(() => {});
     } finally {
@@ -104,7 +105,7 @@ function NewTemplateInner() {
       // web/lib/use-route-segment.ts.
       window.location.assign(`/portal/templates/${custom.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("saveError"));
+      setError(humanizeError(e, t("saveError")));
       setFinalizing(false);
     }
   }

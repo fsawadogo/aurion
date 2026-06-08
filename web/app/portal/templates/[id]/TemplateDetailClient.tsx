@@ -1,6 +1,7 @@
 "use client";
 
 import { Code2, Download, LayoutGrid } from "lucide-react";
+import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -62,7 +63,7 @@ export default function TemplateDetailPage() {
       setRow(found);
       setDraftJson(JSON.stringify(found.template, null, 2));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("loadError"));
+      setError(humanizeError(e, t("loadError")));
     } finally {
       setLoading(false);
     }
@@ -79,7 +80,7 @@ export default function TemplateDetailPage() {
       parsed = JSON.parse(draftJson);
     } catch (e) {
       setError(
-        t("invalidJson", { error: e instanceof Error ? e.message : "" }),
+        t("invalidJson", { error: humanizeError(e, "") }),
       );
       return;
     }
@@ -91,7 +92,7 @@ export default function TemplateDetailPage() {
       setDraftJson(JSON.stringify(updated.template, null, 2));
       setMode("preview");
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("saveError"));
+      setError(humanizeError(e, t("saveError")));
     } finally {
       setSaving(false);
     }
@@ -105,7 +106,7 @@ export default function TemplateDetailPage() {
       await deleteMyCustomTemplate(row.id);
       router.push("/portal/templates");
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("deleteError"));
+      setError(humanizeError(e, t("deleteError")));
       setDeleting(false);
     }
   }

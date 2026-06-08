@@ -1,6 +1,7 @@
 "use client";
 
 import { Pencil, Plus, Trash2, X, Zap } from "lucide-react";
+import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import Badge from "@/components/ui/Badge";
@@ -63,7 +64,7 @@ export default function PortalMacrosPage() {
       xs.sort((a, b) => a.shortcut.localeCompare(b.shortcut));
       setList(xs);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("loadError"));
+      setError(humanizeError(e, t("loadError")));
     } finally {
       setLoading(false);
     }
@@ -79,7 +80,7 @@ export default function PortalMacrosPage() {
       await deleteMyMacro(m.id);
       setList(list.filter((x) => x.id !== m.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("deleteError"));
+      setError(humanizeError(e, t("deleteError")));
     }
   }
 
@@ -226,7 +227,7 @@ function MacroEditor({
         : await createMyMacro(payload);
       onSaved(saved);
     } catch (e) {
-      const msg = e instanceof Error ? e.message : tEditor("saveError");
+      const msg = humanizeError(e, tEditor("saveError"));
       // Surface the backend's 409 message verbatim — it's already
       // friendly ("Macro with shortcut '/ros' already exists").
       setError(msg.replace(/^API \d+:\s*/, "").replace(/^.*"detail":"?/, "").replace(/"?\}.*$/, ""));

@@ -39,7 +39,7 @@ import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import EmptyPanelState from "@/components/portal/EmptyPanelState";
 import PageHeader from "@/components/portal/PageHeader";
-import { getCapturedMedia, getMe, getMediaDownloadUrls } from "@/lib/api";
+import { getCapturedMedia, getMe, getMediaDownloadUrls, humanizeError} from "@/lib/api";
 import type { CapturedMediaItem, UserRole } from "@/types";
 
 /** States the backend stateBadge map knows about — anything else renders raw. */
@@ -102,7 +102,7 @@ export default function CapturedMediaPage() {
       if (e instanceof Error && e.message.startsWith("API 403")) {
         setNotEnabled(true);
       } else {
-        setError(e instanceof Error ? e.message : t("loadError"));
+        setError(humanizeError(e, t("loadError")));
       }
     } finally {
       setLoading(false);

@@ -9,7 +9,7 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { getSessionDetail } from "@/lib/api";
+import { getSessionDetail, humanizeError} from "@/lib/api";
 import type { NoteSectionStatus, SessionDetail } from "@/types";
 
 const stateBadgeVariant: Record<string, "success" | "warning" | "error" | "info" | "neutral"> = {
@@ -74,7 +74,7 @@ export default function SessionDetailClient(
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load session");
+          setError(humanizeError(err, "Failed to load session"));
         }
       })
       .finally(() => {

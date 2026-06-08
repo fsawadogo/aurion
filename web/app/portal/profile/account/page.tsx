@@ -10,7 +10,7 @@ import LocaleSwitcher from "@/components/portal/LocaleSwitcher";
 import MfaCard from "@/components/portal/MfaCard";
 import PageHeader from "@/components/portal/PageHeader";
 import SessionsCard from "@/components/portal/SessionsCard";
-import { getMe, logout } from "@/lib/api";
+import { getMe, logout, humanizeError} from "@/lib/api";
 import { getMyProfile, updateMyProfile } from "@/lib/portal-api";
 import type { CurrentUser, PhysicianProfile } from "@/types";
 
@@ -54,7 +54,7 @@ export default function PortalAccountPage() {
       setMe(u);
       setProfile(p);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("loadError"));
+      setError(humanizeError(e, t("loadError")));
     } finally {
       setLoading(false);
     }
@@ -72,7 +72,7 @@ export default function PortalAccountPage() {
       const updated = await updateMyProfile({ output_language: lang });
       setProfile(updated);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("saveLanguageError"));
+      setError(humanizeError(e, t("saveLanguageError")));
     } finally {
       setSavingLanguage(false);
     }
