@@ -30,6 +30,9 @@ struct CaptureView: View {
     /// resurfaces if the cause persists; per-launch persistence would hide
     /// a permanently denied permission and never resurface it.
     @State private var captionsHintDismissed = false
+    /// Drives the Dynamic Type adaptations (#271): the consent-method picker
+    /// switches to a menu and the consent card scrolls at accessibility sizes.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         ZStack {
@@ -542,7 +545,12 @@ struct CaptureView: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundColor(.aurionGold)
             Text(displayName)
-                .font(.system(size: 12, weight: .semibold))
+                // #271 DT: scale the label like the sibling capsule chips
+                // (collaborationPill, consentChip) instead of a fixed 12pt.
+                // The icon stays a fixed glyph; lineLimit(1)+tail truncation
+                // and the immersive bar's 132pt maxWidth cap keep it from
+                // breaking the HUD layout when it grows.
+                .aurionFont(12, weight: .semibold, relativeTo: .caption)
                 .foregroundColor(.white)
                 // Single line + tail truncation so a long specialty
                 // ("Orthopedic Surgery") shrinks to "Orthopedic Su…" when the
@@ -793,7 +801,11 @@ struct CaptureView: View {
             Text(label)
                 .aurionFont(12, weight: .medium, relativeTo: .caption)
                 .foregroundColor(.white.opacity(0.92))
-                .lineLimit(1)
+                // #271 DT: drop lineLimit(1) and let the label wrap +
+                // size to content so the participant summary isn't
+                // truncated at larger Dynamic Type sizes.
+                .fixedSize(horizontal: false, vertical: true)
+                .multilineTextAlignment(.leading)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 5)
@@ -818,8 +830,11 @@ struct CaptureView: View {
             Text(message)
                 .aurionFont(13, weight: .medium, relativeTo: .footnote)
                 .foregroundColor(.white.opacity(0.7))
-                .lineLimit(1)
-                .truncationMode(.tail)
+                // #271 DT: allow up to two lines and size to content so the
+                // reason isn't clipped to a single truncated line at larger
+                // Dynamic Type sizes.
+                .lineLimit(2)
+                .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
             Button {
                 withAnimation(AurionAnimation.smooth) {
@@ -927,50 +942,67 @@ struct CaptureView: View {
             Color.aurionNavy.opacity(0.78)
                 .ignoresSafeArea()
 
-            VStack(spacing: 14) {
-                ZStack {
-                    RoundedRectangle(cornerRadius: 16)
-                        .fill(Color.aurionGoldBg)
-                        .frame(width: 64, height: 64)
-                    Image(systemName: "lock.shield")
-                        .font(.system(size: 30))
-                        .foregroundColor(.aurionGoldDark)
+            // #271 DT: the consent card scrolls when it can't fit (large
+            // Dynamic Type on a small device) so the "Confirm consent" button
+            // is ALWAYS reachable — recording is hard-blocked behind this
+            // gate, so an unreachable button would trap the clinician. The
+            // GeometryReader + minHeight frame keeps the card vertically
+            // centered when it fits and lets it scroll when it doesn't.
+            GeometryReader { proxy in
+                ScrollView {
+                    consentCard
+                        .frame(maxWidth: .infinity)
+                        .frame(minHeight: proxy.size.height, alignment: .center)
                 }
-
-                Text(L("capture.consentTitle"))
-                    .aurionFont(20, weight: .semibold, relativeTo: .title3)
-                    .foregroundColor(.aurionTextPrimary)
-                    .multilineTextAlignment(.center)
-
-                Text(L("capture.consentSub"))
-                    .aurionFont(14, relativeTo: .subheadline)
-                    .foregroundColor(.aurionTextSecondary)
-                    .multilineTextAlignment(.center)
-                    .lineSpacing(3)
-
-                consentMethodPicker
-
-                AurionGoldButton(label: L("capture.consentButton"), full: true) {
-                    Task { await sessionManager.confirmConsent(method: pendingConsentMethod) }
-                }
-
-                Button(L("common.cancel")) {
-                    // Abort the consent-pending session and return to the
-                    // dashboard. Was an empty closure — Cancel did nothing,
-                    // trapping the user on the consent gate (#294). endSession
-                    // is the established teardown (drops the staged WAV, ends
-                    // the Live Activity, sets uiState = .idle).
-                    AurionHaptics.impact(.light)
-                    sessionManager.endSession()
-                }
-                    .aurionFont(14, relativeTo: .subheadline)
-                    .foregroundColor(.aurionTextSecondary)
+                .scrollBounceBehavior(.basedOnSize)
             }
-            .padding(28)
-            .background(Color.aurionCardBackground)
-            .clipShape(RoundedRectangle(cornerRadius: AurionRadius.xl))
-            .padding(28)
         }
+    }
+
+    private var consentCard: some View {
+        VStack(spacing: 14) {
+            ZStack {
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.aurionGoldBg)
+                    .frame(width: 64, height: 64)
+                Image(systemName: "lock.shield")
+                    .font(.system(size: 30))
+                    .foregroundColor(.aurionGoldDark)
+            }
+
+            Text(L("capture.consentTitle"))
+                .aurionFont(20, weight: .semibold, relativeTo: .title3)
+                .foregroundColor(.aurionTextPrimary)
+                .multilineTextAlignment(.center)
+
+            Text(L("capture.consentSub"))
+                .aurionFont(14, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextSecondary)
+                .multilineTextAlignment(.center)
+                .lineSpacing(3)
+
+            consentMethodPicker
+
+            AurionGoldButton(label: L("capture.consentButton"), full: true) {
+                Task { await sessionManager.confirmConsent(method: pendingConsentMethod) }
+            }
+
+            Button(L("common.cancel")) {
+                // Abort the consent-pending session and return to the
+                // dashboard. Was an empty closure — Cancel did nothing,
+                // trapping the user on the consent gate (#294). endSession
+                // is the established teardown (drops the staged WAV, ends
+                // the Live Activity, sets uiState = .idle).
+                AurionHaptics.impact(.light)
+                sessionManager.endSession()
+            }
+                .aurionFont(14, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextSecondary)
+        }
+        .padding(28)
+        .background(Color.aurionCardBackground)
+        .clipShape(RoundedRectangle(cornerRadius: AurionRadius.xl))
+        .padding(28)
     }
 
     /// Segmented picker so the clinician records HOW consent was obtained.
@@ -980,13 +1012,33 @@ struct CaptureView: View {
             Text(L("capture.consentMethodQ"))
                 .aurionFont(13, weight: .medium, relativeTo: .footnote)
                 .foregroundColor(.aurionTextSecondary)
-            Picker(L("capture.consentMethodQ"), selection: $pendingConsentMethod) {
-                ForEach(ConsentMethod.allCases) { method in
-                    Text(method.displayName).tag(method)
-                }
+            consentMethodControl
+        }
+    }
+
+    /// #271 DT: a segmented control can neither wrap nor scale, so the
+    /// method labels ("Paper Form", "Digital Form" — longer still in FR)
+    /// truncate to "Pape…/Digit…" at accessibility text sizes. Swap to a
+    /// menu picker — which shows the full selected label and lists every
+    /// option at any text size — once text is at an accessibility size, and
+    /// keep the compact segmented control at normal sizes.
+    @ViewBuilder
+    private var consentMethodControl: some View {
+        let picker = Picker(L("capture.consentMethodQ"), selection: $pendingConsentMethod) {
+            ForEach(ConsentMethod.allCases) { method in
+                Text(method.displayName).tag(method)
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+        }
+        .labelsHidden()
+
+        if dynamicTypeSize.isAccessibilitySize {
+            picker
+                .pickerStyle(.menu)
+                .tint(.aurionGold)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            picker
+                .pickerStyle(.segmented)
         }
     }
 

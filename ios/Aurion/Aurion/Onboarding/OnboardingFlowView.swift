@@ -170,6 +170,12 @@ struct OnboardingFlowView: View {
                         .animation(AurionAnimation.smooth, value: currentStepIndex)
                 }
             }
+            // #271 DT: this 5-across row is a fixed micro progress-indicator —
+            // the full step name + position are already exposed to VoiceOver
+            // via the header's accessibilityValue below, so cap the visual
+            // labels at xxxLarge to keep them readable instead of letting
+            // accessibility sizes blow them up and clip the row.
+            .dynamicTypeSize(...DynamicTypeSize.xxxLarge)
         }
         // Expose the header as one progress element instead of five
         // disconnected words; VoiceOver hears the current step and total.

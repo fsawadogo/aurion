@@ -69,9 +69,26 @@ struct MfaChallengeView: View {
                 .padding(.horizontal, 24)
                 .padding(.top, 20)
 
-                Spacer()
+                // #271 DT: scroll the card so the code field + Verify button
+                // stay reachable at large Dynamic Type sizes; the min-height
+                // frame keeps the card centered when it fits.
+                GeometryReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            Spacer(minLength: 12)
+                            challengeCard
+                            Spacer(minLength: 12)
+                        }
+                        .frame(minHeight: proxy.size.height)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                }
+            }
+        }
+    }
 
-                VStack(alignment: .leading, spacing: 18) {
+    private var challengeCard: some View {
+        VStack(alignment: .leading, spacing: 18) {
                     VStack(alignment: .leading, spacing: 6) {
                         Text(L("login.mfa.challenge.title"))
                             .aurionFont(22, weight: .semibold, relativeTo: .title2)
@@ -126,10 +143,6 @@ struct MfaChallengeView: View {
                         .stroke(Color.white.opacity(0.10), lineWidth: 1)
                 )
                 .padding(.horizontal, 24)
-
-                Spacer()
-            }
-        }
     }
 
     @MainActor
