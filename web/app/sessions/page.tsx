@@ -8,6 +8,11 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { getSessions } from "@/lib/api";
+import {
+  abbreviateName,
+  nameInitials,
+  shortSessionId,
+} from "@/lib/session-format";
 import type { Session, SessionFilters, PaginatedResponse } from "@/types";
 
 const stateBadgeVariant: Record<string, "success" | "warning" | "error" | "info" | "neutral"> = {
@@ -157,12 +162,27 @@ export default function SessionsPage() {
                         className="cursor-pointer transition-colors hover:bg-gray-50/80"
                       >
                         <td className="whitespace-nowrap px-4 py-3">
-                          <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
-                            {s.id.length > 12 ? `${s.id.slice(0, 8)}...` : s.id}
+                          <code
+                            title={s.id}
+                            className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs tracking-tight text-gray-500"
+                          >
+                            {shortSessionId(s.id)}
                           </code>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                          {s.clinician_name}
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <div
+                            className="flex items-center gap-2.5"
+                            title={s.clinician_name || undefined}
+                          >
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-50 text-[10px] font-semibold text-navy-700 ring-1 ring-inset ring-navy-100">
+                              {nameInitials(s.clinician_name || "—")}
+                            </span>
+                            <span className="text-sm font-medium text-navy-800">
+                              {s.clinician_name
+                                ? abbreviateName(s.clinician_name)
+                                : "—"}
+                            </span>
+                          </div>
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-sm capitalize text-gray-500">
                           {s.specialty.replace(/_/g, " ")}

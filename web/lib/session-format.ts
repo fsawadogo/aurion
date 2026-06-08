@@ -90,3 +90,59 @@ export function badgeVariantFor(state: SessionState): SessionBadgeVariant {
       return "neutral";
   }
 }
+
+/** First 8 hex chars of a UUID — a glanceable short id for dense tables.
+ * Pair with `title={fullId}` on the element so the full id stays available
+ * on hover/copy. "b90baea3-56fb-4a4f-..." → "b90baea3". */
+export function shortSessionId(id: string): string {
+  return id.slice(0, 8);
+}
+
+// Leading honorifics stripped before abbreviating a name. Lowercased,
+// with/without a trailing dot. "Dre" = French "Docteure".
+const HONORIFICS = new Set([
+  "dr",
+  "dre",
+  "mr",
+  "mrs",
+  "ms",
+  "mx",
+  "prof",
+  "professor",
+]);
+
+function nameTokens(fullName: string): string[] {
+  return fullName
+    .trim()
+    .split(/\s+/)
+    .filter((t) => t && !HONORIFICS.has(t.replace(/\.$/, "").toLowerCase()));
+}
+
+/** Abbreviate a clinician's full name to "F. Lastname" for dense lists —
+ * first given-name initial + last token, honorific stripped. Falls back to
+ * the single token (or trimmed input) when there's no surname.
+ *
+ *   "Faical Sawadogo"      → "F. Sawadogo"
+ *   "Dr. Perry Gdalevitch" → "P. Gdalevitch"
+ *   "Aurion Admin"         → "A. Admin"
+ *   "Madonna"              → "Madonna"
+ *
+ * Pair with `title={fullName}` so the full name shows on hover. */
+export function abbreviateName(fullName: string): string {
+  const tokens = nameTokens(fullName);
+  if (tokens.length === 0) return fullName.trim();
+  if (tokens.length === 1) return tokens[0];
+  const first = tokens[0].charAt(0).toUpperCase();
+  return `${first}. ${tokens[tokens.length - 1]}`;
+}
+
+/** 1–2 letter monogram for a name avatar (first + last token initials,
+ * honorific stripped). "Faical Sawadogo" → "FS"; "Admin" → "A". */
+export function nameInitials(fullName: string): string {
+  const tokens = nameTokens(fullName);
+  if (tokens.length === 0) return "—";
+  if (tokens.length === 1) return tokens[0].charAt(0).toUpperCase();
+  return (
+    tokens[0].charAt(0) + tokens[tokens.length - 1].charAt(0)
+  ).toUpperCase();
+}
