@@ -14,6 +14,10 @@ struct DashboardView: View {
     /// and capped at ~720pt so the dashboard doesn't stretch absurdly
     /// wide. ``.compact`` (iPhone, iPad slide-over) keeps full width.
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// Drives the Dynamic Type reflows. At accessibility sizes the Quick
+    /// Start grid collapses to a single column and the recent-session row
+    /// drops its status pill below the title so nothing clips (#271).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var recentSessions: [SessionResponse] = []
     @State private var isLoadingSessions = false
     @State private var showEncounterTypeSheet = false
@@ -431,6 +435,16 @@ struct DashboardView: View {
 
     // MARK: - Quick Start (2×2 grid)
 
+    /// Grid columns for the Quick Start cards. Two side-by-side columns at
+    /// normal text sizes; a single full-width column at accessibility sizes
+    /// so the specialty + visit-type labels have room to wrap instead of
+    /// being squeezed into a narrow half-width card and clipping (#271 DT).
+    private var quickStartColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible(), spacing: 10)]
+            : [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+    }
+
     private var quickStartSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: L("dashboard.quickStart"))
@@ -441,7 +455,7 @@ struct DashboardView: View {
             if appState.physicianProfile == nil {
                 quickStartSkeleton
             } else {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: quickStartColumns, spacing: 10) {
                 ForEach(Array(quickStartCards.enumerated()), id: \.element.type) { idx, card in
                     Button {
                         AurionHaptics.impact(.light)
@@ -464,7 +478,13 @@ struct DashboardView: View {
                                     Text(card.label)
                                         .aurionFont(16, weight: .semibold, relativeTo: .body)
                                         .foregroundColor(.aurionTextPrimary)
-                                        .lineLimit(2)
+                                        // Cap at 2 lines in the 2-up grid, but
+                                        // let the label wrap freely in the
+                                        // single-column accessibility layout so
+                                        // long visit-type names aren't clipped
+                                        // (#271 DT).
+                                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                                        .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
                                 }
                             }
                             .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
@@ -495,7 +515,7 @@ struct DashboardView: View {
     /// (nil). Mirrors the 2-up Quick Start grid so the layout doesn't jump
     /// when the real cards replace it. Renders no GENERAL fallback (#278).
     private var quickStartSkeleton: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+        LazyVGrid(columns: quickStartColumns, spacing: 10) {
             ForEach(0..<2, id: \.self) { _ in
                 AurionCard(padding: 14) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -565,6 +585,7 @@ struct DashboardView: View {
         }
     }
 
+    @ViewBuilder
     private func recentSessionRow(session: SessionResponse) -> some View {
         let icon: String = {
             switch session.specialty {
@@ -576,30 +597,55 @@ struct DashboardView: View {
             }
         }()
 
-        return HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(Color.aurionSurfaceAlt)
-                    .frame(width: 32, height: 32)
-                Image(systemName: icon)
-                    .aurionFont(14, relativeTo: .subheadline)
-                    .foregroundColor(.aurionTextSecondary)
+        let iconBubble = ZStack {
+            RoundedRectangle(cornerRadius: 9)
+                .fill(Color.aurionSurfaceAlt)
+                .frame(width: 32, height: 32)
+            Image(systemName: icon)
+                .aurionFont(14, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextSecondary)
+        }
+
+        // At accessibility sizes the title is allowed to wrap; otherwise it
+        // stays a single line beside the trailing pill (#271 DT).
+        let titleStack = VStack(alignment: .leading, spacing: 2) {
+            Text(localizedSpecialty(session.specialty))
+                .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextPrimary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
+            Text(formatRelativeTime(session.createdAt))
+                .aurionFont(12, relativeTo: .caption)
+                .foregroundColor(.aurionTextSecondary)
+                .lineLimit(1)
+        }
+
+        let pill = AurionStatusPill(
+            kind: sessionStateKind(session.state),
+            labelOverride: sessionStateLabel(session.state)
+        )
+
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // The title + pill can't coexist on one line at AX sizes —
+                // the pill would crush the title to an ellipsis. Drop it
+                // below the title/time stack so both read in full (#271 DT).
+                HStack(alignment: .top, spacing: 12) {
+                    iconBubble
+                    VStack(alignment: .leading, spacing: 8) {
+                        titleStack
+                        pill
+                    }
+                    Spacer(minLength: 0)
+                }
+            } else {
+                HStack(spacing: 12) {
+                    iconBubble
+                    titleStack
+                    Spacer()
+                    pill
+                }
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(localizedSpecialty(session.specialty))
-                    .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
-                    .foregroundColor(.aurionTextPrimary)
-                    .lineLimit(1)
-                Text(formatRelativeTime(session.createdAt))
-                    .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(.aurionTextSecondary)
-                    .lineLimit(1)
-            }
-            Spacer()
-            AurionStatusPill(
-                kind: sessionStateKind(session.state),
-                labelOverride: sessionStateLabel(session.state)
-            )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
