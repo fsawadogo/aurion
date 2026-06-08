@@ -2,7 +2,7 @@
 
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { AlertCircle, Eye, EyeOff } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Button from "@/components/ui/Button";
@@ -52,7 +52,6 @@ export default function ResetPasswordPage() {
 
 function ResetPasswordContent() {
   const t = useTranslations("Auth.resetPassword");
-  const router = useRouter();
   const searchParams = useSearchParams();
   // useSearchParams returns null in static-export builds before
   // hydration; default to empty string so the missing-token branch
@@ -118,14 +117,15 @@ function ResetPasswordContent() {
     try {
       await resetPassword(token, newPassword);
       // Success → bounce to login with the success flag. We use
-      // window.location instead of `router.push` here because the
-      // login page lives in a different route group; static-export
-      // routing has been finicky with cross-group navigation in this
-      // codebase (see commit b20910a — "bypass Next router for
-      // dynamic-route navigation under static export"). The static
-      // /login HTML still ships from the same domain so this is a
-      // single-page-app boundary, not a network hop.
-      router.push("/login?reset=success");
+      // window.location (not the Next router) here because the login
+      // page lives in a different route group; static-export routing
+      // has been finicky with cross-group navigation in this codebase
+      // (see commit b20910a — "bypass Next router for dynamic-route
+      // navigation under static export"), and a `router.push` can
+      // stall the post-success bounce under the Amplify static export.
+      // The static /login HTML still ships from the same domain so
+      // this is a single-page-app boundary, not a network hop.
+      window.location.assign("/login?reset=success");
     } catch (err) {
       const msg = err instanceof Error ? err.message : "";
       setApiError(msg || t("errors.transport"));
