@@ -34,6 +34,7 @@ silently dropped.
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -333,7 +334,7 @@ async def list_captured_media(
     response_model=MediaDownloadUrlsResponse,
 )
 async def get_media_download_urls(
-    session_id: str,
+    session_id: uuid.UUID,
     user: CurrentUser = Depends(
         require_role(UserRole.ADMIN, UserRole.EVAL_TEAM)
     ),

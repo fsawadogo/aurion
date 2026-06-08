@@ -128,7 +128,7 @@ async def create_user(
     response_model=ResetPasswordResponse,
 )
 async def admin_reset_password(
-    user_id: str,
+    user_id: uuid.UUID,
     actor: CurrentUser = Depends(require_role(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
@@ -138,7 +138,7 @@ async def admin_reset_password(
     it out-of-band. Logs ADMIN_PASSWORD_RESET_ISSUED + PASSWORD_CHANGED
     (via=admin_reset) for the audit trail.
     """
-    target = await db.get(UserModel, uuid.UUID(user_id))
+    target = await db.get(UserModel, user_id)
     if target is None:
         raise HTTPException(status_code=404, detail="User not found.")
 
@@ -168,7 +168,7 @@ async def admin_reset_password(
 
 @router.patch("/users/{user_id}", response_model=UserResponse)
 async def update_user(
-    user_id: str,
+    user_id: uuid.UUID,
     body: UpdateUserRequest,
     user: CurrentUser = Depends(require_role(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
