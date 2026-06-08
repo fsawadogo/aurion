@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, Query
-from sqlalchemy import Float, func, select
+from sqlalchemy import Integer, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1.admin._shared import (
@@ -194,11 +194,14 @@ async def get_metrics_timeseries(
             func.avg(PilotMetricsModel.stage2_latency_ms).label(
                 "stage2_latency_ms"
             ),
-            # session_completeness as a Boolean → 1/0 → average × 100
-            # gives % of that day's rows that were complete.
+            # session_completeness is Boolean → cast to Integer (1/0) first,
+            # then average × 100 = % of that day's rows that were complete.
+            # NB: Postgres cannot cast boolean directly to float
+            # (asyncpg CannotCoerceError) — it must go bool→int. SQLite is
+            # lax about this, which is why the unit test missed it.
             (
                 func.avg(
-                    func.cast(PilotMetricsModel.session_completeness, Float)
+                    func.cast(PilotMetricsModel.session_completeness, Integer)
                 )
                 * 100
             ).label("session_completeness"),
