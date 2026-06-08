@@ -595,6 +595,7 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
             "deleted_sessions",
             "deleted_note_versions",
             "deleted_pilot_metrics",
+            "deleted_transcripts",
             "deleted_s3_objects",
             "retention_note",
         }
