@@ -62,7 +62,12 @@ struct PatientIdentifierEditor: View {
                     .font(.system(size: 16))
                     .foregroundColor(.aurionGold)
                 Text(value)
-                    .font(.system(size: 15, weight: .semibold, design: .monospaced))
+                    // Scale with Dynamic Type but keep the monospaced design
+                    // so look-alike codes (1/l, 0/O) stay disambiguated; shrink
+                    // a touch before truncating (#271 DT).
+                    .monospaced()
+                    .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                    .minimumScaleFactor(0.8)
                     .foregroundColor(.aurionTextPrimary)
                     .lineLimit(1)
                 Spacer()

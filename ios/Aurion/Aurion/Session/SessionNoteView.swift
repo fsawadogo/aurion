@@ -37,12 +37,35 @@ struct NoteDocumentBody: View {
                 Text(dateString)
                     .font(.system(size: forPDF ? 15 : dateSize))
                     .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
-                HStack(spacing: 12) {
-                    Text(L("noteDoc.percentComplete", Int(note.completenessScore * 100)))
-                    Text("·").foregroundColor((forPDF ? Color.black : .aurionTextSecondary).opacity(0.4))
-                    Text("v\(note.version)")
-                    Text("·").foregroundColor((forPDF ? Color.black : .aurionTextSecondary).opacity(0.4))
-                    Text(note.providerUsed)
+                // PDF keeps a fixed single dotted line (print-clean — the
+                // export path never reflows). On screen the meta row falls
+                // back to a stacked layout when the dotted row would overflow
+                // at larger Dynamic Type (#271 DT).
+                Group {
+                    if forPDF {
+                        HStack(spacing: 12) {
+                            Text(L("noteDoc.percentComplete", Int(note.completenessScore * 100)))
+                            Text("·").foregroundColor(Color.black.opacity(0.4))
+                            Text("v\(note.version)")
+                            Text("·").foregroundColor(Color.black.opacity(0.4))
+                            Text(note.providerUsed)
+                        }
+                    } else {
+                        ViewThatFits(in: .horizontal) {
+                            HStack(spacing: 12) {
+                                Text(L("noteDoc.percentComplete", Int(note.completenessScore * 100)))
+                                Text("·").foregroundColor(Color.aurionTextSecondary.opacity(0.4))
+                                Text("v\(note.version)")
+                                Text("·").foregroundColor(Color.aurionTextSecondary.opacity(0.4))
+                                Text(note.providerUsed)
+                            }
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(L("noteDoc.percentComplete", Int(note.completenessScore * 100)))
+                                Text("v\(note.version)")
+                                Text(note.providerUsed)
+                            }
+                        }
+                    }
                 }
                 .font(.system(size: forPDF ? 12 : metaSize))
                 .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
@@ -237,7 +260,7 @@ struct SessionNoteView: View {
                             // confirmation event, not just an overlay.
                             .symbolEffect(.bounce, value: showCopiedToast)
                         Text(L("sessionNote.copied"))
-                            .font(.system(size: 14, weight: .semibold))
+                            .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
                     }
                     .foregroundColor(.aurionTextPrimary)
                     .padding(.horizontal, AurionSpacing.xl)

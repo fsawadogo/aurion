@@ -47,8 +47,9 @@ struct PatientSummaryCard: View {
     @State private var showShareSheet = false
     @State private var copiedFlash = false
 
-    // Drives the action row's collapse to icon-only at accessibility
-    // text sizes so the four chips don't clip / push off-screen.
+    // Drives the action row's reflow at accessibility text sizes: the four
+    // chips wrap into AurionFlowLayout (labels kept) and the editor footer
+    // stacks the char-counter above the buttons so nothing clips (#271 DT).
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     // Backend cap matches the portal — see web/types/index.ts:
@@ -236,25 +237,43 @@ struct PatientSummaryCard: View {
 
             metaRow(s)
 
-            HStack(spacing: 8) {
-                actionButton(
-                    label: copiedFlash ? L("summary.copied") : L("summary.copy"),
-                    icon: copiedFlash ? "checkmark" : "doc.on.doc"
-                ) { copy(s.body) }
-                actionButton(label: L("summary.share"), icon: "square.and.arrow.up") {
-                    showShareSheet = true
+            // Copy / Share / Edit / Regenerate — the only way to act on the
+            // summary. A flat HStack pushes the four chips off-screen at
+            // accessibility text sizes, so wrap them into AurionFlowLayout
+            // there: chips flow onto extra rows with labels intact (#271 DT).
+            if dynamicTypeSize.isAccessibilitySize {
+                AurionFlowLayout(spacing: 8, lineSpacing: 8) {
+                    summaryActions(s)
                 }
-                actionButton(label: L("summary.edit"), icon: "pencil") {
-                    draftBody = s.body
-                    isEditing = true
+            } else {
+                HStack(spacing: 8) {
+                    summaryActions(s)
                 }
-                actionButton(
-                    label: isGenerating ? L("summary.generating") : L("summary.regenerate"),
-                    icon: "arrow.clockwise",
-                    disabled: isGenerating
-                ) { Task { await generate() } }
             }
         }
+    }
+
+    /// The four summary-action chips, shared between the inline HStack
+    /// (default sizes) and the wrapping AurionFlowLayout (accessibility
+    /// sizes) so the set is defined once (#271 DT).
+    @ViewBuilder
+    private func summaryActions(_ s: PatientSummaryResponse) -> some View {
+        actionButton(
+            label: copiedFlash ? L("summary.copied") : L("summary.copy"),
+            icon: copiedFlash ? "checkmark" : "doc.on.doc"
+        ) { copy(s.body) }
+        actionButton(label: L("summary.share"), icon: "square.and.arrow.up") {
+            showShareSheet = true
+        }
+        actionButton(label: L("summary.edit"), icon: "pencil") {
+            draftBody = s.body
+            isEditing = true
+        }
+        actionButton(
+            label: isGenerating ? L("summary.generating") : L("summary.regenerate"),
+            icon: "arrow.clockwise",
+            disabled: isGenerating
+        ) { Task { await generate() } }
     }
 
     private func editor(_ s: PatientSummaryResponse) -> some View {
@@ -276,12 +295,11 @@ struct PatientSummaryCard: View {
                 )
                 .disabled(isSaving)
 
-            HStack {
-                Text(L("summary.charLimit", draftBody.count, maxChars))
-                    .aurionFont(11, relativeTo: .caption2)
-                    .foregroundColor(draftBody.count > maxChars
-                                     ? .aurionRed : .aurionTextSecondary)
-                Spacer()
+            let counter = Text(L("summary.charLimit", draftBody.count, maxChars))
+                .aurionFont(11, relativeTo: .caption2)
+                .foregroundColor(draftBody.count > maxChars
+                                 ? .aurionRed : .aurionTextSecondary)
+            let buttons = HStack(spacing: 12) {
                 Button(L("summary.cancel")) {
                     isEditing = false
                     draftBody = ""
@@ -309,14 +327,45 @@ struct PatientSummaryCard: View {
                           || draftBody.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
                           || draftBody.count > maxChars)
             }
+
+            // At accessibility sizes the counter takes its own line above the
+            // Cancel/Save row — a single HStack squeezes the counter and clips
+            // the Save button otherwise (#271 DT).
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 10) {
+                    counter
+                    HStack {
+                        Spacer()
+                        buttons
+                    }
+                }
+            } else {
+                HStack {
+                    counter
+                    Spacer()
+                    buttons
+                }
+            }
         }
     }
 
     private func metaRow(_ s: PatientSummaryResponse) -> some View {
-        HStack(spacing: 8) {
-            Text(L("summary.versionLabel", s.version))
-            Text("·").foregroundColor(.aurionTextSecondary.opacity(0.4))
-            Text(L("summary.providerLabel", s.generatedByProvider))
+        // Version + provider stack vertically at accessibility sizes (the
+        // single dot-separated row clips otherwise); drop the "·" there
+        // since the line break already separates them (#271 DT).
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("summary.versionLabel", s.version))
+                    Text(L("summary.providerLabel", s.generatedByProvider))
+                }
+            } else {
+                HStack(spacing: 8) {
+                    Text(L("summary.versionLabel", s.version))
+                    Text("·").foregroundColor(.aurionTextSecondary.opacity(0.4))
+                    Text(L("summary.providerLabel", s.generatedByProvider))
+                }
+            }
         }
         .aurionFont(11, relativeTo: .caption2)
         .foregroundColor(.aurionTextSecondary)
@@ -332,14 +381,13 @@ struct PatientSummaryCard: View {
             HStack(spacing: 4) {
                 Image(systemName: icon)
                     .font(.system(size: 11, weight: .semibold))
-                // At accessibility text sizes the four labelled chips
-                // can't fit one row — drop to icon-only and let the
-                // VoiceOver label below carry the meaning.
-                if !dynamicTypeSize.isAccessibilitySize {
-                    Text(label)
-                        .aurionFont(11, weight: .semibold, relativeTo: .caption)
-                        .lineLimit(1)
-                }
+                // Label stays visible at every size — AurionFlowLayout (above)
+                // wraps the chips at accessibility sizes so we no longer drop
+                // to icon-only; shrink a touch before truncating (#271 DT).
+                Text(label)
+                    .aurionFont(11, weight: .semibold, relativeTo: .caption)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
             .foregroundColor(.aurionTextPrimary)
             .padding(.horizontal, 10)

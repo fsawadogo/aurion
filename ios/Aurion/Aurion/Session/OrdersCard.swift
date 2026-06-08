@@ -41,6 +41,11 @@ struct OrdersCard: View {
 
     @State private var cancelTarget: NoteOrderResponse?
 
+    /// At accessibility text sizes each order row wraps its kind + status
+    /// badges into AurionFlowLayout and drops the confirm/cancel actions
+    /// below the order detail instead of squeezing them right (#271 DT).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private static let approvedStates: Set<String> = [
         "REVIEW_COMPLETE", "EXPORTED", "PURGED",
     ]
@@ -283,44 +288,84 @@ struct OrdersCard: View {
 
     private func row(for order: NoteOrderResponse) -> some View {
         let isCancelled = order.status == "cancelled"
-        return HStack(alignment: .top, spacing: 10) {
-            Image(systemName: iconName(for: order.kind))
-                .font(.system(size: 16))
-                .foregroundColor(.aurionTextSecondary)
-                .frame(width: 22)
-
-            VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    Text(localizedKindLabel(order.kind))
-                        .aurionFont(13, weight: .semibold, relativeTo: .footnote)
-                        .foregroundColor(.aurionTextPrimary)
-                    statusBadge(for: order.status)
-                    if order.kind == "prescription" && order.drugValidated == false {
-                        catalogWarningPill
-                    }
-                }
-                Text(summarize(order))
-                    .aurionFont(12, relativeTo: .caption)
+        return VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: iconName(for: order.kind))
+                    .font(.system(size: 16))
                     .foregroundColor(.aurionTextSecondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                if order.kind == "prescription" && order.drugValidated == false {
-                    Text(L("orders.drugVerifyHint"))
-                        .aurionFont(11, relativeTo: .caption2)
-                        .foregroundColor(.aurionAmber)
-                        .fixedSize(horizontal: false, vertical: true)
+                    .frame(width: 22)
+
+                orderDetail(for: order)
+
+                Spacer(minLength: 6)
+
+                // Default sizes: actions sit to the right of the detail.
+                if !dynamicTypeSize.isAccessibilitySize {
+                    rowActions(for: order)
                 }
             }
-
-            Spacer(minLength: 6)
-
-            if order.status == "draft" {
-                actionStack(for: order)
-            } else if order.status == "confirmed" {
-                cancelOnlyButton(order)
+            // Accessibility sizes: actions drop to their own row below the
+            // detail so the confirm/cancel controls don't clip off-screen
+            // beside the wrapped kind + badges (#271 DT).
+            if dynamicTypeSize.isAccessibilitySize {
+                HStack {
+                    Spacer()
+                    rowActions(for: order)
+                }
             }
         }
         .opacity(isCancelled ? 0.55 : 1.0)
         .padding(.vertical, 6)
+    }
+
+    /// The confirm/cancel controls for an order, gated by status. Shared
+    /// between the inline (default) and stacked (accessibility) layouts.
+    @ViewBuilder
+    private func rowActions(for order: NoteOrderResponse) -> some View {
+        if order.status == "draft" {
+            actionStack(for: order)
+        } else if order.status == "confirmed" {
+            cancelOnlyButton(order)
+        }
+    }
+
+    /// Kind label + badges + summary + (prescription) verify hint. Extracted
+    /// so the row can place it beside or above the actions by text size (#271 DT).
+    private func orderDetail(for order: NoteOrderResponse) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            // Kind + status + catalog-miss wrap at accessibility sizes so the
+            // badges flow onto a second line instead of clipping (#271 DT).
+            if dynamicTypeSize.isAccessibilitySize {
+                AurionFlowLayout(spacing: 6, lineSpacing: 6) {
+                    orderKindAndBadges(order)
+                }
+            } else {
+                HStack(spacing: 6) {
+                    orderKindAndBadges(order)
+                }
+            }
+            Text(summarize(order))
+                .aurionFont(12, relativeTo: .caption)
+                .foregroundColor(.aurionTextSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            if order.kind == "prescription" && order.drugValidated == false {
+                Text(L("orders.drugVerifyHint"))
+                    .aurionFont(11, relativeTo: .caption2)
+                    .foregroundColor(.aurionAmber)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func orderKindAndBadges(_ order: NoteOrderResponse) -> some View {
+        Text(localizedKindLabel(order.kind))
+            .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+            .foregroundColor(.aurionTextPrimary)
+        statusBadge(for: order.status)
+        if order.kind == "prescription" && order.drugValidated == false {
+            catalogWarningPill
+        }
     }
 
     private func actionStack(for order: NoteOrderResponse) -> some View {

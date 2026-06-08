@@ -38,6 +38,11 @@ struct CodingSuggestionsCard: View {
     @State private var editingCode: String = ""
     @State private var editingDescription: String = ""
 
+    /// At accessibility text sizes each suggestion row wraps its badges into
+    /// AurionFlowLayout and drops the confirm/reject action stack below the
+    /// code + description instead of squeezing it to the right (#271 DT).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private static let approvedStates: Set<String> = [
         "REVIEW_COMPLETE", "EXPORTED", "PURGED",
     ]
@@ -337,64 +342,101 @@ struct CodingSuggestionsCard: View {
         let isRejected = item.status == "rejected"
 
         return VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .top, spacing: 8) {
-                systemChip(for: item.codeSystem)
-                VStack(alignment: .leading, spacing: 4) {
-                    Button {
-                        withAnimation(AurionAnimation.smooth) {
-                            toggleExpansion(id: item.id, defaultExpanded: defaultExpanded)
-                        }
-                    } label: {
-                        VStack(alignment: .leading, spacing: 4) {
-                            HStack(spacing: 6) {
-                                Text(item.code)
-                                    .monospaced()
-                                    .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
-                                    .foregroundColor(.aurionTextPrimary)
-                                Text(item.description)
-                                    .aurionFont(12, relativeTo: .caption)
-                                    .foregroundColor(.aurionTextSecondary)
-                                    .lineLimit(2)
-                                    .multilineTextAlignment(.leading)
-                                // Disclosure affordance — signals the row
-                                // expands to reveal the justification.
-                                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
-                                    .font(.system(size: 9, weight: .semibold))
-                                    .foregroundColor(.aurionTextSecondary)
-                                    .accessibilityHidden(true)
-                            }
-                            HStack(spacing: 5) {
-                                confidenceBadge(for: item.confidence)
-                                if item.codeValidated == false {
-                                    catalogMissPill
-                                }
-                                statusBadge(for: item.status)
-                            }
-                        }
-                    }
-                    .buttonStyle(.plain)
-                    if isExpanded {
-                        Text(item.justification)
-                            .aurionFont(11, relativeTo: .caption2)
-                            .foregroundColor(.aurionTextSecondary)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .padding(.top, 2)
-                        if item.codeValidated == false {
-                            Text(L("coding.notInCatalogHint"))
-                                .aurionFont(11, relativeTo: .caption2)
-                                .foregroundColor(.aurionAmber)
-                                .fixedSize(horizontal: false, vertical: true)
-                        }
-                    }
+            if dynamicTypeSize.isAccessibilitySize {
+                // System chip + code/description up top, the confirm/reject
+                // action stack on its OWN row below — squeezing it to the
+                // right edge clips it off-screen at accessibility sizes (#271 DT).
+                HStack(alignment: .top, spacing: 8) {
+                    systemChip(for: item.codeSystem)
+                    suggestionDetail(for: item, isExpanded: isExpanded, defaultExpanded: defaultExpanded)
+                    Spacer(minLength: 0)
                 }
-
-                Spacer(minLength: 6)
-
-                actionStack(for: item)
+                HStack {
+                    Spacer()
+                    actionStack(for: item)
+                }
+            } else {
+                HStack(alignment: .top, spacing: 8) {
+                    systemChip(for: item.codeSystem)
+                    suggestionDetail(for: item, isExpanded: isExpanded, defaultExpanded: defaultExpanded)
+                    Spacer(minLength: 6)
+                    actionStack(for: item)
+                }
             }
         }
         .opacity(isRejected ? 0.55 : 1.0)
         .padding(.vertical, 6)
+    }
+
+    /// Code + description + badges + (expanded) justification for one
+    /// suggestion. Extracted so the row can place it beside or above the
+    /// action stack depending on text size (#271 DT).
+    private func suggestionDetail(
+        for item: CodingSuggestionResponse,
+        isExpanded: Bool,
+        defaultExpanded: Bool
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(AurionAnimation.smooth) {
+                    toggleExpansion(id: item.id, defaultExpanded: defaultExpanded)
+                }
+            } label: {
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 6) {
+                        Text(item.code)
+                            .monospaced()
+                            .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
+                            .foregroundColor(.aurionTextPrimary)
+                        Text(item.description)
+                            .aurionFont(12, relativeTo: .caption)
+                            .foregroundColor(.aurionTextSecondary)
+                            .lineLimit(2)
+                            .multilineTextAlignment(.leading)
+                        // Disclosure affordance — signals the row
+                        // expands to reveal the justification.
+                        Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                            .font(.system(size: 9, weight: .semibold))
+                            .foregroundColor(.aurionTextSecondary)
+                            .accessibilityHidden(true)
+                    }
+                    // Badges wrap at accessibility sizes so the
+                    // confidence / catalog-miss / status chips flow
+                    // onto a second line instead of clipping (#271 DT).
+                    if dynamicTypeSize.isAccessibilitySize {
+                        AurionFlowLayout(spacing: 5, lineSpacing: 5) {
+                            confidenceBadge(for: item.confidence)
+                            if item.codeValidated == false {
+                                catalogMissPill
+                            }
+                            statusBadge(for: item.status)
+                        }
+                    } else {
+                        HStack(spacing: 5) {
+                            confidenceBadge(for: item.confidence)
+                            if item.codeValidated == false {
+                                catalogMissPill
+                            }
+                            statusBadge(for: item.status)
+                        }
+                    }
+                }
+            }
+            .buttonStyle(.plain)
+            if isExpanded {
+                Text(item.justification)
+                    .aurionFont(11, relativeTo: .caption2)
+                    .foregroundColor(.aurionTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.top, 2)
+                if item.codeValidated == false {
+                    Text(L("coding.notInCatalogHint"))
+                        .aurionFont(11, relativeTo: .caption2)
+                        .foregroundColor(.aurionAmber)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
     }
 
     private func toggleExpansion(id: String, defaultExpanded: Bool) {
@@ -508,7 +550,9 @@ struct CodingSuggestionsCard: View {
             .padding(.vertical, 3)
             .background(style.0.opacity(0.12))
             .clipShape(RoundedRectangle(cornerRadius: 4))
-            .frame(width: 50, alignment: .center)
+            // Size to the label, not a hard 50pt box — the fixed width
+            // clipped "ICD-10" / localized system names at larger type (#271 DT).
+            .fixedSize()
     }
 
     @ViewBuilder
