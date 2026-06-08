@@ -1019,6 +1019,26 @@ struct ProviderOverrides: Codable, Sendable, Equatable {
     }
 }
 
+/// One participant as round-tripped by `GET /sessions/{id}` (#275 / PR #348).
+///
+/// Mirrors the backend's `participants_json` item shape
+/// (`{name, role, source, is_persistent}`). `name` is null for an anonymous
+/// role chip (`source == "adhoc_role"`) and carries zero PHI. Decoded only
+/// to re-hydrate `CaptureSession.participants` on crash recovery / adopt so a
+/// relaunched session keeps its roster; never re-uploaded from here (the
+/// create path builds its own wire dicts).
+struct SessionParticipantPayload: Codable, Sendable, Equatable {
+    let name: String?
+    let role: String
+    let source: String?
+    let isPersistent: Bool?
+
+    enum CodingKeys: String, CodingKey {
+        case name, role, source
+        case isPersistent = "is_persistent"
+    }
+}
+
 struct SessionResponse: Codable, Sendable {
     let id: String
     let clinicianId: String
@@ -1038,11 +1058,18 @@ struct SessionResponse: Codable, Sendable {
     /// overrides were set at creation. Read by `SessionManager.extractEvidence`
     /// to drive Stage 2 dual-mode routing without a second backend call.
     let providerOverrides: ProviderOverrides?
+    /// Round-trippable roster set at creation (#275 / PR #348). Surfaced only
+    /// for the owning clinician's own session row; nil when none were set or
+    /// on older backend payloads. Read by `SessionManager` to re-hydrate
+    /// `CaptureSession.participants` on crash recovery / adopt so a relaunched
+    /// session keeps its shared-encounter pill. Anonymous role chips carry
+    /// `name == nil` (zero PHI).
+    let participants: [SessionParticipantPayload]?
     let createdAt: String
     let updatedAt: String
 
     enum CodingKeys: String, CodingKey {
-        case id, specialty, state
+        case id, specialty, state, participants
         case clinicianId = "clinician_id"
         case encounterType = "encounter_type"
         case captureMode = "capture_mode"
@@ -1062,6 +1089,7 @@ struct SessionResponse: Codable, Sendable {
         captureMode = try c.decodeIfPresent(String.self, forKey: .captureMode) ?? "multimodal"
         externalReferenceId = try c.decodeIfPresent(String.self, forKey: .externalReferenceId)
         providerOverrides = try c.decodeIfPresent(ProviderOverrides.self, forKey: .providerOverrides)
+        participants = try c.decodeIfPresent([SessionParticipantPayload].self, forKey: .participants)
         createdAt = try c.decode(String.self, forKey: .createdAt)
         updatedAt = try c.decode(String.self, forKey: .updatedAt)
     }
@@ -1075,6 +1103,7 @@ struct SessionResponse: Codable, Sendable {
         captureMode: String = "multimodal",
         externalReferenceId: String? = nil,
         providerOverrides: ProviderOverrides? = nil,
+        participants: [SessionParticipantPayload]? = nil,
         createdAt: String,
         updatedAt: String
     ) {
@@ -1086,6 +1115,7 @@ struct SessionResponse: Codable, Sendable {
         self.captureMode = captureMode
         self.externalReferenceId = externalReferenceId
         self.providerOverrides = providerOverrides
+        self.participants = participants
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }
@@ -1692,16 +1722,46 @@ struct AlliedHealthMember: Codable, Sendable, Equatable, Identifiable {
     /// transparently — pre-existing rows decode with `email = nil` and
     /// stay forward-compatible.
     let email: String?
+    /// Per-day roster flag (#275 / B4). `true` when the clinician has
+    /// marked this member as working today. Stored verbatim on the
+    /// backend's `list[dict]` JSON column alongside ``presentTodayDate``;
+    /// the *effective* presence (the one the day-roster picker filters on)
+    /// is recomputed server-side on every read — see ``presentTodayEffective``.
+    /// Optional so pre-existing rows decode unchanged.
+    let presentToday: Bool?
+    /// Server-local calendar date (`YYYY-MM-DD`) the ``presentToday`` flag
+    /// was last set. A stale date reads as absent (daily auto-reset). Round-
+    /// trips through the editor so a same-day toggle keeps the date current.
+    let presentTodayDate: String?
+    /// Backend-derived effective presence (`present_today == true AND
+    /// present_today_date == today`). READ-ONLY — never re-sent (the editor
+    /// emits the raw ``presentToday`` / ``presentTodayDate`` keys and the
+    /// server recomputes this). nil on older payloads → treated as absent.
+    let presentTodayEffective: Bool?
 
     enum CodingKeys: String, CodingKey {
         case name, role, email
+        case presentToday = "present_today"
+        case presentTodayDate = "present_today_date"
+        case presentTodayEffective = "present_today_effective"
     }
 
-    init(id: UUID = UUID(), name: String, role: String, email: String? = nil) {
+    init(
+        id: UUID = UUID(),
+        name: String,
+        role: String,
+        email: String? = nil,
+        presentToday: Bool? = nil,
+        presentTodayDate: String? = nil,
+        presentTodayEffective: Bool? = nil
+    ) {
         self.id = id
         self.name = name
         self.role = role
         self.email = email
+        self.presentToday = presentToday
+        self.presentTodayDate = presentTodayDate
+        self.presentTodayEffective = presentTodayEffective
     }
 
     init(from decoder: Decoder) throws {
@@ -1710,6 +1770,9 @@ struct AlliedHealthMember: Codable, Sendable, Equatable, Identifiable {
         self.name = try c.decode(String.self, forKey: .name)
         self.role = try c.decode(String.self, forKey: .role)
         self.email = try c.decodeIfPresent(String.self, forKey: .email)
+        self.presentToday = try c.decodeIfPresent(Bool.self, forKey: .presentToday)
+        self.presentTodayDate = try c.decodeIfPresent(String.self, forKey: .presentTodayDate)
+        self.presentTodayEffective = try c.decodeIfPresent(Bool.self, forKey: .presentTodayEffective)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1717,6 +1780,44 @@ struct AlliedHealthMember: Codable, Sendable, Equatable, Identifiable {
         try c.encode(name, forKey: .name)
         try c.encode(role, forKey: .role)
         try c.encodeIfPresent(email, forKey: .email)
+        // Round-trip the raw presence keys; `presentTodayEffective` is
+        // backend-derived and intentionally never written back.
+        try c.encodeIfPresent(presentToday, forKey: .presentToday)
+        try c.encodeIfPresent(presentTodayDate, forKey: .presentTodayDate)
+    }
+
+    /// Whether the day-roster picker should treat this member as present.
+    /// Prefers the backend's computed flag; falls back to a local
+    /// recompute for older payloads that predate `present_today_effective`.
+    var isWorkingToday: Bool {
+        if let presentTodayEffective { return presentTodayEffective }
+        return (presentToday == true) && (presentTodayDate == Self.todayString)
+    }
+
+    /// Device-local `YYYY-MM-DD`, matching the backend's `date.today()`
+    /// ISO shape so a freshly-toggled member reads as present on the next
+    /// profile read.
+    static var todayString: String {
+        let f = DateFormatter()
+        f.locale = Locale(identifier: "en_US_POSIX")
+        f.dateFormat = "yyyy-MM-dd"
+        return f.string(from: Date())
+    }
+
+    /// A copy with the working-today flag set/cleared. Setting it stamps
+    /// today's date so the backend's effective-presence check passes;
+    /// clearing it drops the date so a stale flag can't linger. Preserves
+    /// the local `id` so SwiftUI list identity stays stable.
+    func settingWorkingToday(_ working: Bool) -> AlliedHealthMember {
+        AlliedHealthMember(
+            id: id,
+            name: name,
+            role: role,
+            email: email,
+            presentToday: working,
+            presentTodayDate: working ? Self.todayString : nil,
+            presentTodayEffective: working
+        )
     }
 }
 

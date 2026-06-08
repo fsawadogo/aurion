@@ -383,10 +383,15 @@ final class SessionManager: ObservableObject {
                 captureMode: request.captureMode.rawValue,
                 contextId: request.contextId
             )
+            // An anonymous role chip (#275) carries no `name` key — only an
+            // `adhoc_role` source + role — so we no longer require a name to
+            // build the participant; missing name maps to a name-less chip
+            // that the capture pill renders by role label.
             let participants: [SessionParticipant] = (request.participants ?? []).compactMap { dict in
-                guard let name = dict["name"] as? String,
-                      let role = dict["role"] as? String else { return nil }
-                return SessionParticipant(name: name, role: role)
+                guard let role = dict["role"] as? String else { return nil }
+                let name = dict["name"] as? String
+                let source = dict["source"] as? String ?? "adhoc_named"
+                return SessionParticipant(name: name, role: role, source: source)
             }
             let captureSession = CaptureSession(
                 id: response.id,
@@ -1931,7 +1936,9 @@ final class SessionManager: ObservableObject {
             specialty: response.specialty,
             captureMode: mode,
             encounterType: response.encounterType,
-            participants: [],
+            // #275 — keep the roster on a resumed review so the encounter's
+            // participant context survives a relaunch into the review flow.
+            participants: participants(from: response),
             externalReferenceId: response.externalReferenceId,
             providerOverrides: response.providerOverrides
         )
@@ -2045,6 +2052,20 @@ final class SessionManager: ObservableObject {
     /// so a cold start is required — `pause`/`resume` on the source is a no-op
     /// when `isCapturing == false`. This method handles the full re-engage:
     /// permissions → start sources → backend resume → live transcriber.
+    /// Map the round-trippable participant payload on a `SessionResponse`
+    /// (#275) back to the in-memory `[SessionParticipant]` the capture pill
+    /// renders. Defaults a missing `source` to `adhoc_named` so older rows
+    /// (pre-source) still hydrate; an anonymous role chip keeps its nil name.
+    private func participants(from response: SessionResponse) -> [SessionParticipant] {
+        (response.participants ?? []).map { p in
+            SessionParticipant(
+                name: p.name,
+                role: p.role,
+                source: p.source ?? "adhoc_named"
+            )
+        }
+    }
+
     func adoptSession(_ response: SessionResponse) async {
         error = nil
         let mode = CaptureMode(rawValue: response.captureMode) ?? .multimodal
@@ -2053,7 +2074,9 @@ final class SessionManager: ObservableObject {
             specialty: response.specialty,
             captureMode: mode,
             encounterType: response.encounterType,
-            participants: [],
+            // #275 — re-hydrate the roster from the server so a recovered /
+            // adopted session keeps its shared-encounter pill across relaunch.
+            participants: participants(from: response),
             externalReferenceId: response.externalReferenceId,
             providerOverrides: response.providerOverrides
         )

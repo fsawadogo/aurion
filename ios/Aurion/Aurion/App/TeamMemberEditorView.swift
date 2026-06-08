@@ -40,6 +40,18 @@ struct TeamMemberEditorView: View {
     @State private var showAddForm = false
     @FocusState private var nameFocused: Bool
 
+    /// Edit-in-place (#275 / I3 — folds in the #300 deferred team-editor
+    /// edit item). The local `id` of the member currently open in the edit
+    /// sheet, or nil when no edit is in flight. Edits are buffered in the
+    /// `edit*` drafts and replaced at the member's buffer index on Save;
+    /// Cancel drops them. Separate from the add-form drafts so the inline
+    /// add and the edit sheet never cross-contaminate.
+    @State private var editingMemberID: UUID?
+    @State private var editName: String = ""
+    @State private var editRole: String = ""
+    @State private var editEmail: String = ""
+    @FocusState private var editNameFocused: Bool
+
     @State private var isSaving = false
     @State private var saveError: String?
 
@@ -94,6 +106,14 @@ struct TeamMemberEditorView: View {
                     }
                 }
                 .onAppear(perform: seedBuffer)
+                .sheet(
+                    isPresented: Binding(
+                        get: { editingMemberID != nil },
+                        set: { if !$0 { cancelEditing() } }
+                    )
+                ) {
+                    editMemberSheet
+                }
         }
     }
 
@@ -176,25 +196,60 @@ struct TeamMemberEditorView: View {
             // hide the bubble from VoiceOver to avoid a stray focus stop.
             AurionIconBubble(symbol: "person.fill", tint: .aurionBlue, size: 36)
                 .accessibilityHidden(true)
-            VStack(alignment: .leading, spacing: 2) {
-                Text(member.name)
-                    .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
-                    .foregroundColor(.aurionTextPrimary)
-                Text(member.role.displayFormatted)
-                    .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(.aurionTextSecondary)
-                if let email = member.email, !email.isEmpty {
-                    Text(email)
-                        .aurionFont(11, relativeTo: .caption2)
-                        .foregroundColor(.aurionMutedGray)
+            // Tapping the member opens the edit sheet (#275 / I3). Scoped to
+            // the text column (NOT the whole row) so the trailing "Working
+            // today" toggle keeps its own hit target.
+            Button {
+                beginEditing(member)
+            } label: {
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(member.name)
+                        .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                        .foregroundColor(.aurionTextPrimary)
+                    Text(member.role.displayFormatted)
+                        .aurionFont(12, relativeTo: .caption)
+                        .foregroundColor(.aurionTextSecondary)
+                    if let email = member.email, !email.isEmpty {
+                        Text(email)
+                            .aurionFont(11, relativeTo: .caption2)
+                            .foregroundColor(.aurionMutedGray)
+                    }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
             }
-            Spacer()
+            .buttonStyle(.plain)
+            // Read the name/role/email column as one element; expose edit.
+            .accessibilityElement(children: .combine)
+            .accessibilityHint(L("profile.teamEditor.editHint"))
+
+            // Per-day roster toggle (#275 / I2). Marks the member as working
+            // today; the start-sheet day-roster picker filters on the
+            // backend's effective-presence so only today's team shows.
+            Toggle("", isOn: workingTodayBinding(for: member))
+                .labelsHidden()
+                .tint(.aurionGold)
+                .accessibilityLabel(L("profile.teamEditor.workingToday"))
         }
         .padding(.vertical, 4)
-        // Read the whole row as one coherent member entry instead of three
-        // separate fragments (name, role, email).
-        .accessibilityElement(children: .combine)
+    }
+
+    /// Two-way binding for a member's "working today" flag, written straight
+    /// into the buffer so the diff→persist path picks it up on Done. Setting
+    /// it stamps today's date (so the backend's effective-presence check
+    /// passes); clearing it drops the date.
+    private func workingTodayBinding(for member: AlliedHealthMember) -> Binding<Bool> {
+        Binding(
+            get: {
+                guard let idx = buffer.firstIndex(where: { $0.id == member.id }) else { return false }
+                return buffer[idx].isWorkingToday
+            },
+            set: { newValue in
+                guard let idx = buffer.firstIndex(where: { $0.id == member.id }) else { return }
+                buffer[idx] = buffer[idx].settingWorkingToday(newValue)
+                AurionHaptics.selection()
+            }
+        )
     }
 
     /// Subtle "NN/60" counter that fades in only as a field nears the hard
@@ -294,6 +349,124 @@ struct TeamMemberEditorView: View {
             !draftRole.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
 
+    // MARK: - Edit-in-place (#275 / I3)
+
+    /// Sheet form prefilled from the tapped member; Save replaces the entry
+    /// at its buffer index (preserving its `id` + presence flags), Cancel
+    /// drops the edits. Reuses the same 60-char field caps + `charCountHint`
+    /// as the add form.
+    private var editMemberSheet: some View {
+        NavigationStack {
+            Form {
+                Section {
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L("profile.teamEditor.nameLabel"))
+                            .aurionFont(11, weight: .semibold, relativeTo: .caption2)
+                            .foregroundColor(.aurionTextSecondary)
+                        TextField(L("profile.teamEditor.namePlaceholder"), text: $editName)
+                            .focused($editNameFocused)
+                            .textContentType(.name)
+                            .autocorrectionDisabled()
+                            .onChange(of: editName) { _, new in
+                                if new.count > Self.fieldCharLimit {
+                                    editName = String(new.prefix(Self.fieldCharLimit))
+                                }
+                            }
+                        charCountHint(editName.count)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L("profile.teamEditor.roleLabel"))
+                            .aurionFont(11, weight: .semibold, relativeTo: .caption2)
+                            .foregroundColor(.aurionTextSecondary)
+                        TextField(L("profile.teamEditor.rolePlaceholder"), text: $editRole)
+                            .textContentType(.jobTitle)
+                            .autocorrectionDisabled()
+                            .onChange(of: editRole) { _, new in
+                                if new.count > Self.fieldCharLimit {
+                                    editRole = String(new.prefix(Self.fieldCharLimit))
+                                }
+                            }
+                        charCountHint(editRole.count)
+                    }
+
+                    VStack(alignment: .leading, spacing: 4) {
+                        Text(L("profile.teamEditor.emailLabel"))
+                            .aurionFont(11, weight: .semibold, relativeTo: .caption2)
+                            .foregroundColor(.aurionTextSecondary)
+                        TextField(L("profile.teamEditor.emailPlaceholder"), text: $editEmail)
+                            .textContentType(.emailAddress)
+                            .keyboardType(.emailAddress)
+                            .textInputAutocapitalization(.never)
+                            .autocorrectionDisabled()
+                    }
+                }
+            }
+            .navigationTitle(L("profile.teamEditor.editTitle"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .topBarLeading) {
+                    Button(L("profile.teamEditor.cancel")) { cancelEditing() }
+                        .foregroundColor(.aurionTextPrimary)
+                }
+                ToolbarItem(placement: .topBarTrailing) {
+                    Button(L("profile.teamEditor.save")) { commitEdit() }
+                        .foregroundColor(canEditSave ? .aurionGold : .aurionMutedGray)
+                        .fontWeight(.semibold)
+                        .disabled(!canEditSave)
+                }
+            }
+            .onAppear {
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
+                    editNameFocused = true
+                }
+            }
+        }
+        .presentationDetents([.medium, .large])
+    }
+
+    private var canEditSave: Bool {
+        !editName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty &&
+            !editRole.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+
+    private func beginEditing(_ member: AlliedHealthMember) {
+        AurionHaptics.impact(.light)
+        editName = member.name
+        editRole = member.role
+        editEmail = member.email ?? ""
+        editingMemberID = member.id
+    }
+
+    private func cancelEditing() {
+        editingMemberID = nil
+        editName = ""
+        editRole = ""
+        editEmail = ""
+    }
+
+    /// Replace the edited member at its buffer index, preserving the local
+    /// `id` (list-identity stability) and the per-day presence flags (the
+    /// edit form only touches name/role/email).
+    private func commitEdit() {
+        guard canEditSave,
+              let id = editingMemberID,
+              let idx = buffer.firstIndex(where: { $0.id == id }) else { return }
+        let existing = buffer[idx]
+        let trimmedEmail = editEmail.trimmingCharacters(in: .whitespacesAndNewlines)
+        buffer[idx] = AlliedHealthMember(
+            id: existing.id,
+            name: editName.trimmingCharacters(in: .whitespacesAndNewlines),
+            role: editRole.trimmingCharacters(in: .whitespacesAndNewlines),
+            email: trimmedEmail.isEmpty ? nil : trimmedEmail,
+            presentToday: existing.presentToday,
+            presentTodayDate: existing.presentTodayDate,
+            presentTodayEffective: existing.presentTodayEffective
+        )
+        AurionHaptics.notification(.success)
+        cancelEditing()
+    }
+
     // MARK: - State mutations
 
     private func seedBuffer() {
@@ -365,7 +538,14 @@ struct TeamMemberEditorView: View {
     static func contentEqual(_ a: [AlliedHealthMember], _ b: [AlliedHealthMember]) -> Bool {
         guard a.count == b.count else { return false }
         for (x, y) in zip(a, b) {
-            if x.name != y.name || x.role != y.role || x.email != y.email {
+            // Compare the wire-meaningful fields, now including the raw
+            // per-day presence keys (#275 / I2) so a "working today" toggle
+            // — with no name/role/email change — still trips the diff and
+            // persists. `presentTodayEffective` is backend-derived and
+            // intentionally excluded.
+            if x.name != y.name || x.role != y.role || x.email != y.email
+                || x.presentToday != y.presentToday
+                || x.presentTodayDate != y.presentTodayDate {
                 return false
             }
         }
@@ -374,7 +554,9 @@ struct TeamMemberEditorView: View {
 
     /// Serialize a member to the `[String: Any]` shape `updateProfile`
     /// expects. Strips `id` (local-only) and omits `email` when nil so
-    /// the wire payload matches pre-existing rows.
+    /// the wire payload matches pre-existing rows. Emits the two raw
+    /// presence keys (#275 / I2) when set; the backend recomputes the
+    /// effective flag on read, so `present_today_effective` is never sent.
     static func encodeMember(_ member: AlliedHealthMember) -> [String: Any] {
         var dict: [String: Any] = [
             "name": member.name,
@@ -382,6 +564,12 @@ struct TeamMemberEditorView: View {
         ]
         if let email = member.email, !email.isEmpty {
             dict["email"] = email
+        }
+        if let presentToday = member.presentToday {
+            dict["present_today"] = presentToday
+        }
+        if let date = member.presentTodayDate, !date.isEmpty {
+            dict["present_today_date"] = date
         }
         return dict
     }
