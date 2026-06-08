@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.v1.admin import router as admin_router
 from app.api.v1.auth import router as auth_router
@@ -74,6 +76,44 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+_errors_logger = logging.getLogger("aurion.api.errors")
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    """Catch-all 500 handler that keeps CORS headers on error responses.
+
+    Starlette routes a handler keyed on ``Exception`` through
+    ``ServerErrorMiddleware``, which sits OUTSIDE ``CORSMiddleware`` — so the
+    response never passes back through CORS and would otherwise ship with no
+    ``Access-Control-Allow-Origin`` header. A browser then masks the real 500
+    as a CORS failure. We re-apply the CORS headers manually here, mirroring
+    ``CORSMiddleware``'s ``allow_credentials=True`` (origin echo, never ``*``
+    alongside credentials).
+
+    The body is a fixed generic string — no exception message, no traceback —
+    so PHI can never leak into an API response. The real error (PHI-free:
+    method, path, and exception class only) is logged server-side via
+    ``logger.exception`` for CloudWatch.
+    """
+    _errors_logger.exception(
+        "Unhandled exception: method=%s path=%s error=%s",
+        request.method,
+        request.url.path,
+        type(exc).__name__,
+    )
+    response = JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error"},
+    )
+    origin = request.headers.get("origin")
+    if origin and (origin in _allowed_origins or "*" in _allowed_origins):
+        response.headers["Access-Control-Allow-Origin"] = origin
+        response.headers["Access-Control-Allow-Credentials"] = "true"
+        response.headers["Vary"] = "Origin"
+    return response
+
 
 app.include_router(health_router)
 app.include_router(auth_router, prefix="/api/v1")

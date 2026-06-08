@@ -166,7 +166,7 @@ async def get_admin_sessions(
 
 @router.get("/sessions/{session_id}", response_model=SessionDetailResponse)
 async def get_admin_session_detail(
-    session_id: str,
+    session_id: uuid.UUID,
     user: CurrentUser = Depends(
         require_role(UserRole.EVAL_TEAM, UserRole.ADMIN)
     ),
