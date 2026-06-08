@@ -1,9 +1,11 @@
 """Integration tests for GET /api/v1/config (#324 clip cadence floor).
 
-The client-config endpoint returns the AppConfig subset iOS needs. Most
-clip-family pipeline knobs are intentionally NOT emitted to iOS, but
-``clip_cadence_seconds`` MUST be — iOS owns the during-recording cadence
-timer and reads this value to drive it.
+The client-config endpoint returns the AppConfig subset iOS needs. The
+clip family (``clip_cadence_seconds``, ``visual_evidence_mode``,
+``clip_window_ms``, ``clip_trigger_kinds``) MUST all be emitted: iOS owns
+the during-recording cadence timer and gates it on BOTH a non-zero
+cadence AND a clips_only/hybrid mode, so withholding ``visual_evidence_mode``
+silently disables cadence on-device (the mode defaults to frames_only).
 
 Test isolation mirrors test_clips_endpoint: an in-process ASGI client,
 the ``APP_ENV=local`` dev-token bearer shape, and a patched ``get_config``
@@ -27,7 +29,11 @@ import pytest  # noqa: E402
 import pytest_asyncio  # noqa: E402
 from httpx import ASGITransport, AsyncClient  # noqa: E402
 
-from app.modules.config.schema import AppConfigSchema, PipelineConfig  # noqa: E402
+from app.modules.config.schema import (  # noqa: E402
+    AppConfigSchema,
+    PipelineConfig,
+    VisualEvidenceMode,
+)
 
 
 @pytest.fixture
@@ -61,6 +67,37 @@ async def test_config_includes_clip_cadence_seconds(
     pipeline = response.json()["pipeline"]
     assert "clip_cadence_seconds" in pipeline
     assert pipeline["clip_cadence_seconds"] == 30
+
+
+async def test_config_emits_clip_family_so_ios_can_activate_cadence(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    """Regression (zero-clips root cause): iOS only starts the cadence
+    driver when BOTH clip_cadence_seconds>0 AND the resolved visual-evidence
+    mode is clips_only/hybrid reach the device. The endpoint previously
+    emitted clip_cadence_seconds alone, so iOS defaulted the mode to
+    frames_only and cadence never ran. Lock that the whole clip family iOS
+    decodes is present and that a hybrid+cadence config round-trips."""
+    cfg = AppConfigSchema(
+        pipeline=PipelineConfig(
+            clip_cadence_seconds=30,
+            visual_evidence_mode=VisualEvidenceMode.HYBRID,
+            clip_window_ms=7000,
+        )
+    )
+    monkeypatch.setattr("app.api.v1.config.get_config", lambda: cfg)
+
+    response = await app_client.get("/api/v1/config", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    pipeline = response.json()["pipeline"]
+    assert pipeline["clip_cadence_seconds"] == 30
+    # The field whose absence disabled cadence on-device.
+    assert pipeline["visual_evidence_mode"] == "hybrid"
+    assert pipeline["clip_window_ms"] == 7000
+    assert isinstance(pipeline["clip_trigger_kinds"], list)
 
 
 async def test_config_clip_cadence_default_off(
