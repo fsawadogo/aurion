@@ -23,11 +23,17 @@ from app.api.v1._helpers import write_audit
 from app.core.audit_events import AuditEventType
 from app.core.clock import utcnow
 from app.core.database import get_db
-from app.core.models import NoteVersionModel, PilotMetricsModel, SessionModel
+from app.core.models import (
+    NoteVersionModel,
+    PilotMetricsModel,
+    SessionModel,
+    TranscriptModel,
+)
 from app.core.s3 import AUDIO_BUCKET, EVAL_BUCKET, FRAMES_BUCKET, get_s3_client
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.cleanup.service import _evidence_prefix
+from app.modules.session.service import _SESSION_CHILD_MODELS
 
 logger = logging.getLogger("aurion.privacy")
 
@@ -396,8 +402,17 @@ async def delete_my_account(
     """Full account deletion — Quebec Law 25 right to erasure.
 
     Deletes:
-      - All sessions (cascades to note_versions via DB)
-      - All pilot metrics for the user
+      - All sessions and every row keyed to them. The session-child
+        rows are erased via the SAME ``_SESSION_CHILD_MODELS`` enumeration
+        the per-session discard path uses (``session.service``) so the two
+        erasure paths can't drift. That set covers the full verbatim
+        ``transcripts`` text (PHI), note_versions, pilot_metrics,
+        stage2_jobs, eval_scores, and eval_assignments. (#344 — transcripts
+        were previously orphaned in Postgres because ``transcripts.session_id``
+        is a bare PK with no ON DELETE CASCADE.)
+      - All pilot metrics for the user — additionally swept by
+        ``clinician_id`` to catch metrics-but-no-sessions rows the
+        session-scoped delete can't see.
       - All remaining S3 media for the user's sessions, across every
         bucket and kind-prefix: raw audio (audio/), plus frames/, clips/,
         and screen_frames/ in BOTH the frames bucket and the no-TTL eval
@@ -413,21 +428,36 @@ async def delete_my_account(
     session_ids = [s.id for s in sessions]
     session_count = len(sessions)
 
-    # 2. Count note versions before deletion
+    # 2. Pre-count note versions + pilot metrics for the audit row +
+    #    response. Counted BEFORE any delete so the figures are the real
+    #    totals (the session-scoped sweep in step 3 removes the rows).
     notes = await _get_note_versions_for_sessions(db, session_ids)
     note_count = len(notes)
-
-    # 3. Delete note versions
-    if session_ids:
-        await db.execute(
-            delete(NoteVersionModel).where(
-                NoteVersionModel.session_id.in_(session_ids)
-            )
-        )
-
-    # 4. Count and delete pilot metrics
     metrics = await _get_metrics_for_clinician(db, user.user_id)
     metric_count = len(metrics)
+
+    # 3. Delete EVERY session-child row by session_id, reusing the
+    #    authoritative ``_SESSION_CHILD_MODELS`` list from session.service
+    #    so account-erasure and per-session discard can't drift (#344).
+    #    This is what removes the verbatim ``transcripts`` rows (full
+    #    transcript text = PHI) that were previously orphaned — the bare
+    #    ``transcripts.session_id`` PK has no FK/ON DELETE CASCADE to
+    #    ``sessions``. Covers transcripts, note_versions, pilot_metrics,
+    #    stage2_jobs, eval_scores, eval_assignments.
+    child_counts: dict[str, int] = {}
+    if session_ids:
+        for model in _SESSION_CHILD_MODELS:
+            result = await db.execute(
+                delete(model).where(model.session_id.in_(session_ids))
+            )
+            child_counts[model.__tablename__] = result.rowcount or 0
+    transcript_count = child_counts.get(TranscriptModel.__tablename__, 0)
+
+    # 4. Sweep any pilot metrics not keyed to a surviving session.
+    #    Pilot metrics carry both ``clinician_id`` and ``session_id``; the
+    #    clinician-scoped delete catches metrics-but-no-sessions rows
+    #    (e.g. a session already discarded) that the session_id sweep in
+    #    step 3 misses. Idempotent when step 3 already removed them.
     await db.execute(
         delete(PilotMetricsModel).where(
             PilotMetricsModel.clinician_id == user.user_id
@@ -462,6 +492,7 @@ async def delete_my_account(
         deleted_sessions=session_count,
         deleted_note_versions=note_count,
         deleted_pilot_metrics=metric_count,
+        deleted_transcripts=transcript_count,
         deleted_s3_objects=s3_deleted,
         retention_note="Audit logs pseudonymized, retained 7 years for compliance",
     )
@@ -469,11 +500,13 @@ async def delete_my_account(
         await write_audit(target, AuditEventType.ACCOUNT_DELETED, **audit_kwargs)
 
     logger.info(
-        "Account deleted: user=%s sessions=%d notes=%d metrics=%d s3=%d",
+        "Account deleted: user=%s sessions=%d notes=%d metrics=%d "
+        "transcripts=%d s3=%d",
         str(user.user_id),
         session_count,
         note_count,
         metric_count,
+        transcript_count,
         s3_deleted,
     )
 
@@ -482,6 +515,7 @@ async def delete_my_account(
             "sessions": session_count,
             "note_versions": note_count,
             "pilot_metrics": metric_count,
+            "transcripts": transcript_count,
             "s3_objects": s3_deleted,
         },
         retained={
