@@ -28,6 +28,12 @@ struct TotpCodeField: View {
 
     @FocusState private var focused: Bool
 
+    /// #271 DT: the cell box grows vertically with Dynamic Type so a larger
+    /// digit has room. Width stays fixed (see `cell(at:)`) so all six cells
+    /// always fit on one row on the narrowest supported device; the digit's
+    /// `minimumScaleFactor` keeps it legible within that fixed width.
+    @ScaledMetric(relativeTo: .title3) private var cellHeight: CGFloat = 54
+
     /// Cognito TOTP codes are always 6 ASCII digits. Centralizing the
     /// rule keeps the verify button enablement, the auto-submit trigger,
     /// and the input filter consistent.
@@ -96,7 +102,7 @@ struct TotpCodeField: View {
             .aurionFont(22, weight: .semibold, relativeTo: .title3)
             .lineLimit(1)
             .minimumScaleFactor(0.6)
-            .frame(width: 44, height: 54)
+            .frame(width: 44, height: cellHeight)
             .foregroundColor(digitColor)
             .background(Color.white.opacity(0.08))
             .cornerRadius(10)

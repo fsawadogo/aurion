@@ -13,6 +13,10 @@ struct DeviceHubView: View {
     /// Note so the four tabs feel like one app on iPad, not three
     /// stretched-phone views and one centred one.
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// Drives Dynamic Type adaptations (#271): the active-source summary
+    /// stacks and the permissions grid collapses to one column at
+    /// accessibility text sizes.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     var body: some View {
         NavigationStack {
@@ -61,21 +65,37 @@ struct DeviceHubView: View {
 
     // MARK: - Active summary
 
-    /// Shows the currently selected audio + video sources side by side.
+    /// Shows the currently selected audio + video sources. Side by side when
+    /// they fit; #271 DT: stacks vertically when the two-up row can't fit at
+    /// larger Dynamic Type sizes so neither card's source name is squeezed.
     private var activeSummary: some View {
-        HStack(spacing: 12) {
-            summaryCard(
-                title: L("devices.audio"),
-                source: registry.activeAudioSource,
-                placeholder: nil
-            )
-            summaryCard(
-                title: L("devices.video"),
-                source: registry.activeVideoSource,
-                // placeholder shown when no video source (audio-only)
-                placeholder: L("devices.audioOnlySession")
-            )
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: 12) {
+                audioSummaryCard
+                videoSummaryCard
+            }
+            VStack(spacing: 12) {
+                audioSummaryCard
+                videoSummaryCard
+            }
         }
+    }
+
+    private var audioSummaryCard: some View {
+        summaryCard(
+            title: L("devices.audio"),
+            source: registry.activeAudioSource,
+            placeholder: nil
+        )
+    }
+
+    private var videoSummaryCard: some View {
+        summaryCard(
+            title: L("devices.video"),
+            source: registry.activeVideoSource,
+            // placeholder shown when no video source (audio-only)
+            placeholder: L("devices.audioOnlySession")
+        )
     }
 
     private func summaryCard(title: String, source: CaptureSource?, placeholder: String?) -> some View {
@@ -94,11 +114,15 @@ struct DeviceHubView: View {
                         .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
                         .foregroundColor(.aurionTextPrimary)
                         .lineLimit(1)
+                        // #271 DT: shrink rather than truncate the source name
+                        // when text is large in the narrow two-up layout.
+                        .minimumScaleFactor(0.7)
                     if let source {
                         Text(source.status.label)
                             .aurionFont(11, relativeTo: .caption2)
                             .foregroundColor(tint)
                             .lineLimit(1)
+                            .minimumScaleFactor(0.7)
                     }
                 }
                 Spacer()
@@ -168,7 +192,12 @@ struct DeviceHubView: View {
     // MARK: - Permissions Grid
 
     private var permissionsGrid: some View {
-        LazyVGrid(columns: [GridItem(.flexible()), GridItem(.flexible())], spacing: 12) {
+        // #271 DT: collapse the 2-up grid to a single column at accessibility
+        // text sizes so each tile has the full width for its (wrapping) label.
+        let columns: [GridItem] = dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible())]
+            : [GridItem(.flexible()), GridItem(.flexible())]
+        return LazyVGrid(columns: columns, spacing: 12) {
             permissionCard(
                 icon: "camera.fill",
                 label: L("devices.permission.camera"),
@@ -213,7 +242,10 @@ struct DeviceHubView: View {
                         Text(label)
                             .aurionFont(14, weight: .medium, relativeTo: .subheadline)
                             .foregroundColor(.aurionTextPrimary)
-                            .lineLimit(1)
+                            // #271 DT: allow the permission label to wrap to a
+                            // second line instead of truncating at large text.
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     AurionStatusPill(
                         kind: granted ? .done : .archived,
@@ -285,7 +317,10 @@ struct DeviceHubView: View {
                         Text(label)
                             .aurionFont(14, weight: .medium, relativeTo: .subheadline)
                             .foregroundColor(.aurionTextPrimary)
-                            .lineLimit(1)
+                            // #271 DT: allow the permission label to wrap to a
+                            // second line instead of truncating at large text.
+                            .lineLimit(2)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
                     AurionStatusPill(
                         kind: state.pillKind,
@@ -382,6 +417,10 @@ private struct SourceRow: View {
                         .aurionFont(12, relativeTo: .caption)
                         .foregroundColor(source.status.tint)
                         .lineLimit(2)
+                        // #271 DT: shrink slightly before truncating so the
+                        // source detail stays legible at large text sizes.
+                        .minimumScaleFactor(0.8)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()

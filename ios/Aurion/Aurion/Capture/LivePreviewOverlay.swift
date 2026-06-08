@@ -92,30 +92,25 @@ struct LivePreviewOverlay: View {
         Button {
             withAnimation(AurionAnimation.smooth) { isCollapsed.toggle() }
         } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "doc.text.below.ecg")
-                    .font(.system(size: 14))
-                    .foregroundColor(.aurionAmber)
-                Text(L("preview.title"))
-                    .aurionFont(13, weight: .semibold, relativeTo: .footnote)
-                    // Fixed-light: this overlay floats on the fixed-dark
-                    // capture screen (amber@10% bg is near-transparent), so
-                    // adaptive text is invisible in LIGHT mode (#293). Matches
-                    // CaptureView's on-navy palette.
-                    .foregroundColor(.white)
-                draftBadge
-                if let p = preview {
-                    Text(L("preview.versionMeta", p.version, relativeTime(p.createdAt)))
-                        .aurionFont(10, relativeTo: .caption2)
-                        .foregroundColor(.aurionOnNavySecondary)
+            // #271 DT: at larger Dynamic Type the title + DRAFT badge +
+            // version/time meta + chevron can't share one row. ViewThatFits
+            // keeps them inline when they fit and reflows the version meta to
+            // a second line under the title when they don't.
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 8) {
+                    headerTitleCluster
+                    versionMeta
+                    Spacer(minLength: 0)
+                    headerTrailing
                 }
-                Spacer()
-                if isGenerating {
-                    ProgressView().tint(.aurionAmber)
+                VStack(alignment: .leading, spacing: 4) {
+                    HStack(spacing: 8) {
+                        headerTitleCluster
+                        Spacer(minLength: 0)
+                        headerTrailing
+                    }
+                    versionMeta
                 }
-                Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundColor(.aurionOnNavySecondary)
             }
             .contentShape(Rectangle())
         }
@@ -125,9 +120,52 @@ struct LivePreviewOverlay: View {
                                   : L("preview.collapse")))
     }
 
+    /// Icon + "Live preview" title + DRAFT badge — the always-on-the-first-row
+    /// part of the header.
+    private var headerTitleCluster: some View {
+        HStack(spacing: 8) {
+            Image(systemName: "doc.text.below.ecg")
+                .font(.system(size: 14))
+                .foregroundColor(.aurionAmber)
+            Text(L("preview.title"))
+                .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                // Fixed-light: this overlay floats on the fixed-dark
+                // capture screen (amber@10% bg is near-transparent), so
+                // adaptive text is invisible in LIGHT mode (#293). Matches
+                // CaptureView's on-navy palette.
+                .foregroundColor(.white)
+                .lineLimit(1)
+            draftBadge
+        }
+    }
+
+    /// Spinner (when generating) + collapse/expand chevron.
+    private var headerTrailing: some View {
+        HStack(spacing: 8) {
+            if isGenerating {
+                ProgressView().tint(.aurionAmber)
+            }
+            Image(systemName: isCollapsed ? "chevron.down" : "chevron.up")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundColor(.aurionOnNavySecondary)
+        }
+    }
+
+    @ViewBuilder
+    private var versionMeta: some View {
+        if let p = preview {
+            Text(L("preview.versionMeta", p.version, relativeTime(p.createdAt)))
+                .aurionFont(10, relativeTo: .caption2)
+                .foregroundColor(.aurionOnNavySecondary)
+                .lineLimit(1)
+        }
+    }
+
     private var draftBadge: some View {
         Text(L("preview.draftBadge"))
-            .font(.system(size: 9, weight: .bold))
+            // #271 DT: scale the micro badge with Dynamic Type instead of a
+            // fixed 9pt.
+            .aurionFont(9, weight: .bold, relativeTo: .caption2)
             .tracking(0.8)
             .foregroundColor(.white)
             .padding(.horizontal, 5)

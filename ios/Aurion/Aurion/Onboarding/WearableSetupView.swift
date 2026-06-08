@@ -14,77 +14,97 @@ struct WearableSetupView: View {
     @State private var didFireSuccessHaptic = false
 
     var body: some View {
-        VStack(spacing: 24) {
-            Spacer(minLength: 12)
+        // #271 DT: two-zone layout (mirrors VoiceRecordingView #268/#271) so
+        // the only ways past this gate — Skip / Scan, or Continue once paired
+        // — are ALWAYS reachable. The hero + copy + device list scroll; the
+        // actionable buttons ride in a .safeAreaInset(.bottom) footer that
+        // stays pinned at every Dynamic Type size.
+        ScrollView {
+            VStack(spacing: 24) {
+                heroIcon
+                    .aurionStagger(order: 0, baseDelay: 0.05)
 
-            heroIcon
-                .aurionStagger(order: 0, baseDelay: 0.05)
+                Text(L("onboarding.wearable.title"))
+                    .font(.title)
+                    .fontWeight(.bold)
+                    .foregroundColor(.aurionTextPrimary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .aurionStagger(order: 1)
 
-            Text(L("onboarding.wearable.title"))
-                .font(.title)
-                .fontWeight(.bold)
-                .foregroundColor(.aurionTextPrimary)
-                .aurionStagger(order: 1)
+                Text(L("onboarding.wearable.sub"))
+                    .font(.body)
+                    .foregroundColor(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .padding(.horizontal, 40)
+                    .aurionStagger(order: 2)
 
-            Text(L("onboarding.wearable.sub"))
-                .font(.body)
-                .foregroundColor(.secondary)
-                .multilineTextAlignment(.center)
-                .padding(.horizontal, 40)
-                .aurionStagger(order: 2)
-
-            // Discovered devices appear here. Empty until Scan tapped.
-            if !ble.isPaired {
-                discoveredList
-                    .aurionStagger(order: 3)
-            }
-
-            VStack(spacing: 12) {
+                // Discovered devices appear here. Empty until Scan tapped.
                 if !ble.isPaired {
-                    AurionGoldButton(
-                        label: scanButtonLabel,
-                        full: true,
-                        disabled: ble.isScanning || ble.connectionState == .connecting
-                    ) {
-                        ble.startScanning()
-                    }
+                    discoveredList
+                        .aurionStagger(order: 3)
+                }
+
+                if ble.isPaired {
+                    pairedCard
+                        .transition(.move(edge: .bottom).combined(with: .opacity))
+                        .onAppear { handlePairedAppearance() }
+                }
+
+                if let err = ble.error, !ble.isPaired {
+                    Text(err)
+                        .font(.caption)
+                        .foregroundColor(.aurionRed)
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .padding(.horizontal, 40)
+                        .transition(.opacity)
+                }
+            }
+            .frame(maxWidth: .infinity)
+            .padding(20)
+            .padding(.top, 12)
+        }
+        .scrollBounceBehavior(.basedOnSize)
+        .safeAreaInset(edge: .bottom) {
+            wearableFooter
+        }
+        .animation(.aurionIOS, value: ble.isPaired)
+        .animation(.aurionIOS, value: ble.discoveredDevices)
+        .animation(.aurionIOS, value: ble.isScanning)
+    }
+
+    // MARK: - Footer (always-reachable actions)
+
+    @ViewBuilder
+    private var wearableFooter: some View {
+        VStack(spacing: 12) {
+            if ble.isPaired {
+                // Explicit Continue instead of a timed auto-advance: gives the
+                // clinician a beat to confirm the device name shown in
+                // pairedCard (and to re-scan if the wrong nearby device was
+                // tapped) before leaving the screen.
+                AurionGoldButton(label: L("setup.continue"), full: true) {
+                    onComplete()
+                }
+            } else {
+                AurionGoldButton(
+                    label: scanButtonLabel,
+                    full: true,
+                    disabled: ble.isScanning || ble.connectionState == .connecting
+                ) {
+                    ble.startScanning()
                 }
                 AurionGhostButton(label: L("onboarding.wearable.skip"), full: true) {
                     onComplete()
                 }
             }
-            .aurionStagger(order: 4)
-
-            if ble.isPaired {
-                VStack(spacing: 12) {
-                    pairedCard
-                    // Explicit Continue instead of a timed auto-advance:
-                    // gives the clinician a beat to confirm the device name
-                    // shown in pairedCard (and to re-scan if the wrong
-                    // nearby device was tapped) before leaving the screen.
-                    AurionGoldButton(label: L("setup.continue"), full: true) {
-                        onComplete()
-                    }
-                }
-                .transition(.move(edge: .bottom).combined(with: .opacity))
-                .onAppear { handlePairedAppearance() }
-            }
-
-            if let err = ble.error, !ble.isPaired {
-                Text(err)
-                    .font(.caption)
-                    .foregroundColor(.aurionRed)
-                    .multilineTextAlignment(.center)
-                    .padding(.horizontal, 40)
-                    .transition(.opacity)
-            }
-
-            Spacer(minLength: 12)
         }
-        .padding(20)
-        .animation(.aurionIOS, value: ble.isPaired)
-        .animation(.aurionIOS, value: ble.discoveredDevices)
-        .animation(.aurionIOS, value: ble.isScanning)
+        .frame(maxWidth: .infinity)
+        .padding(.horizontal, 20)
+        .padding(.top, 12)
+        .padding(.bottom, 8)
     }
 
     // MARK: - Hero icon
@@ -147,7 +167,10 @@ struct WearableSetupView: View {
                     Text(device.name)
                         .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                         .foregroundColor(.aurionTextPrimary)
-                        .lineLimit(1)
+                        // #271 DT: allow a second line + slight shrink so a
+                        // long peripheral name isn't truncated at large text.
+                        .lineLimit(2)
+                        .minimumScaleFactor(0.7)
                     Text(rssiLabel(device.rssi))
                         .aurionFont(11, relativeTo: .caption2)
                         .foregroundColor(.aurionTextSecondary)

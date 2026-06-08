@@ -63,17 +63,30 @@ struct MfaSetupView: View {
 
             VStack(spacing: 0) {
                 topBar
-                Spacer(minLength: 12)
-                cardContent
-                    .padding(24)
-                    .background(Color.white.opacity(0.06))
-                    .cornerRadius(18)
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 18)
-                            .stroke(Color.white.opacity(0.10), lineWidth: 1)
-                    )
-                    .padding(.horizontal, 24)
-                Spacer()
+                // #271 DT: scroll the card so the 200pt QR + "Complete setup"
+                // button stay reachable at large Dynamic Type sizes — this
+                // gate blocks MFA enrolment, so the button must never clip.
+                // The min-height frame keeps the card vertically centered when
+                // it fits and lets it scroll when it doesn't.
+                GeometryReader { proxy in
+                    ScrollView {
+                        VStack(spacing: 0) {
+                            Spacer(minLength: 12)
+                            cardContent
+                                .padding(24)
+                                .background(Color.white.opacity(0.06))
+                                .cornerRadius(18)
+                                .overlay(
+                                    RoundedRectangle(cornerRadius: 18)
+                                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                                )
+                                .padding(.horizontal, 24)
+                            Spacer(minLength: 12)
+                        }
+                        .frame(minHeight: proxy.size.height)
+                    }
+                    .scrollBounceBehavior(.basedOnSize)
+                }
             }
         }
         .task {

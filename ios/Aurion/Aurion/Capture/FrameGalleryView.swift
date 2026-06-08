@@ -13,6 +13,10 @@ import SwiftUI
 struct FrameGalleryView: View {
     @ObservedObject var source: BuiltInCaptureSource
     @Environment(\.dismiss) private var dismiss
+    /// #271 DT: at accessibility text sizes the frame-count moves out of the
+    /// toolbar (where it would crowd / clip the inline title) into the scroll
+    /// content as a header.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var selectedFrame: CapturedFrame?
 
     // 3-column grid is the right density on iPhone — bigger than a
@@ -33,6 +37,19 @@ struct FrameGalleryView: View {
                     emptyState
                 } else {
                     ScrollView {
+                        // #271 DT: at accessibility sizes the count rides here
+                        // instead of in the toolbar so it neither clips nor
+                        // crowds the inline navigation title.
+                        if dynamicTypeSize.isAccessibilitySize {
+                            Text(frameCountLabel)
+                                .aurionFont(13, weight: .medium, relativeTo: .footnote)
+                                .foregroundColor(.aurionTextSecondary)
+                                .contentTransition(.numericText())
+                                .animation(AurionAnimation.smooth, value: source.capturedFrames.count)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(.horizontal, 16)
+                                .padding(.top, 12)
+                        }
                         LazyVGrid(columns: columns, spacing: 8) {
                             ForEach(source.capturedFrames.reversed()) { frame in
                                 Button {
@@ -65,11 +82,15 @@ struct FrameGalleryView: View {
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
-                    Text(frameCountLabel)
-                        .aurionFont(13, weight: .medium, relativeTo: .footnote)
-                        .foregroundColor(.aurionTextSecondary)
-                        .contentTransition(.numericText())
-                        .animation(AurionAnimation.smooth, value: source.capturedFrames.count)
+                    // #271 DT: hidden here at accessibility sizes — it renders
+                    // as an in-content header instead (see ScrollView above).
+                    if !dynamicTypeSize.isAccessibilitySize {
+                        Text(frameCountLabel)
+                            .aurionFont(13, weight: .medium, relativeTo: .footnote)
+                            .foregroundColor(.aurionTextSecondary)
+                            .contentTransition(.numericText())
+                            .animation(AurionAnimation.smooth, value: source.capturedFrames.count)
+                    }
                 }
                 ToolbarItem(placement: .topBarTrailing) {
                     Button(L("common.done")) {
