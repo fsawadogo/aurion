@@ -153,7 +153,7 @@ async def get_eval_sessions(
 
 @router.get("/eval/sessions/{session_id}", response_model=EvalSessionDetailResponse)
 async def get_eval_session_detail(
-    session_id: str,
+    session_id: uuid.UUID,
     user: CurrentUser = Depends(
         require_role(UserRole.EVAL_TEAM, UserRole.ADMIN)
     ),
@@ -166,10 +166,9 @@ async def get_eval_session_detail(
     the frontend list page can keep using the smaller list response,
     only the detail route needs this fatter payload.
     """
-    try:
-        sid_uuid = uuid.UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
+    # FastAPI validates the uuid.UUID path param → a malformed id returns a
+    # CORS-bearing 422 before we get here (matches sessions/media/users).
+    sid_uuid = session_id
 
     s = await get_session_or_404(db, sid_uuid)
     sid = str(s.id)
@@ -266,7 +265,7 @@ async def get_eval_session_detail(
 
 @router.post("/eval/sessions/{session_id}/score", response_model=EvalSessionResponse)
 async def submit_eval_score(
-    session_id: str,
+    session_id: uuid.UUID,
     body: EvalScoreRequest,
     user: CurrentUser = Depends(
         require_role(UserRole.EVAL_TEAM, UserRole.ADMIN)
@@ -274,10 +273,9 @@ async def submit_eval_score(
     db: AsyncSession = Depends(get_db),
 ):
     """Submit (or re-submit) quality scores for a session. EVAL_TEAM or ADMIN."""
-    try:
-        sid_uuid = uuid.UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
+    # FastAPI validates the uuid.UUID path param → a malformed id returns a
+    # CORS-bearing 422 before we get here (matches sessions/media/users).
+    sid_uuid = session_id
 
     session = await get_session_or_404(db, sid_uuid)
 
@@ -350,7 +348,7 @@ async def submit_eval_score(
     response_model=EvalSessionResponse,
 )
 async def assign_eval_session(
-    session_id: str,
+    session_id: uuid.UUID,
     body: EvalAssignmentRequest,
     user: CurrentUser = Depends(require_role(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
@@ -362,10 +360,9 @@ async def assign_eval_session(
     session in their queue immediately; the previous assignee no longer
     does.
     """
-    try:
-        sid_uuid = uuid.UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
+    # FastAPI validates the uuid.UUID path param → a malformed id returns a
+    # CORS-bearing 422 before we get here (matches sessions/media/users).
+    sid_uuid = session_id
 
     session = await get_session_or_404(db, sid_uuid)
 
@@ -424,15 +421,14 @@ async def assign_eval_session(
     response_model=EvalSessionResponse,
 )
 async def unassign_eval_session(
-    session_id: str,
+    session_id: uuid.UUID,
     user: CurrentUser = Depends(require_role(UserRole.ADMIN)),
     db: AsyncSession = Depends(get_db),
 ):
     """ADMIN-only: remove any assignment for this session."""
-    try:
-        sid_uuid = uuid.UUID(session_id)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid session ID format")
+    # FastAPI validates the uuid.UUID path param → a malformed id returns a
+    # CORS-bearing 422 before we get here (matches sessions/media/users).
+    sid_uuid = session_id
 
     session = await get_session_or_404(db, sid_uuid)
     prior = await eval_repo.get_assignment(db, sid_uuid)
