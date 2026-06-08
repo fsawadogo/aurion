@@ -32,13 +32,20 @@ class PipelineResponse(BaseModel):
     frame_window_procedural_ms: int
     screen_capture_fps: int
     video_capture_fps: int
-    # ── Clip cadence floor (#324) ──────────────────────────────────────
-    # Interval (seconds) at which iOS extracts ≥1 clip during recording
-    # regardless of spoken triggers. 0 = off (back-compat). The clip-family
-    # pipeline knobs are otherwise NOT emitted to iOS, but this one MUST be:
-    # iOS owns the during-recording cadence timer and reads this value to
-    # drive it. dev=30, pilot default=0.
+    # ── Clip family (#324) ─────────────────────────────────────────────
+    # iOS owns the during-recording cadence timer AND gates it on the
+    # resolved visual-evidence mode, so BOTH must reach the device: the
+    # cadence driver only starts when `clip_cadence_seconds > 0` AND the
+    # mode is clips_only/hybrid (see iOS SessionManager.clipCadenceActive).
+    # Emitting `clip_cadence_seconds` alone — with `visual_evidence_mode`
+    # withheld — left iOS defaulting the mode to `frames_only`, so cadence
+    # never activated and every session produced zero clips. We therefore
+    # emit the whole clip family the iOS client decodes. dev: mode=hybrid,
+    # cadence=30; pilot default: mode=frames_only, cadence=0.
     clip_cadence_seconds: int
+    visual_evidence_mode: str
+    clip_window_ms: int
+    clip_trigger_kinds: list[str]
 
 
 class FeatureFlagsResponse(BaseModel):
@@ -88,6 +95,9 @@ async def get_client_config(_: CurrentUser = Depends(get_current_user)):
             screen_capture_fps=cfg.pipeline.screen_capture_fps,
             video_capture_fps=cfg.pipeline.video_capture_fps,
             clip_cadence_seconds=cfg.pipeline.clip_cadence_seconds,
+            visual_evidence_mode=cfg.pipeline.visual_evidence_mode.value,
+            clip_window_ms=cfg.pipeline.clip_window_ms,
+            clip_trigger_kinds=cfg.pipeline.clip_trigger_kinds,
         ),
         feature_flags=FeatureFlagsResponse(
             screen_capture_enabled=cfg.feature_flags.screen_capture_enabled,
