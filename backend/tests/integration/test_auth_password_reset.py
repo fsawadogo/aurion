@@ -78,6 +78,70 @@ async def test_forgot_password_for_existing_user_issues_token_and_logs_link(
     assert len(rows) == 1
 
 
+async def test_forgot_password_returns_204_when_email_send_raises(
+    app_client, db_session, mock_audit_log, monkeypatch, caplog
+) -> None:
+    """SES delivery failure (e.g. sandbox blocking an unverified
+    recipient) must NOT surface as a 500 — that would both break the
+    "always 204" contract and leak account existence (a real-but-
+    undeliverable address would 500 while an unknown one 204s). The
+    token is already persisted, so the endpoint stays 204 and still
+    writes the audit row. See issue #349."""
+    from botocore.exceptions import ClientError
+
+    import app.api.v1.auth as auth_module
+
+    caplog.set_level(logging.ERROR, logger="aurion.auth")
+    user_id, email = await seed_user(db_session)
+
+    async def _boom(*, user, raw_token):  # noqa: ANN001, ANN202
+        raise ClientError(
+            {"Error": {"Code": "MessageRejected", "Message": "redacted"}},
+            "SendEmail",
+        )
+
+    monkeypatch.setattr(auth_module, "send_password_reset_email", _boom)
+
+    response = await app_client.post(
+        "/api/v1/auth/forgot-password", json={"email": email}
+    )
+    assert response.status_code == 204
+
+    # The failure log carries only the exception class — never the
+    # email, link, or token.
+    failure_logs = [
+        r.getMessage()
+        for r in caplog.records
+        if "password reset email send failed" in r.getMessage()
+    ]
+    assert failure_logs, "expected the send-failure to be logged"
+    for msg in failure_logs:
+        assert email not in msg
+        assert "token=" not in msg
+        assert "ClientError" in msg
+
+    # The reset token is still issued despite the email failure.
+    from sqlalchemy import select
+
+    from app.core.models import PasswordResetTokenModel
+
+    rows = (
+        await db_session.execute(
+            select(PasswordResetTokenModel).where(
+                PasswordResetTokenModel.user_id == user_id
+            )
+        )
+    ).scalars().all()
+    assert len(rows) == 1
+
+    # The audit row is still written.
+    types = [
+        c.kwargs["event_type"]
+        for c in mock_audit_log.write_event.call_args_list
+    ]
+    assert AuditEventType.PASSWORD_RESET_REQUESTED in types
+
+
 async def test_forgot_password_for_unknown_email_returns_204_no_audit(
     app_client, db_session, mock_audit_log, caplog
 ) -> None:

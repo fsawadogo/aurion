@@ -39,6 +39,7 @@ import string
 import uuid
 from dataclasses import dataclass
 
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -468,7 +469,22 @@ async def forgot_password(
         return None
 
     raw_token, _row = await password_reset.issue_reset_token(db, user)
-    await send_password_reset_email(user=user, raw_token=raw_token)
+    try:
+        await send_password_reset_email(user=user, raw_token=raw_token)
+    except (BotoCoreError, ClientError) as e:
+        # SES rejected the recipient (e.g. sandbox blocks unverified
+        # addresses) or another delivery error. The reset token is
+        # already persisted, so failing to email it is harmless — the
+        # endpoint MUST still return 204 so a real-but-undeliverable
+        # account can't be told apart from an unknown one. Log the
+        # exception CLASS only — NEVER the email, link, or token.
+        logger.error(
+            "password reset email send failed: %s", type(e).__name__
+        )
+    except Exception as e:  # noqa: BLE001 — defensive: never leak existence
+        logger.error(
+            "password reset email send failed: %s", type(e).__name__
+        )
     await write_audit(
         _AUTH_AUDIT_SESSION,
         AuditEventType.PASSWORD_RESET_REQUESTED,

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi, beforeEach } from "vitest";
+import { describe, expect, it, vi, beforeEach, afterEach } from "vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
@@ -16,14 +16,16 @@ import { withIntl } from "./helpers/intl";
  *   * token present → form renders.
  *   * token absent → error banner, no form.
  *   * local validation (< 8 chars, mismatch) → inline error + no API.
- *   * happy path 204 → router.push('/login?reset=success').
+ *   * happy path 204 → window.location.assign('/login?reset=success').
  *   * backend 400 "Invalid or expired reset token." → surfaces detail
  *     + suggests requesting a new link.
  *   * EN + FR catalogs both expose the namespace.
  *
- * `next/navigation` mocked at the module boundary — useRouter +
- * useSearchParams are both spied so we can drive the token query +
- * observe the post-submit navigation.
+ * `next/navigation` mocked at the module boundary — useSearchParams
+ * is spied so we can drive the token query. The page navigates on
+ * success via `window.location.assign` (not the Next router) because
+ * cross-route-group navigation is finicky under static export, so we
+ * stub `window.location` to observe the post-submit bounce.
  *
  * `@/lib/api` mocked to inspect the call shape AND inject the
  * 204 / 400 / network branches without needing a real backend.
@@ -33,10 +35,8 @@ vi.mock("@/lib/api", () => ({
   resetPassword: vi.fn(),
 }));
 
-const mockPush = vi.fn();
 const mockUseSearchParams = vi.fn();
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push: mockPush, refresh: vi.fn(), replace: vi.fn() }),
   useSearchParams: () => mockUseSearchParams(),
 }));
 
@@ -44,12 +44,45 @@ import { resetPassword } from "@/lib/api";
 
 const VALID_TOKEN = "tok_test_0123456789abcdef";
 
+// The page bounces to /login via `window.location.assign` under static
+// export. jsdom's Location can't be reassigned in place and `assign` is
+// non-configurable, so swap the whole object for a stub carrying a spy.
+// Preserve the real URL fields (href/origin/…) so Next's <Image> — which
+// builds a `new URL(...)` against window.location — still resolves; then
+// restore the original afterwards.
+const originalLocation = window.location;
+const mockAssign = vi.fn();
+
 beforeEach(() => {
   vi.mocked(resetPassword).mockReset();
-  mockPush.mockReset();
+  mockAssign.mockReset();
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    writable: true,
+    value: {
+      href: originalLocation.href,
+      origin: originalLocation.origin,
+      protocol: originalLocation.protocol,
+      host: originalLocation.host,
+      hostname: originalLocation.hostname,
+      port: originalLocation.port,
+      pathname: originalLocation.pathname,
+      search: originalLocation.search,
+      hash: originalLocation.hash,
+      assign: mockAssign,
+    },
+  });
   mockUseSearchParams.mockReset();
   mockUseSearchParams.mockReturnValue({
     get: (key: string) => (key === "token" ? VALID_TOKEN : null),
+  });
+});
+
+afterEach(() => {
+  Object.defineProperty(window, "location", {
+    configurable: true,
+    writable: true,
+    value: originalLocation,
   });
 });
 
@@ -154,7 +187,7 @@ describe("ResetPasswordPage — submit + outcomes", () => {
       expect(resetPassword).toHaveBeenCalledWith(VALID_TOKEN, pw);
     });
     await waitFor(() => {
-      expect(mockPush).toHaveBeenCalledWith("/login?reset=success");
+      expect(mockAssign).toHaveBeenCalledWith("/login?reset=success");
     });
   });
 
@@ -186,7 +219,7 @@ describe("ResetPasswordPage — submit + outcomes", () => {
       screen.getByText(enMessages.Auth.resetPassword.errors.expiredHint),
     ).toBeInTheDocument();
     // Never navigated away.
-    expect(mockPush).not.toHaveBeenCalled();
+    expect(mockAssign).not.toHaveBeenCalled();
   });
 
   it("surfaces 'Invalid or expired reset token.' with the invalid hint when the message doesn't match expired/used", async () => {
