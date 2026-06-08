@@ -32,6 +32,13 @@ class PipelineResponse(BaseModel):
     frame_window_procedural_ms: int
     screen_capture_fps: int
     video_capture_fps: int
+    # ── Clip cadence floor (#324) ──────────────────────────────────────
+    # Interval (seconds) at which iOS extracts ≥1 clip during recording
+    # regardless of spoken triggers. 0 = off (back-compat). The clip-family
+    # pipeline knobs are otherwise NOT emitted to iOS, but this one MUST be:
+    # iOS owns the during-recording cadence timer and reads this value to
+    # drive it. dev=30, pilot default=0.
+    clip_cadence_seconds: int
 
 
 class FeatureFlagsResponse(BaseModel):
@@ -80,6 +87,7 @@ async def get_client_config(_: CurrentUser = Depends(get_current_user)):
             frame_window_procedural_ms=cfg.pipeline.frame_window_procedural_ms,
             screen_capture_fps=cfg.pipeline.screen_capture_fps,
             video_capture_fps=cfg.pipeline.video_capture_fps,
+            clip_cadence_seconds=cfg.pipeline.clip_cadence_seconds,
         ),
         feature_flags=FeatureFlagsResponse(
             screen_capture_enabled=cfg.feature_flags.screen_capture_enabled,

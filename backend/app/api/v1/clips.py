@@ -25,6 +25,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -86,6 +87,14 @@ async def upload_clip(
     frames_total: int = Form(..., ge=1),
     frames_with_faces: int = Form(..., ge=0),
     masking_confirmed: bool = Form(...),
+    # #324 clip cadence floor — how this clip was produced on iOS.
+    # "trigger" = extracted at a spoken-keyword trigger timestamp (today's
+    # behavior); "cadence" = extracted by the during-recording cadence
+    # timer to fill a silent gap. Defaults to "trigger" so existing iOS
+    # builds (which don't send the field) keep the prior semantics. Not
+    # PHI — a two-value provenance enum, carried into the audit + log for
+    # count-only telemetry.
+    source: Literal["trigger", "cadence"] = Form("trigger"),
     clip: UploadFile = File(...),
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -142,8 +151,15 @@ async def upload_clip(
     # the iOS side never picks the key; this also prevents two clips
     # with the same trigger_segment_id from clobbering each other when
     # the eval team replays a session.
+    #
+    # #324: embed the trigger-anchor timestamp_ms in the key prefix
+    # (zero-padded to 9 digits for lexical sort) so Stage 2 can recover
+    # each clip's real timestamp from the key alone. Before this, the key
+    # carried no timestamp, so the vision service mis-anchored every clip
+    # to trigger_segments[0]; with the prefix it anchors each clip to its
+    # nearest transcript segment. Pattern: clips/{sid}/{ts:09d}_{clip_id}.mp4.
     clip_id = uuid.uuid4().hex
-    key = f"clips/{session_id}/{clip_id}.mp4"
+    key = f"clips/{session_id}/{timestamp_ms:09d}_{clip_id}.mp4"
     try:
         s3 = get_s3_client()
         s3.put_object(
@@ -174,11 +190,13 @@ async def upload_clip(
         frames_total=masking_metadata.frames_total,
         frames_with_faces=masking_metadata.frames_with_faces,
         faces_blurred=masking_metadata.faces_blurred,
+        source=source,
     )
 
     logger.info(
-        "Clip uploaded: session=%s clip=%s bytes=%d duration_ms=%d",
+        "Clip uploaded: session=%s clip=%s bytes=%d duration_ms=%d source=%s",
         _session_log_prefix(session_id), clip_id[:8], len(body), duration_ms,
+        source,
     )
 
     return ClipUploadResponse(

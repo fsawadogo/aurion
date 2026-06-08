@@ -115,22 +115,7 @@ async def run_stage2_vision(
             detail="No Stage 1 note found — cannot run vision enrichment.",
         )
 
-    # If there are no triggers, skip the expensive S3+vision-provider work.
-    if not trigger_segments:
-        await write_audit(
-            session_id,
-            AuditEventType.STAGE2_COMPLETE,
-            frames=0, conflicts=0,
-            reason="no_visual_triggers",
-        )
-        return VisionProcessingResponse(
-            session_id=str(session_id),
-            frames_processed=0, frames_discarded=0,
-            enriches_count=0, repeats_count=0, conflicts_count=0,
-            captions=[],
-        )
-
-    # 3. Resolve evidence mode + retrieve frames and/or clips.
+    # 3. Resolve evidence mode (needed before the no-trigger short-circuit).
     #
     # P1-7 introduced per-session `visual_evidence_mode`; P1-FU-METRICS
     # threads the resolved mode here so the clip path participates in
@@ -147,6 +132,27 @@ async def run_stage2_vision(
         else VisualEvidenceMode.FRAMES_ONLY
     )
 
+    # No-trigger short-circuit (#324 — relaxed). Frames are extracted ONLY
+    # at trigger timestamps, so a FRAMES_ONLY session with zero spoken
+    # triggers has nothing to retrieve and fast-skips (existing behavior).
+    # But clips are extracted on a cadence floor independent of spoken
+    # triggers, so CLIPS_ONLY / HYBRID must PROCEED with zero triggers —
+    # a silent physical exam still produces cadence clips to caption.
+    if not trigger_segments and evidence_mode == VisualEvidenceMode.FRAMES_ONLY:
+        await write_audit(
+            session_id,
+            AuditEventType.STAGE2_COMPLETE,
+            frames=0, conflicts=0,
+            reason="no_visual_triggers",
+        )
+        return VisionProcessingResponse(
+            session_id=str(session_id),
+            frames_processed=0, frames_discarded=0,
+            enriches_count=0, repeats_count=0, conflicts_count=0,
+            captions=[],
+        )
+
+    # Retrieve frames and/or clips per the resolved mode.
     frames = (
         await retrieve_frames_for_triggers(str(session_id), trigger_segments)
         if evidence_mode != VisualEvidenceMode.CLIPS_ONLY
@@ -188,6 +194,9 @@ async def run_stage2_vision(
         clip_telemetry_sink=clip_telemetry,
         frame_system_prompt=frame_system_prompt,
         clip_system_prompt=clip_system_prompt,
+        # #324: anchor clips against the FULL transcript (incidental speech
+        # near a cadence clip), not just spoken triggers.
+        anchor_segments=transcript.segments,
     )
 
     # Drop low-confidence captions before conflict classification.

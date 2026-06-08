@@ -266,15 +266,36 @@ async def retrieve_frames_for_triggers(
     return unique
 
 
-# ── Clip Retrieval (P1-3) ─────────────────────────────────────────────────
+# ── Clip Retrieval (P1-3, #324) ───────────────────────────────────────────
 #
 # Parallels `retrieve_frames_for_triggers` for the clip path. Clips live
-# under `clips/{session_id}/{clip_id}.mp4`; the anchor timestamp is
-# encoded in the audit log (not the key), so trigger-window matching
-# happens against the audit-log timestamps for the clip rows. For the
-# pilot we keep it simple: list every clip under the session prefix and
-# treat each one as relevant; the iOS dispatcher is the gate that
-# decides which triggers produce clips.
+# under `clips/{session_id}/{timestamp_ms:09d}_{clip_id}.mp4` (#324 embeds
+# the trigger-anchor timestamp in the key prefix). We list every clip
+# under the session prefix and parse each clip's real timestamp from its
+# key, so a clip is anchored to the transcript segment nearest its OWN
+# extraction time — not blanket-anchored to the first trigger.
+
+def _parse_clip_timestamp_ms(key: str) -> Optional[int]:
+    """Parse the trigger-anchor ``timestamp_ms`` embedded in a clip key.
+
+    Key shape (clips.py upload, #324):
+    ``clips/{session_id}/{timestamp_ms:09d}_{clip_id}.mp4``. The timestamp
+    is the integer prefix before the first ``_`` in the filename stem.
+
+    Returns the parsed int, or ``None`` for legacy keys that predate the
+    timestamp prefix (``clips/{session_id}/{clip_id}.mp4`` — the clip_id
+    is a 32-char hex with no leading run of decimal digits before a ``_``,
+    so ``int(...)`` raises and we fall back). The caller substitutes a
+    default anchor in that case so old sessions stay byte-compatible.
+    """
+    filename = key.rsplit("/", 1)[-1]
+    stem = filename.split(".", 1)[0]
+    prefix = stem.split("_", 1)[0]
+    try:
+        return int(prefix)
+    except ValueError:
+        return None
+
 
 async def retrieve_clips_for_triggers(
     session_id: str,
@@ -282,10 +303,16 @@ async def retrieve_clips_for_triggers(
 ) -> list[MaskedClip]:
     """Retrieve masked clips for a session from S3.
 
-    Clips don't encode the trigger timestamp in their key (the path is
-    `clips/{session_id}/{clip_id}.mp4`), so we list every clip under
-    the session prefix and trust the iOS dispatcher's per-trigger
-    decision (a clip lives in S3 because iOS produced it for a trigger).
+    Lists every clip under the session prefix and recovers each clip's
+    real anchor ``timestamp_ms`` from its key (#324). A clip lives in S3
+    because iOS produced it — either for a spoken trigger or on the
+    cadence floor for a silent exam — so we surface them all and let the
+    captioning loop anchor each to its nearest transcript segment.
+
+    Legacy clips whose key has no embedded timestamp fall back to the
+    first trigger's ``start_ms`` (or 0 when the session has no triggers),
+    preserving the pre-#324 behavior for any clip uploaded by an older
+    iOS build.
 
     Returns one `MaskedClip` per object found. The masking metadata
     fields are populated with `0` placeholders — those are audit-only
@@ -314,23 +341,28 @@ async def retrieve_clips_for_triggers(
         )
         return clips
 
-    # Anchor each clip to the closest trigger segment. If the session
-    # has no triggers (frames-only mode), `trigger_segments` is empty
-    # and the clip skips to the default anchor inside `caption_frames`.
+    # Fallback anchor for legacy keys (no embedded timestamp). With no
+    # triggers at all (silent exam, cadence-only) this is 0; the
+    # captioning loop then anchors against the FULL transcript by the
+    # clip's parsed timestamp, so the fallback only matters for old keys.
     default_anchor_ts = (
         trigger_segments[0].start_ms if trigger_segments else 0
     )
+    fallback_trigger_id = (
+        trigger_segments[0].id if trigger_segments else "unknown"
+    )
+    clip_window_ms = get_config().pipeline.clip_window_ms
 
     for obj in response.get("Contents", []):
         key = obj["Key"]
+        parsed_ts = _parse_clip_timestamp_ms(key)
+        ts_ms = parsed_ts if parsed_ts is not None else default_anchor_ts
         clips.append(
             MaskedClip(
                 s3_key=key,
-                timestamp_ms=default_anchor_ts,
-                duration_ms=get_config().pipeline.clip_window_ms,
-                trigger_segment_id=(
-                    trigger_segments[0].id if trigger_segments else "unknown"
-                ),
+                timestamp_ms=ts_ms,
+                duration_ms=clip_window_ms,
+                trigger_segment_id=fallback_trigger_id,
                 masking_metadata=ClipMaskingMetadata(
                     frames_total=0, frames_with_faces=0, faces_blurred=0
                 ),
@@ -379,8 +411,21 @@ async def caption_visual_evidence(
     clip_telemetry_sink: Optional[list[ClipTelemetry]] = None,
     frame_system_prompt: Optional[str] = None,
     clip_system_prompt: Optional[str] = None,
+    anchor_segments: Optional[list[TranscriptSegment]] = None,
 ) -> list[FrameCaption]:
     """Caption a mixed list of frames + clips using kind-routed providers.
+
+    ``anchor_segments`` (#324) is the pool an evidence item is anchored
+    against (nearest segment by timestamp). It defaults to
+    ``trigger_segments`` so frame-only call sites are byte-identical to
+    the pre-PR behavior. Stage 2 (``run_stage2_vision``) passes the FULL
+    ``transcript.segments`` so a CADENCE clip — extracted on the silent-
+    exam floor with no spoken keyword trigger — still anchors to nearby
+    incidental speech. When the pool is empty (a truly silent transcript),
+    a clip is captioned against a synthesized empty-text anchor at its own
+    ``timestamp_ms`` (NO fabricated audio context) rather than dropped;
+    frames keep the existing drop-if-no-anchor behavior. ``trigger_segments``
+    stays the pool the caller hands to conflict reconciliation.
 
     The Stage 2 dispatch loop. Each evidence item is routed by its
     `evidence_kind` to either `provider.caption_frame` or
@@ -483,9 +528,27 @@ async def caption_visual_evidence(
         """
         kind = _evidence_kind_of(item)
         evidence_id = _evidence_id_of(item)
-        anchor = _find_anchor_segment(item.timestamp_ms, trigger_segments)
-        if not anchor:
-            return None
+        # #324: anchor against the full transcript pool (not just spoken
+        # triggers) so a cadence clip lands on nearby incidental speech.
+        # Defaults to trigger_segments for frame-only / legacy callers.
+        pool = anchor_segments if anchor_segments is not None else trigger_segments
+        anchor = _find_anchor_segment(item.timestamp_ms, pool)
+        if anchor is None:
+            if kind != "clip":
+                # Frame path unchanged — a frame with no anchor is dropped.
+                return None
+            # Cadence clip + truly silent transcript (zero segments):
+            # synthesize an empty-text anchor at the clip's own timestamp
+            # so the clip is still captioned, with NO audio context. We
+            # never fabricate speech — the empty text is the honest
+            # "silent" signal; the clip renders as a time-anchored passive
+            # visual observation.
+            anchor = TranscriptSegment(
+                id=f"clip_silent_{item.timestamp_ms}",
+                start_ms=item.timestamp_ms,
+                end_ms=item.timestamp_ms,
+                text="",
+            )
 
         provider = registry.get_vision_provider_for_kind_with_fallback(kind)
         operation_name = "caption_clip" if kind == "clip" else "caption_frame"

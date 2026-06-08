@@ -97,6 +97,22 @@ class PipelineConfig(BaseModel):
     clip_trigger_kinds: list[str] = Field(
         default_factory=lambda: ["motion", "rom", "gait", "procedural"]
     )
+    # ── Clip cadence floor (#324) ──────────────────────────────────────
+    # Interval, in seconds, at which iOS extracts at least one clip during
+    # recording REGARDLESS of spoken triggers. 0 (the default) is off —
+    # back-compatible with today's pilot, where clips are produced only at
+    # keyword-trigger timestamps. When >0, iOS extracts ≥1 clip every N
+    # seconds so a SILENT physical exam (a clinician examining without
+    # narrating) still produces time-anchored visual evidence; the backend
+    # captions those cadence clips even when the session has zero spoken
+    # triggers. Cadence extraction is skip-if-trigger-covered on iOS — a
+    # window already covered by a trigger clip does not also emit a cadence
+    # clip, so the floor only fills silent gaps. dev runs at 30s. Bounds
+    # 0..300 — 0 disables, 300s (5min) is a paranoia ceiling so a
+    # misconfiguration can't flood S3 with sub-window clips. MUST stay in
+    # lockstep with the AppConfig JSON-Schema validator
+    # (infrastructure/appconfig.tf).
+    clip_cadence_seconds: int = Field(default=0, ge=0, le=300)
     # ── Stage 1 entry guard (lane-backend/empty-transcript-guard) ─────
     # Minimum cumulative transcript character count below which Stage 1
     # is short-circuited with a STAGE1_SKIPPED_LOW_TRANSCRIPT audit
