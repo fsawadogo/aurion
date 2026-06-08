@@ -648,14 +648,34 @@ struct NoteReviewView: View {
                         expandedSectionId = isExpanded ? nil : s.id
                     }
                 } label: {
-                    Text(body)
-                        .aurionFont(15, relativeTo: .body)
-                        .foregroundColor(.aurionTextPrimary)
-                        .lineSpacing(5)
-                        .multilineTextAlignment(.leading)
-                        .frame(maxWidth: .infinity, alignment: .leading)
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text(body)
+                            .aurionFont(15, relativeTo: .body)
+                            .foregroundColor(.aurionTextPrimary)
+                            .lineSpacing(5)
+                            .multilineTextAlignment(.leading)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+
+                        // Disclosure cue — the prose paragraphs are tappable
+                        // (toggle the citation list) but gave no visual hint of
+                        // it (#300). Surface a "Sources (n)" caption + a chevron
+                        // that rotates open. Only when there are sources to show.
+                        if !sourceClaims.isEmpty {
+                            HStack(spacing: 4) {
+                                Image(systemName: "chevron.right")
+                                    .font(.system(size: 10, weight: .bold))
+                                    .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                                Text(Lplural("noteReview.sourcesCount", sourceClaims.count))
+                            }
+                            .aurionFont(11, weight: .semibold, relativeTo: .caption2)
+                            .foregroundColor(.aurionGold)
+                        }
+                    }
                 }
                 .buttonStyle(.plain)
+                .accessibilityElement(children: .combine)
+                .accessibilityHint(sourceClaims.isEmpty ? "" : L("noteReview.sourcesHint"))
+                .accessibilityAddTraits(.isButton)
 
                 if isExpanded && !sourceClaims.isEmpty {
                     sourcesPanel(sourceClaims)

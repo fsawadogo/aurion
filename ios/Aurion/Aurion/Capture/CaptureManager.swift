@@ -4,11 +4,30 @@ import UIKit
 
 // MARK: - Captured Frame Model
 
+/// Privacy-masking state of a captured frame, surfaced as a badge in
+/// `FrameGalleryView` so the physician can verify the masking contract at a
+/// glance (the view's stated purpose).
+///
+/// Live gallery frames are buffered RAW pre-upload — masking runs after
+/// record-stop via `MaskingPipeline`, there is no real-time masking — so a
+/// live thumbnail honestly reads `.pending`. We deliberately never label an
+/// unmasked frame "Masked"; the badge always reflects the true state.
+enum FrameMaskingStatus {
+    /// Not yet run through `MaskingPipeline`. Faces will be masked on-device
+    /// before the frame crosses any network/persistence boundary.
+    case pending
+    /// Confirmed masked by `MaskingPipeline` (faces blurred / PHI redacted).
+    case masked
+}
+
 /// A single captured video frame with timestamp and JPEG data.
 struct CapturedFrame: Identifiable {
     let id = UUID()
     let timestamp: TimeInterval
     let imageData: Data
+    /// Masking state for the privacy badge in `FrameGalleryView`. Defaults to
+    /// `.pending`: live frames are raw until the post-stop masking pass.
+    var maskingStatus: FrameMaskingStatus = .pending
 }
 
 // MARK: - Permission State

@@ -5,6 +5,36 @@ import SwiftUI
 struct NoteReadyView: View {
     @EnvironmentObject var sessionManager: SessionManager
 
+    /// One-line note summary built from the already-fetched Stage 1 note.
+    /// `fetchNote()` runs before `uiState` flips to `.noteReady`, so
+    /// `sessionManager.note` is populated by the time this screen shows; nil
+    /// only on the rare path where the note never loaded — we hide the line.
+    private var noteSummary: String? {
+        guard let note = sessionManager.note else { return nil }
+        let sectionCount = note.sections.count
+        guard sectionCount > 0 else { return nil }
+
+        let sectionsText = Lplural("noteReady.sectionCount", sectionCount)
+
+        // Unresolved Stage 2 conflicts use the same definition as
+        // NoteReviewView: a "conflict_"-prefixed claim the physician hasn't
+        // yet edited. These block approval, so they lead the summary.
+        let conflictCount = note.sections.reduce(0) { acc, section in
+            acc + section.claims.filter {
+                $0.id.hasPrefix("conflict_") && !$0.physicianEdited
+            }.count
+        }
+
+        let detail: String
+        if conflictCount > 0 {
+            detail = Lplural("noteReady.needsReview", conflictCount)
+        } else {
+            let pct = Int((note.completenessScore * 100).rounded())
+            detail = L("noteReady.completePct", pct)
+        }
+        return "\(sectionsText) \u{00B7} \(detail)"
+    }
+
     var body: some View {
         ZStack {
             Color.aurionBackground.ignoresSafeArea()
@@ -39,6 +69,19 @@ struct NoteReadyView: View {
                     .lineSpacing(3)
                     .frame(maxWidth: 280)
                     .padding(.top, 8)
+
+                // One-line summary of the generated note so the review-now vs
+                // save-for-later choice has context (#300). Surfaces conflicts
+                // when present (they need attention), else completeness.
+                if let summary = noteSummary {
+                    Text(summary)
+                        .aurionFont(13, weight: .medium, relativeTo: .footnote)
+                        .foregroundColor(.aurionTextSecondary)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 280)
+                        .padding(.top, 8)
+                        .accessibilityLabel(summary)
+                }
 
                 Spacer()
 

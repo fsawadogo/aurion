@@ -56,6 +56,11 @@
 "noteReady.subtitle" = "Votre note clinique a \U00E9t\U00E9 g\U00E9n\U00E9r\U00E9e et est pr\U00EAte pour r\U00E9vision.";
 "noteReady.reviewNow" = "R\U00E9viser maintenant";
 "noteReady.saveLater" = "Enregistrer pour plus tard";
+"noteReady.sectionCount.one" = "%d section";
+"noteReady.sectionCount.many" = "%d sections";
+"noteReady.needsReview.one" = "%d \U00E0 r\U00E9viser";
+"noteReady.needsReview.many" = "%d \U00E0 r\U00E9viser";
+"noteReady.completePct" = "%d%% termin\U00E9";
 
 /* ── Post-consultation ────────────────────────────────── */
 "postEncounter.title" = "Confirmer les param\U00E8tres";
@@ -413,6 +418,8 @@
 "onboarding.biometric.title" = "Consentement aux donn\U00E9es biom\U00E9triques";
 "onboarding.biometric.sub" = "Veuillez lire attentivement ce qui suit avant de continuer.";
 "onboarding.biometric.read" = "J\U2019ai lu et compris ce qui pr\U00E9c\U00E8de";
+"onboarding.biometric.scrollHint" = "Faites d\U00E9filer jusqu\U2019\U00E0 la fin pour continuer";
+"onboarding.biometric.scrollA11yHint" = "Faites d\U00E9filer le texte de consentement jusqu\U2019en bas pour activer la case de confirmation.";
 "onboarding.biometric.agree" = "J\U2019accepte \U2014 cr\U00E9er l\U2019identit\U00E9 vocale";
 "onboarding.biometric.goBack" = "Retour";
 "onboarding.biometric.consentText" = "Aurion Clinical AI demande votre consentement pour collecter et traiter un court enregistrement vocal afin de cr\U00E9er un profil vocal de locuteur.\n\n**Ce que nous collectons :** Un enregistrement vocal de 30 \U00E0 60 secondes lu \U00E0 partir de phrases cliniques.\n\n**Comment il est utilis\U00E9 :** L\U2019enregistrement est trait\U00E9 enti\U00E8rement sur cet appareil pour cr\U00E9er une empreinte vocale (une repr\U00E9sentation math\U00E9matique de votre voix). Cette empreinte sert pendant les sessions cliniques \U00E0 distinguer votre voix de celle de votre patient.\n\n**Stockage :** L\U2019empreinte vocale est stock\U00E9e exclusivement dans le trousseau s\U00E9curis\U00E9 de cet appareil. Elle n\U2019est jamais transmise \U00E0 un serveur.\n\n**Suppression de l\U2019enregistrement :** L\U2019enregistrement vocal brut est supprim\U00E9 de la m\U00E9moire de l\U2019appareil imm\U00E9diatement apr\U00E8s la g\U00E9n\U00E9ration de l\U2019empreinte vocale. Il n\U2019est jamais stock\U00E9 sur disque ni t\U00E9l\U00E9vers\U00E9.\n\n**Vos droits :** Vous pouvez supprimer votre profil vocal \U00E0 tout moment dans les r\U00E9glages. Vous pouvez aussi le r\U00E9enregistrer. Le refus n\U2019affecte pas votre capacit\U00E9 \U00E0 utiliser Aurion \U2014 le syst\U00E8me fonctionnera sans s\U00E9paration des locuteurs.\n\nCe consentement est r\U00E9gi par les lois applicables sur la protection des donn\U00E9es biom\U00E9triques, dont la Loi 25 du Qu\U00E9bec et la LPRPDE.";
@@ -590,6 +597,14 @@
 "login.mfa.setup.confirmLabel" = "Confirmez le code \U00E0 6 chiffres affich\U00E9 par l\U2019application.";
 "login.mfa.setup.completeButton" = "Terminer la configuration";
 "login.mfa.setup.codeMismatch" = "Ce code ne correspond pas. R\U00E9essayez.";
+
+/* ── MFA : r\U00E9cup\U00E9ration en cas de perte de l\U2019authentificateur (#300) ── */
+"login.mfa.recovery.cantAccess" = "Vous n\U2019avez pas acc\U00E8s \U00E0 votre code\U00A0?";
+"login.mfa.recovery.a11yHint" = "Ouvre les conseils de r\U00E9cup\U00E9ration en cas de perte de l\U2019application d\U2019authentification.";
+"login.mfa.recovery.title" = "Acc\U00E8s perdu \U00E0 votre authentificateur\U00A0?";
+"login.mfa.recovery.body" = "Votre application d\U2019authentification g\U00E9n\U00E8re les codes \U00E0 6 chiffres. Si vous avez perdu l\U2019appareil ou supprim\U00E9 l\U2019application, vous ne pouvez pas g\U00E9n\U00E9rer de nouveau code vous-m\U00EAme.\n\nPour des raisons de s\U00E9curit\U00E9, l\U2019authentification \U00E0 deux facteurs ne peut \U00EAtre r\U00E9initialis\U00E9e que par l\U2019administrateur de votre clinique. Contactez votre administrateur ou le support Aurion et nous r\U00E9tablirons l\U2019acc\U00E8s \U00E0 votre compte.";
+"login.mfa.recovery.emailButton" = "Contacter le support";
+"login.mfa.recovery.emailA11yHint" = "Ouvre un nouvel e-mail au support Aurion.";
 
 /* ── Mot de passe oubli\U00E9 (r\U00E9initialisation par e-mail) ──── */
 "login.forgotPassword.linkText" = "Mot de passe oubli\U00E9\U00A0?";
@@ -779,6 +794,9 @@
 "noteReview.optionalPlaceholder" = "Optionnel \U2014 se remplit seulement si de l\U2019imagerie a \U00E9t\U00E9 montr\U00E9e pendant la consultation.";
 "noteReview.noContent" = "Aucun contenu captur\U00E9 pour cette section.";
 "noteReview.sources" = "SOURCES";
+"noteReview.sourcesCount.one" = "%d source";
+"noteReview.sourcesCount.many" = "%d sources";
+"noteReview.sourcesHint" = "Touchez deux fois pour afficher ou masquer les sources de cette section.";
 "noteReview.editedBadge" = "MODIFI\U00C9";
 "noteReview.conflictHint" = "Conflit visuel/audio \U2014 \U00E0 r\U00E9soudre avant l\U2019approbation.";
 "noteReview.acceptVisual" = "Accepter le visuel";
@@ -972,6 +990,11 @@
 "capture.a11yShowPreview" = "Afficher l'aper\U00E7u de la cam\U00E9ra";
 "frames.a11yFrame" = "Image capt\U00E9e \U00E0 %@";
 "frames.a11yFrameHint" = "Touchez deux fois pour afficher en plein \U00E9cran";
+"frames.maskingMasked" = "Masqu\U00E9";
+"frames.maskingPending" = "En attente";
+"frames.maskingMaskedA11y" = "Visages masqu\U00E9s";
+"frames.maskingPendingA11y" = "Masquage en attente \U2014 les visages sont masqu\U00E9s sur cet appareil avant le t\U00E9l\U00E9versement";
+"frames.zoomHint" = "Pincez pour zoomer. Touchez deux fois pour r\U00E9initialiser.";
 "common.forget" = "Oublier";
 "deviceStatus.connected" = "Connect\U00E9";
 "deviceStatus.disconnected" = "D\U00E9connect\U00E9";

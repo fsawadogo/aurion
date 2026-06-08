@@ -1103,5 +1103,8 @@ struct DashboardView: View {
         } catch {
             recentSessions = []
         }
+        // Publish the awaiting-review count to the shared nav bus so the
+        // Sessions tab badge stays in step with this list (#300).
+        navigation.pendingReviewCount = pendingReviewSessions.count
     }
 }
