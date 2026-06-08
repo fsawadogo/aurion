@@ -53,6 +53,8 @@ final class RemoteConfig: ObservableObject {
     @Published private(set) var lastUpdated: Date?
     @Published private(set) var lastError: String?
 
+    private var pollTask: Task<Void, Never>?
+
     private init() {}
 
     /// Fetches the current config from /api/v1/config. Safe to call repeatedly;
@@ -68,5 +70,28 @@ final class RemoteConfig: ObservableObject {
         } catch {
             lastError = error.localizedDescription
         }
+    }
+
+    /// Begin periodic background refresh (CLAUDE.md's AppConfig polling
+    /// contract — "switching via AppConfig update, < 30s"). Without this the
+    /// app only refreshed on sign-in / cold launch, so a mid-shift AppConfig
+    /// push (e.g. flipping the clip-cadence/visual-evidence mode on) never
+    /// reached a device that stayed signed in — every session ran the stale
+    /// snapshot. Idempotent: a second call while a poll is live is a no-op.
+    /// Pair with `stopPolling()` on sign-out.
+    func startPolling(intervalSeconds: UInt64 = 30) {
+        guard pollTask == nil else { return }
+        pollTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(nanoseconds: intervalSeconds * 1_000_000_000)
+                if Task.isCancelled { break }
+                await self?.refresh()
+            }
+        }
+    }
+
+    func stopPolling() {
+        pollTask?.cancel()
+        pollTask = nil
     }
 }

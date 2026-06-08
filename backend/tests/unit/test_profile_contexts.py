@@ -2,8 +2,14 @@
 #318, B3).
 
 Locks (pure, no DB — exercises the pydantic models + helpers directly):
-  * ``VisitTypeContext`` label validation has parity with custom
-    consultation-type labels (shared ``_validate_consultation_type``).
+  * ``VisitTypeContext`` label validation shares the
+    ``_validate_consultation_type`` format gate (SSN / email / length) with
+    custom consultation-type labels, but the full-name / proper-noun
+    heuristic is OFF for contexts (#313 follow-up) so legitimate clinical
+    Title-Case phrases ("Knee Pain", "Limb Length Discrepancy") pass.
+  * ``VisitTypeContext.description`` is optional free-text prose (#313
+    follow-up): SSN / email / 500-char gates on, full-name gate off,
+    blank → None.
   * ``template_key`` membership gate (must be a built-in template).
   * ``template_ref`` is now PRESERVED (#318 / B3) and is mutually
     exclusive with ``template_key``; its ownership + existence check
@@ -70,7 +76,6 @@ def test_visitTypeContext_stripsLabelWhitespace() -> None:
 @pytest.mark.parametrize(
     "bad_label,leak_phrase",
     [
-        ("Marie Gdalevitch", "full name"),
         ("perry@clinic.lan", "email"),
         ("123-45-6789", "SSN"),
         ("123456789", "SSN"),
@@ -80,16 +85,98 @@ def test_visitTypeContext_stripsLabelWhitespace() -> None:
 def test_visitTypeContext_rejectsPHIShapedLabels(
     bad_label: str, leak_phrase: str
 ) -> None:
-    """SSN / email / full-name / over-long labels are rejected, and the
-    rejected value never echoes in the error (hide_input_in_errors)."""
+    """SSN / email / over-long labels are rejected, and the rejected value
+    never echoes in the error (hide_input_in_errors).
+
+    NOTE (Marie pilot follow-up to #313): the full-name / proper-noun
+    heuristic is INTENTIONALLY OFF for context labels — a context is a
+    reusable clinical sub-mode in the physician's own profile (not a
+    per-patient field), and legitimate clinical labels are Title-Case
+    multi-word phrases ("Knee Pain", "Limb Length Discrepancy") that the
+    heuristic would falsely reject. See
+    ``test_visitTypeContext_acceptsClinicalTitleCaseLabels``. The SSN /
+    email / length gates still fire, so an actual identifier is rejected.
+    """
     with pytest.raises(ValidationError) as exc:
         VisitTypeContext(label=bad_label)
     assert bad_label not in str(exc.value)
 
 
+@pytest.mark.parametrize(
+    "label",
+    [
+        "Limb Length Discrepancy",  # 3 Title-Case clinical words
+        "Knee Pain",                # 2 Title-Case clinical words
+        "Breast Reconstruction",
+        "ACL Repair",
+    ],
+)
+def test_visitTypeContext_acceptsClinicalTitleCaseLabels(label: str) -> None:
+    """Title-Case clinical phrases pass for context labels (#313 follow-up).
+
+    These all trip the ``_looks_like_proper_noun_pair`` heuristic that
+    still gates *consultation-type* labels, so they DIVERGE from the
+    consultation-type contract on purpose: a context label is a reusable
+    clinical descriptor, not a patient identifier. Marie's pilot feedback
+    was that the AI needs "the context as full as possible" — rejecting
+    these short clinical labels was friction with no PHI upside.
+    """
+    ctx = VisitTypeContext(label=label)
+    assert ctx.label == label
+
+
 def test_visitTypeContext_rejectsBlankLabel() -> None:
     with pytest.raises(ValidationError):
         VisitTypeContext(label="   ")
+
+
+# ── VisitTypeContext: free-text description (#313 follow-up) ───────────────
+
+
+def test_visitTypeContext_descriptionDefaultsNone() -> None:
+    """Omitted description → None (no note set)."""
+    ctx = VisitTypeContext(label="LL")
+    assert ctx.description is None
+
+
+@pytest.mark.parametrize("blank", ["", "   ", "\n\t "])
+def test_visitTypeContext_blankDescriptionCoercesNone(blank: str) -> None:
+    """A blank / whitespace-only description normalizes to None so it
+    doesn't read downstream as 'a note is set'."""
+    ctx = VisitTypeContext(label="LL", description=blank)
+    assert ctx.description is None
+
+
+def test_visitTypeContext_acceptsMultilineProseDescription() -> None:
+    """The description is prose, not a label: multiline text with
+    capitalized clinical terms passes (full-name heuristic is OFF). It is
+    stripped of surrounding whitespace."""
+    note = (
+        "  Follow-up for Limb Length Discrepancy.\n"
+        "Patient walks with a Left-sided limp; assess gait and ROM.  "
+    )
+    ctx = VisitTypeContext(label="LL fu", description=note)
+    assert ctx.description == note.strip()
+    assert "\n" in ctx.description  # newlines preserved
+
+
+@pytest.mark.parametrize(
+    "bad_desc,leak_phrase",
+    [
+        ("clinic@example.com", "email"),
+        ("123-45-6789", "SSN"),
+        ("123456789", "SSN"),
+        ("X" * 501, "500"),  # over the 500-char cap
+    ],
+)
+def test_visitTypeContext_rejectsPHIShapedDescription(
+    bad_desc: str, leak_phrase: str
+) -> None:
+    """SSN / email / over-long descriptions are rejected, and the rejected
+    value never echoes in the error (hide_input_in_errors)."""
+    with pytest.raises(ValidationError) as exc:
+        VisitTypeContext(label="LL", description=bad_desc)
+    assert bad_desc not in str(exc.value)
 
 
 # ── VisitTypeContext: template_key membership + template_ref nulling ──────

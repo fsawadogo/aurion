@@ -165,7 +165,13 @@ final class CaptureManager: NSObject, ObservableObject {
     /// in parallel with the existing per-frame JPEG extractor; the frame
     /// path is unchanged. NEVER uploaded raw — see `VideoRingBuffer`'s
     /// privacy contract.
-    let clipRingBuffer: VideoRingBuffer
+    ///
+    /// `nonisolated(unsafe)` + `private(set)`: read from the nonisolated
+    /// sample-buffer delegate (`append`) and rebuilt by `applyPipelineConfig`.
+    /// The rebuild is contractually only invoked while NOT capturing (the ring
+    /// is empty and no buffers are in flight), mirroring `videoCaptureFPS`'s
+    /// same-pattern annotation above.
+    nonisolated(unsafe) private(set) var clipRingBuffer: VideoRingBuffer
 
     // MARK: - Interruption Handling
 
@@ -188,6 +194,32 @@ final class CaptureManager: NSObject, ObservableObject {
         super.init()
         checkPermissions()
         registerInterruptionObservers()
+    }
+
+    /// Apply the live AppConfig pipeline values before capture starts.
+    ///
+    /// Sets the per-frame extraction throttle to `video_capture_fps` AND
+    /// rebuilds the clip ring so it still spans the clip window at the new
+    /// rate. Sizing matters: the old ring was a fixed `15 × 1fps = 15`
+    /// entries; at a higher fps those 15 entries cover far less wall-clock
+    /// (e.g. 15 / 4fps ≈ 3.75s) — shorter than a 7s clip window, which would
+    /// break cadence extraction. We size `maxItems` to span the window (+2s
+    /// margin) at the live rate, never below the historical 15-entry floor
+    /// so the 1 fps path is byte-identical.
+    ///
+    /// fps is clamped to a sane band [1, 8] so a misconfigured AppConfig
+    /// can't blow up ring memory. MUST be called while NOT capturing — the
+    /// ring is rebuilt empty with no sample buffers in flight (see the
+    /// `nonisolated(unsafe)` contract on `clipRingBuffer`).
+    func applyPipelineConfig(videoCaptureFPS fps: Double, clipWindowMs: Int) {
+        guard !isCapturing else { return }
+        let safeFPS = min(max(fps, 1.0), 8.0)
+        videoCaptureFPS = safeFPS
+        let windowSeconds = Double(max(clipWindowMs, 1_000)) / 1_000.0
+        let neededForWindow = Int(((windowSeconds + 2.0) * safeFPS).rounded(.up))
+        let baselineItems = Int((Self.defaultClipRingBufferSeconds * 1.0).rounded())
+        let maxItems = max(baselineItems, neededForWindow)
+        clipRingBuffer = VideoRingBuffer(maxItems: maxItems, captureFPS: safeFPS)
     }
 
     deinit {

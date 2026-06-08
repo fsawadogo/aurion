@@ -394,6 +394,9 @@
 "setup.context.cancel" = "Annuler";
 "setup.context.delete" = "Supprimer le contexte \U00AB %@ \U00BB";
 "setup.context.limit" = "Maximum 30 contextes.";
+/* GH-313 (suite) — note libre facultative par contexte, transmise \U00E0 l\U2019IA. */
+"setup.context.note.placeholder" = "Ajoutez le contexte utile \U00E0 l\U2019IA (facultatif)";
+"setup.context.note.a11y" = "Note de contexte pour %@";
 "setup.context.expand" = "Afficher les contextes pour %@";
 "setup.context.collapse" = "Masquer les contextes pour %@";
 "setup.context.template.default" = "Utiliser ma sp\U00E9cialit\U00E9 par d\U00E9faut";
@@ -722,6 +725,9 @@
 "encounter.noTeam" = "Aucun membre d\U2019\U00E9quipe configur\U00E9. Ajoutez-les dans les param\U00E8tres du profil.";
 /* #275 — affich\U00E9 quand une \U00E9quipe existe mais personne n\U2019est marqu\U00E9 pr\U00E9sent aujourd\U2019hui. */
 "encounter.noneToday" = "Aucun membre marqu\U00E9 pr\U00E9sent aujourd\U2019hui. Ajoutez-les par nom ou par r\U00F4le ci-dessous.";
+/* Marie (suite pilote) — badge sur les membres pr\U00E9sents aujourd\U2019hui. */
+"encounter.todayBadge" = "Aujourd\U2019hui";
+"encounter.todayBadge.a11y" = "Pr\U00E9sent aujourd\U2019hui";
 /* #275 — en-t\U00EAte au-dessus des puces de r\U00F4le anonymes (sans nom, aucune donn\U00E9e personnelle). */
 "encounter.anonRoles" = "Ou ajouter par r\U00F4le (sans nom)";
 "encounter.name" = "Nom";

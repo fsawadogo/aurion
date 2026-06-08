@@ -773,15 +773,17 @@ struct DashboardView: View {
         // filter on it here so combos 2 & 3 show who's actually in the clinic
         // today. When nobody is marked working today we still let the
         // clinician add ad-hoc named members and anonymous role chips below.
+        // Marie pilot follow-up: show the FULL saved roster as selectable,
+        // working-today members floated to the top (with a "Today" badge).
+        // The prior `filter(isWorkingToday)` hid the entire roster on days
+        // nobody was toggled working — a dead end with no way to pick a saved
+        // member. Partition (not `sorted`) so stored order is preserved
+        // within each group regardless of sort stability.
         let team = allTeam.filter(\.isWorkingToday)
+            + allTeam.filter { !$0.isWorkingToday }
         return VStack(alignment: .leading, spacing: 10) {
             if allTeam.isEmpty {
                 Text(L("encounter.noTeam"))
-                    .aurionFont(13, relativeTo: .footnote)
-                    .foregroundColor(.aurionTextSecondary)
-                    .padding(.horizontal, 12)
-            } else if team.isEmpty {
-                Text(L("encounter.noneToday"))
                     .aurionFont(13, relativeTo: .footnote)
                     .foregroundColor(.aurionTextSecondary)
                     .padding(.horizontal, 12)
@@ -828,6 +830,16 @@ struct DashboardView: View {
                             Text("\(member.role.displayFormatted) \u{2014} \(member.name)")
                                 .aurionFont(14, relativeTo: .subheadline)
                                 .foregroundColor(.aurionTextPrimary)
+                            if member.isWorkingToday {
+                                Text(L("encounter.todayBadge"))
+                                    .aurionFont(10, weight: .semibold, relativeTo: .caption2)
+                                    .foregroundColor(.aurionGoldDark)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 2)
+                                    .background(Color.aurionGold.opacity(0.15))
+                                    .clipShape(Capsule())
+                                    .accessibilityLabel(L("encounter.todayBadge.a11y"))
+                            }
                             Spacer()
                         }
                         .frame(minHeight: 44)
@@ -1248,7 +1260,17 @@ struct DashboardView: View {
         let encounterLabel: String
         let contextId: String?
         if hasSavedContextSelection, let ctx = selectedContext {
-            encounterLabel = ctx.label
+            // Lead with the short label (keeps the session-list display
+            // recognizable) and append the context's free-text note (#313
+            // follow-up) so the AI receives the fuller context the physician
+            // authored — Marie: "let me put the context as full as possible so
+            // it can understand." Label alone when there's no note.
+            if let note = ctx.contextDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+               !note.isEmpty {
+                encounterLabel = "\(ctx.label) \u{2014} \(note)"
+            } else {
+                encounterLabel = ctx.label
+            }
             contextId = ctx.serverID.isEmpty ? nil : ctx.serverID
         } else {
             encounterLabel = encounterContext.trimmingCharacters(in: .whitespacesAndNewlines)

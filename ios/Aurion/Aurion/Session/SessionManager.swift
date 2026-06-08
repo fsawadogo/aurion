@@ -439,6 +439,13 @@ final class SessionManager: ObservableObject {
         do {
             _ = try await api.startRecording(sessionId: session.id)
             session.startRecording()
+            // Pull the latest AppConfig right before we wire capture +
+            // cadence. The cadence driver and the ring's capture FPS are
+            // both decided from this snapshot (see startCadenceDriverIfEnabled
+            // / coldStartCapturePipeline); a device on a stale snapshot would
+            // silently run cadence OFF or at the wrong FPS. One cheap GET;
+            // failure leaves the prior values in place.
+            await RemoteConfig.shared.refresh()
             try await coldStartCapturePipeline(for: session.captureMode)
             // Lock-screen + Dynamic Island Live Activity. Fires after
             // the backend transition succeeded — no point starting an
@@ -506,6 +513,16 @@ final class SessionManager: ObservableObject {
     /// the offline branch of `validateRecoveredSession`.
     private func coldStartCapturePipeline(for mode: CaptureMode) async throws {
         registry.builtIn.includeVideo = mode.includesVideo
+        // Apply the live AppConfig capture FPS and resize the clip ring so it
+        // still spans the clip window at that rate. MUST run before any source
+        // starts (the ring is rebuilt empty, no buffers in flight). Previously
+        // `video_capture_fps` was never applied on-device — the ring ran at a
+        // hardcoded 1 fps regardless of AppConfig.
+        let pipeline = RemoteConfig.shared.pipeline
+        registry.builtIn.applyPipelineConfig(
+            videoCaptureFPS: Double(pipeline.videoCaptureFps),
+            clipWindowMs: pipeline.clipWindowMs
+        )
         for source in activeSourcesForCurrentMode {
             try source.start()
         }
@@ -862,13 +879,36 @@ final class SessionManager: ObservableObject {
     /// strict no-op.
     private func startCadenceDriverIfEnabled() {
         cadenceDriver = nil
-        guard let session else { return }
+        guard let session else {
+            print("[Cadence] not started: no active session")
+            return
+        }
         let pipeline = RemoteConfig.shared.pipeline
-        guard clipCadenceActive(for: session, pipeline: pipeline) else { return }
+        // Inlined (rather than the shared `clipCadenceActive`) so each bail
+        // names its specific reason in the device log — the prior silent
+        // no-op made "zero clips" indistinguishable from "config OFF". The
+        // gate is identical: cadence>0 AND a clips/hybrid mode AND a built-in
+        // video source feeding the ring.
+        if pipeline.clipCadenceSeconds <= 0 {
+            print("[Cadence] not started: clip_cadence_seconds=\(pipeline.clipCadenceSeconds) (AppConfig cadence OFF or stale snapshot); visual_evidence_mode=\(pipeline.visualEvidenceMode.rawValue)")
+            return
+        }
+        let mode = Self.resolveEvidenceMode(
+            sessionOverride: session.providerOverrides?.visualEvidenceMode,
+            globalDefault: pipeline.visualEvidenceMode
+        )
+        guard mode == .clipsOnly || mode == .hybrid else {
+            print("[Cadence] not started: resolved visual_evidence_mode=\(mode.rawValue) does not emit clips (need clips_only or hybrid)")
+            return
+        }
         // The ring buffer lives on the BuiltInCaptureSource's manager. No
         // built-in video source ⇒ nothing to extract from ⇒ no driver.
-        guard registry.activeVideoSource is BuiltInCaptureSource else { return }
+        guard registry.activeVideoSource is BuiltInCaptureSource else {
+            print("[Cadence] not started: no built-in video source (capture mode=\(session.captureMode.rawValue), includesVideo=\(session.captureMode.includesVideo)) — cadence clips need multimodal capture")
+            return
+        }
         let clipWindowMs = pipeline.clipWindowMs
+        print("[Cadence] STARTED: cadence=\(pipeline.clipCadenceSeconds)s window=\(clipWindowMs)ms mode=\(mode.rawValue) fps=\(pipeline.videoCaptureFps)")
         let driver = CadenceClipDriver(cadenceSeconds: pipeline.clipCadenceSeconds) { [weak self] in
             await self?.emitCadenceClip(windowMs: clipWindowMs) ?? false
         }
@@ -906,6 +946,7 @@ final class SessionManager: ObservableObject {
         // ⇒ the ring can't satisfy the window yet (warm-up before the first
         // frame, or just-cleared on a racing stop) — skip, retry next tick.
         guard let extracted = await source.extractCadenceClip(windowMs: windowMs) else {
+            print("[Cadence] clip dropped: ring not ready (extractCadenceClip returned nil) — camera warm-up or just-stopped; retry next tick")
             return false
         }
         let rawURL = extracted.url
@@ -919,6 +960,7 @@ final class SessionManager: ObservableObject {
             // Masking failed → fail-closed: nothing uploaded, no raw bytes
             // linger. The interval is still satisfied (we extracted a clip),
             // so return true rather than retrying every sub-interval.
+            print("[Cadence] clip dropped: on-device masking failed (fail-closed — nothing uploaded)")
             return true
         }
 
@@ -933,10 +975,12 @@ final class SessionManager: ObservableObject {
                 framesWithFaces: result.framesWithFaces,
                 source: "cadence"
             )
+            print("[Cadence] clip uploaded: ts=\(extracted.timestampMs)ms frames=\(result.framesTotal) withFaces=\(result.framesWithFaces)")
         } catch {
             // Network failure mid-recording is non-fatal — the clip was
             // extracted + masked; we don't retry it (no post-stop ring to
             // re-extract from). Clean up below.
+            print("[Cadence] clip upload failed (non-fatal, not retried): \(error.localizedDescription)")
         }
         try? FileManager.default.removeItem(at: maskedURL)
         return true

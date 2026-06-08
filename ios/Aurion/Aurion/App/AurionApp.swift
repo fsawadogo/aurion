@@ -91,6 +91,11 @@ struct AurionApp: App {
                     // it before sign-in would just 401.
                     if appState.isAuthenticated {
                         await remoteConfig.refresh()
+                        // Keep config fresh while signed in (30s poll) so a
+                        // mid-shift AppConfig push — e.g. enabling clip
+                        // cadence / a clips-or-hybrid visual-evidence mode —
+                        // reaches the device without a re-login. Idempotent.
+                        remoteConfig.startPolling()
                         // Eager-load the physician profile on sign-in / cold
                         // launch. Without this, `physicianProfile` stays nil
                         // until the Profile tab is opened, so the dashboard
@@ -106,6 +111,9 @@ struct AurionApp: App {
                         // session and arm reconnect-driven sync. Gated on auth
                         // because the upload needs a bearer token.
                         OfflineUploadQueue.shared.start()
+                    } else {
+                        // Signed out — stop the background config poll.
+                        remoteConfig.stopPolling()
                     }
                 }
                 // Spotlight result tap. The donation lives in SessionNoteView;
@@ -187,6 +195,13 @@ struct AurionApp: App {
             if newPhase == .active {
                 Task { @MainActor in
                     LocalDataPurger.purgeStaleArtifacts()
+                }
+                // Re-pull AppConfig on every foreground so a config change
+                // pushed while the app was backgrounded is live before the
+                // next record-start (the cadence/visual-evidence mode is
+                // read at that moment). Cheap GET; no-op fields on failure.
+                if appState.isAuthenticated {
+                    Task { @MainActor in await remoteConfig.refresh() }
                 }
             }
             // Arm/clear the biometric lock based on background-idle time.
