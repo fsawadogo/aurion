@@ -529,6 +529,10 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
             "frames_total",
             "frames_with_faces",
             "faces_blurred",
+            # #324 — clip provenance: "trigger" (spoken-keyword anchored)
+            # or "cadence" (during-recording cadence floor for silent
+            # exams). A two-value enum, never PHI; count-only telemetry.
+            "source",
         }
     ),
     # CLIP_MASKED is iOS-emitted — server never writes it via write_audit.

@@ -156,6 +156,7 @@ def _multipart_body(
     frames_with_faces: int = 210,
     content_type: str = "video/mp4",
     body_bytes: bytes = b"\x00\x00\x00\x18ftypmp42",  # MP4 signature
+    source: str | None = None,
 ) -> tuple[dict, dict]:
     """Build (data, files) for an httpx multipart POST."""
     data = {
@@ -166,6 +167,8 @@ def _multipart_body(
         "frames_with_faces": str(frames_with_faces),
         "masking_confirmed": str(masking_confirmed).lower(),
     }
+    if source is not None:
+        data["source"] = source
     files = {"clip": ("clip.mp4", body_bytes, content_type)}
     return data, files
 
@@ -405,6 +408,116 @@ async def test_clip_id_is_server_generated_and_unique(
     assert r2.status_code == 200
     assert r1.json()["clip_id"] != r2.json()["clip_id"]
     assert r1.json()["s3_key"] != r2.json()["s3_key"]
+
+
+# ── #324 clip cadence floor ───────────────────────────────────────────────
+
+
+async def test_clip_key_embeds_timestamp(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+    mock_s3: MagicMock,
+) -> None:
+    """#324: the S3 key embeds the zero-padded timestamp_ms prefix so
+    Stage 2 can recover each clip's real anchor — clips/{sid}/{ts:09d}_*.mp4."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        data, files = _multipart_body(timestamp_ms=14500)
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}",
+            headers=auth_headers,
+            data=data,
+            files=files,
+        )
+
+    assert response.status_code == 200, response.text
+    key = response.json()["s3_key"]
+    assert key.startswith(f"clips/{session_uuid}/000014500_")
+    assert key.endswith(".mp4")
+    # The persisted S3 key matches the response key.
+    assert mock_s3.put_object.call_args.kwargs["Key"] == key
+
+
+async def test_source_defaults_to_trigger_in_audit(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+    mock_s3: MagicMock,
+) -> None:
+    """#324: omitting `source` defaults to "trigger" in the CLIP_UPLOADED
+    audit (back-compat for older iOS builds)."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        data, files = _multipart_body()  # no source field
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}",
+            headers=auth_headers,
+            data=data,
+            files=files,
+        )
+
+    assert response.status_code == 200, response.text
+    assert mock_audit.write_event.call_args.kwargs["source"] == "trigger"
+
+
+async def test_source_cadence_recorded_in_audit(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+    mock_s3: MagicMock,
+) -> None:
+    """#324: source="cadence" is carried into the CLIP_UPLOADED audit."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        data, files = _multipart_body(source="cadence")
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}",
+            headers=auth_headers,
+            data=data,
+            files=files,
+        )
+
+    assert response.status_code == 200, response.text
+    assert mock_audit.write_event.call_args.kwargs["source"] == "cadence"
+
+
+async def test_invalid_source_rejected(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+    mock_s3: MagicMock,
+) -> None:
+    """#324: a source outside the {trigger, cadence} Literal → 422."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        data, files = _multipart_body(source="bogus")
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}",
+            headers=auth_headers,
+            data=data,
+            files=files,
+        )
+
+    assert response.status_code == 422, response.text
+    mock_s3.put_object.assert_not_called()
+    mock_audit.write_event.assert_not_called()
 
 
 # ── PHI scan ────────────────────────────────────────────────────────────────

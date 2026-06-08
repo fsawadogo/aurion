@@ -70,6 +70,23 @@ class TestPipelineConfig:
         with pytest.raises(ValidationError):
             PipelineConfig(media_review_retention_days=31)  # max is 30
 
+    def test_clip_cadence_seconds_default_off(self):
+        # #324 — cadence floor defaults OFF (0) for back-compat: today's
+        # pilot produces clips only at spoken-keyword triggers.
+        config = PipelineConfig()
+        assert config.clip_cadence_seconds == 0
+
+    def test_clip_cadence_seconds_bounds(self):
+        # Bounds 0..300 MUST match the AppConfig JSON-Schema validator in
+        # infrastructure/appconfig.tf. dev runs at 30.
+        assert PipelineConfig(clip_cadence_seconds=0).clip_cadence_seconds == 0
+        assert PipelineConfig(clip_cadence_seconds=30).clip_cadence_seconds == 30
+        assert PipelineConfig(clip_cadence_seconds=300).clip_cadence_seconds == 300
+        with pytest.raises(ValidationError):
+            PipelineConfig(clip_cadence_seconds=-1)  # min is 0
+        with pytest.raises(ValidationError):
+            PipelineConfig(clip_cadence_seconds=301)  # max is 300
+
 
 class TestFeatureFlagsConfig:
     def test_media_review_retention_disabled_by_default(self):

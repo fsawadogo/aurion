@@ -122,6 +122,20 @@ resource "aws_appconfig_configuration_profile" "main" {
             clip_window_ms           = { type = "integer", minimum = 1000, maximum = 30000 }
             clip_ring_buffer_seconds = { type = "integer", minimum = 5, maximum = 60 }
             clip_trigger_kinds       = { type = "array", items = { type = "string" } }
+            # Clip cadence floor (#324). Interval (seconds) at which iOS
+            # extracts >=1 clip during recording regardless of spoken
+            # triggers, so a silent physical exam still yields clip
+            # captions. 0 = off (back-compat); dev runs at 30. Bounds
+            # 0..300 MUST match the backend Pydantic Field in
+            # backend/app/modules/config/schema.py. NOT in the pipeline
+            # `required` list (precedent: longitudinal_context_max_encounters,
+            # media_review_retention_days) so an older hosted document
+            # without this key still validates under
+            # additionalProperties = false — the backend Pydantic default
+            # (0) supplies the value until the CLI hosted-version push
+            # ships the key live (hosted content is CLI-managed; terraform
+            # owns the schema validator only).
+            clip_cadence_seconds = { type = "integer", minimum = 0, maximum = 300 }
             # Longitudinal patient context (#61, full slice). Cap on
             # the number of prior encounters Stage 1 note-gen feeds to
             # the LLM as additional context. Mirrors PipelineConfig in
