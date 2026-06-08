@@ -1,5 +1,6 @@
 "use client";
 
+import { AlertTriangle } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 
@@ -104,8 +105,12 @@ export default function PortalAccountPage() {
       ) : me && profile ? (
         <div className="space-y-6">
           {error && (
-            <div className="rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">
-              {error}
+            <div
+              className="flex items-start gap-2 rounded-aurion-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              role="alert"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
 

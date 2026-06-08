@@ -10,6 +10,12 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { getSessionDetail, humanizeError} from "@/lib/api";
+import {
+  formatRelative,
+  humanSpecialty,
+  nameInitials,
+  shortSessionId,
+} from "@/lib/session-format";
 import type { NoteSectionStatus, SessionDetail } from "@/types";
 
 const stateBadgeVariant: Record<string, "success" | "warning" | "error" | "info" | "neutral"> = {
@@ -46,6 +52,17 @@ const sourceLabel: Record<string, string> = {
   screen: "Screen",
   physician_edit: "Physician edit",
 };
+
+// SCREAMING_CASE / snake_case enum → Title Case for display.
+// "PROCESSING_STAGE1" → "Processing Stage 1". The raw value is kept in
+// a `title` attribute at the call site so it stays available on hover.
+function humanizeState(raw: string): string {
+  return raw
+    .toLowerCase()
+    .replace(/_/g, " ")
+    .replace(/([a-z])(\d)/g, "$1 $2")
+    .replace(/\b\w/g, (c) => c.toUpperCase());
+}
 
 // Under static export the `params` prop carries the placeholder ID
 // from `generateStaticParams` ("_"). `useParams()` returns the same
@@ -92,7 +109,13 @@ export default function SessionDetailClient(
     <>
       <Header
         title="Session detail"
-        subtitle={data ? `${data.clinician_name} — ${data.specialty.replace(/_/g, " ")}` : undefined}
+        subtitle={
+          data
+            ? [data.clinician_name?.trim(), humanSpecialty(data.specialty)]
+                .filter(Boolean)
+                .join(" — ")
+            : undefined
+        }
         actions={
           <Link href="/sessions">
             <Button variant="secondary" size="sm">
@@ -114,17 +137,47 @@ export default function SessionDetailClient(
           <Card>
             <LoadingSkeleton lines={8} />
           </Card>
-        ) : data === null ? null : (
+        ) : data === null ? (
+          !error && (
+            <Card>
+              <div className="py-12 text-center">
+                <p className="text-sm font-medium text-gray-600">Session not found</p>
+                <p className="mt-1 text-xs text-gray-400">
+                  This session may have been purged, or the link is no longer valid.
+                </p>
+              </div>
+            </Card>
+          )
+        ) : (
           <>
             {/* Summary card */}
             <Card className="mb-6">
               <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
-                <SummaryCell label="Session ID" mono>
-                  {data.id}
+                <SummaryCell label="Clinician">
+                  {data.clinician_name?.trim() ? (
+                    <div className="flex items-center gap-2.5" title={data.clinician_name}>
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-50 text-[11px] font-semibold text-navy-700 ring-1 ring-inset ring-navy-100">
+                        {nameInitials(data.clinician_name)}
+                      </span>
+                      <span className="text-sm font-medium text-navy-800">
+                        {data.clinician_name}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-sm text-gray-400">—</span>
+                  )}
+                </SummaryCell>
+                <SummaryCell label="Session ID">
+                  <code
+                    title={data.id}
+                    className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs tracking-tight text-gray-500"
+                  >
+                    {shortSessionId(data.id)}
+                  </code>
                 </SummaryCell>
                 <SummaryCell label="State">
                   <Badge variant={stateBadgeVariant[data.state] ?? "neutral"} dot>
-                    {data.state.replace(/_/g, " ")}
+                    <span title={data.state}>{humanizeState(data.state)}</span>
                   </Badge>
                 </SummaryCell>
                 <SummaryCell label="Completeness">
@@ -163,17 +216,29 @@ export default function SessionDetailClient(
                   )}
                 </SummaryCell>
                 <SummaryCell label="Provider">
-                  <span className="text-sm">{data.provider_used || "--"}</span>
+                  {data.provider_used ? (
+                    <span className="text-sm text-gray-600">{data.provider_used}</span>
+                  ) : (
+                    <span className="text-sm text-gray-400">—</span>
+                  )}
                 </SummaryCell>
-                <SummaryCell label="Created">
-                  <span className="text-sm text-gray-500">
-                    {new Date(data.created_at).toLocaleString()}
-                  </span>
-                </SummaryCell>
-                <SummaryCell label="Updated">
-                  <span className="text-sm text-gray-500">
-                    {new Date(data.updated_at).toLocaleString()}
-                  </span>
+                <SummaryCell label="Created / Updated">
+                  <div className="space-y-0.5 text-sm text-gray-500">
+                    <span
+                      className="block"
+                      title={new Date(data.created_at).toLocaleString()}
+                    >
+                      <span className="text-gray-400">Created</span>{" "}
+                      {formatRelative(data.created_at)}
+                    </span>
+                    <span
+                      className="block"
+                      title={new Date(data.updated_at).toLocaleString()}
+                    >
+                      <span className="text-gray-400">Updated</span>{" "}
+                      {formatRelative(data.updated_at)}
+                    </span>
+                  </div>
                 </SummaryCell>
               </div>
             </Card>
@@ -183,7 +248,7 @@ export default function SessionDetailClient(
               <div className="mb-4 flex items-baseline justify-between">
                 <h2 className="text-base font-semibold text-navy-700">Sections</h2>
                 <p className="text-xs text-gray-400">
-                  Per-section coverage against the {data.specialty.replace(/_/g, " ")} template.
+                  Per-section coverage against the {humanSpecialty(data.specialty)} template.
                   Required sections that are empty are highlighted.
                 </p>
               </div>
@@ -211,10 +276,12 @@ export default function SessionDetailClient(
                           <tr key={sec.id} className={isGap ? "bg-red-50/30" : ""}>
                             <td className="whitespace-nowrap px-4 py-3">
                               <p className="text-sm font-medium text-gray-700">{sec.title}</p>
-                              <p className="text-[11px] text-gray-400">{sec.id}</p>
+                              <p className="font-mono text-[11px] text-gray-400">{sec.id}</p>
                             </td>
-                            <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                              {sec.required ? "Yes" : "Optional"}
+                            <td className="whitespace-nowrap px-4 py-3 text-sm">
+                              <span className={sec.required ? "font-medium text-gray-600" : "text-gray-400"}>
+                                {sec.required ? "Required" : "Optional"}
+                              </span>
                             </td>
                             <td className="whitespace-nowrap px-4 py-3">
                               <Badge variant={statusBadgeVariant[sec.status] ?? "neutral"} dot>
@@ -264,18 +331,16 @@ export default function SessionDetailClient(
 function SummaryCell({
   label,
   children,
-  mono,
 }: {
   label: string;
   children: React.ReactNode;
-  mono?: boolean;
 }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="mb-1 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
         {label}
       </p>
-      <div className={mono ? "font-mono text-xs text-gray-600 break-all" : ""}>{children}</div>
+      <div>{children}</div>
     </div>
   );
 }

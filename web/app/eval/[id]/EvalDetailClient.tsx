@@ -14,9 +14,15 @@ import {
   getEvalAssignees,
   getEvalSession,
   getMe,
+  humanizeError,
   submitEvalScore,
   unassignEvalSession,
 } from "@/lib/api";
+import {
+  humanSpecialty,
+  nameInitials,
+  shortSessionId,
+} from "@/lib/session-format";
 import type {
   Claim,
   CurrentUser,
@@ -44,6 +50,25 @@ const sourceLabel: Record<Claim["source_type"], string> = {
   screen: "Screen",
   physician_edit: "Physician edit",
 };
+
+// Section status → display label. Raw value is kept in a title attribute
+// on the wrapping element so the underlying enum stays inspectable.
+const statusLabel: Record<string, string> = {
+  populated: "Populated",
+  pending_video: "Pending video",
+  not_captured: "Not captured",
+  processing_failed: "Processing failed",
+};
+
+// SCREAMING_CASE role → human label for the assignee picker
+// ("EVAL_TEAM" → "Eval Team").
+function humanizeRole(role: string): string {
+  return role
+    .toLowerCase()
+    .split("_")
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
+}
 
 function fmtMs(ms: number): string {
   if (!Number.isFinite(ms)) return "—";
@@ -124,7 +149,7 @@ export default function EvalDetailClient(
       );
       setAssignmentFeedback(email ? "Assigned." : "Unassigned.");
     } catch (err) {
-      setAssignmentFeedback(err instanceof Error ? err.message : "Failed");
+      setAssignmentFeedback(humanizeError(err, "Failed"));
     } finally {
       setAssigning(false);
     }
@@ -150,7 +175,7 @@ export default function EvalDetailClient(
         }
       })
       .catch((err: unknown) => {
-        if (!cancelled) setError(err instanceof Error ? err.message : "Failed to load");
+        if (!cancelled) setError(humanizeError(err, "Failed to load"));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -196,7 +221,7 @@ export default function EvalDetailClient(
       });
       setScoreFeedback("Saved.");
     } catch (err) {
-      setScoreFeedback(err instanceof Error ? err.message : "Submit failed");
+      setScoreFeedback(humanizeError(err, "Submit failed"));
     } finally {
       setSubmitting(false);
     }
@@ -220,7 +245,7 @@ export default function EvalDetailClient(
     <>
       <Header
         title={data ? `Eval — ${data.clinician_name}` : "Eval"}
-        subtitle={data ? data.specialty.replace(/_/g, " ") : undefined}
+        subtitle={data ? humanSpecialty(data.specialty) : undefined}
         actions={
           <Link href="/eval">
             <Button variant="secondary" size="sm">
@@ -247,8 +272,30 @@ export default function EvalDetailClient(
             {/* Summary strip */}
             <Card className="mb-6">
               <div className="grid gap-4 md:grid-cols-4 lg:grid-cols-6">
+                <Cell label="Clinician">
+                  {data.clinician_name ? (
+                    <div
+                      className="flex items-center gap-2"
+                      title={data.clinician_name}
+                    >
+                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-50 text-[11px] font-semibold text-navy-700 ring-1 ring-inset ring-navy-100">
+                        {nameInitials(data.clinician_name)}
+                      </span>
+                      <span className="min-w-0 truncate text-sm font-medium text-navy-800">
+                        {data.clinician_name}
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-gray-300">—</span>
+                  )}
+                </Cell>
                 <Cell label="Session">
-                  <code className="block break-all text-xs text-gray-600">{data.session_id}</code>
+                  <code
+                    title={data.session_id}
+                    className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs tracking-tight text-gray-500"
+                  >
+                    {shortSessionId(data.session_id)}
+                  </code>
                 </Cell>
                 <Cell label="Transcript">
                   <Badge variant={data.transcript_masked ? "success" : "error"} dot>
@@ -298,7 +345,7 @@ export default function EvalDetailClient(
                         <option value="">— Unassigned —</option>
                         {assignees.map((a) => (
                           <option key={a.user_id} value={a.email}>
-                            {a.full_name || a.email} ({a.role})
+                            {a.full_name || a.email} ({humanizeRole(a.role)})
                           </option>
                         ))}
                       </select>
@@ -311,7 +358,10 @@ export default function EvalDetailClient(
                   ) : (
                     <span className="text-sm">
                       {data.assigned_to ? (
-                        <span title={data.assigned_to}>
+                        <span
+                          title={data.assigned_to}
+                          className="inline-flex items-center gap-1.5"
+                        >
                           {data.assigned_to.split("@")[0]}
                           {data.assignment_completed_at && (
                             <Badge variant="success" dot>
@@ -393,12 +443,14 @@ export default function EvalDetailClient(
                             <h3 className="text-sm font-semibold text-navy-700">
                               {sec.title || sec.id}
                             </h3>
-                            <Badge variant={statusBadge[sec.status] ?? "neutral"} dot>
-                              {sec.status.replace(/_/g, " ")}
-                            </Badge>
+                            <span title={sec.status}>
+                              <Badge variant={statusBadge[sec.status] ?? "neutral"} dot>
+                                {statusLabel[sec.status] ?? sec.status.replace(/_/g, " ")}
+                              </Badge>
+                            </span>
                           </div>
                           {sec.claims.length === 0 ? (
-                            <p className="text-xs text-gray-300">no claims</p>
+                            <p className="text-xs text-gray-400">No claims captured.</p>
                           ) : (
                             <ul className="space-y-1.5">
                               {sec.claims.map((c) => (

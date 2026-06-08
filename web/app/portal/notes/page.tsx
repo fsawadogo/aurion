@@ -10,7 +10,7 @@ import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
 import { bulkExport, listMySessions } from "@/lib/portal-api";
-import { formatRelative, humanSpecialty } from "@/lib/session-format";
+import { formatRelative, humanSpecialty, shortSessionId } from "@/lib/session-format";
 import type { Session, SessionState } from "@/types";
 
 /**
@@ -246,7 +246,7 @@ export default function PortalSessionsInboxPage() {
                     className="ml-1 h-4 w-4 rounded border-gray-300 text-gold-500 focus:ring-gold-400"
                     checked={isChecked}
                     onChange={() => toggleSelected(s.id)}
-                    aria-label={tSelection("selectAria", { id: s.id.slice(0, 8) })}
+                    aria-label={tSelection("selectAria", { id: shortSessionId(s.id) })}
                   />
                 )}
                 {!isSelectable && <span className="w-6 shrink-0" aria-hidden />}
@@ -267,14 +267,19 @@ export default function PortalSessionsInboxPage() {
                         </span>
                       )}
                     </p>
-                    <p className="text-xs text-gray-500 mt-0.5">
-                      {formatRelative(s.created_at, { withYear: true })} ·{" "}
-                      <span className="font-mono text-[10px]">
-                        {s.id.slice(0, 8)}
+                    <div className="mt-1 flex items-center gap-2">
+                      <span className="text-xs text-gray-500">
+                        {formatRelative(s.created_at, { withYear: true })}
                       </span>
-                    </p>
+                      <code
+                        className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs tracking-tight text-gray-500"
+                        title={s.id}
+                      >
+                        {shortSessionId(s.id)}
+                      </code>
+                    </div>
                   </div>
-                  <div className="hidden sm:block w-32 shrink-0">
+                  <div className="hidden sm:flex w-32 shrink-0 justify-end">
                     <StateBadge state={s.state} />
                   </div>
                   <ArrowRight className="h-4 w-4 text-gray-300 shrink-0" />

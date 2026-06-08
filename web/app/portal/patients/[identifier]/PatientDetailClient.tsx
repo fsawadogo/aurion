@@ -27,6 +27,7 @@ import {
   badgeVariantFor,
   formatRelative,
   humanSpecialty,
+  shortSessionId,
 } from "@/lib/session-format";
 import type { PatientSessionMatch } from "@/types";
 
@@ -242,16 +243,23 @@ function SessionRow({ session }: { session: PatientSessionMatch }) {
             {humanSpecialty(session.specialty)}
           </p>
           <p className="text-xs text-gray-500 mt-0.5 flex items-center gap-1.5">
-            <CalendarDays className="h-3 w-3 text-navy-300" />
-            {formatRelative(session.created_at, { withYear: true })} ·{" "}
-            <span className="font-mono text-[10px]">
-              {session.session_id.slice(0, 8)}
+            <CalendarDays className="h-3 w-3 shrink-0 text-navy-300" />
+            <span className="truncate">
+              {formatRelative(session.created_at, { withYear: true })}
             </span>
+            <code
+              className="shrink-0 rounded-md bg-gray-100 px-1.5 py-0.5 font-mono text-[10px] tracking-tight text-gray-500"
+              title={session.session_id}
+            >
+              {shortSessionId(session.session_id)}
+            </code>
           </p>
         </div>
-        <Badge variant={variant} dot>
-          {session.state.replace(/_/g, " ")}
-        </Badge>
+        <span className="shrink-0" title={session.state}>
+          <Badge variant={variant} dot>
+            {session.state.replace(/_/g, " ")}
+          </Badge>
+        </span>
         <ArrowRight className="h-4 w-4 text-gray-300 shrink-0" />
       </a>
     </li>

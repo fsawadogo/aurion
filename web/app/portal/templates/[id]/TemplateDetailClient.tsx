@@ -137,7 +137,7 @@ export default function TemplateDetailPage() {
         title={row?.display_name ?? t("fallbackTitle")}
         description={
           row
-            ? <><span className="font-mono">{row.key}</span> · {t("metadata", { version: row.version, sections: t("sectionCount", { count: row.template.sections.length }) })}</>
+            ? <><code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] tracking-tight text-gray-500">{row.key}</code> · {t("metadata", { version: row.version, sections: t("sectionCount", { count: row.template.sections.length }) })}</>
             : undefined
         }
       />
@@ -156,7 +156,7 @@ export default function TemplateDetailPage() {
       ) : row ? (
         <div className="space-y-4">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-1 rounded-lg border border-gray-200 p-1">
+            <div className="flex items-center gap-1 rounded-aurion-md border border-gray-200 p-1">
               <ModeButton
                 active={mode === "preview"}
                 onClick={() => setMode("preview")}
@@ -188,7 +188,7 @@ export default function TemplateDetailPage() {
           </div>
 
           {error && (
-            <div className="rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">
+            <div className="rounded-aurion-md bg-red-50 border border-red-200 px-4 py-3 text-aurion-callout text-red-700">
               {error}
             </div>
           )}
@@ -197,7 +197,7 @@ export default function TemplateDetailPage() {
             <TemplateDraftPreview template={row.template} />
           ) : (
             <Card>
-              <p className="text-xs text-gray-500 mb-2">{t("jsonHint")}</p>
+              <p className="text-aurion-caption text-navy-500 mb-2">{t("jsonHint")}</p>
               <textarea
                 className="form-input w-full h-[60vh] font-mono text-xs leading-snug resize-y"
                 value={draftJson}
@@ -249,10 +249,10 @@ function ModeButton({
       type="button"
       onClick={onClick}
       className={
-        "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors " +
+        "inline-flex items-center gap-1.5 rounded-aurion-xs px-3 py-1.5 text-xs font-medium transition-colors duration-short " +
         (active
           ? "bg-navy-50 text-navy-800"
-          : "text-gray-500 hover:bg-gray-50 hover:text-gray-700")
+          : "text-navy-500 hover:bg-canvas hover:text-navy-700")
       }
       aria-pressed={active}
     >

@@ -1,6 +1,6 @@
 "use client";
 
-import { Settings } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Settings } from "lucide-react";
 import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -197,13 +197,21 @@ export default function PortalProfilePage() {
       ) : profile && draft ? (
         <div className="space-y-6">
           {savedNotice && (
-            <div className="rounded-md bg-emerald-50 border border-emerald-200 px-4 py-2 text-sm text-emerald-700">
-              {t("savedNotice")}
+            <div
+              className="flex items-start gap-2 rounded-aurion-md border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700"
+              role="status"
+            >
+              <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{t("savedNotice")}</span>
             </div>
           )}
           {error && (
-            <div className="rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">
-              {error}
+            <div
+              className="flex items-start gap-2 rounded-aurion-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700"
+              role="alert"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" />
+              <span>{error}</span>
             </div>
           )}
 
@@ -299,7 +307,7 @@ export default function PortalProfilePage() {
             </div>
           </Card>
 
-          <div className="flex items-center gap-3 sticky bottom-4 bg-white/85 backdrop-blur rounded-lg border border-gray-200 px-4 py-3 shadow-sm">
+          <div className="sticky bottom-4 z-10 flex items-center gap-3 rounded-lg border border-gray-200 bg-white/95 backdrop-blur px-4 py-3 shadow-sm">
             <Button
               variant="primary"
               onClick={() => void onSave()}
@@ -433,17 +441,13 @@ function Toggle({
       <button
         type="button"
         onClick={() => onChange(!value)}
-        className={
-          "relative inline-flex h-6 w-11 shrink-0 rounded-full border-2 border-transparent transition-colors duration-150 focus:outline-none focus:ring-2 focus:ring-gold-500/50 " +
-          (value ? "bg-gold-500" : "bg-gray-300")
-        }
+        className={"aurion-toggle " + (value ? "bg-gold-500" : "bg-gray-300")}
         aria-pressed={value}
         aria-label={label}
       >
         <span
           className={
-            "inline-block h-5 w-5 transform rounded-full bg-white shadow transition-transform duration-150 " +
-            (value ? "translate-x-5" : "translate-x-0")
+            "aurion-toggle-knob " + (value ? "translate-x-5" : "translate-x-0")
           }
         />
       </button>

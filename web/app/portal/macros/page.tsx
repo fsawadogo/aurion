@@ -103,7 +103,10 @@ export default function PortalMacrosPage() {
       />
 
       {error && (
-        <div className="mb-4 rounded-aurion-md bg-red-50 border border-red-200 px-4 py-3 text-aurion-callout text-red-700">
+        <div
+          role="alert"
+          className="mb-4 rounded-aurion-md border border-red-200 bg-red-50 px-4 py-3 text-aurion-callout text-red-700"
+        >
           {error}
         </div>
       )}
@@ -112,9 +115,11 @@ export default function PortalMacrosPage() {
         {loading ? (
           <LoadingSkeleton lines={6} />
         ) : list.length === 0 ? (
-          <div className="py-8 text-center">
-            <Zap className="mx-auto h-10 w-10 text-gold-300 mb-2" />
-            <p className="aurion-callout text-navy-500 mb-3">
+          <div className="py-10 text-center">
+            <div className="mx-auto mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-gold-50 text-gold-600">
+              <Zap className="h-6 w-6" />
+            </div>
+            <p className="aurion-callout text-navy-500 mb-4 mx-auto max-w-sm">
               {t("emptyTitle")}
             </p>
             <Button
@@ -313,8 +318,7 @@ function MacroEditor({
           )}
         </div>
 
-        <div className="flex items-center gap-2 border-t border-hairline px-5 py-3 bg-canvas/40">
-          <div className="flex-1" />
+        <div className="flex items-center justify-end gap-2 border-t border-hairline px-5 py-3 bg-canvas/40">
           <Button
             size="sm"
             variant="secondary"

@@ -207,25 +207,35 @@ export default function FeatureFlagsPage() {
                 const name = t(`flags.${key}.name`);
                 const description = t(`flags.${key}.description`);
                 const enabled = draft[key];
+                const changed = loaded ? loaded[key] !== draft[key] : false;
                 return (
                   <li
                     key={key}
-                    className="flex items-start justify-between gap-4 py-4"
+                    className="flex items-start justify-between gap-6 py-4"
                     data-testid={`flag-row-${key}`}
                   >
                     <div className="min-w-0">
                       <p className="text-aurion-body font-semibold text-navy-800">
                         {name}
                       </p>
-                      <p className="mt-0.5 text-aurion-caption text-navy-500">
+                      <p className="mt-1 text-aurion-caption text-navy-500">
                         {description}
                       </p>
                     </div>
-                    <ToggleSwitch
-                      enabled={enabled}
-                      onChange={() => toggle(key)}
-                      ariaLabel={name}
-                    />
+                    <div className="flex shrink-0 items-center gap-2.5 pt-0.5">
+                      <span
+                        aria-hidden="true"
+                        className={
+                          "h-2 w-2 rounded-full bg-gold-500 transition-opacity duration-short ease-aurion " +
+                          (changed ? "opacity-100" : "opacity-0")
+                        }
+                      />
+                      <ToggleSwitch
+                        enabled={enabled}
+                        onChange={() => toggle(key)}
+                        ariaLabel={name}
+                      />
+                    </div>
                   </li>
                 );
               })}
