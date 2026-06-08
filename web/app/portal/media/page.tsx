@@ -40,6 +40,7 @@ import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import EmptyPanelState from "@/components/portal/EmptyPanelState";
 import PageHeader from "@/components/portal/PageHeader";
 import { getCapturedMedia, getMe, getMediaDownloadUrls, humanizeError} from "@/lib/api";
+import { nameInitials } from "@/lib/session-format";
 import type { CapturedMediaItem, UserRole } from "@/types";
 
 /** States the backend stateBadge map knows about — anything else renders raw. */
@@ -288,8 +289,15 @@ export default function CapturedMediaPage() {
                 ) : (
                   items.map((item) => (
                     <tr key={item.session_id} className="transition-colors hover:bg-canvas/60">
-                      <td className="whitespace-nowrap px-4 py-3 text-aurion-body font-medium text-navy-800">
-                        {item.physician_name}
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <div className="flex items-center gap-2.5">
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-50 text-[11px] font-semibold text-navy-700 ring-1 ring-inset ring-navy-100">
+                            {nameInitials(item.physician_name || "—")}
+                          </span>
+                          <span className="text-aurion-body font-medium text-navy-800">
+                            {item.physician_name || "—"}
+                          </span>
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-aurion-callout text-navy-500">
                         {formatDate(item.started_at)}
