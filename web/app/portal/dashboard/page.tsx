@@ -19,6 +19,7 @@ import {
   badgeVariantFor,
   formatRelative,
   humanSpecialty,
+  shortSessionId,
 } from "@/lib/session-format";
 import type { CustomTemplate, Session, SessionState } from "@/types";
 
@@ -296,8 +297,8 @@ function SessionRow({
           </p>
           <p className="text-xs text-gray-500 mt-0.5">
             {formatRelative(session.created_at)} ·{" "}
-            <span className="font-mono text-[10px]">
-              {session.id.slice(0, 8)}
+            <span className="font-mono text-[10px]" title={session.id}>
+              {shortSessionId(session.id)}
             </span>
           </p>
         </div>
@@ -422,8 +423,11 @@ function RecentCard({
           {session.external_reference_id}
         </p>
       ) : (
-        <p className="mt-0.5 font-mono text-[11px] text-aurion-tertiary truncate">
-          {session.id.slice(0, 8)}
+        <p
+          className="mt-0.5 font-mono text-[11px] text-aurion-tertiary truncate"
+          title={session.id}
+        >
+          {shortSessionId(session.id)}
         </p>
       )}
     </a>
