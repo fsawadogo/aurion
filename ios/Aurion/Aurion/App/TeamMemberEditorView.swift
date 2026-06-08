@@ -224,12 +224,22 @@ struct TeamMemberEditorView: View {
             .accessibilityHint(L("profile.teamEditor.editHint"))
 
             // Per-day roster toggle (#275 / I2). Marks the member as working
-            // today; the start-sheet day-roster picker filters on the
-            // backend's effective-presence so only today's team shows.
-            Toggle("", isOn: workingTodayBinding(for: member))
-                .labelsHidden()
-                .tint(.aurionGold)
-                .accessibilityLabel(L("profile.teamEditor.workingToday"))
+            // today; the start-sheet day-roster picker floats today's team to
+            // the top. A VISIBLE caption sits above the switch — Marie's pilot
+            // feedback was that a bare toggle gave no hint what it controlled.
+            VStack(spacing: 3) {
+                Text(L("profile.teamEditor.workingToday"))
+                    .aurionFont(10, weight: .medium, relativeTo: .caption2)
+                    .foregroundColor(.aurionTextSecondary)
+                    .multilineTextAlignment(.center)
+                    .frame(width: 64)
+                    .fixedSize(horizontal: false, vertical: true)
+                Toggle("", isOn: workingTodayBinding(for: member))
+                    .labelsHidden()
+                    .tint(.aurionGold)
+            }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(L("profile.teamEditor.workingToday"))
         }
         .padding(.vertical, 4)
     }

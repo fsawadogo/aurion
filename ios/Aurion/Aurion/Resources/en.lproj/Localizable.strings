@@ -405,6 +405,9 @@
 "setup.context.cancel" = "Cancel";
 "setup.context.delete" = "Remove context \"%@\"";
 "setup.context.limit" = "30 contexts maximum.";
+/* #313 follow-up — optional free-text note per context, sent to the AI. */
+"setup.context.note.placeholder" = "Add context the AI should know (optional)";
+"setup.context.note.a11y" = "Context note for %@";
 "setup.context.expand" = "Show contexts for %@";
 "setup.context.collapse" = "Hide contexts for %@";
 "setup.context.template.default" = "Use my specialty default";
@@ -734,6 +737,9 @@
 "encounter.noTeam" = "No team members configured. Add them in Profile settings.";
 /* #275 — shown when a roster exists but nobody is marked working today. */
 "encounter.noneToday" = "No team members marked as working today. Add them by name or role below.";
+/* Marie pilot follow-up — badge on roster rows whose member is working today. */
+"encounter.todayBadge" = "Today";
+"encounter.todayBadge.a11y" = "Working today";
 /* #275 — header above the anonymous role chips (zero-PHI, no name). */
 "encounter.anonRoles" = "Or add by role (no name)";
 "encounter.name" = "Name";

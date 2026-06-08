@@ -162,6 +162,14 @@ final class BuiltInCaptureSource: CaptureSource {
         await manager.extractCadenceClip(windowMs: windowMs)
     }
 
+    /// Apply the live AppConfig capture FPS + resize the clip ring to span
+    /// the clip window at that rate. Forwarded to the manager. MUST be called
+    /// before `start()` (ring rebuilt empty) — `SessionManager.coldStart`
+    /// does so right after setting `includeVideo`.
+    func applyPipelineConfig(videoCaptureFPS fps: Double, clipWindowMs: Int) {
+        manager.applyPipelineConfig(videoCaptureFPS: fps, clipWindowMs: clipWindowMs)
+    }
+
     override func start() throws {
         guard manager.permissionsGranted else {
             throw CaptureSourceError.permissionDenied("camera and microphone")

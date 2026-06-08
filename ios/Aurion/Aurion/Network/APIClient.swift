@@ -1862,6 +1862,13 @@ struct VisitTypeContext: Codable, Sendable, Identifiable {
     /// (``CustomTemplateSummary/id``), or nil. Mutually exclusive with
     /// ``templateKey``.
     var templateRef: String?
+    /// Optional free-text note (Marie pilot follow-up to #313). Travels to
+    /// the note-generation prompt as additional encounter context so the AI
+    /// "understands the context as fully as possible". Wire key `description`;
+    /// named `contextDescription` here to avoid `CustomStringConvertible`
+    /// confusion. nil / blank = no note. Clinician-authored → potential PHI;
+    /// never log.
+    var contextDescription: String?
 
     var id: UUID { localID }
 
@@ -1870,19 +1877,22 @@ struct VisitTypeContext: Codable, Sendable, Identifiable {
         case label
         case templateKey = "template_key"
         case templateRef = "template_ref"
+        case contextDescription = "description"
     }
 
     init(
         serverID: String = "",
         label: String,
         templateKey: String? = nil,
-        templateRef: String? = nil
+        templateRef: String? = nil,
+        contextDescription: String? = nil
     ) {
         self.localID = UUID()
         self.serverID = serverID
         self.label = label
         self.templateKey = templateKey
         self.templateRef = templateRef
+        self.contextDescription = contextDescription
     }
 
     init(from decoder: Decoder) throws {
@@ -1892,6 +1902,7 @@ struct VisitTypeContext: Codable, Sendable, Identifiable {
         self.label = try c.decode(String.self, forKey: .label)
         self.templateKey = try c.decodeIfPresent(String.self, forKey: .templateKey)
         self.templateRef = try c.decodeIfPresent(String.self, forKey: .templateRef)
+        self.contextDescription = try c.decodeIfPresent(String.self, forKey: .contextDescription)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -1900,6 +1911,7 @@ struct VisitTypeContext: Codable, Sendable, Identifiable {
         try c.encode(label, forKey: .label)
         try c.encodeIfPresent(templateKey, forKey: .templateKey)
         try c.encodeIfPresent(templateRef, forKey: .templateRef)
+        try c.encodeIfPresent(contextDescription, forKey: .contextDescription)
     }
 
     /// Serialize to the `[String: Any]` shape `updateProfile` expects. An
@@ -1930,6 +1942,12 @@ struct VisitTypeContext: Codable, Sendable, Identifiable {
             }
         } else if let tk = ctx.templateKey {
             dict["template_key"] = tk
+        }
+        // Free-text note (#313 follow-up). Only sent when non-blank — a blank
+        // note is "no note" and the backend coerces empty → null anyway.
+        if let note = ctx.contextDescription?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !note.isEmpty {
+            dict["description"] = note
         }
         return dict
     }

@@ -100,6 +100,7 @@ struct VisitTypeContextEditor: View {
                     .foregroundColor(.aurionTextPrimary)
                     .fixedSize(horizontal: false, vertical: true)
                 templateMenu(ctx)
+                contextNoteField(ctx)
             }
             Spacer(minLength: 8)
             Button {
@@ -206,6 +207,33 @@ struct VisitTypeContextEditor: View {
         .accessibilityLabel(
             L("setup.context.template.a11y", resolvedTemplate(value).text)
         )
+    }
+
+    /// Optional free-text note for this context (Marie pilot follow-up to
+    /// #313). Multiline, grows to a few lines. Travels to the note-generation
+    /// prompt as additional encounter context so the AI "understands the
+    /// context as fully as possible"; nil when blank. Clamped to the backend's
+    /// 500-char cap so a long note never eats a 422 on save. Clinician-authored
+    /// → potential PHI; never logged.
+    @ViewBuilder
+    private func contextNoteField(_ ctx: Binding<VisitTypeContext>) -> some View {
+        TextField(
+            L("setup.context.note.placeholder"),
+            text: Binding(
+                get: { ctx.wrappedValue.contextDescription ?? "" },
+                set: { newValue in
+                    let clamped = String(newValue.prefix(500))
+                    let trimmed = clamped.trimmingCharacters(in: .whitespacesAndNewlines)
+                    ctx.wrappedValue.contextDescription = trimmed.isEmpty ? nil : clamped
+                }
+            ),
+            axis: .vertical
+        )
+        .aurionFont(13, relativeTo: .footnote)
+        .foregroundColor(.aurionTextPrimary)
+        .lineLimit(1...4)
+        .textFieldStyle(.plain)
+        .accessibilityLabel(L("setup.context.note.a11y", ctx.wrappedValue.label))
     }
 
     /// The label shown on the picker trigger for a context's current binding,
