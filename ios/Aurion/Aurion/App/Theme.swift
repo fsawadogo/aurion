@@ -601,6 +601,13 @@ struct AurionTabBar: View {
     @Binding var selection: String
     let items: [AurionTabItem]
 
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
+    // At accessibilityLarge and above even a scaled-down 10pt label would crowd
+    // the narrow tab slots and wrap/clip, so the bar goes icon-only and leans on
+    // the VoiceOver label below to keep naming the tab (#271).
+    private var iconOnly: Bool { dynamicTypeSize >= .accessibility2 }
+
     var body: some View {
         VStack(spacing: 0) {
             Rectangle()
@@ -620,14 +627,22 @@ struct AurionTabBar: View {
                                 .foregroundColor(on ? .aurionGold : .aurionTabInactive)
                                 .frame(height: 26)
 
-                            Text(item.label)
-                                .aurionFont(10, weight: on ? .semibold : .medium, relativeTo: .caption2)
-                                .foregroundColor(on ? .aurionGold : .aurionTabInactive)
+                            if !iconOnly {
+                                Text(item.label)
+                                    .aurionFont(10, weight: on ? .semibold : .medium, relativeTo: .caption2)
+                                    .foregroundColor(on ? .aurionGold : .aurionTabInactive)
+                                    .lineLimit(1)
+                                    .minimumScaleFactor(0.6)
+                            }
                         }
                         .frame(maxWidth: .infinity, minHeight: 44)
                         .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
+                    // Explicit label so the tab is still announced when the
+                    // visible text is hidden in icon-only mode.
+                    .accessibilityLabel(item.label)
+                    .accessibilityAddTraits(on ? .isSelected : [])
                 }
             }
             .padding(.top, 8)
@@ -659,6 +674,11 @@ struct StatusBadge: View {
             Text(text)
                 .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                 .tracking(0.4)
+                // Single line + slight scale so the capsule caps its width at
+                // larger Dynamic Type; host rows treat it as a fixed-ish badge
+                // and overflow would shove their siblings off (#271).
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .foregroundColor(color)
         .padding(.horizontal, 10)
@@ -702,6 +722,11 @@ struct MetricCard: View {
     let icon: String
     var trend: String? = nil
 
+    // Scale the headline number with Dynamic Type (same `relativeTo: .title`
+    // behaviour as `.aurionFont`) while preserving the rounded numerals the
+    // design depends on — `.aurionFont` can't carry `design: .rounded` (#271).
+    @ScaledMetric(relativeTo: .title) private var valueSize: CGFloat = 26
+
     var body: some View {
         VStack(alignment: .leading, spacing: AurionSpacing.xs) {
             HStack {
@@ -717,8 +742,10 @@ struct MetricCard: View {
             }
 
             Text(value)
-                .font(.system(size: 26, weight: .bold, design: .rounded))
+                .font(.system(size: valueSize, weight: .bold, design: .rounded))
                 .foregroundColor(.aurionTextPrimary)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
 
             Text(title)
                 .aurionFont(12, weight: .medium, relativeTo: .caption)
@@ -744,31 +771,49 @@ struct SectionHeader<Trailing: View>: View {
     }
 
     var body: some View {
-        HStack(spacing: AurionSpacing.xs) {
-            Text(title.uppercased())
-                .aurionFont(11, weight: .semibold, relativeTo: .caption2)
-                .tracking(1.1)
-                .foregroundColor(.aurionTextSecondary)
-
-            if let count = count {
-                Text("\(count)")
-                    .aurionFont(10, weight: .bold, relativeTo: .caption2)
-                    // Brand pattern — navy on gold pill (~12:1 contrast,
-                    // matches every other gold-pill count badge in the
-                    // app: DashboardView, SessionsInboxView, CaptureView,
-                    // TourOverlay). The previous `.white` here was a
-                    // one-off that read at only 4.7:1 — visible but
-                    // inconsistent with the brand convention.
-                    .foregroundColor(.aurionNavy)
-                    .padding(.horizontal, 6)
-                    .padding(.vertical, 2)
-                    .background(Color.aurionGold)
-                    .clipShape(Capsule())
+        // Title + count keep one row; if the trailing accessory (e.g. a
+        // "See all" link) can't fit beside them at larger Dynamic Type, it
+        // drops to its own row below instead of squeezing the title (#271).
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: AurionSpacing.xs) {
+                titleAndCount
+                Spacer()
+                trailing
             }
+            VStack(alignment: .leading, spacing: AurionSpacing.xs) {
+                HStack(spacing: AurionSpacing.xs) {
+                    titleAndCount
+                    Spacer()
+                }
+                trailing
+            }
+        }
+    }
 
-            Spacer()
+    @ViewBuilder private var titleAndCount: some View {
+        Text(title.uppercased())
+            .aurionFont(11, weight: .semibold, relativeTo: .caption2)
+            .tracking(1.1)
+            .foregroundColor(.aurionTextSecondary)
+            // Cap to one line and shrink slightly before truncating so a long
+            // localized header doesn't clip (#271).
+            .lineLimit(1)
+            .minimumScaleFactor(0.8)
 
-            trailing
+        if let count = count {
+            Text("\(count)")
+                .aurionFont(10, weight: .bold, relativeTo: .caption2)
+                // Brand pattern — navy on gold pill (~12:1 contrast,
+                // matches every other gold-pill count badge in the
+                // app: DashboardView, SessionsInboxView, CaptureView,
+                // TourOverlay). The previous `.white` here was a
+                // one-off that read at only 4.7:1 — visible but
+                // inconsistent with the brand convention.
+                .foregroundColor(.aurionNavy)
+                .padding(.horizontal, 6)
+                .padding(.vertical, 2)
+                .background(Color.aurionGold)
+                .clipShape(Capsule())
         }
     }
 }
