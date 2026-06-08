@@ -9,7 +9,7 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { getSessionAudit } from "@/lib/api";
+import { getSessionAudit, humanizeError} from "@/lib/api";
 import type { AuditEvent } from "@/types";
 
 function eventBadgeVariant(
@@ -61,7 +61,7 @@ export default function AuditDetailClient(
       })
       .catch((err: unknown) => {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load timeline");
+          setError(humanizeError(err, "Failed to load timeline"));
         }
       })
       .finally(() => {

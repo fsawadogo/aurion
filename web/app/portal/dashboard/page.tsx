@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowRight, BadgeCheck, ClipboardList, Clock, FileText, History, Inbox, LayoutGrid, RefreshCw, Sparkles } from "lucide-react";
+import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -67,7 +68,7 @@ export default function PortalDashboardPage() {
       setSessions(ss);
       setTemplates(ts);
     } catch (e) {
-      setError(e instanceof Error ? e.message : "Failed to load dashboard.");
+      setError(humanizeError(e, "Failed to load dashboard."));
     } finally {
       setLoading(false);
     }

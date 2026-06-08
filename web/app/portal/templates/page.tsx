@@ -1,6 +1,7 @@
 "use client";
 
 import { MessagesSquare, Plus, SquarePen, Trash2, Upload } from "lucide-react";
+import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -46,7 +47,7 @@ export default function PortalTemplatesPage() {
       xs.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
       setList(xs);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("loadError"));
+      setError(humanizeError(e, t("loadError")));
     } finally {
       setLoading(false);
     }
@@ -66,7 +67,7 @@ export default function PortalTemplatesPage() {
       // there and the physician can keep refining it.
       router.push(`/portal/templates/new?session=${session.id}`);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("uploadError"));
+      setError(humanizeError(e, t("uploadError")));
     } finally {
       setUploading(false);
     }
@@ -79,7 +80,7 @@ export default function PortalTemplatesPage() {
       await deleteMyCustomTemplate(tpl.id);
       setList(list.filter((x) => x.id !== tpl.id));
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("deleteError"));
+      setError(humanizeError(e, t("deleteError")));
     } finally {
       setDeletingId(null);
     }

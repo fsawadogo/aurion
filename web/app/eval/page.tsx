@@ -8,7 +8,7 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { getEvalSessions, submitEvalScore } from "@/lib/api";
+import { getEvalSessions, submitEvalScore, humanizeError} from "@/lib/api";
 import type { EvalSession } from "@/types";
 
 export default function EvalPage() {
@@ -31,7 +31,7 @@ export default function EvalPage() {
       setEvalSessions(data);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to load eval sessions",
+        humanizeError(err, "Failed to load eval sessions"),
       );
     } finally {
       setLoading(false);
@@ -65,7 +65,7 @@ export default function EvalPage() {
       await fetchEvalSessions();
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to submit score",
+        humanizeError(err, "Failed to submit score"),
       );
     } finally {
       setSubmitting(false);
@@ -189,9 +189,13 @@ export default function EvalPage() {
                             {/* Plain anchor for dynamic `/eval/[id]` —
                                 Next `<Link>` collapses the URL under
                                 static export.
-                                See web/lib/use-route-segment.ts. */}
+                                See web/lib/use-route-segment.ts.
+                                Route on the session UUID (`session_id`), not
+                                the `eval_…` display id (`s.id`) — the detail
+                                page feeds the segment to
+                                GET /admin/eval/sessions/{uuid}. */}
                             <a
-                              href={`/eval/${encodeURIComponent(s.id)}`}
+                              href={`/eval/${encodeURIComponent(s.session_id)}`}
                               onClick={(e) => e.stopPropagation()}
                             >
                               <Button variant="ghost" size="sm">

@@ -7,7 +7,7 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { getSessions } from "@/lib/api";
+import { getSessions, humanizeError} from "@/lib/api";
 import {
   abbreviateName,
   nameInitials,
@@ -54,7 +54,7 @@ export default function SessionsPage() {
       setTotal(data.total);
     } catch (err) {
       setError(
-        err instanceof Error ? err.message : "Failed to load sessions",
+        humanizeError(err, "Failed to load sessions"),
       );
     } finally {
       setLoading(false);

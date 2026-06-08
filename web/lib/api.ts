@@ -150,6 +150,66 @@ function buildQuery<T extends object>(params: T): string {
   return parts.length > 0 ? `?${parts.join("&")}` : "";
 }
 
+/** Error thrown by `fetchWithAuth` for any non-OK response. Carries the HTTP
+ * status + raw body so callers can branch (role-403 vs 404 vs 5xx) and
+ * `humanizeError` can produce friendly copy. `.message` stays the legacy
+ * `API <status>: <body>` string for backward compatibility. */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly body: string;
+  constructor(status: number, body: string) {
+    super(`API ${status}: ${body}`);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
+}
+
+function extractDetail(body: string): string | null {
+  try {
+    const parsed = JSON.parse(body) as { detail?: unknown };
+    if (typeof parsed?.detail === "string") return parsed.detail;
+    // FastAPI validation errors: detail is an array of { msg, ... }.
+    const first = Array.isArray(parsed?.detail) ? parsed.detail[0] : null;
+    if (first && typeof (first as { msg?: unknown }).msg === "string") {
+      return (first as { msg: string }).msg;
+    }
+  } catch {
+    /* body wasn't JSON */
+  }
+  return null;
+}
+
+/** Turn a thrown API/network error into a short, human-friendly banner
+ * message — never the raw `API 403: {"detail":...}` JSON. Use in catch
+ * blocks instead of `e.message`. Pass a context-specific `fallback` for the
+ * unclassifiable case. */
+export function humanizeError(
+  e: unknown,
+  fallback = "Something went wrong.",
+): string {
+  if (e instanceof ApiError) {
+    if (e.status === 403) {
+      return /CLINICIAN role only/i.test(e.body)
+        ? "This section is only available to clinician accounts."
+        : "You don't have permission to view this.";
+    }
+    if (e.status === 404) return "Not found.";
+    if (e.status === 429) return "Too many requests — please wait a moment.";
+    if (e.status >= 500) {
+      return "Something went wrong on our end. Please try again.";
+    }
+    return extractDetail(e.body) ?? fallback;
+  }
+  if (e instanceof Error) {
+    if (/Failed to fetch|NetworkError|Load failed/i.test(e.message)) {
+      return "Couldn't reach Aurion. Check your connection and try again.";
+    }
+    return e.message || fallback;
+  }
+  return fallback;
+}
+
 export async function fetchWithAuth(
   path: string,
   options: RequestInit = {},
@@ -191,7 +251,7 @@ export async function fetchWithAuth(
 
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(`API ${response.status}: ${body}`);
+    throw new ApiError(response.status, body);
   }
   return response;
 }

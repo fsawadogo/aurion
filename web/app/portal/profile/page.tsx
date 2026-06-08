@@ -1,6 +1,7 @@
 "use client";
 
 import { Settings } from "lucide-react";
+import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -98,7 +99,7 @@ export default function PortalProfilePage() {
           .map((tpl) => ({ id: tpl.id, display_name: tpl.display_name })),
       );
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("loadError"));
+      setError(humanizeError(e, t("loadError")));
     } finally {
       setLoading(false);
     }
@@ -136,7 +137,7 @@ export default function PortalProfilePage() {
       // belt + suspenders.
       window.setTimeout(() => setSavedNotice(false), 2500);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("saveError"));
+      setError(humanizeError(e, t("saveError")));
     } finally {
       setSaving(false);
     }

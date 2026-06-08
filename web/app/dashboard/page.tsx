@@ -6,7 +6,7 @@ import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { getMe, getMetrics, getMetricsTimeseries, getSessions } from "@/lib/api";
+import { getMe, getMetrics, getMetricsTimeseries, getSessions, humanizeError} from "@/lib/api";
 import type {
   MetricTimeseriesBucket,
   MetricTimeseriesResponse,
@@ -95,7 +95,7 @@ export default function DashboardPage() {
         setTimeseries(timeseriesRes);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Failed to load dashboard data",
+          humanizeError(err, "Failed to load dashboard data"),
         );
       } finally {
         setLoading(false);

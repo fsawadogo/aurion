@@ -7,7 +7,7 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { getAuditLog, exportAuditCsv } from "@/lib/api";
+import { getAuditLog, exportAuditCsv, humanizeError} from "@/lib/api";
 import type { AuditEvent, AuditFilters, PaginatedResponse } from "@/types";
 
 function eventBadgeVariant(
@@ -61,7 +61,7 @@ export default function AuditPage() {
       setEvents(data.items);
       setTotal(data.total);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load audit log");
+      setError(humanizeError(err, "Failed to load audit log"));
     } finally {
       setLoading(false);
     }
@@ -91,7 +91,7 @@ export default function AuditPage() {
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "CSV export failed");
+      setError(humanizeError(err, "CSV export failed"));
     } finally {
       setExporting(false);
     }

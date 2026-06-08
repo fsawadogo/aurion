@@ -10,6 +10,7 @@ import {
   IdCard,
   Stethoscope,
 } from "lucide-react";
+import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -79,7 +80,7 @@ export default function PatientDetailClient() {
       // No identifier in the error message we surface — message is the
       // generic "couldn't load" string from the catalog, so a 422 or
       // 500 doesn't echo PHI into the UI.
-      setError(e instanceof Error ? e.message : t("loadFailed"));
+      setError(humanizeError(e, t("loadFailed")));
     } finally {
       setLoading(false);
     }

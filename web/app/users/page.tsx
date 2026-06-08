@@ -7,7 +7,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Modal from "@/components/ui/Modal";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { getUsers, createUser, updateUser } from "@/lib/api";
+import { getUsers, createUser, updateUser, humanizeError} from "@/lib/api";
 import type { User, UserRole, CreateUserPayload } from "@/types";
 
 const roleBadgeVariant: Record<UserRole, "success" | "warning" | "error" | "info" | "neutral"> = {
@@ -56,7 +56,7 @@ export default function UsersPage() {
       const data = await getUsers();
       setUsers(data);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load users");
+      setError(humanizeError(err, "Failed to load users"));
     } finally {
       setLoading(false);
     }
@@ -83,7 +83,7 @@ export default function UsersPage() {
       setNewPassword("");
       await fetchUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create user");
+      setError(humanizeError(err, "Failed to create user"));
     } finally {
       setCreating(false);
     }
@@ -102,7 +102,7 @@ export default function UsersPage() {
       await updateUser(userId, { is_active: isActive });
       await fetchUsers();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to update user");
+      setError(humanizeError(err, "Failed to update user"));
     }
   }
 

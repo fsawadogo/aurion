@@ -1,6 +1,7 @@
 "use client";
 
 import { Download, ExternalLink, Filter, Search, X } from "lucide-react";
+import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
@@ -139,7 +140,7 @@ export default function MyAuditClient() {
       setEvents(data.items ?? []);
       setTotal(data.total ?? 0);
     } catch (e) {
-      setError(e instanceof Error ? e.message : t("loadError"));
+      setError(humanizeError(e, t("loadError")));
     } finally {
       setLoading(false);
     }
