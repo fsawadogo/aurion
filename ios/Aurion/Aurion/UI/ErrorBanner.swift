@@ -49,19 +49,17 @@ struct ErrorBanner: View {
                     .fixedSize(horizontal: false, vertical: true)
 
                 if hasActions {
-                    HStack(spacing: 18) {
-                        if let onRetry {
-                            Button(L("common.retry")) {
-                                AurionHaptics.impact(.light)
-                                onRetry()
-                            }
-                            .aurionFont(13, weight: .semibold, relativeTo: .footnote)
-                            .foregroundColor(.aurionGold)
+                    // Retry / Dismiss sit side-by-side; at larger Dynamic Type
+                    // the two labels can't share a row, so they stack
+                    // vertically instead of being clipped (#271).
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 18) {
+                            retryButton
+                            dismissButton
                         }
-                        if let onDismiss {
-                            Button(L("common.dismiss"), action: onDismiss)
-                                .aurionFont(13, relativeTo: .footnote)
-                                .foregroundColor(.aurionTextSecondary)
+                        VStack(alignment: .leading, spacing: 10) {
+                            retryButton
+                            dismissButton
                         }
                     }
                     .buttonStyle(.plain)
@@ -77,5 +75,24 @@ struct ErrorBanner: View {
             RoundedRectangle(cornerRadius: AurionRadius.md, style: .continuous)
                 .stroke(Color.aurionRed.opacity(0.3), lineWidth: 1)
         )
+    }
+
+    @ViewBuilder private var retryButton: some View {
+        if let onRetry {
+            Button(L("common.retry")) {
+                AurionHaptics.impact(.light)
+                onRetry()
+            }
+            .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+            .foregroundColor(.aurionGold)
+        }
+    }
+
+    @ViewBuilder private var dismissButton: some View {
+        if let onDismiss {
+            Button(L("common.dismiss"), action: onDismiss)
+                .aurionFont(13, relativeTo: .footnote)
+                .foregroundColor(.aurionTextSecondary)
+        }
     }
 }
