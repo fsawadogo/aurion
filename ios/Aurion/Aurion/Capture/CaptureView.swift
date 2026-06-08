@@ -252,9 +252,45 @@ struct CaptureView: View {
                 streamCircle("S")
             }
             if session.captureMode.includesVideo {
+                zoomToggleButton
                 previewToggleButton
                 framesButton
             }
+        }
+    }
+
+    // MARK: - Zoom Toggle (0.5× ultra-wide ↔ 1× wide)
+
+    /// Lens toggle pill — shows the active back-camera zoom factor (0.5× or 1×)
+    /// and flips between the ultra-wide and standard lens on tap. Shown only
+    /// when the device actually has an ultra-wide camera
+    /// (`builtInSource.ultraWideAvailable`), so phones without it — and the
+    /// Simulator — never see a dead control. Theme-styled to match the adjacent
+    /// stream toggles, with the HIG-minimum 44pt touch target.
+    @ViewBuilder
+    private var zoomToggleButton: some View {
+        if builtInSource.ultraWideAvailable {
+            Button {
+                AurionHaptics.selection()
+                builtInSource.setUltraWide(!builtInSource.useUltraWide)
+            } label: {
+                Text(builtInSource.useUltraWide ? "0.5\u{00D7}" : "1\u{00D7}")
+                    .font(.system(size: 11, weight: .bold))
+                    .monospacedDigit()
+                    .foregroundColor(.aurionGold)
+                    .frame(minWidth: 30, minHeight: 24)
+                    .padding(.horizontal, 4)
+                    .background(Color.white.opacity(0.10))
+                    .clipShape(Capsule())
+            }
+            .frame(minWidth: 44, minHeight: 44)
+            .contentShape(Rectangle())
+            .buttonStyle(.plain)
+            .accessibilityLabel(
+                builtInSource.useUltraWide ? L("capture.zoom.a11yWide")
+                                           : L("capture.zoom.a11yStandard")
+            )
+            .accessibilityHint(L("capture.zoom.a11yHint"))
         }
     }
 

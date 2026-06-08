@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Full-screen coach-mark overlay: a dimmed scrim with a spotlight cut-out
 /// around the current step's target, a pulsing gold ring, and a tooltip card.
@@ -13,6 +14,10 @@ struct TourOverlay: View {
     let containerSize: CGSize
 
     @State private var ringPulse = false
+    /// Measured height of the tooltip card. Drives the safe-area clamp so the
+    /// whole card (incl. the Skip/Next row) stays on-screen at any Dynamic Type
+    /// size; 0 until the first layout pass measures it.
+    @State private var cardHeight: CGFloat = 0
 
     private var step: TourStep { tour.currentStep }
 
@@ -71,29 +76,122 @@ struct TourOverlay: View {
     }
 
     /// Positions the card below a top-half spotlight, above a bottom-half one,
-    /// or centered when there's no spotlight. Spacer-based so we don't need to
-    /// know the card's height in advance.
+    /// or centered when there's no spotlight — then CLAMPS it so the entire
+    /// card (incl. the Skip/Next row) always stays inside the safe area, for
+    /// any spotlight position and any Dynamic Type size (#352). A low/large
+    /// spotlight (e.g. the Quick Start grid at AX sizes) used to push Skip/Next
+    /// off the bottom; the clamp now pins the card so its bottom never crosses
+    /// `safeAreaInsets.bottom`, and if the card is taller than the safe band it
+    /// becomes scrollable so both buttons stay tappable.
     @ViewBuilder
     private var tooltipLayout: some View {
-        VStack(spacing: 0) {
-            if let rect = spotlight {
-                if rect.midY < containerSize.height / 2 {
-                    Spacer().frame(height: rect.maxY + 18)
-                    card
-                    Spacer(minLength: 0)
-                } else {
-                    Spacer(minLength: 0)
-                    card
-                    Spacer().frame(height: max(0, containerSize.height - rect.minY + 18))
+        let insets = windowSafeAreaInsets
+        let topInset = insets.top + 16
+        let bottomInset = insets.bottom + 16
+        let available = max(0, containerSize.height - topInset - bottomInset)
+        let clampedTop = Self.clampedCardTop(
+            spotlight: spotlight,
+            cardHeight: cardHeight,
+            containerHeight: containerSize.height,
+            safeTop: insets.top,
+            safeBottom: insets.bottom
+        )
+
+        ZStack(alignment: .topLeading) {
+            if cardHeight > available, available > 0 {
+                // Card taller than the safe band (extreme Dynamic Type on a
+                // small device): make it scrollable so Skip + Next stay reachable
+                // instead of overflowing off-screen.
+                ScrollView(showsIndicators: false) {
+                    measuredCard
                 }
+                .frame(width: containerSize.width, height: available)
+                .position(x: containerSize.width / 2, y: topInset + available / 2)
             } else {
-                Spacer()
-                card
-                Spacer()
+                measuredCard
+                    .position(x: containerSize.width / 2, y: clampedTop + cardHeight / 2)
             }
         }
-        .frame(width: containerSize.width, height: containerSize.height)
+        .frame(width: containerSize.width, height: containerSize.height, alignment: .topLeading)
+        .onPreferenceChange(TourCardHeightKey.self) { cardHeight = $0 }
         .transition(.opacity)
+    }
+
+    /// The card with a transparent height probe behind it. The probe reports
+    /// the card's rendered height up through `TourCardHeightKey` so the layout
+    /// can clamp the card's position to the safe area.
+    private var measuredCard: some View {
+        card.background(
+            GeometryReader { geo in
+                Color.clear.preference(key: TourCardHeightKey.self, value: geo.size.height)
+            }
+        )
+    }
+
+    /// Safe-area insets of the active window. The host `GeometryReader` in
+    /// `ContentView` ignores the safe area (so its proxy reports zero insets),
+    /// so we read the key window directly to keep the card clear of the notch /
+    /// Dynamic Island and the home indicator.
+    private var windowSafeAreaInsets: EdgeInsets {
+        let insets = UIApplication.shared.connectedScenes
+            .compactMap { $0 as? UIWindowScene }
+            .flatMap { $0.windows }
+            .first { $0.isKeyWindow }?
+            .safeAreaInsets ?? .zero
+        return EdgeInsets(
+            top: insets.top, leading: insets.left,
+            bottom: insets.bottom, trailing: insets.right
+        )
+    }
+
+    /// Pure placement math for the tooltip card's top edge — extracted so the
+    /// "never clipped" guarantee is unit-testable without a live view. Returns
+    /// the card's top Y in container coordinates, clamped so the whole card
+    /// stays within the safe band `[safeTop + margin, containerHeight -
+    /// safeBottom - margin]`.
+    static func clampedCardTop(
+        spotlight: CGRect?,
+        cardHeight: CGFloat,
+        containerHeight: CGFloat,
+        safeTop: CGFloat,
+        safeBottom: CGFloat,
+        margin: CGFloat = 16,
+        gap: CGFloat = 18
+    ) -> CGFloat {
+        let topInset = safeTop + margin
+        let bottomInset = safeBottom + margin
+        let available = max(0, containerHeight - topInset - bottomInset)
+
+        let desiredTop: CGFloat
+        if let rect = spotlight {
+            if rect.midY < containerHeight / 2 {
+                desiredTop = rect.maxY + gap            // below a top-half spotlight
+            } else {
+                desiredTop = rect.minY - gap - cardHeight  // above a bottom-half spotlight
+            }
+        } else {
+            desiredTop = topInset + max(0, (available - cardHeight) / 2)  // centered
+        }
+
+        // Lower bound: never above the top safe band. Upper bound: card bottom
+        // never crosses the bottom safe band (falls back to topInset when the
+        // card is taller than the band — the scroll path then takes over).
+        let maxTop = max(topInset, containerHeight - bottomInset - cardHeight)
+        return min(max(desiredTop, topInset), maxTop)
+    }
+
+    /// Whether the card is taller than the safe band and therefore needs to
+    /// scroll for Skip/Next to stay reachable. Mirrors the runtime branch in
+    /// `tooltipLayout`; exposed for unit tests.
+    static func cardNeedsScroll(
+        cardHeight: CGFloat,
+        containerHeight: CGFloat,
+        safeTop: CGFloat,
+        safeBottom: CGFloat,
+        margin: CGFloat = 16
+    ) -> Bool {
+        let available = max(0, containerHeight - (safeTop + margin) - (safeBottom + margin))
+        return cardHeight > available && available > 0
     }
 
     private var card: some View {
@@ -164,6 +262,15 @@ struct TourOverlay: View {
         .transition(.opacity.combined(with: .scale(scale: 0.96)))
         .accessibilityElement(children: .contain)
         .accessibilityAddTraits(.isModal)
+    }
+}
+
+/// Carries the measured tooltip-card height up the view tree so `tooltipLayout`
+/// can clamp the card's position to the safe area.
+private struct TourCardHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
     }
 }
 

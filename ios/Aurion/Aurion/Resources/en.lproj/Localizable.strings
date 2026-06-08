@@ -1030,3 +1030,9 @@
 "capture.a11yShowTranscription" = "Show live transcription";
 "capture.maskingReassurance" = "Faces are masked on this device before any video is uploaded.";
 "capture.consentBadgeA11y" = "Consent confirmed";
+
+/* -- #352 capture ultra-wide (0.5x) zoom + version label -- */
+"capture.zoom.a11yWide" = "Wide angle";
+"capture.zoom.a11yStandard" = "Standard";
+"capture.zoom.a11yHint" = "Switches the camera between the standard and wide-angle (0.5\U00D7) lens.";
+"version.label" = "Version %1$@ (build %2$@)";
