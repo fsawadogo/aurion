@@ -94,6 +94,66 @@ resource "aws_amplify_app" "web_portal" {
   # rewrite below routes any nested path to that placeholder. The
   # client-side router reads the URL and renders the right content.
   # Order matters: more specific rules MUST come before the catch-all.
+  #
+  # List pages share a base path with their `[id]` detail route, so the
+  # `/X/<*>` wildcards below would otherwise shadow the bare list URL on a
+  # hard load — Amplify serves the detail `_/index.html` shell for
+  # `/sessions/`, whose client reads the last path segment ("sessions") as
+  # the :id and calls `/admin/sessions/sessions` → 500. These exact-match
+  # rules MUST precede the wildcards so the base path serves the LIST index;
+  # nested `/X/<uuid>` still falls through to the detail placeholder.
+  # (`/portal/patients` is detail-only — no list page — so it's omitted.)
+  custom_rule {
+    source = "/sessions/"
+    target = "/sessions/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/sessions"
+    target = "/sessions/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/audit/"
+    target = "/audit/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/audit"
+    target = "/audit/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/eval/"
+    target = "/eval/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/eval"
+    target = "/eval/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/portal/notes/"
+    target = "/portal/notes/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/portal/notes"
+    target = "/portal/notes/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/portal/templates/"
+    target = "/portal/templates/index.html"
+    status = "200"
+  }
+  custom_rule {
+    source = "/portal/templates"
+    target = "/portal/templates/index.html"
+    status = "200"
+  }
+
   custom_rule {
     source = "/portal/notes/<*>"
     target = "/portal/notes/_/index.html"
