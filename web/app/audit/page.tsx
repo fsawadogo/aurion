@@ -8,6 +8,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { getAuditLog, exportAuditCsv, humanizeError} from "@/lib/api";
+import { shortSessionId } from "@/lib/session-format";
 import type { AuditEvent, AuditFilters, PaginatedResponse } from "@/types";
 
 function eventBadgeVariant(
@@ -251,10 +252,11 @@ export default function AuditPage() {
                         {new Date(evt.event_timestamp).toLocaleString()}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3">
-                        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
-                          {evt.session_id.length > 12
-                            ? `${evt.session_id.slice(0, 8)}...`
-                            : evt.session_id}
+                        <code
+                          title={evt.session_id}
+                          className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs tracking-tight text-gray-500"
+                        >
+                          {shortSessionId(evt.session_id)}
                         </code>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">

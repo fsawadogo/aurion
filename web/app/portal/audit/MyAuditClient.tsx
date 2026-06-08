@@ -11,6 +11,7 @@ import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
 import { getMyAuditLog } from "@/lib/portal-api";
+import { shortSessionId } from "@/lib/session-format";
 import type { AuditEvent, AuditFilters, PaginatedResponse } from "@/types";
 
 /**
@@ -438,7 +439,7 @@ function AuditRow({
   // Local clinician time for the timestamp (not UTC) so review feels
   // natural. Falls back to the raw ISO string if parsing fails.
   const timestamp = formatLocalTimestamp(event.event_timestamp);
-  const sessionIdShort = event.session_id.slice(0, 8);
+  const sessionIdShort = shortSessionId(event.session_id);
   const detailsPreview = formatDetailsPreview(event.details, noDetailsLabel);
 
   return (
@@ -452,6 +453,7 @@ function AuditRow({
             static export collapses dynamic `[id]` segments. */}
         <a
           href={`/portal/notes/${event.session_id}`}
+          title={event.session_id}
           aria-label={`${openSessionLabel} ${sessionIdShort}`}
           className="inline-flex items-center gap-1 rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-navy-700 transition-colors hover:bg-gold-50 hover:text-navy-900"
         >
