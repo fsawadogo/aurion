@@ -10,8 +10,9 @@ import { withIntl } from "./helpers/intl";
 /**
  * Sidebar — "My Activity" nav entry (issue #162, AC-6 + AC-8).
  *
- * Verifies the new entry shows for CLINICIAN + ADMIN roles and that
- * the i18n catalogs both carry the `Sidebar.nav.myActivity` key.
+ * Verifies the entry shows for CLINICIAN only (it's the clinician's own
+ * self-audit; admin/eval/compliance use the canonical /audit) and that the
+ * i18n catalogs both carry the `Sidebar.nav.myActivity` key.
  *
  * `getMe` is mocked so the sidebar resolves a current user without a
  * network round-trip. Profile fetch (theme + locale sync) is mocked
@@ -88,7 +89,7 @@ describe("Sidebar — My Activity nav entry (AC-6)", () => {
     }
   });
 
-  it("renders the entry for the ADMIN role (preview mode)", async () => {
+  it("does NOT render the entry for the ADMIN role (clinician-only workspace)", async () => {
     vi.mocked(getMe).mockResolvedValue({
       user_id: "u2",
       email: "admin@aurionclinical.com",
@@ -99,8 +100,11 @@ describe("Sidebar — My Activity nav entry (AC-6)", () => {
     render(withIntl(<Sidebar />));
 
     await waitFor(() => {
-      expect(screen.getAllByText("My Activity").length).toBeGreaterThan(0);
+      // Admin sees the canonical Audit Log (/audit), not the clinician
+      // self-activity surface.
+      expect(screen.getAllByText("Audit Log").length).toBeGreaterThan(0);
     });
+    expect(screen.queryByText("My Activity")).toBeNull();
   });
 
   it("does NOT render the entry for COMPLIANCE_OFFICER (admin /audit covers that role)", async () => {

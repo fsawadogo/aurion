@@ -67,24 +67,20 @@ const navigation: {
   { tKey: "capturedMedia", href: "/portal/media", icon: Film, roles: ["COMPLIANCE_OFFICER", "EVAL_TEAM", "ADMIN"] },
   { tKey: "eval",       href: "/eval",      icon: FlaskConical,  roles: ["EVAL_TEAM", "ADMIN"] },
   // ── Clinician portal surface (PR-C onward) ──
-  // Admin can preview each portal page for support — backend still
-  // 403s admin from POST/PATCH/DELETE on /me/* routes (those are
-  // CLINICIAN-only at the dependency layer).
+  // CLINICIAN-only personal workspace. Admin/eval/compliance roles do NOT
+  // see these: the /me/* endpoints behind them are CLINICIAN-gated (so they
+  // 403 for other roles), and a clinician's own notes / macros / profile /
+  // activity aren't an admin surface. Admins get their account essentials
+  // (locale, theme, sign out) from the sidebar footer instead.
   { tKey: "dashboard",  href: "/portal/dashboard",  icon: BarChart3, roles: ["CLINICIAN"] },
-  { tKey: "myNotes",    href: "/portal/notes",      icon: FileText,  roles: ["CLINICIAN", "ADMIN"] },
-  { tKey: "templates",  href: "/portal/templates",  icon: LayoutGrid, roles: ["CLINICIAN", "ADMIN"] },
-  { tKey: "macros",     href: "/portal/macros",     icon: Zap,       roles: ["CLINICIAN", "ADMIN"] },
-  { tKey: "myProfile",  href: "/portal/profile",    icon: CircleUser, roles: ["CLINICIAN", "ADMIN"] },
-  // Self-audit log (#162) — clinician-side mirror of /audit. Sits
-  // next to My Profile because both are personal-account surfaces.
-  // ADMIN previews the page but the backend /me/audit endpoint
-  // 403s admin (CLINICIAN-only at the dependency layer), so admins
-  // see an empty state — the canonical full audit is /audit.
-  { tKey: "myActivity", href: "/portal/audit",      icon: Activity,  roles: ["CLINICIAN", "ADMIN"] },
-  // AI Prompts Transparency — read-only catalog of every LLM system
-  // prompt the encounter pipeline uses. Sits at the bottom of the
-  // clinician nav because it's a reference / audit surface, not part
-  // of the everyday workflow.
+  { tKey: "myNotes",    href: "/portal/notes",      icon: FileText,  roles: ["CLINICIAN"] },
+  { tKey: "templates",  href: "/portal/templates",  icon: LayoutGrid, roles: ["CLINICIAN"] },
+  { tKey: "macros",     href: "/portal/macros",     icon: Zap,       roles: ["CLINICIAN"] },
+  { tKey: "myProfile",  href: "/portal/profile",    icon: CircleUser, roles: ["CLINICIAN"] },
+  { tKey: "myActivity", href: "/portal/audit",      icon: Activity,  roles: ["CLINICIAN"] },
+  // AI Prompts Transparency — read-only catalog of every LLM system prompt
+  // the encounter pipeline uses. A reference / audit surface (not per-
+  // clinician workflow) and GET /me/prompts allows ADMIN, so admins keep it.
   { tKey: "aiPrompts",  href: "/portal/prompts",    icon: ScrollText, roles: ["CLINICIAN", "ADMIN"] },
 ];
 

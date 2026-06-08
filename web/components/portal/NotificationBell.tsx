@@ -18,6 +18,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 
+import { getMe } from "@/lib/api";
 import { getMyAuditLog } from "@/lib/portal-api";
 import { formatRelative } from "@/lib/session-format";
 import type { AuditEvent, PaginatedResponse } from "@/types";
@@ -82,6 +83,11 @@ export default function NotificationBell() {
   const [failed, setFailed] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
   const buttonRef = useRef<HTMLButtonElement>(null);
+  // The bell surfaces the CLINICIAN's own session activity (/me/audit is
+  // CLINICIAN-gated). For admin/eval/compliance it has no meaning and the
+  // endpoint 403s, so we resolve the role once and render nothing — and
+  // never poll — for non-clinicians. null = not yet resolved.
+  const [isClinician, setIsClinician] = useState<boolean | null>(null);
 
   /* ── Read lastSeen on mount ───────────────────────────────────────── */
 
@@ -93,6 +99,22 @@ export default function NotificationBell() {
       // localStorage can throw in Safari private mode — fail silent,
       // every event becomes "unread" which is the safer default.
     }
+  }, []);
+
+  /* ── Resolve role once (gate the bell to clinicians) ──────────────── */
+
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((me) => {
+        if (!cancelled) setIsClinician(me.role === "CLINICIAN");
+      })
+      .catch(() => {
+        if (!cancelled) setIsClinician(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   /* ── Polling ──────────────────────────────────────────────────────── */
@@ -111,10 +133,11 @@ export default function NotificationBell() {
   }, []);
 
   useEffect(() => {
+    if (!isClinician) return; // don't poll /me/audit for non-clinician roles
     void load();
     const id = window.setInterval(() => void load(), POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
-  }, [load]);
+  }, [load, isClinician]);
 
   /* ── Unread count ─────────────────────────────────────────────────── */
 
@@ -176,6 +199,10 @@ export default function NotificationBell() {
   }, [open]);
 
   /* ── Render ───────────────────────────────────────────────────────── */
+
+  // Clinician-only surface — render nothing for other roles (and while the
+  // role is still resolving) so admins never see a bell that 403s.
+  if (!isClinician) return null;
 
   return (
     <div className="fixed top-4 right-4 z-40 sm:top-5 sm:right-5">
