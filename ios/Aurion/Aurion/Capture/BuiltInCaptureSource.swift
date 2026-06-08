@@ -19,6 +19,11 @@ final class BuiltInCaptureSource: CaptureSource {
     @Published private(set) var cameraPermission: CapturePermissionStatus = .notDetermined
     @Published private(set) var microphonePermission: CapturePermissionStatus = .notDetermined
 
+    /// Active back-camera lens: `false` = standard (1×), `true` = ultra-wide
+    /// (0.5×). Published so the capture controls reflect the live lens. Mirror
+    /// of the underlying CaptureManager.
+    @Published private(set) var useUltraWide: Bool = false
+
     private let manager: CaptureManager
     private var cancellables = Set<AnyCancellable>()
 
@@ -61,6 +66,10 @@ final class BuiltInCaptureSource: CaptureSource {
         manager.$capturedFrames
             .receive(on: RunLoop.main)
             .assign(to: &$capturedFrames)
+
+        manager.$useUltraWide
+            .receive(on: RunLoop.main)
+            .assign(to: &$useUltraWide)
     }
 
     override func discoverIfNeeded() {
@@ -119,6 +128,18 @@ final class BuiltInCaptureSource: CaptureSource {
     /// Set by SessionManager before `start()` to gate the camera input.
     /// False keeps the LED dark in audio-only modes.
     var includeVideo: Bool = true
+
+    /// Whether this device has a back ultra-wide (0.5×) lens. Drives the
+    /// capture screen's 0.5× toggle visibility. `false` on the Simulator (no
+    /// camera) so the control stays hidden there.
+    var ultraWideAvailable: Bool { manager.ultraWideAvailable }
+
+    /// Switches the back camera between standard (1×) and ultra-wide (0.5×).
+    /// Falls back to wide + publishes `useUltraWide = false` when the device
+    /// lacks an ultra-wide lens. Safe to call before or during a live session.
+    func setUltraWide(_ enabled: Bool) {
+        manager.setUltraWide(enabled)
+    }
 
     /// Rolling video sample buffer ring, pumped by the underlying
     /// CaptureManager during active recording. Exposed so the P1-5

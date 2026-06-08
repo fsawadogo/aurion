@@ -439,17 +439,17 @@ struct ProfileView: View {
                         Text(L("profile.version"))
                             .foregroundColor(.aurionTextPrimary)
                         Spacer()
-                        // Read from the bundle so the displayed values
-                        // always track the installed binary instead of
-                        // drifting from a hardcoded literal in TestFlight.
-                        Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "—")
+                        // Read from the bundle (via AppVersion) so the displayed
+                        // values always track the installed binary instead of
+                        // drifting from a hardcoded literal in TestFlight (#352).
+                        Text(AppVersion.short)
                             .foregroundColor(.secondary)
                     }
                     HStack {
                         Text(L("profile.build"))
                             .foregroundColor(.aurionTextPrimary)
                         Spacer()
-                        Text(Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "—")
+                        Text(AppVersion.build)
                             .foregroundColor(.secondary)
                     }
                     HStack {

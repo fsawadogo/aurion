@@ -1018,3 +1018,9 @@
 "capture.a11yShowTranscription" = "Afficher la transcription en direct";
 "capture.maskingReassurance" = "Les visages sont masqu\U00E9s sur cet appareil avant tout t\U00E9l\U00E9versement de la vid\U00E9o.";
 "capture.consentBadgeA11y" = "Consentement confirm\U00E9";
+
+/* -- #352 capture ultra-wide (0.5x) zoom + version label -- */
+"capture.zoom.a11yWide" = "Grand angle";
+"capture.zoom.a11yStandard" = "Standard";
+"capture.zoom.a11yHint" = "Bascule la cam\U00E9ra entre l\U2019objectif standard et le grand angle (0,5\U00D7).";
+"version.label" = "Version %1$@ (build %2$@)";

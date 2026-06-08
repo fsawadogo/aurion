@@ -480,6 +480,14 @@ struct LoginView: View {
                 startPoint: .top, endPoint: .bottom
             ).ignoresSafeArea()
 
+            // #271 — wrap the sign-in column in a scroll view so every control
+            // (email, password, Remember-me, Sign In, Forgot password, the
+            // reset-link fallback, and Sign in with Face ID) stays reachable at
+            // large Dynamic Type. The GeometryReader `minHeight` keeps the card
+            // vertically centered (via the Spacers) when it fits and lets the
+            // column scroll once it overflows the viewport.
+            GeometryReader { proxy in
+            ScrollView(showsIndicators: false) {
             VStack(spacing: 0) {
                 AurionLogoLockup(size: 1.2, dark: true)
                     .padding(.top, 80)
@@ -645,13 +653,24 @@ struct LoginView: View {
 
                 Spacer()
 
-                Text(L("login.footer"))
-                    .aurionFont(12, relativeTo: .caption)
-                    .tracking(0.4)
-                    .foregroundColor(Color.aurionOnNavyFootnote)
-                    .padding(.bottom, 40)
-                    .opacity(loginAppeared ? 1 : 0)
-                    .animation(.easeOut(duration: 0.5).delay(0.4), value: loginAppeared)
+                VStack(spacing: 4) {
+                    Text(L("login.footer"))
+                        .aurionFont(12, relativeTo: .caption)
+                        .tracking(0.4)
+                        .foregroundColor(Color.aurionOnNavyFootnote)
+                    // #352 — discreet build stamp so pilot users can report the
+                    // exact version in TestFlight feedback. Reads CFBundle*
+                    // from the bundle via AppVersion.
+                    Text(AppVersion.displayLabel)
+                        .aurionFont(11, relativeTo: .caption2)
+                        .foregroundColor(Color.aurionOnNavyFootnote.opacity(0.8))
+                }
+                .padding(.bottom, 40)
+                .opacity(loginAppeared ? 1 : 0)
+                .animation(.easeOut(duration: 0.5).delay(0.4), value: loginAppeared)
+            }
+            .frame(minHeight: proxy.size.height)
+            }
             }
         }
         .onAppear {

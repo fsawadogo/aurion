@@ -62,6 +62,27 @@ final class CaptureManager: NSObject, ObservableObject {
     @Published var microphonePermission: CapturePermissionStatus = .notDetermined
     @Published var error: String?
 
+    /// Back-camera lens selection: `false` = standard wide (1×), `true` =
+    /// ultra-wide (0.5×). UI-facing mirror of `desiredUltraWide`, kept on the
+    /// main actor so SwiftUI can observe lens changes. `private(set)` — callers
+    /// flip it through `setUltraWide(_:)`, never directly, so the session-queue
+    /// shadow stays in step.
+    @Published private(set) var useUltraWide: Bool = false
+
+    /// Session-queue-readable copy of the lens preference. `useUltraWide` is
+    /// main-actor isolated and can't be read from the capture queue, so the
+    /// queue reads this instead. Updated alongside `useUltraWide`.
+    private nonisolated(unsafe) var desiredUltraWide: Bool = false
+
+    /// Whether this device exposes a back ultra-wide (0.5×) camera. Computed
+    /// from device discovery so the capture UI can hide the 0.5× toggle on
+    /// phones that lack the lens (SE, older single-camera devices). The
+    /// Simulator has no camera, so this is `false` there — the toggle stays
+    /// hidden and 1× capture is unaffected (the safe fallback).
+    nonisolated var ultraWideAvailable: Bool {
+        Self.videoDevice(position: .back, ultraWide: true).isUltraWide
+    }
+
     // MARK: - Configuration
 
     /// Frames per second to extract from the video stream (from AppConfig pipeline.video_capture_fps).
@@ -217,6 +238,34 @@ final class CaptureManager: NSObject, ObservableObject {
     /// patient and clinician.
     private nonisolated(unsafe) var configuredCaptureVideo: Bool = true
 
+    /// Resolves the back/front video device for the requested lens. Prefers the
+    /// ultra-wide (0.5×) lens when `ultraWide` is requested AND the device has
+    /// one on the back; otherwise the standard wide lens, with a final
+    /// `default(for: .video)` fallback so we always get *some* camera if one
+    /// exists. Returns whether the resolved device is actually the ultra-wide
+    /// lens — used to reconcile the published flag when a request falls back.
+    private nonisolated static func videoDevice(
+        position: AVCaptureDevice.Position,
+        ultraWide: Bool
+    ) -> (device: AVCaptureDevice?, isUltraWide: Bool) {
+        if ultraWide, position == .back,
+           let uw = AVCaptureDevice.default(.builtInUltraWideCamera, for: .video, position: .back) {
+            return (uw, true)
+        }
+        let wide = AVCaptureDevice.default(.builtInWideAngleCamera, for: .video, position: position)
+            ?? AVCaptureDevice.default(for: .video)
+        return (wide, false)
+    }
+
+    /// The session's current video-device input, if any. Lets `setUltraWide`
+    /// swap just the camera input mid-session without touching the audio input
+    /// or either output (the 3-stream pipeline stays intact).
+    private nonisolated func currentVideoInput() -> AVCaptureDeviceInput? {
+        captureSession.inputs
+            .compactMap { $0 as? AVCaptureDeviceInput }
+            .first { $0.device.hasMediaType(.video) }
+    }
+
     /// Configures the AVCaptureSession with audio and video inputs/outputs.
     /// Idempotent in the common case — if the session already has the
     /// requested camera position wired up, this is a no-op. The destructive
@@ -266,17 +315,24 @@ final class CaptureManager: NSObject, ObservableObject {
 
             // --- Video Input + Output (skipped when audio-only) ---
             if captureVideo {
-                let videoDevice = AVCaptureDevice.default(
-                    .builtInWideAngleCamera,
-                    for: .video,
-                    position: requestedPosition
-                ) ?? AVCaptureDevice.default(for: .video)
-
-                if let device = videoDevice,
+                // Honor the current zoom preference: ultra-wide (0.5×) when
+                // requested AND present, otherwise the standard wide lens. A
+                // device without an ultra-wide camera (and the Simulator)
+                // silently lands on 1× — no regression, never a crash.
+                let resolved = Self.videoDevice(
+                    position: requestedPosition,
+                    ultraWide: self.desiredUltraWide
+                )
+                if let device = resolved.device,
                    let videoInput = try? AVCaptureDeviceInput(device: device) {
                     if self.captureSession.canAddInput(videoInput) {
                         self.captureSession.addInput(videoInput)
                     }
+                    // Reconcile the published lens flag with what we actually
+                    // got — a requested ultra-wide may have fallen back to wide.
+                    let isUltraWide = resolved.isUltraWide
+                    self.desiredUltraWide = isUltraWide
+                    Task { @MainActor in self.useUltraWide = isUltraWide }
                 } else {
                     Task { @MainActor in
                         self.error = "No video device available."
@@ -434,6 +490,77 @@ final class CaptureManager: NSObject, ObservableObject {
         guard isCapturing, isPaused else { return }
         isPaused = false
         audioBuffer.activate()
+    }
+
+    // MARK: - Lens Switching (0.5× ultra-wide ↔ 1× wide)
+
+    /// Switches the back camera between the standard wide (1×) and ultra-wide
+    /// (0.5×) lens. Safe before OR during a live session:
+    ///
+    /// - If ultra-wide is requested but the device lacks it, this falls back to
+    ///   the wide lens and publishes `useUltraWide = false` so the UI can hide
+    ///   the toggle. Never crashes.
+    /// - Mid-session it swaps ONLY the video input inside a
+    ///   `beginConfiguration`/`commitConfiguration` transaction on the capture
+    ///   session queue (the same serial queue every input/output mutation uses,
+    ///   so it never races the preview layer's render thread). The audio input
+    ///   and both outputs — the 3-stream pipeline — are left untouched.
+    /// - On any failure adding the new input it restores the previous input, or
+    ///   a fresh wide input as a last resort, so the session is never left
+    ///   without a camera.
+    func setUltraWide(_ enabled: Bool) {
+        desiredUltraWide = enabled
+        sessionQueue.async { [weak self] in
+            guard let self else { return }
+
+            // Lens switching only applies to a video-wired session — audio-only
+            // modes have no camera input to swap.
+            guard self.configuredCaptureVideo else {
+                Task { @MainActor in self.useUltraWide = false }
+                return
+            }
+
+            let position = self.configuredCameraPosition ?? .back
+            let resolved = Self.videoDevice(position: position, ultraWide: enabled)
+            guard let newDevice = resolved.device,
+                  let newInput = try? AVCaptureDeviceInput(device: newDevice) else {
+                // Couldn't build the requested input — leave the current lens
+                // as-is and report ultra-wide as off.
+                self.desiredUltraWide = false
+                Task { @MainActor in self.useUltraWide = false }
+                return
+            }
+
+            let previousVideoInput = self.currentVideoInput()
+
+            self.captureSession.beginConfiguration()
+            if let previousVideoInput {
+                self.captureSession.removeInput(previousVideoInput)
+            }
+            if self.captureSession.canAddInput(newInput) {
+                self.captureSession.addInput(newInput)
+                self.captureSession.commitConfiguration()
+                let isUltraWide = resolved.isUltraWide
+                self.desiredUltraWide = isUltraWide
+                Task { @MainActor in self.useUltraWide = isUltraWide }
+            } else {
+                // New input rejected — restore the previous input, or a fresh
+                // wide input as a last resort, so the camera never goes dark.
+                if let previousVideoInput, self.captureSession.canAddInput(previousVideoInput) {
+                    self.captureSession.addInput(previousVideoInput)
+                } else {
+                    let wide = Self.videoDevice(position: position, ultraWide: false)
+                    if let wideDevice = wide.device,
+                       let wideInput = try? AVCaptureDeviceInput(device: wideDevice),
+                       self.captureSession.canAddInput(wideInput) {
+                        self.captureSession.addInput(wideInput)
+                    }
+                }
+                self.captureSession.commitConfiguration()
+                self.desiredUltraWide = false
+                Task { @MainActor in self.useUltraWide = false }
+            }
+        }
     }
 
     // MARK: - Audio Data Retrieval
