@@ -302,6 +302,35 @@ struct MfaSetupView: View {
                     .multilineTextAlignment(.leading)
                     .frame(maxWidth: .infinity, alignment: .leading)
             }
+
+            // Back to the QR / secret display. The secret is still held in
+            // @State, so returning is free — the confirm → display transition
+            // was previously one-way (#300). Disabled mid-verify so we don't
+            // yank the card out from under an in-flight request.
+            Button {
+                AurionHaptics.selection()
+                code = ""
+                error = nil
+                withAnimation(AurionAnimation.smooth) {
+                    phase = .display
+                }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "chevron.left")
+                        .font(.system(size: 12, weight: .semibold))
+                    Text(L("setup.back"))
+                }
+                .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                .foregroundColor(.white.opacity(0.8))
+                .frame(maxWidth: .infinity)
+                .frame(minHeight: AurionSpacing.hitMin)
+                .contentShape(Rectangle())
+            }
+            .disabled(phase == .finishing)
+
+            // Recovery path for a clinician who can't produce a code (lost the
+            // authenticator mid-setup) — a way forward besides Cancel.
+            MfaRecoveryLink()
         }
     }
 

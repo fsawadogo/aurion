@@ -42,6 +42,12 @@ final class AppNavigation: ObservableObject {
     /// specific session's note. The dashboard / inbox consumer is
     /// responsible for clearing it once the view has navigated.
     @Published var pendingNoteSessionID: String?
+    /// Number of sessions in `AWAITING_REVIEW` — the count of notes the
+    /// physician still has to review. Published here (rather than kept local
+    /// to ``DashboardView``) so ``MainTabView`` can surface it as a badge on
+    /// the Sessions tab. ``DashboardView`` is the single writer: it refreshes
+    /// this whenever it (re)loads the session list.
+    @Published var pendingReviewCount: Int = 0
 
     private init() {}
 

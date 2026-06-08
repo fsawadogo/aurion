@@ -56,6 +56,11 @@
 "noteReady.subtitle" = "Your clinical note has been generated and is ready for review.";
 "noteReady.reviewNow" = "Review Now";
 "noteReady.saveLater" = "Save for Later";
+"noteReady.sectionCount.one" = "%d section";
+"noteReady.sectionCount.many" = "%d sections";
+"noteReady.needsReview.one" = "%d needs your review";
+"noteReady.needsReview.many" = "%d need your review";
+"noteReady.completePct" = "%d%% complete";
 
 /* ── Post-Encounter ───────────────────────────────────── */
 "postEncounter.title" = "Confirm Settings";
@@ -424,6 +429,8 @@
 "onboarding.biometric.title" = "Biometric Data Consent";
 "onboarding.biometric.sub" = "Please read the following carefully before proceeding.";
 "onboarding.biometric.read" = "I have read and understand the above";
+"onboarding.biometric.scrollHint" = "Scroll to the end to continue";
+"onboarding.biometric.scrollA11yHint" = "Scroll the consent text to the bottom to enable the confirmation toggle.";
 "onboarding.biometric.agree" = "I Agree \U2014 Create Voice Profile";
 "onboarding.biometric.goBack" = "Go Back";
 "onboarding.biometric.consentText" = "Aurion Clinical AI requests your consent to collect and process a short voice recording for the purpose of creating a speaker voice profile.\n\n**What we collect:** A 30-60 second voice recording read from clinical sentences.\n\n**How it is used:** The recording is processed entirely on this device to create a voice embedding (a mathematical representation of your voice). This embedding is used during clinical sessions to distinguish your speech from your patient\U2019s.\n\n**Storage:** The voice embedding is stored exclusively in this device\U2019s secure Keychain. It is never transmitted to any server.\n\n**Recording deletion:** The raw voice recording is deleted from device memory immediately after the voice embedding is generated. It is never stored on disk or uploaded.\n\n**Your rights:** You may delete your voice profile at any time from Settings. You may also re-record your voice profile. Declining does not affect your ability to use Aurion \U2014 the system will function without speaker separation.\n\nThis consent is governed by applicable biometric data protection laws including Quebec\U2019s Law 25 and PIPEDA.";
@@ -602,6 +609,14 @@
 "login.mfa.setup.confirmLabel" = "Confirm the 6-digit code from the app.";
 "login.mfa.setup.completeButton" = "Complete setup";
 "login.mfa.setup.codeMismatch" = "That code didn\U2019t match. Try again.";
+
+/* ── MFA: lost-authenticator recovery (#300) ─────────── */
+"login.mfa.recovery.cantAccess" = "Can\U2019t access your code?";
+"login.mfa.recovery.a11yHint" = "Opens recovery guidance for a lost authenticator app.";
+"login.mfa.recovery.title" = "Lost access to your authenticator?";
+"login.mfa.recovery.body" = "Your authenticator app generates the 6-digit codes. If you\U2019ve lost the device or removed the app, you can\U2019t generate a new code yourself.\n\nFor security, two-factor authentication can only be reset by your clinic administrator. Contact your administrator or Aurion support and we\U2019ll restore access to your account.";
+"login.mfa.recovery.emailButton" = "Email support";
+"login.mfa.recovery.emailA11yHint" = "Opens a new email to Aurion support.";
 
 /* ── Forgot password (email-link reset) ──────────────── */
 "login.forgotPassword.linkText" = "Forgot password?";
@@ -791,6 +806,9 @@
 "noteReview.optionalPlaceholder" = "Optional \U2014 fills only if imaging was shown during the encounter.";
 "noteReview.noContent" = "No content captured for this section.";
 "noteReview.sources" = "SOURCES";
+"noteReview.sourcesCount.one" = "%d source";
+"noteReview.sourcesCount.many" = "%d sources";
+"noteReview.sourcesHint" = "Double tap to show or hide the sources for this section.";
 "noteReview.editedBadge" = "EDITED";
 "noteReview.conflictHint" = "Visual vs audio conflict \U2014 resolve before approval.";
 "noteReview.acceptVisual" = "Accept visual";
@@ -984,6 +1002,11 @@
 "capture.a11yShowPreview" = "Show camera preview";
 "frames.a11yFrame" = "Captured frame at %@";
 "frames.a11yFrameHint" = "Double tap to view full size";
+"frames.maskingMasked" = "Masked";
+"frames.maskingPending" = "Pending";
+"frames.maskingMaskedA11y" = "Faces masked";
+"frames.maskingPendingA11y" = "Masking pending \U2014 faces are masked on this device before upload";
+"frames.zoomHint" = "Pinch to zoom. Double tap to reset.";
 "common.forget" = "Forget";
 "deviceStatus.connected" = "Connected";
 "deviceStatus.disconnected" = "Disconnected";

@@ -112,6 +112,11 @@ struct MfaChallengeView: View {
                             .multilineTextAlignment(.leading)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
+
+                    // Recovery path for a clinician who lost their authenticator
+                    // — otherwise Cancel-to-login was the only way out.
+                    MfaRecoveryLink()
+                        .padding(.top, 2)
                 }
                 .padding(24)
                 .background(Color.white.opacity(0.06))

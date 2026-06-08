@@ -46,6 +46,7 @@ struct FrameGalleryView: View {
                                 .accessibilityLabel(
                                     L("frames.a11yFrame", formatTimestamp(frame.timestamp))
                                 )
+                                .accessibilityValue(maskingA11yValue(frame.maskingStatus))
                                 .accessibilityHint(L("frames.a11yFrameHint"))
                                 .transition(
                                     .scale(scale: 0.85)
@@ -135,11 +136,48 @@ struct FrameGalleryView: View {
                 .padding(6)
                 .accessibilityHidden(true)
         }
+        // Masking-status badge — top-trailing over the image. Decorative:
+        // the status is already announced via the button's accessibilityValue,
+        // so hide the visual pill from VoiceOver here.
+        .overlay(alignment: .topTrailing) {
+            maskingBadge(frame.maskingStatus)
+                .padding(6)
+                .accessibilityHidden(true)
+        }
         .clipShape(RoundedRectangle(cornerRadius: 12))
         .overlay(
             RoundedRectangle(cornerRadius: 12)
                 .stroke(Color.aurionGold.opacity(0.25), lineWidth: 1)
         )
+    }
+
+    /// Pill badge surfacing a frame's privacy-masking state — green "Masked"
+    /// when `MaskingPipeline` has confirmed the frame, amber "Pending"
+    /// otherwise. The view's whole purpose is to let the physician verify
+    /// framing + masking, so we make the masking state explicit rather than
+    /// implied.
+    @ViewBuilder
+    private func maskingBadge(_ status: FrameMaskingStatus) -> some View {
+        let masked = status == .masked
+        HStack(spacing: 3) {
+            Image(systemName: masked ? "checkmark.shield.fill" : "clock.fill")
+                .font(.system(size: 9, weight: .bold))
+            Text(masked ? L("frames.maskingMasked") : L("frames.maskingPending"))
+                .aurionFont(9, weight: .bold, relativeTo: .caption2)
+        }
+        .foregroundColor(masked ? .aurionGreen : .aurionAmber)
+        .padding(.horizontal, 6)
+        .padding(.vertical, 3)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+    }
+
+    /// VoiceOver value describing a frame's masking state, attached to the
+    /// thumbnail button so the badge isn't lost to non-visual users.
+    private func maskingA11yValue(_ status: FrameMaskingStatus) -> String {
+        status == .masked
+            ? L("frames.maskingMaskedA11y")
+            : L("frames.maskingPendingA11y")
     }
 
     private var emptyState: some View {
@@ -171,9 +209,21 @@ struct FrameGalleryView: View {
 
 /// Tap-to-expand presentation of a single captured frame. No edit / delete
 /// affordances — the physician's role here is to verify, not curate.
+/// Supports pinch-to-zoom (1×–5×) with drag-to-pan and double-tap reset so
+/// the physician can inspect framing + masking detail up close.
 private struct FullFrameView: View {
     let frame: CapturedFrame
     @Environment(\.dismiss) private var dismiss
+
+    // Zoom + pan state. `last*` hold the committed value between gestures so
+    // a new pinch/drag continues from where the previous one ended.
+    @State private var scale: CGFloat = 1
+    @State private var lastScale: CGFloat = 1
+    @State private var offset: CGSize = .zero
+    @State private var lastOffset: CGSize = .zero
+
+    private let minScale: CGFloat = 1
+    private let maxScale: CGFloat = 5
 
     var body: some View {
         NavigationStack {
@@ -185,8 +235,22 @@ private struct FullFrameView: View {
                         .resizable()
                         .aspectRatio(contentMode: .fit)
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                        .scaleEffect(scale)
+                        .offset(offset)
+                        .gesture(magnification)
+                        .simultaneousGesture(pan)
+                        .onTapGesture(count: 2) { toggleZoom() }
+                        .accessibilityHint(L("frames.zoomHint"))
                         .transition(.scale(scale: 0.95).combined(with: .opacity))
                 }
+
+                // Masking-status badge — top-leading over the image, mirroring
+                // the gallery thumbnail's pill so the verification signal
+                // carries into the full view.
+                maskingBadge(frame.maskingStatus)
+                    .padding(16)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                    .allowsHitTesting(false)
             }
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -205,6 +269,76 @@ private struct FullFrameView: View {
             .toolbarBackground(.visible, for: .navigationBar)
             .toolbarColorScheme(.dark, for: .navigationBar)
         }
+    }
+
+    // MARK: - Zoom gestures
+
+    private var magnification: some Gesture {
+        MagnificationGesture()
+            .onChanged { value in
+                scale = min(max(lastScale * value, minScale), maxScale)
+            }
+            .onEnded { _ in
+                lastScale = scale
+                if scale <= minScale {
+                    withAnimation(AurionAnimation.smooth) { resetZoom() }
+                }
+            }
+    }
+
+    private var pan: some Gesture {
+        DragGesture()
+            .onChanged { value in
+                // Panning only makes sense once zoomed in; below 1× the image
+                // already fills its fitted bounds.
+                guard scale > minScale else { return }
+                offset = CGSize(
+                    width: lastOffset.width + value.translation.width,
+                    height: lastOffset.height + value.translation.height
+                )
+            }
+            .onEnded { _ in lastOffset = offset }
+    }
+
+    private func toggleZoom() {
+        AurionHaptics.selection()
+        withAnimation(AurionAnimation.smooth) {
+            if scale > minScale {
+                resetZoom()
+            } else {
+                scale = 2.5
+                lastScale = 2.5
+            }
+        }
+    }
+
+    private func resetZoom() {
+        scale = minScale
+        lastScale = minScale
+        offset = .zero
+        lastOffset = .zero
+    }
+
+    // MARK: - Masking badge
+
+    @ViewBuilder
+    private func maskingBadge(_ status: FrameMaskingStatus) -> some View {
+        let masked = status == .masked
+        HStack(spacing: 4) {
+            Image(systemName: masked ? "checkmark.shield.fill" : "clock.fill")
+                .font(.system(size: 11, weight: .bold))
+            Text(masked ? L("frames.maskingMasked") : L("frames.maskingPending"))
+                .aurionFont(11, weight: .bold, relativeTo: .caption2)
+        }
+        .foregroundColor(masked ? .aurionGreen : .aurionAmber)
+        .padding(.horizontal, 8)
+        .padding(.vertical, 5)
+        .background(.ultraThinMaterial)
+        .clipShape(Capsule())
+        .accessibilityElement(children: .ignore)
+        .accessibilityLabel(masked
+            ? L("frames.maskingMaskedA11y")
+            : L("frames.maskingPendingA11y"))
     }
 
     private func formatTimestamp(_ seconds: TimeInterval) -> String {

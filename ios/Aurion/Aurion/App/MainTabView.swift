@@ -60,6 +60,10 @@ struct MainTabView: View {
             Tab(MainTab.sessions.label, systemImage: MainTab.sessions.systemImage, value: MainTab.sessions) {
                 SessionsInboxView()
             }
+            // Badge of notes still awaiting review, fed from the shared nav
+            // bus (DashboardView is the writer). SwiftUI hides the badge when
+            // the value is 0, so no extra guard is needed (#300).
+            .badge(navigation.pendingReviewCount)
             Tab(MainTab.profile.label, systemImage: MainTab.profile.systemImage, value: MainTab.profile) {
                 ProfileView()
             }
