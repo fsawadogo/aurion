@@ -207,6 +207,19 @@ final class CaptureSession: ObservableObject, Identifiable {
         state == .recording || (state == .consentPending && isConsentConfirmed)
     }
 
+    /// Whether the ultra-wide (0.5×) ↔ wide (1×) lens toggle may be offered.
+    /// The lens is chosen PRE-RECORD only (#354): switching it once recording
+    /// is underway reconfigures the live `AVCaptureSession`, and that
+    /// begin/commit transaction stalls ALL data flow — including the audio
+    /// output delegate — dropping tens-to-low-hundreds of ms of PCM. Audio is
+    /// the spine, so a clipped word degrades the transcript. The physician
+    /// frames the shot and picks 0.5×/1× while still in the consent/pre-record
+    /// state; the lens then locks for the duration of the recording (and
+    /// through PAUSED — a paused session is still wired to the live pipeline).
+    var isLensToggleAllowed: Bool {
+        state == .consentPending
+    }
+
     var pauseDuration: TimeInterval? {
         guard let pausedAt, state == .paused else { return nil }
         return Date().timeIntervalSince(pausedAt)

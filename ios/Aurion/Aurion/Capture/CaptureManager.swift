@@ -74,14 +74,18 @@ final class CaptureManager: NSObject, ObservableObject {
     /// queue reads this instead. Updated alongside `useUltraWide`.
     private nonisolated(unsafe) var desiredUltraWide: Bool = false
 
-    /// Whether this device exposes a back ultra-wide (0.5×) camera. Computed
+    /// Whether this device exposes a back ultra-wide (0.5×) camera. Resolved
     /// from device discovery so the capture UI can hide the 0.5× toggle on
     /// phones that lack the lens (SE, older single-camera devices). The
     /// Simulator has no camera, so this is `false` there — the toggle stays
     /// hidden and 1× capture is unaffected (the safe fallback).
-    nonisolated var ultraWideAvailable: Bool {
-        Self.videoDevice(position: .back, ultraWide: true).isUltraWide
-    }
+    ///
+    /// Computed ONCE at init and stored (#354): a device's lens set is fixed
+    /// for the lifetime of the process, but `CaptureView` reads this on every
+    /// body pass and the view re-renders 20–40×/sec at audio-meter cadence.
+    /// The old computed-property form hit the `AVCaptureDevice` discovery
+    /// registry on each of those passes; caching makes it a single Bool read.
+    nonisolated let ultraWideAvailable: Bool
 
     // MARK: - Configuration
 
@@ -177,6 +181,10 @@ final class CaptureManager: NSObject, ObservableObject {
         // documented defaults; the ring is only filled, never extracted.
         let maxItems = max(1, Int(Self.defaultClipRingBufferSeconds * 1.0))
         self.clipRingBuffer = VideoRingBuffer(maxItems: maxItems, captureFPS: 1.0)
+        // Resolve the ultra-wide lens once — the device's lens set never
+        // changes at runtime, so this avoids a device-registry lookup on every
+        // CaptureView body pass (#354).
+        self.ultraWideAvailable = Self.videoDevice(position: .back, ultraWide: true).isUltraWide
         super.init()
         checkPermissions()
         registerInterruptionObservers()
@@ -495,27 +503,59 @@ final class CaptureManager: NSObject, ObservableObject {
     // MARK: - Lens Switching (0.5× ultra-wide ↔ 1× wide)
 
     /// Switches the back camera between the standard wide (1×) and ultra-wide
-    /// (0.5×) lens. Safe before OR during a live session:
+    /// (0.5×) lens. The lens is chosen PRE-RECORD ONLY (#354):
     ///
+    /// - **Defense in depth:** if the capture session is already running, this
+    ///   is a no-op (logged). Swapping the video input on a LIVE session needs
+    ///   a `beginConfiguration`/`commitConfiguration` transaction, which
+    ///   `AVCaptureSession` applies atomically — stalling ALL data flow,
+    ///   including the audio output delegate, for the commit. That drops
+    ///   tens-to-low-hundreds of ms of PCM, and audio is the spine: a clipped
+    ///   word degrades the transcript. The capture UI already hides the toggle
+    ///   once recording starts; this guard blocks any stray programmatic call.
     /// - If ultra-wide is requested but the device lacks it, this falls back to
     ///   the wide lens and publishes `useUltraWide = false` so the UI can hide
     ///   the toggle. Never crashes.
-    /// - Mid-session it swaps ONLY the video input inside a
-    ///   `beginConfiguration`/`commitConfiguration` transaction on the capture
-    ///   session queue (the same serial queue every input/output mutation uses,
-    ///   so it never races the preview layer's render thread). The audio input
-    ///   and both outputs — the 3-stream pipeline — are left untouched.
+    /// - Pre-record, the chosen lens is stored in `desiredUltraWide` and
+    ///   resolved into the initial video input by `configureCaptureSession`
+    ///   when the camera comes up at record start. The swap below therefore
+    ///   only ever runs against a STOPPED session (pre-record, or a
+    ///   configured-but-idle session between encounters) where no audio is
+    ///   flowing and the begin/commit cannot clip the spine. It swaps ONLY the
+    ///   video input on the serial session queue (never racing the preview
+    ///   layer's render thread); the audio input and both outputs are untouched.
     /// - On any failure adding the new input it restores the previous input, or
     ///   a fresh wide input as a last resort, so the session is never left
     ///   without a camera.
     func setUltraWide(_ enabled: Bool) {
-        desiredUltraWide = enabled
         sessionQueue.async { [weak self] in
             guard let self else { return }
+
+            // Defense in depth (#354): never reconfigure a LIVE session. The
+            // begin/commit swap below would stall the audio output delegate
+            // for the commit and clip the transcript. Reading `isRunning` on
+            // the session queue — the same serial queue that starts/stops the
+            // session — is race-free. A stopped session falls through and the
+            // swap is safe (no audio flowing). Guard BEFORE writing
+            // `desiredUltraWide` so a mid-record call leaves the published lens
+            // state perfectly in step with the actual live lens.
+            guard !self.captureSession.isRunning else {
+                NSLog("[Aurion] setUltraWide(%d) ignored — capture session is live; the lens locks at record start (#354)",
+                      enabled ? 1 : 0)
+                return
+            }
+
+            // TSAN-clean (#354): `desiredUltraWide` is `nonisolated(unsafe)`
+            // and re-resolved on this queue below + read by
+            // `configureCaptureSession` on this same queue. Writing it here —
+            // rather than as a main-actor first line in the caller — keeps
+            // every access to the unsynchronized Bool on this one serial queue.
+            self.desiredUltraWide = enabled
 
             // Lens switching only applies to a video-wired session — audio-only
             // modes have no camera input to swap.
             guard self.configuredCaptureVideo else {
+                self.desiredUltraWide = false
                 Task { @MainActor in self.useUltraWide = false }
                 return
             }

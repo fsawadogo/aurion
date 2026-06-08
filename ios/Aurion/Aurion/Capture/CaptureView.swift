@@ -263,13 +263,25 @@ struct CaptureView: View {
 
     /// Lens toggle pill — shows the active back-camera zoom factor (0.5× or 1×)
     /// and flips between the ultra-wide and standard lens on tap. Shown only
-    /// when the device actually has an ultra-wide camera
-    /// (`builtInSource.ultraWideAvailable`), so phones without it — and the
-    /// Simulator — never see a dead control. Theme-styled to match the adjacent
-    /// stream toggles, with the HIG-minimum 44pt touch target.
+    /// when:
+    ///   • the device actually has an ultra-wide camera
+    ///     (`builtInSource.ultraWideAvailable`), so phones without it — and the
+    ///     Simulator — never see a dead control, AND
+    ///   • the session is still PRE-RECORD (`session.isLensToggleAllowed`).
+    ///     The lens is set while framing and then locked: switching it mid-
+    ///     session reconfigures the live `AVCaptureSession`, stalling the audio
+    ///     output delegate and dropping PCM (#354). Once recording (or paused)
+    ///     the pill is HIDDEN rather than greyed — it's an *input* control that
+    ///     mutates the capture pipeline (unlike the always-available preview /
+    ///     frames *view* toggles beside it), so a locked-but-visible pill would
+    ///     read as broken over the live camera. Hiding it also matches the
+    ///     immersive layout, which only ever renders while recording/paused, so
+    ///     the pill lives exclusively in the pre-record standard layout.
+    /// Theme-styled to match the adjacent stream toggles, with the HIG-minimum
+    /// 44pt touch target.
     @ViewBuilder
     private var zoomToggleButton: some View {
-        if builtInSource.ultraWideAvailable {
+        if builtInSource.ultraWideAvailable, session.isLensToggleAllowed {
             Button {
                 AurionHaptics.selection()
                 builtInSource.setUltraWide(!builtInSource.useUltraWide)
