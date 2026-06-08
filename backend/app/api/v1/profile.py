@@ -67,6 +67,13 @@ _MAX_CONSULTATION_TYPE_LEN = 60
 # (Dr. Marie / Dr. Perry expect a handful per visit type).
 _MAX_CONTEXTS_PER_VISIT_TYPE = 30
 
+# Free-text context description cap (Marie pilot follow-up to #313). A
+# context label is a short shorthand ("LL fu"); the description is the
+# fuller note the physician wants the AI to "understand the context as
+# fully as possible" — so it's a generous prose budget, not a label
+# budget. 500 chars carries a few sentences while bounding audit risk.
+_MAX_CONTEXT_DESCRIPTION_LEN = 500
+
 # Context id shape: ``ctx_`` + 8 lowercase-hex chars, minted via
 # ``secrets.token_hex(4)``. We preserve a client-supplied id ONLY when it
 # matches this shape (i.e. a value round-tripped from a prior GET); any
@@ -87,7 +94,9 @@ def _assign_context_id(existing: Optional[str]) -> str:
     return "ctx_" + secrets.token_hex(4)
 
 
-def _validate_consultation_type(value: str) -> str:
+def _validate_consultation_type(
+    value: str, *, check_proper_noun: bool = True
+) -> str:
     """Validate one custom consultation-type label.
 
     Returns the stripped value. Raises ``ValueError`` on any gate
@@ -95,13 +104,18 @@ def _validate_consultation_type(value: str) -> str:
     ``validateConsultationType``. NEVER includes the rejected value in
     the error.
 
-    Posture: SSN / email / 60-char cap gates are on. The full-name
+    Posture: SSN / email / 60-char cap gates are always on. The full-name
     gate is OFF here — Dr. Marie's "LL new pt" / "LL fu" and Dr. Perry's
     "Breast visit" are multi-word labels by design and the patient-
-    identifier-style full-name heuristic would reject them. The
-    proper-noun-shape gate below catches the residual "two capitalized
-    word tokens" pattern (e.g. "Jane Doe") without rejecting legitimate
-    multi-word shorthand.
+    identifier-style full-name heuristic would reject them.
+
+    ``check_proper_noun`` (default True) gates the residual "two
+    capitalized word tokens" pattern (e.g. "Jane Doe"). It is turned OFF
+    for *context* labels (#313 follow-up): a context is a reusable
+    clinical sub-mode shared across patients ("Limb Length Discrepancy",
+    "Breast Reconstruction"), not a per-patient field, so a legitimate
+    Title-Case clinical phrase must be allowed. The SSN / email / length
+    gates still apply, so an actual identifier is still rejected.
     """
     stripped = value.strip()
     if not stripped:
@@ -118,7 +132,7 @@ def _validate_consultation_type(value: str) -> str:
         # underlying gates.
         msg = str(exc).replace("text", "consultation type", 1)
         raise ValueError(msg) from None
-    if _looks_like_proper_noun_pair(stripped):
+    if check_proper_noun and _looks_like_proper_noun_pair(stripped):
         raise ValueError("consultation type looks like a full name")
     return stripped
 
@@ -193,13 +207,43 @@ class VisitTypeContext(BaseModel):
     label: str
     template_key: Optional[str] = None
     template_ref: Optional[str] = None
+    # Optional free-text note (Marie pilot follow-up to #313). Travels to
+    # the note-generation prompt as additional encounter context so the AI
+    # can "understand the context as fully as possible". Prose, not a
+    # label — validated WITHOUT the full-name / proper-noun heuristics.
+    description: Optional[str] = None
 
     @model_validator(mode="after")
     def _validate(self) -> "VisitTypeContext":
-        # Label: identical gate to a custom consultation-type label. Raises
-        # ValueError (→ 422) on a PHI-shaped or over-long value, never
-        # echoing the value itself.
-        self.label = _validate_consultation_type(self.label)
+        # Label: same format gate as a custom consultation-type label, but
+        # with the proper-noun heuristic OFF — a context is a reusable
+        # clinical sub-mode ("Limb Length Discrepancy"), not a per-patient
+        # field, so a legitimate Title-Case clinical phrase must pass. The
+        # SSN / email / length gates still reject an actual identifier.
+        # Raises ValueError (→ 422) without echoing the value.
+        self.label = _validate_consultation_type(
+            self.label, check_proper_noun=False
+        )
+        # Description: prose free-text. Blank → None so an empty string from
+        # a client doesn't read as "a note is set". Validated through the
+        # shared format gate (SSN / email / 500-char cap) with the full-name
+        # heuristic OFF — a clinical note may legitimately read like prose
+        # with capitalized terms. Never echoes the value into the 422.
+        if self.description is not None:
+            stripped_desc = self.description.strip()
+            if not stripped_desc:
+                self.description = None
+            else:
+                try:
+                    validate_user_text(
+                        stripped_desc,
+                        max_length=_MAX_CONTEXT_DESCRIPTION_LEN,
+                        reject_full_name=False,
+                    )
+                except ValueError as exc:
+                    msg = str(exc).replace("text", "context description", 1)
+                    raise ValueError(msg) from None
+                self.description = stripped_desc
         # Id: preserve a well-formed round-tripped id, else server-assign.
         self.id = _assign_context_id(self.id)
         # Normalize the custom-template pointer: blank → None so an empty
