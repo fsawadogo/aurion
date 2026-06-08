@@ -9,6 +9,11 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { getEvalSessions, submitEvalScore, humanizeError} from "@/lib/api";
+import {
+  abbreviateName,
+  nameInitials,
+  shortSessionId,
+} from "@/lib/session-format";
 import type { EvalSession } from "@/types";
 
 export default function EvalPage() {
@@ -132,14 +137,27 @@ export default function EvalPage() {
                           onClick={() => setSelectedId(s.id)}
                         >
                           <td className="whitespace-nowrap px-4 py-3">
-                            <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
-                              {s.session_id.length > 12
-                                ? `${s.session_id.slice(0, 8)}...`
-                                : s.session_id}
+                            <code
+                              title={s.session_id}
+                              className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs tracking-tight text-gray-500"
+                            >
+                              {shortSessionId(s.session_id)}
                             </code>
                           </td>
-                          <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                            {s.clinician_name}
+                          <td className="whitespace-nowrap px-4 py-3">
+                            <div
+                              className="flex items-center gap-2.5"
+                              title={s.clinician_name || undefined}
+                            >
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-50 text-[10px] font-semibold text-navy-700 ring-1 ring-inset ring-navy-100">
+                                {nameInitials(s.clinician_name || "—")}
+                              </span>
+                              <span className="text-sm font-medium text-navy-800">
+                                {s.clinician_name
+                                  ? abbreviateName(s.clinician_name)
+                                  : "—"}
+                              </span>
+                            </div>
                           </td>
                           <td className="whitespace-nowrap px-4 py-3 text-sm capitalize text-gray-500">
                             {s.specialty.replace(/_/g, " ")}
