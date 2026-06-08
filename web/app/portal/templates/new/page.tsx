@@ -1,6 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { Check, LayoutGrid } from "lucide-react";
 import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { Suspense, useCallback, useEffect, useState } from "react";
@@ -136,7 +136,7 @@ function NewTemplateInner() {
       ) : authSession ? (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="h-[calc(100vh-220px)] min-h-[480px]">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-2">
+            <h2 className="aurion-micro mb-2">
               {t("conversationLabel")}
             </h2>
             <TemplateChat
@@ -146,11 +146,11 @@ function NewTemplateInner() {
             />
           </div>
           <div className="space-y-3">
-            <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-0">
+            <h2 className="aurion-micro mb-0">
               {t("draftPreviewLabel")}
             </h2>
             {error && (
-              <div className="rounded-md bg-red-50 border border-red-200 px-3 py-2 text-sm text-red-700">
+              <div className="rounded-aurion-md bg-red-50 border border-red-200 px-3 py-2 text-aurion-callout text-red-700">
                 {error}
               </div>
             )}
@@ -170,9 +170,14 @@ function NewTemplateInner() {
               </>
             ) : (
               <Card>
-                <p className="text-sm text-gray-500 italic">
-                  {t("draftPlaceholder")}
-                </p>
+                <div className="flex flex-col items-center justify-center py-6 text-center">
+                  <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-navy-50 text-navy-400">
+                    <LayoutGrid className="h-6 w-6" />
+                  </div>
+                  <p className="text-aurion-callout italic text-navy-500 max-w-[34ch]">
+                    {t("draftPlaceholder")}
+                  </p>
+                </div>
               </Card>
             )}
           </div>

@@ -1,6 +1,6 @@
 "use client";
 
-import { MessagesSquare, Plus, SquarePen, Trash2, Upload } from "lucide-react";
+import { LayoutGrid, MessagesSquare, Plus, SquarePen, Trash2, Upload } from "lucide-react";
 import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -128,7 +128,7 @@ export default function PortalTemplatesPage() {
       />
 
       {error && (
-        <div className="mb-4 rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">
+        <div className="mb-4 rounded-aurion-md bg-red-50 border border-red-200 px-4 py-3 text-aurion-callout text-red-700">
           {error}
         </div>
       )}
@@ -137,27 +137,38 @@ export default function PortalTemplatesPage() {
         {loading ? (
           <LoadingSkeleton lines={6} />
         ) : list.length === 0 ? (
-          <div className="py-8 text-center">
-            <MessagesSquare className="mx-auto h-10 w-10 text-gray-300 mb-2" />
-            <p className="text-sm text-gray-500">
+          <div className="flex flex-col items-center justify-center py-10 text-center">
+            <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-gold-50 text-gold-600">
+              <MessagesSquare className="h-6 w-6" />
+            </div>
+            <p className="aurion-callout font-medium text-navy-700">
               {t("emptyTitle")}
             </p>
             <Link href="/portal/templates/new">
-              <Button variant="primary" size="sm" className="mt-3">
+              <Button variant="primary" size="sm" className="mt-4">
                 {t("startBuilding")}
               </Button>
             </Link>
           </div>
         ) : (
-          <ul className="divide-y divide-gray-100">
+          <ul className="divide-y divide-hairline">
             {list.map((tpl) => (
-              <li key={tpl.id} className="py-3 flex items-center gap-4">
+              <li
+                key={tpl.id}
+                className="group flex items-center gap-3 py-3 -mx-2 px-2 rounded-aurion-md hover:bg-canvas/40 transition-colors duration-short"
+              >
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-aurion-md bg-navy-50 text-navy-600 ring-1 ring-inset ring-navy-100">
+                  <LayoutGrid className="h-4 w-4" />
+                </span>
                 <div className="flex-1 min-w-0">
-                  <p className="font-medium text-navy-800 truncate">
+                  <p className="text-aurion-callout font-medium text-navy-800 truncate">
                     {tpl.display_name}
                   </p>
-                  <p className="text-xs text-gray-500 mt-0.5">
-                    <span className="font-mono">{tpl.key}</span> ·{" "}
+                  <p className="mt-0.5 text-aurion-caption text-navy-500">
+                    <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] tracking-tight text-gray-500">
+                      {tpl.key}
+                    </code>{" "}
+                    ·{" "}
                     {t("metadata", {
                       version: tpl.version,
                       sections: t("sectionCount", { count: tpl.template.sections.length }),
@@ -165,26 +176,32 @@ export default function PortalTemplatesPage() {
                     })}
                   </p>
                 </div>
-                {tpl.is_shared && <Badge variant="info">{t("sharedBadge")}</Badge>}
-                {/* Plain anchor for dynamic `/portal/templates/[id]` —
-                    Next `<Link>` collapses the URL under static export.
-                    See web/lib/use-route-segment.ts. */}
-                <a
-                  href={`/portal/templates/${tpl.id}`}
-                  className="inline-flex items-center gap-1 text-sm text-navy-700 hover:text-navy-900"
-                >
-                  <SquarePen className="h-4 w-4" />
-                  {t("open")}
-                </a>
-                <button
-                  type="button"
-                  onClick={() => void onDelete(tpl)}
-                  className="inline-flex items-center text-gray-400 hover:text-red-600 disabled:opacity-50"
-                  disabled={deletingId === tpl.id}
-                  aria-label={t("deleteAria", { name: tpl.display_name })}
-                >
-                  <Trash2 className="h-4 w-4" />
-                </button>
+                {tpl.is_shared && (
+                  <Badge variant="info" className="shrink-0">
+                    {t("sharedBadge")}
+                  </Badge>
+                )}
+                <div className="flex items-center gap-1 shrink-0">
+                  {/* Plain anchor for dynamic `/portal/templates/[id]` —
+                      Next `<Link>` collapses the URL under static export.
+                      See web/lib/use-route-segment.ts. */}
+                  <a
+                    href={`/portal/templates/${tpl.id}`}
+                    className="inline-flex items-center gap-1 rounded-aurion-xs px-2 py-1 text-aurion-caption font-medium text-navy-600 hover:bg-canvas hover:text-navy-800 transition-colors duration-short"
+                  >
+                    <SquarePen className="h-4 w-4" />
+                    {t("open")}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={() => void onDelete(tpl)}
+                    className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 transition-colors duration-short"
+                    disabled={deletingId === tpl.id}
+                    aria-label={t("deleteAria", { name: tpl.display_name })}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                </div>
               </li>
             ))}
           </ul>

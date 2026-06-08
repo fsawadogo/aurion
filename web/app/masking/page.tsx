@@ -1,12 +1,17 @@
 "use client";
 
-import { CheckCircle2, XCircle } from "lucide-react";
+import { CheckCircle2, ShieldCheck, XCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
-import { getMaskingReport } from "@/lib/api";
+import { getMaskingReport, humanizeError } from "@/lib/api";
+import {
+  abbreviateName,
+  nameInitials,
+  shortSessionId,
+} from "@/lib/session-format";
 import type { MaskingReport } from "@/types";
 
 function ProgressRing({ value, size = 100 }: { value: number; size?: number }) {
@@ -68,9 +73,7 @@ export default function MaskingPage() {
         const data = await getMaskingReport(filters);
         setReport(data);
       } catch (err) {
-        setError(
-          err instanceof Error ? err.message : "Failed to load masking report",
-        );
+        setError(humanizeError(err, "Failed to load masking report"));
       } finally {
         setLoading(false);
       }
@@ -136,7 +139,7 @@ export default function MaskingPage() {
             {loading ? (
               <LoadingSkeleton lines={1} className="mt-2" />
             ) : (
-              <p className="mt-1 text-2xl font-bold text-navy-700">
+              <p className="mt-1 text-2xl font-bold tabular-nums text-navy-700">
                 {displayReport.total_sessions}
               </p>
             )}
@@ -148,7 +151,7 @@ export default function MaskingPage() {
             {loading ? (
               <LoadingSkeleton lines={1} className="mt-2" />
             ) : (
-              <p className="mt-1 text-2xl font-bold text-emerald-600">
+              <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-600">
                 {displayReport.pass_count}
               </p>
             )}
@@ -160,7 +163,13 @@ export default function MaskingPage() {
             {loading ? (
               <LoadingSkeleton lines={1} className="mt-2" />
             ) : (
-              <p className="mt-1 text-2xl font-bold text-red-600">
+              <p
+                className={`mt-1 text-2xl font-bold tabular-nums ${
+                  displayReport.fail_count > 0
+                    ? "text-red-600"
+                    : "text-gray-300"
+                }`}
+              >
                 {displayReport.fail_count}
               </p>
             )}
@@ -202,10 +211,18 @@ export default function MaskingPage() {
                   </tr>
                 ) : displayReport.sessions.length === 0 ? (
                   <tr>
-                    <td colSpan={9} className="px-4 py-12 text-center">
-                      <p className="text-sm text-gray-400">
-                        No masking data available yet. Events appear here once sessions process video frames.
-                      </p>
+                    <td colSpan={9} className="px-4 py-14 text-center">
+                      <div className="mx-auto flex max-w-sm flex-col items-center gap-2">
+                        <span className="flex h-10 w-10 items-center justify-center rounded-full bg-navy-50 ring-1 ring-inset ring-navy-100">
+                          <ShieldCheck className="h-5 w-5 text-navy-300" />
+                        </span>
+                        <p className="text-sm font-medium text-gray-500">
+                          No masking data available yet
+                        </p>
+                        <p className="text-xs text-gray-400">
+                          Events appear here once sessions process video frames.
+                        </p>
+                      </div>
                     </td>
                   </tr>
                 ) : (
@@ -223,14 +240,27 @@ export default function MaskingPage() {
                       className="cursor-pointer transition-colors hover:bg-gray-50/80"
                     >
                       <td className="whitespace-nowrap px-4 py-3">
-                        <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-600">
-                          {s.session_id.length > 12
-                            ? `${s.session_id.slice(0, 8)}...`
-                            : s.session_id}
+                        <code
+                          title={s.session_id}
+                          className="rounded-md bg-gray-100 px-2 py-0.5 font-mono text-xs tracking-tight text-gray-500"
+                        >
+                          {shortSessionId(s.session_id)}
                         </code>
                       </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                        {s.clinician_name}
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <div
+                          className="flex items-center gap-2.5"
+                          title={s.clinician_name || undefined}
+                        >
+                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-50 text-[10px] font-semibold text-navy-700 ring-1 ring-inset ring-navy-100">
+                            {nameInitials(s.clinician_name || "—")}
+                          </span>
+                          <span className="text-sm font-medium text-navy-800">
+                            {s.clinician_name
+                              ? abbreviateName(s.clinician_name)
+                              : "—"}
+                          </span>
+                        </div>
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
                         {s.date}

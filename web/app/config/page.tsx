@@ -1,12 +1,13 @@
 "use client";
 
-import { Clock, Cpu, Flag, SlidersHorizontal } from "lucide-react";
+import { Clock, Cpu, Flag, History, SlidersHorizontal } from "lucide-react";
 import { useEffect, useState } from "react";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { getConfig, getConfigHistory, humanizeError} from "@/lib/api";
+import { abbreviateName, formatRelative, nameInitials } from "@/lib/session-format";
 import type { ProviderConfig, ConfigChangeEvent } from "@/types";
 
 const defaultConfig: ProviderConfig = {
@@ -52,9 +53,63 @@ function ToggleSwitch({ enabled }: { enabled: boolean }) {
 
 function ConfigRow({ label, value }: { label: string; value: string | number }) {
   return (
-    <div className="flex items-center justify-between py-1.5">
+    <div className="flex items-center justify-between gap-4 py-1.5">
       <span className="text-sm text-gray-500">{label}</span>
-      <span className="text-sm font-medium text-navy-700">{value}</span>
+      <span className="font-mono text-sm font-medium tabular-nums text-navy-700">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+/** Title-cases each dot-separated segment of a config key path for display,
+ * keeping the raw path available via the caller's `title` attribute.
+ *   "providers.note_generation" → "Providers · Note generation" */
+function humanizeConfigPath(path: string): string {
+  return path
+    .split(".")
+    .map((seg) =>
+      seg.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase()),
+    )
+    .join(" · ");
+}
+
+/** Flattens a (partial) config object into leaf [dottedPath, value] pairs so
+ * a change event renders as readable key/value chips instead of raw JSON. */
+function flattenConfig(
+  obj: unknown,
+  prefix = "",
+): Array<[string, string]> {
+  if (obj === null || typeof obj !== "object") return [];
+  const out: Array<[string, string]> = [];
+  for (const [key, val] of Object.entries(obj as Record<string, unknown>)) {
+    const path = prefix ? `${prefix}.${key}` : key;
+    if (val !== null && typeof val === "object" && !Array.isArray(val)) {
+      out.push(...flattenConfig(val, path));
+    } else {
+      out.push([path, String(val)]);
+    }
+  }
+  return out;
+}
+
+/** Renders a config snapshot as stacked key/value rows. Falls back to a muted
+ * em dash for empty snapshots so the cell never shows raw `{}`. */
+function ConfigDiff({ config }: { config: Partial<ProviderConfig> }) {
+  const entries = flattenConfig(config);
+  if (entries.length === 0) {
+    return <span className="text-gray-300">—</span>;
+  }
+  return (
+    <div className="space-y-1" title={JSON.stringify(config)}>
+      {entries.map(([path, value]) => (
+        <div key={path} className="flex items-baseline gap-2">
+          <span className="text-xs text-gray-400">{humanizeConfigPath(path)}</span>
+          <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs tracking-tight text-gray-600">
+            {value}
+          </code>
+        </div>
+      ))}
     </div>
   );
 }
@@ -118,17 +173,17 @@ export default function ConfigPage() {
               </h2>
             </div>
             <div className="space-y-3">
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <span className="text-sm text-gray-500">Transcription</span>
-                <Badge variant="info">{cfg.providers.transcription}</Badge>
+                <Badge variant="info" className="font-mono">{cfg.providers.transcription}</Badge>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <span className="text-sm text-gray-500">Note Generation</span>
-                <Badge variant="info">{cfg.providers.note_generation}</Badge>
+                <Badge variant="info" className="font-mono">{cfg.providers.note_generation}</Badge>
               </div>
-              <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-4">
                 <span className="text-sm text-gray-500">Vision</span>
-                <Badge variant="info">{cfg.providers.vision}</Badge>
+                <Badge variant="info" className="font-mono">{cfg.providers.vision}</Badge>
               </div>
             </div>
           </Card>
@@ -143,33 +198,21 @@ export default function ConfigPage() {
                 Model Parameters
               </h2>
             </div>
-            <div className="space-y-3">
-              <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
-                Note Generation
-              </p>
-              <div className="flex gap-4 text-sm">
-                <span className="text-gray-500">
-                  Temp: <span className="font-medium text-navy-700">{cfg.model_params.note_generation.temperature}</span>
-                </span>
-                <span className="text-gray-500">
-                  Max tokens: <span className="font-medium text-navy-700">{cfg.model_params.note_generation.max_tokens}</span>
-                </span>
+            <div className="divide-y divide-gray-50">
+              <div className="pb-2">
+                <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">
+                  Note Generation
+                </p>
+                <ConfigRow label="Temperature" value={cfg.model_params.note_generation.temperature} />
+                <ConfigRow label="Max tokens" value={cfg.model_params.note_generation.max_tokens} />
               </div>
-              <div className="border-t border-gray-100 pt-3">
-                <p className="text-[11px] font-medium uppercase tracking-wider text-gray-400">
+              <div className="pt-2">
+                <p className="mb-1 text-[11px] font-medium uppercase tracking-wider text-gray-400">
                   Vision
                 </p>
-              </div>
-              <div className="flex flex-wrap gap-4 text-sm">
-                <span className="text-gray-500">
-                  Temp: <span className="font-medium text-navy-700">{cfg.model_params.vision.temperature}</span>
-                </span>
-                <span className="text-gray-500">
-                  Max tokens: <span className="font-medium text-navy-700">{cfg.model_params.vision.max_tokens}</span>
-                </span>
-                <span className="text-gray-500">
-                  Confidence: <span className="font-medium text-navy-700">{cfg.model_params.vision.confidence_threshold}</span>
-                </span>
+                <ConfigRow label="Temperature" value={cfg.model_params.vision.temperature} />
+                <ConfigRow label="Max tokens" value={cfg.model_params.vision.max_tokens} />
+                <ConfigRow label="Confidence threshold" value={cfg.model_params.vision.confidence_threshold} />
               </div>
             </div>
           </Card>
@@ -237,30 +280,44 @@ export default function ConfigPage() {
                   {history.length === 0 ? (
                     <tr>
                       <td colSpan={5} className="px-4 py-12 text-center">
-                        <p className="text-sm text-gray-400">No configuration changes recorded yet.</p>
+                        <div className="flex flex-col items-center gap-2">
+                          <div className="rounded-full bg-gray-50 p-2.5 ring-1 ring-inset ring-gray-100">
+                            <History className="h-5 w-5 text-gray-300" />
+                          </div>
+                          <p className="text-sm text-gray-400">No configuration changes recorded yet.</p>
+                        </div>
                       </td>
                     </tr>
                   ) : (
                     history.map((h) => (
-                      <tr key={h.id} className="transition-colors hover:bg-gray-50/80">
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                          {new Date(h.changed_at).toLocaleString()}
+                      <tr key={h.id} className="align-top transition-colors hover:bg-gray-50/80">
+                        <td
+                          className="whitespace-nowrap px-4 py-3 text-sm text-gray-500"
+                          title={new Date(h.changed_at).toLocaleString()}
+                        >
+                          {formatRelative(h.changed_at)}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-600">
-                          {h.changed_by}
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <div
+                            className="flex items-center gap-2.5"
+                            title={h.changed_by || undefined}
+                          >
+                            <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-50 text-[10px] font-semibold text-navy-700 ring-1 ring-inset ring-navy-100">
+                              {nameInitials(h.changed_by || "—")}
+                            </span>
+                            <span className="text-sm font-medium text-navy-800">
+                              {h.changed_by ? abbreviateName(h.changed_by) : "—"}
+                            </span>
+                          </div>
                         </td>
                         <td className="px-4 py-3 text-sm">
-                          <code className="rounded bg-gray-50 px-1.5 py-0.5 text-xs text-gray-500">
-                            {JSON.stringify(h.previous_config).slice(0, 60)}
-                          </code>
+                          <ConfigDiff config={h.previous_config} />
                         </td>
                         <td className="px-4 py-3 text-sm">
-                          <code className="rounded bg-gray-50 px-1.5 py-0.5 text-xs text-gray-500">
-                            {JSON.stringify(h.new_config).slice(0, 60)}
-                          </code>
+                          <ConfigDiff config={h.new_config} />
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-sm">
-                          <Badge variant="info">v{h.appconfig_version}</Badge>
+                          <Badge variant="info" className="font-mono">v{h.appconfig_version}</Badge>
                         </td>
                       </tr>
                     ))
