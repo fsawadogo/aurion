@@ -823,7 +823,10 @@ struct DashboardView: View {
             Text(L("encounter.anonRoles"))
                 .aurionFont(13, weight: .medium, relativeTo: .footnote)
                 .foregroundColor(.aurionTextSecondary)
-            HStack(spacing: 8) {
+            // Flow layout (not a flat HStack) so the three chips wrap to a
+            // second row at larger Dynamic Type instead of being squeezed
+            // flat and truncating their labels (#271).
+            AurionFlowLayout(spacing: 8, lineSpacing: 8) {
                 ForEach(Self.anonymousRoleChips) { entry in
                     let selected = isRoleChipSelected(entry.role)
                     let capReached = !selected && selectedParticipants.count >= 3
@@ -845,6 +848,7 @@ struct DashboardView: View {
                         Text(L(entry.labelKey))
                             .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                             .foregroundColor(selected ? .white : .aurionTextPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 7)
                             .background(selected ? Color.aurionNavy : Color.aurionCardBackground)
@@ -859,8 +863,8 @@ struct DashboardView: View {
                     .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
                     .accessibilityHint(capReached ? L("encounter.participantCapReached") : "")
                 }
-                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.leading, 56)
     }
@@ -868,21 +872,61 @@ struct DashboardView: View {
     @State private var traineeName = ""
     @State private var traineeRole = "resident"
 
+    /// Full-text label for an ad-hoc trainee role tag. Used by the role
+    /// menu trigger so the selected role always reads in full.
+    private func traineeRoleLabel(_ role: String) -> String {
+        switch role {
+        case "resident": return L("encounter.role.resident")
+        case "fellow": return L("encounter.role.fellow")
+        case "medical_student": return L("encounter.role.student")
+        default: return role.displayFormatted
+        }
+    }
+
     private var traineeForm: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                AurionField(label: L("encounter.name"), placeholder: L("encounter.namePlaceholder"), text: $traineeName)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L("encounter.role"))
-                        .aurionFont(13, weight: .medium, relativeTo: .footnote)
-                        .foregroundColor(.aurionTextSecondary)
+        // Name + Role each get their OWN full-width row (#271). The Role
+        // control was a `.segmented` Picker squeezed into the right half of
+        // an HStack, so its labels truncated to "Resi… / Fellow / Stud…" at
+        // larger Dynamic Type. Segmented controls can't wrap or scale, so
+        // it's now a menu-style picker whose trigger shows the full role
+        // word and whose dropdown lists all three at any text size.
+        VStack(alignment: .leading, spacing: 12) {
+            AurionField(label: L("encounter.name"), placeholder: L("encounter.namePlaceholder"), text: $traineeName)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L("encounter.role"))
+                    .aurionFont(13, weight: .medium, relativeTo: .footnote)
+                    .foregroundColor(.aurionTextSecondary)
+                Menu {
                     Picker(L("encounter.role"), selection: $traineeRole) {
                         Text(L("encounter.role.resident")).tag("resident")
                         Text(L("encounter.role.fellow")).tag("fellow")
                         Text(L("encounter.role.student")).tag("medical_student")
                     }
-                    .pickerStyle(.segmented)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(traineeRoleLabel(traineeRole))
+                            .aurionFont(16, relativeTo: .body)
+                            .foregroundColor(.aurionTextPrimary)
+                            // Let the role word wrap rather than truncate at AX
+                            // sizes; the trigger grows vertically to fit.
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.aurionTextSecondary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color.aurionCardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: AurionRadius.sm))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AurionRadius.sm)
+                            .stroke(Color.aurionInputBorder, lineWidth: 1)
+                    )
+                    .contentShape(Rectangle())
                 }
+                .accessibilityLabel(L("encounter.role"))
+                .accessibilityValue(traineeRoleLabel(traineeRole))
             }
             HStack {
                 Spacer()
@@ -1056,11 +1100,15 @@ struct DashboardView: View {
     /// sub-line (required vs. choose-or-describe).
     private func contextQuestionHeader(subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
+            // firstTextBaseline keeps the gold "required" bullet riding the
+            // first line when the question wraps at larger Dynamic Type; the
+            // fixedSize lets the title grow vertically instead of clipping.
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(L("context.question"))
                     .aurionFont(22, weight: .semibold, relativeTo: .title2)
                     .tracking(-0.22)
                     .foregroundColor(.aurionTextPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("•")
                     .aurionFont(22, weight: .semibold, relativeTo: .title2)
                     .foregroundColor(.aurionGold)
