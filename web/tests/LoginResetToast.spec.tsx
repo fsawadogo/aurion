@@ -13,22 +13,14 @@ import { withIntl } from "./helpers/intl";
  * param and shows a green toast above the brand lockup; the toast
  * auto-dismisses after 5 seconds via setTimeout.
  *
- * Mocks @/lib/cognito because importing the real module pulls in
- * env-driven config; the toast test only cares about the URL flag,
- * never about the actual sign-in path.
+ * Mocks @/lib/api (the only auth dependency now that the portal is on
+ * backend bcrypt-JWT) so the toast test never touches the real sign-in
+ * path; it only cares about the URL flag.
  */
 
 vi.mock("@/lib/api", () => ({
-  fetchWithAuth: vi.fn(),
   login: vi.fn(),
-}));
-
-vi.mock("@/lib/cognito", () => ({
-  signInWithPassword: vi.fn(),
-  getStoredIdToken: vi.fn(() => null),
-  refreshTokens: vi.fn(),
-  signOut: vi.fn(),
-  tokenIsStale: vi.fn(() => false),
+  verifyMfaLogin: vi.fn(),
 }));
 
 const mockUseSearchParams = vi.fn();

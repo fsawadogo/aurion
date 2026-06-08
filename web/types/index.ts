@@ -619,13 +619,37 @@ export interface PaginatedResponse<T> {
   page_size: number;
 }
 
+/** The user object embedded in a successful backend login response.
+ * Mirrors `backend.app.api.v1.auth.UserPayload`. */
+export interface AuthUser {
+  user_id: string;
+  email: string;
+  role: UserRole;
+  full_name: string;
+  mfa_enrolled: boolean;
+}
+
+/** Successful login / refresh / MFA-verify. Mirrors the backend
+ * `LoginSuccessResponse` — backend bcrypt-JWT (no Cognito). */
 export interface AuthResponse {
   access_token: string;
+  refresh_token: string;
   token_type: string;
-  role: UserRole;
-  user_id: string;
-  full_name: string;
+  expires_in: number;
+  user: AuthUser;
 }
+
+/** Returned by `/api/v1/auth/login` when the account has TOTP MFA
+ * enrolled — the caller must finish via `/api/v1/auth/mfa/verify-login`.
+ * Mirrors the backend `LoginMfaRequiredResponse`. */
+export interface MfaRequiredResponse {
+  mfa_required: true;
+  mfa_challenge_token: string;
+  user_email: string;
+}
+
+/** Discriminated union the login form branches on. */
+export type LoginResult = AuthResponse | MfaRequiredResponse;
 
 export interface CurrentUser {
   user_id: string;

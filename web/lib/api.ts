@@ -11,6 +11,7 @@ import type {
   EvalSession,
   EvalSessionDetail,
   FeatureFlags,
+  LoginResult,
   MaskingReport,
   MediaDownloadUrls,
   MetricFilters,
@@ -26,35 +27,84 @@ import type {
   UpdateUserPayload,
   User,
 } from "@/types";
-import {
-  getStoredIdToken,
-  refreshTokens,
-  signOut as cognitoSignOut,
-  tokenIsStale,
-} from "@/lib/cognito";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 
+/* ─── Token storage (backend bcrypt-JWT — no Cognito) ─────────────────────────
+ *
+ * Access + refresh tokens live in non-httpOnly cookies so the client JS can
+ * attach the bearer header and run the silent-refresh-on-401 flow. This
+ * matches the portal's pre-existing `aurion_token` cookie approach. The XSS
+ * exposure of a readable token is an accepted MVP trade-off for an internal
+ * admin portal; post-MVP hardening = httpOnly cookies + a server-side refresh
+ * proxy. See docs/plans/auth-pivot-web.md.
+ */
+const ACCESS_COOKIE = "aurion_token";
+const REFRESH_COOKIE = "aurion_refresh";
+const ACCESS_MAX_AGE = 86_400; // 24h cookie; the JWT itself expires sooner and refresh covers the gap
+const REFRESH_MAX_AGE = 2_592_000; // 30d
+
+function readCookie(name: string): string | null {
+  if (typeof document === "undefined") return null;
+  const match = document.cookie.match(
+    new RegExp(`(?:^|;\\s*)${name}=([^;]*)`),
+  );
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function writeCookie(name: string, value: string, maxAge: number): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; SameSite=Strict; max-age=${maxAge}`;
+}
+
+function deleteCookie(name: string): void {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=; path=/; max-age=0`;
+}
+
+/** Persist the tokens from a successful login / refresh / MFA-verify. */
+function storeTokens(data: AuthResponse): void {
+  writeCookie(ACCESS_COOKIE, data.access_token, ACCESS_MAX_AGE);
+  writeCookie(REFRESH_COOKIE, data.refresh_token, REFRESH_MAX_AGE);
+}
+
+/** Clear all auth state (logout, or a refresh that failed). */
+function clearTokens(): void {
+  deleteCookie(ACCESS_COOKIE);
+  deleteCookie(REFRESH_COOKIE);
+}
+
+/** Exchange the stored refresh token for a fresh access+refresh pair.
+ * The backend rotates the refresh token, so we persist the new pair.
+ * Returns true on success; on failure clears tokens (caller redirects). */
+async function refreshAccessToken(): Promise<boolean> {
+  const refresh_token = readCookie(REFRESH_COOKIE);
+  if (!refresh_token) return false;
+  try {
+    const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token }),
+    });
+    if (!res.ok) {
+      clearTokens();
+      return false;
+    }
+    storeTokens((await res.json()) as AuthResponse);
+    return true;
+  } catch {
+    return false; // network blip — keep tokens, let the 401 path retry later
+  }
+}
+
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
 
-/** Resolve the bearer token for outgoing API requests.
- *
- * Preference order:
- *   1. Cognito id_token in sessionStorage (the new hosted-UI flow).
- *   2. Legacy `aurion_token` cookie (kept for one release so in-flight
- *      dev sessions don't get bounced mid-task).
- *
- * Returns null only if neither is present — the caller's request will
- * then fail with 401 and fetchWithAuth will route to /login.
- */
+/** Resolve the bearer token for outgoing API requests — the backend
+ * bcrypt-JWT access token from the `aurion_token` cookie. Returns null
+ * if absent; the caller's request then fails 401 and fetchWithAuth
+ * routes to /login. */
 function getToken(): string | null {
-  if (typeof window !== "undefined") {
-    const cognito = getStoredIdToken();
-    if (cognito) return cognito;
-  }
-  if (typeof document === "undefined") return null;
-  const match = document.cookie.match(/(?:^|;\s*)aurion_token=([^;]*)/);
-  return match ? decodeURIComponent(match[1]) : null;
+  return readCookie(ACCESS_COOKIE);
 }
 
 function buildQuery<T extends object>(params: T): string {
@@ -71,12 +121,6 @@ export async function fetchWithAuth(
   path: string,
   options: RequestInit = {},
 ): Promise<Response> {
-  // If the Cognito id_token is past its expiry, refresh proactively
-  // so this request doesn't trigger the 401 retry path.
-  if (typeof window !== "undefined" && tokenIsStale()) {
-    await refreshTokens(); // null return = best-effort; downstream 401 handles it
-  }
-
   const buildHeaders = (): Record<string, string> => {
     const token = getToken();
     const h: Record<string, string> = {
@@ -92,10 +136,10 @@ export async function fetchWithAuth(
     headers: buildHeaders(),
   });
 
-  // One silent refresh + retry on 401 — if the refresh works the
-  // user never sees the redirect.
+  // One silent refresh + retry on 401 — if the rotated refresh works the
+  // user never sees the redirect. On failure, clear state and bounce.
   if (response.status === 401 && typeof window !== "undefined") {
-    const refreshed = await refreshTokens();
+    const refreshed = await refreshAccessToken();
     if (refreshed) {
       response = await fetch(`${API_BASE}${path}`, {
         ...options,
@@ -103,6 +147,7 @@ export async function fetchWithAuth(
       });
     }
     if (response.status === 401) {
+      clearTokens();
       window.location.href = "/login";
     }
   }
@@ -116,46 +161,77 @@ export async function fetchWithAuth(
 
 /* ─── Auth ───────────────────────────────────────────────────────────────── */
 
+/** Pull the FastAPI `{ detail }` string out of an error body so callers
+ * can match on clean copy (e.g. the 429 lockout line) rather than raw JSON.
+ * Falls back to the raw text for non-JSON bodies. */
+async function loginErrorDetail(res: Response): Promise<string> {
+  const body = await res.text();
+  try {
+    const parsed = JSON.parse(body) as { detail?: unknown };
+    if (parsed && typeof parsed.detail === "string") return parsed.detail;
+  } catch {
+    /* non-JSON body — keep the raw text */
+  }
+  return body;
+}
+
+/** Sign in against the backend bcrypt-JWT API.
+ *
+ * Returns either a full {@link AuthResponse} (tokens stored, ready to
+ * route) or an {@link MfaRequiredResponse} the caller must finish via
+ * {@link verifyMfaLogin}. The MFA branch deliberately does NOT store
+ * tokens — there are none until the challenge is satisfied. */
 export async function login(
   email: string,
   password: string,
-): Promise<AuthResponse> {
+): Promise<LoginResult> {
   const res = await fetch(`${API_BASE}/api/v1/auth/login`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email, password }),
   });
   if (!res.ok) {
-    // Surface the backend `detail` string when present (FastAPI wraps
-    // errors as { detail: "..." }) so callers can match on clean copy —
-    // e.g. the 429 lockout message — rather than raw JSON. Falls back to
-    // the raw body for non-JSON responses.
-    const body = await res.text();
-    let detail = body;
-    try {
-      const parsed = JSON.parse(body) as { detail?: unknown };
-      if (parsed && typeof parsed.detail === "string") detail = parsed.detail;
-    } catch {
-      /* non-JSON body — keep the raw text */
-    }
-    throw new Error(`Login failed: ${detail}`);
+    throw new Error(`Login failed: ${await loginErrorDetail(res)}`);
   }
-  const data: AuthResponse = await res.json();
-  document.cookie = `aurion_token=${encodeURIComponent(data.access_token)}; path=/; SameSite=Strict; max-age=86400`;
+  const data = (await res.json()) as LoginResult;
+  if ("mfa_required" in data) return data; // caller prompts for the TOTP code
+  storeTokens(data);
   return data;
 }
 
-/** Sign out. For Cognito hosted-UI sessions, redirects through Cognito's
- * /logout so the server-side session terminates too. For native JWT
- * sessions (no Cognito tokens present), just clears the cookie and bounces
- * to /login — Cognito's /logout would otherwise force a redirect through
- * an account they never had. */
+/** Finish an MFA-gated login with the 6-digit TOTP code. */
+export async function verifyMfaLogin(
+  mfa_challenge_token: string,
+  code: string,
+): Promise<AuthResponse> {
+  const res = await fetch(`${API_BASE}/api/v1/auth/mfa/verify-login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ mfa_challenge_token, code }),
+  });
+  if (!res.ok) {
+    throw new Error(`Login failed: ${await loginErrorDetail(res)}`);
+  }
+  const data = (await res.json()) as AuthResponse;
+  storeTokens(data);
+  return data;
+}
+
+/** Sign out: best-effort revoke the refresh token server-side, clear the
+ * local cookies, and bounce to /login. */
 export function logout(): void {
-  document.cookie = "aurion_token=; path=/; max-age=0";
-  if (typeof window === "undefined") return;
-  if (getStoredIdToken()) {
-    cognitoSignOut();
-  } else {
+  const refresh_token = readCookie(REFRESH_COOKIE);
+  if (refresh_token) {
+    // Fire-and-forget — we clear locally regardless of the result.
+    void fetch(`${API_BASE}/api/v1/auth/logout`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ refresh_token }),
+      keepalive: true,
+    }).catch(() => {});
+  }
+  clearTokens();
+  if (typeof window !== "undefined") {
     window.location.href = "/login";
   }
 }

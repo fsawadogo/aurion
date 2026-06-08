@@ -1,25 +1,16 @@
 "use client";
 
 import { AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
-// Dual-path login, single visual treatment (matches iOS native login):
-//   * IS_LOCAL  → backend `/api/v1/auth/login` (dev-seeded users +
-//                 password hashes). Requires the backend with
-//                 APP_ENV=local.
-//   * Cloud     → direct Cognito `InitiateAuth` with USER_PASSWORD_AUTH
-//                 — same code path the iOS `CognitoNativeAuth` uses.
-//                 No hosted-UI redirect, no PKCE.
-// In both cases the form looks identical to the user; only the
-// transport under the hood differs.
+// Single-path login against the backend bcrypt-JWT API (`/api/v1/auth/login`)
+// — the same auth system the iOS app and backend use. Cognito was removed
+// from the portal (re-added post-MVP); see docs/plans/auth-pivot-web.md.
+//   * Success      → tokens stored, route by `user.role`.
+//   * mfa_required → prompt for the 6-digit TOTP code, then
+//                    `/api/v1/auth/mfa/verify-login`.
+//   * `?reset=success` query param → green confirmation toast.
 //
-// AUTH-EMAIL-RESET-WIRING (this PR):
-//   * Outer chrome (gold halo, navy gradient, logo lockup, footer
-//     lock line) extracted to `<AuthScreenShell />`. Same component
-//     wraps `/forgot-password` and `/reset-password`.
-//   * "Forgot password?" link below the password field — opens
-//     `/forgot-password`.
-//   * `?reset=success` query param → green toast above the card
-//     ("Password reset. Sign in with your new password."), auto-
-//     dismisses after 5 seconds.
+// IS_LOCAL only gates the optional "local dev credentials" hint panel
+// (the APP_ENV=local seed accounts); it no longer changes the auth path.
 
 import { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
@@ -27,8 +18,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useTranslations } from "next-intl";
 import Button from "@/components/ui/Button";
 import AuthScreenShell from "@/components/auth/AuthScreenShell";
-import { fetchWithAuth, login } from "@/lib/api";
-import { signInWithPassword } from "@/lib/cognito";
+import { login, verifyMfaLogin } from "@/lib/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const IS_LOCAL =
@@ -55,6 +45,10 @@ function LoginContent() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [resetToastVisible, setResetToastVisible] = useState(false);
+  // Set once the backend returns mfa_required — switches the form to the
+  // TOTP-code step. Holds the short-lived challenge token.
+  const [mfaChallenge, setMfaChallenge] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
 
   // Show the "Password reset" toast iff arriving with ?reset=success.
   // Auto-dismiss after 5s — the user is already on the login form, so
@@ -70,63 +64,60 @@ function LoginContent() {
     }
   }, [searchParams]);
 
+  // CLINICIAN lands on the portal; everyone else gets the admin
+  // /dashboard, which the admin/eval/compliance pages route off.
+  function routeAfterAuth(role: string) {
+    router.push(role === "CLINICIAN" ? "/portal/dashboard" : "/dashboard");
+    router.refresh();
+  }
+
+  function describeError(err: unknown): string {
+    const msg = err instanceof Error ? err.message : "Sign-in failed";
+    if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
+      return IS_LOCAL
+        ? `Cannot reach the backend at ${API_BASE}. Is \`docker-compose up\` running?`
+        : "Couldn't reach Aurion. Check your network and try again.";
+    }
+    // Backend 429 lockout — keep its distinct "~N minutes" hint rather
+    // than collapsing into the generic invalid-credentials line.
+    if (/Too many failed sign-in attempts/i.test(msg)) {
+      return msg.replace(/^Login failed:\s*/, "");
+    }
+    if (/401|Invalid email or password/i.test(msg)) {
+      return "Invalid email or password.";
+    }
+    return msg.replace(/^Login failed:\s*/, "");
+  }
+
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
     setLoading(true);
     try {
-      const trimmed = email.trim().toLowerCase();
-      let role: string;
-
-      if (IS_LOCAL) {
-        const auth = await login(trimmed, password);
-        role = auth.role;
-      } else {
-        // Cloud env — Cognito native sign-in. Tokens are stored in
-        // sessionStorage by signInWithPassword. Backend role resolution
-        // happens server-side; we hit /auth/me to learn the role.
-        await signInWithPassword(trimmed, password);
-        const meRes = await fetchWithAuth("/api/v1/auth/me");
-        const me = await meRes.json();
-        role = me.role ?? "CLINICIAN";
+      const result = await login(email.trim().toLowerCase(), password);
+      if ("mfa_required" in result) {
+        // Switch to the TOTP step — no tokens issued yet.
+        setMfaChallenge(result.mfa_challenge_token);
+        setLoading(false);
+        return;
       }
-
-      // CLINICIAN lands on the portal; everyone else gets the admin
-      // /dashboard which the existing admin/eval/compliance pages
-      // already route off.
-      router.push(role === "CLINICIAN" ? "/portal/dashboard" : "/dashboard");
-      router.refresh();
+      routeAfterAuth(result.user.role);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : "Sign-in failed";
-      if (/Failed to fetch|NetworkError|Load failed/i.test(msg)) {
-        setError(
-          IS_LOCAL
-            ? `Cannot reach the backend at ${API_BASE}. Is \`docker-compose up\` running?`
-            : "Couldn't reach Aurion. Check your network and try again.",
-        );
-      } else if (/Too many failed sign-in attempts/i.test(msg)) {
-        // Backend 429 account lockout — surface the distinct message
-        // (incl. its "~N minutes" hint) rather than collapsing it into
-        // the generic invalid-credentials line, so the user knows
-        // re-trying won't help right now.
-        setError(msg.replace(/^Login failed:\s*/, ""));
-      } else if (
-        /401|Invalid email or password|Incorrect username or password|NotAuthorizedException/i.test(
-          msg,
-        )
-      ) {
-        setError("Invalid email or password.");
-      } else if (/UserNotFoundException/i.test(msg)) {
-        setError("No account found for that email.");
-      } else if (/UserNotConfirmedException/i.test(msg)) {
-        setError("Account not yet confirmed. Contact your administrator.");
-      } else if (/PasswordResetRequiredException/i.test(msg)) {
-        setError("Password reset required. Contact your administrator.");
-      } else if (/TooManyRequestsException|TooManyFailedAttemptsException/i.test(msg)) {
-        setError("Too many sign-in attempts. Wait a minute and try again.");
-      } else {
-        setError(msg.replace(/^Login failed:\s*/, ""));
-      }
+      setError(describeError(err));
+      setLoading(false);
+    }
+  }
+
+  async function handleMfaSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!mfaChallenge) return;
+    setError(null);
+    setLoading(true);
+    try {
+      const auth = await verifyMfaLogin(mfaChallenge, mfaCode.trim());
+      routeAfterAuth(auth.user.role);
+    } catch (err) {
+      setError(describeError(err));
       setLoading(false);
     }
   }
@@ -144,9 +135,13 @@ function LoginContent() {
 
   return (
     <AuthScreenShell slot={resetToast}>
-      <h2 className="aurion-title-3 mb-1.5">Sign in</h2>
+      <h2 className="aurion-title-3 mb-1.5">
+        {mfaChallenge ? "Two-factor authentication" : "Sign in"}
+      </h2>
       <p className="aurion-caption mb-6">
-        Use your Aurion email and password.
+        {mfaChallenge
+          ? "Enter the 6-digit code from your authenticator app."
+          : "Use your Aurion email and password."}
       </p>
 
       {error && (
@@ -159,6 +154,43 @@ function LoginContent() {
         </div>
       )}
 
+      {mfaChallenge ? (
+        <form
+          onSubmit={handleMfaSubmit}
+          className="space-y-4"
+          data-testid="login-mfa-form"
+        >
+          <label className="block">
+            <span className="aurion-micro mb-1.5 block">
+              Authentication code
+            </span>
+            <input
+              type="text"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              pattern="[0-9]*"
+              maxLength={6}
+              value={mfaCode}
+              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+              autoFocus
+              required
+              disabled={loading}
+              placeholder="123456"
+              className="form-input text-center tracking-[0.4em]"
+            />
+          </label>
+          <Button
+            type="submit"
+            variant="primary"
+            size="lg"
+            loading={loading}
+            fullWidth
+            className="mt-2"
+          >
+            Verify
+          </Button>
+        </form>
+      ) : (
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block">
           <span className="aurion-micro mb-1.5 block">Email</span>
@@ -224,8 +256,9 @@ function LoginContent() {
           Sign in
         </Button>
       </form>
+      )}
 
-      {IS_LOCAL && (
+      {!mfaChallenge && IS_LOCAL && (
         <details className="group mt-6 rounded-aurion-md bg-canvas px-3.5 py-3 ring-1 ring-inset ring-hairline">
           <summary className="cursor-pointer text-[12.5px] font-semibold text-navy-700 marker:hidden flex items-center justify-between">
             <span>Local dev credentials</span>
@@ -241,8 +274,7 @@ function LoginContent() {
             <DevCredRow role="EVAL" email="eval@aurionclinical.com" pw="eval" />
           </ul>
           <p className="mt-2.5 text-[11px] text-navy-400">
-            Seeded by the backend when <code>APP_ENV=local</code>. Cognito
-            hosted UI is paused.
+            Seeded by the backend when <code>APP_ENV=local</code>.
           </p>
         </details>
       )}
