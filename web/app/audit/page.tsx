@@ -27,6 +27,48 @@ function eventBadgeVariant(
   return "info";
 }
 
+// The event types offered in the filter — the canonical session-lifecycle
+// set. Rendered with humanized labels; the raw value is what the API filters on.
+const EVENT_TYPES = [
+  "session_created",
+  "consent_confirmed",
+  "recording_started",
+  "session_paused",
+  "stage1_started",
+  "stage1_delivered",
+  "stage2_started",
+  "full_note_delivered",
+  "note_exported",
+  "session_purged",
+  "masking_confirmed",
+  "config_changed",
+];
+
+/** snake_case event type → readable label, e.g. "stage1_delivered" →
+ * "Stage 1 delivered". Keeps the audit log scannable without losing the
+ * canonical name (still shown verbatim in the CSV export + tooltip). */
+function humanizeEvent(type: string): string {
+  return type
+    .replace(/stage(\d)/gi, "stage $1")
+    .replace(/_/g, " ")
+    .replace(/^./, (c) => c.toUpperCase());
+}
+
+/** Render an audit event's details object as a compact "key: value"
+ * summary instead of raw JSON. PHI-free by design (the backend never puts
+ * PHI in audit details). */
+function formatDetails(details: unknown): string {
+  if (!details || typeof details !== "object") return "—";
+  const entries = Object.entries(details as Record<string, unknown>);
+  if (entries.length === 0) return "—";
+  return entries
+    .map(([k, v]) => {
+      const val = v !== null && typeof v === "object" ? JSON.stringify(v) : String(v);
+      return `${k.replace(/_/g, " ")}: ${val}`;
+    })
+    .join(" · ");
+}
+
 export default function AuditPage() {
   const [events, setEvents] = useState<AuditEvent[]>([]);
   const [total, setTotal] = useState(0);
@@ -184,18 +226,11 @@ export default function AuditPage() {
                 className="rounded-lg border border-gray-200 bg-gray-50/50 px-3 py-2 text-sm transition-colors focus:border-gold-400 focus:bg-white focus:outline-none focus:ring-2 focus:ring-gold-100"
               >
                 <option value="">All events</option>
-                <option value="session_created">session_created</option>
-                <option value="consent_confirmed">consent_confirmed</option>
-                <option value="recording_started">recording_started</option>
-                <option value="session_paused">session_paused</option>
-                <option value="stage1_started">stage1_started</option>
-                <option value="stage1_delivered">stage1_delivered</option>
-                <option value="stage2_started">stage2_started</option>
-                <option value="full_note_delivered">full_note_delivered</option>
-                <option value="note_exported">note_exported</option>
-                <option value="session_purged">session_purged</option>
-                <option value="masking_confirmed">masking_confirmed</option>
-                <option value="config_changed">config_changed</option>
+                {EVENT_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {humanizeEvent(t)}
+                  </option>
+                ))}
               </select>
             </div>
           </div>
@@ -261,13 +296,14 @@ export default function AuditPage() {
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
                         <Badge variant={eventBadgeVariant(evt.event_type)}>
-                          {evt.event_type}
+                          <span title={evt.event_type}>{humanizeEvent(evt.event_type)}</span>
                         </Badge>
                       </td>
-                      <td className="max-w-xs truncate px-4 py-3 text-sm text-gray-400">
-                        {evt.details && Object.keys(evt.details).length > 0
-                          ? JSON.stringify(evt.details).slice(0, 80)
-                          : "--"}
+                      <td
+                        className="max-w-xs truncate px-4 py-3 text-sm text-gray-400"
+                        title={formatDetails(evt.details)}
+                      >
+                        {formatDetails(evt.details)}
                       </td>
                     </tr>
                   ))
