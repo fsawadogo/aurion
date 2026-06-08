@@ -69,12 +69,12 @@ struct CitationChip: View {
             HStack(spacing: 6) {
                 badge
                 Text(claim.sourceId)
-                    .font(.system(size: 10, weight: .semibold))
+                    .aurionFont(10, weight: .semibold, relativeTo: .caption2)
                     .tracking(0.4)
                     .foregroundColor(.aurionTextSecondary)
                 if claim.physicianEdited {
                     Text(L("noteReview.editedBadge"))
-                        .font(.system(size: 9, weight: .bold))
+                        .aurionFont(9, weight: .bold, relativeTo: .caption2)
                         .tracking(0.5)
                         .foregroundColor(.aurionGold)
                 }

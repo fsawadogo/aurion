@@ -278,6 +278,11 @@ struct AurionStatusPill: View {
             Text(labelOverride ?? kind.label)
                 .aurionFont(11, weight: kind.weight, relativeTo: .caption2)
                 .tracking(kind.tracking)
+                // Single line + slight scale so the capsule caps its own width
+                // at larger Dynamic Type — host rows lay it out as a fixed-ish
+                // trailing badge and overflow would push siblings off (#271).
+                .lineLimit(1)
+                .minimumScaleFactor(0.8)
         }
         .foregroundColor(kind.foreground)
         .padding(.horizontal, 10)
@@ -367,19 +372,26 @@ struct AurionListItem: View {
                             .foregroundColor(.aurionTextPrimary)
                             .frame(width: 24)
                     }
-                    Text(title)
-                        .aurionFont(16, relativeTo: .body)
-                        .foregroundColor(.aurionTextPrimary)
-                    Spacer()
-                    if let value {
-                        Text(value)
-                            .aurionFont(15, relativeTo: .subheadline)
-                            .foregroundColor(.aurionTextSecondary)
-                    }
-                    if showChevron && action != nil {
-                        Image(systemName: "chevron.right")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(Color.aurionMutedGray)
+                    // Title + value sit side-by-side at normal sizes; at larger
+                    // Dynamic Type the one-line pair no longer fits, so they
+                    // stack (title over value) instead of the value being
+                    // squeezed flat and truncated (#271). The chevron lives
+                    // inside both candidates so it stays pinned trailing.
+                    ViewThatFits(in: .horizontal) {
+                        HStack(spacing: 12) {
+                            titleText
+                            Spacer(minLength: 8)
+                            valueText
+                            trailingChevron
+                        }
+                        HStack(spacing: 12) {
+                            VStack(alignment: .leading, spacing: 3) {
+                                titleText
+                                valueText
+                            }
+                            Spacer(minLength: 8)
+                            trailingChevron
+                        }
                     }
                 }
                 .padding(.horizontal, 16)
@@ -395,6 +407,32 @@ struct AurionListItem: View {
         }
         .buttonStyle(.plain)
         .disabled(action == nil)
+    }
+
+    @ViewBuilder private var titleText: some View {
+        Text(title)
+            .aurionFont(16, relativeTo: .body)
+            .foregroundColor(.aurionTextPrimary)
+    }
+
+    // Value keeps its single line and wins the layout tug-of-war (priority 1)
+    // so the title yields space first within the side-by-side candidate (#271).
+    @ViewBuilder private var valueText: some View {
+        if let value {
+            Text(value)
+                .aurionFont(15, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextSecondary)
+                .lineLimit(1)
+                .layoutPriority(1)
+        }
+    }
+
+    @ViewBuilder private var trailingChevron: some View {
+        if showChevron && action != nil {
+            Image(systemName: "chevron.right")
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundColor(Color.aurionMutedGray)
+        }
     }
 }
 
@@ -469,20 +507,28 @@ struct AurionNavBar<Leading: View, Trailing: View>: View {
     @ViewBuilder let trailing: () -> Trailing
 
     var body: some View {
-        HStack {
-            // minWidth (not a hard width) so a Cancel/Back label that grows at
-            // larger Dynamic Type gets the room it needs instead of wrapping
-            // inside an 80pt slot (#321). The 80pt floor keeps the title
-            // centered in the common case.
-            HStack { leading() }
-                .frame(minWidth: 80, alignment: .leading)
-            Spacer(minLength: 0)
+        // Side buttons take their natural width and never clip — the title is
+        // overlaid centered across the whole bar so it no longer competes with
+        // the buttons for horizontal space in the HStack flow at larger Dynamic
+        // Type (#271, builds on the #321 minWidth fix). The buttons own the
+        // flow (leading | Spacer | trailing); the title floats on top.
+        HStack(spacing: AurionSpacing.xs) {
+            leading()
+            Spacer(minLength: AurionSpacing.xs)
+            trailing()
+        }
+        .overlay(alignment: .center) {
             Text(title)
                 .aurionFont(17, weight: .semibold, relativeTo: .headline)
                 .foregroundColor(.aurionTextPrimary)
-            Spacer(minLength: 0)
-            HStack { trailing() }
-                .frame(minWidth: 80, alignment: .trailing)
+                // One line, scaled down (never overlapping the side buttons)
+                // before it would ever truncate. The horizontal inset keeps a
+                // long title clear of the leading/trailing buttons (#271).
+                .lineLimit(1)
+                .minimumScaleFactor(0.7)
+                .multilineTextAlignment(.center)
+                .padding(.horizontal, 76)
+                .allowsHitTesting(false)
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 6)
@@ -495,6 +541,60 @@ extension AurionNavBar where Trailing == EmptyView {
         self.title = title
         self.leading = leading
         self.trailing = { EmptyView() }
+    }
+}
+
+// MARK: - Flow layout (wrapping chip rows)
+//
+// Lays children left-to-right, wrapping to a new row when the next child
+// would overflow the proposed width. Used for chip rows (e.g. the encounter
+// role chips) so the chips wrap onto a second row at larger Dynamic Type
+// instead of being squeezed flat and truncated inside a single HStack (#271).
+// iOS 16+ `Layout`.
+struct AurionFlowLayout: Layout {
+    var spacing: CGFloat = 8
+    var lineSpacing: CGFloat = 8
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) -> CGSize {
+        let maxWidth = proposal.width ?? .infinity
+        let sizes = subviews.map { $0.sizeThatFits(.unspecified) }
+        var rowWidth: CGFloat = 0
+        var rowHeight: CGFloat = 0
+        var totalHeight: CGFloat = 0
+        var maxRowWidth: CGFloat = 0
+        for size in sizes {
+            if rowWidth > 0, rowWidth + spacing + size.width > maxWidth {
+                totalHeight += rowHeight + lineSpacing
+                maxRowWidth = max(maxRowWidth, rowWidth)
+                rowWidth = size.width
+                rowHeight = size.height
+            } else {
+                rowWidth += (rowWidth > 0 ? spacing : 0) + size.width
+                rowHeight = max(rowHeight, size.height)
+            }
+        }
+        totalHeight += rowHeight
+        maxRowWidth = max(maxRowWidth, rowWidth)
+        let width = maxWidth == .infinity ? maxRowWidth : maxWidth
+        return CGSize(width: width, height: totalHeight)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Void) {
+        let maxWidth = bounds.width
+        var x = bounds.minX
+        var y = bounds.minY
+        var rowHeight: CGFloat = 0
+        for subview in subviews {
+            let size = subview.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.minX + maxWidth {
+                x = bounds.minX
+                y += rowHeight + lineSpacing
+                rowHeight = 0
+            }
+            subview.place(at: CGPoint(x: x, y: y), anchor: .topLeading, proposal: ProposedViewSize(size))
+            x += size.width + spacing
+            rowHeight = max(rowHeight, size.height)
+        }
     }
 }
 
@@ -511,15 +611,20 @@ struct AurionFilterChip: View {
             AurionHaptics.selection()
             action()
         } label: {
-            HStack(spacing: 6) {
-                Text(label)
-                    .aurionFont(13, weight: .semibold, relativeTo: .footnote)
-                Text("\(count)")
-                    .aurionFont(11, weight: .semibold, relativeTo: .caption2)
-                    .padding(.horizontal, 7)
-                    .padding(.vertical, 1)
-                    .background(active ? Color.white.opacity(0.18) : Color.aurionSurfaceAlt)
-                    .clipShape(Capsule())
+            // Label + count badge sit on one line; if a long localized label
+            // can't fit the count beside it (large Dynamic Type), the count
+            // drops below instead of clipping. The chip rows that host this
+            // already wrap/scroll (#358's AurionFlowLayout / the inbox's
+            // horizontal scroll), so this is the within-chip safety net (#271).
+            ViewThatFits(in: .horizontal) {
+                HStack(spacing: 6) {
+                    chipLabel
+                    chipCountBadge
+                }
+                VStack(alignment: .leading, spacing: 2) {
+                    chipLabel
+                    chipCountBadge
+                }
             }
             // Inactive: aurionTextPrimary (adaptive — navy in light, off-white in
             // dark) so the label reads against the dark card background. Hard-
@@ -541,6 +646,21 @@ struct AurionFilterChip: View {
         .accessibilityElement(children: .combine)
         .accessibilityLabel("\(label), \(count) sessions")
         .accessibilityAddTraits(active ? [.isSelected, .isButton] : .isButton)
+    }
+
+    @ViewBuilder private var chipLabel: some View {
+        Text(label)
+            .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+            .lineLimit(1)
+    }
+
+    @ViewBuilder private var chipCountBadge: some View {
+        Text("\(count)")
+            .aurionFont(11, weight: .semibold, relativeTo: .caption2)
+            .padding(.horizontal, 7)
+            .padding(.vertical, 1)
+            .background(active ? Color.white.opacity(0.18) : Color.aurionSurfaceAlt)
+            .clipShape(Capsule())
     }
 }
 

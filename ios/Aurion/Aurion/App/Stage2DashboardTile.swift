@@ -106,7 +106,15 @@ struct Stage2DashboardTile: View {
                         Text(statusLine)
                             .font(.subheadline)
                             .foregroundColor(.aurionTextSecondary)
-                            .lineLimit(2)
+                            // The .failed case surfaces the backend's
+                            // free-text error message, which can run long and
+                            // truncated under a 2-line cap at larger Dynamic
+                            // Type. Let it wrap in full there (with a gentle
+                            // scale floor as a backstop); other states keep the
+                            // tidy 2-line cap (#271 DT).
+                            .lineLimit(displayKind == .failed ? nil : 2)
+                            .minimumScaleFactor(0.8)
+                            .fixedSize(horizontal: false, vertical: displayKind == .failed)
                         // Stage 2 enrichment can fail without blocking the
                         // physician — the Stage 1 note stays approvable. There
                         // is no in-app re-run endpoint, so make the recovery
@@ -116,7 +124,9 @@ struct Stage2DashboardTile: View {
                             Text(L("stage2.failedStillReviewable"))
                                 .font(.footnote.weight(.semibold))
                                 .foregroundColor(.aurionGold)
-                                .lineLimit(2)
+                                // Recovery hint must never clip — wrap fully
+                                // at accessibility sizes (#271 DT).
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
 

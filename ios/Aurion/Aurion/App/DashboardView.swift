@@ -14,6 +14,10 @@ struct DashboardView: View {
     /// and capped at ~720pt so the dashboard doesn't stretch absurdly
     /// wide. ``.compact`` (iPhone, iPad slide-over) keeps full width.
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+    /// Drives the Dynamic Type reflows. At accessibility sizes the Quick
+    /// Start grid collapses to a single column and the recent-session row
+    /// drops its status pill below the title so nothing clips (#271).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     @State private var recentSessions: [SessionResponse] = []
     @State private var isLoadingSessions = false
     @State private var showEncounterTypeSheet = false
@@ -431,6 +435,16 @@ struct DashboardView: View {
 
     // MARK: - Quick Start (2×2 grid)
 
+    /// Grid columns for the Quick Start cards. Two side-by-side columns at
+    /// normal text sizes; a single full-width column at accessibility sizes
+    /// so the specialty + visit-type labels have room to wrap instead of
+    /// being squeezed into a narrow half-width card and clipping (#271 DT).
+    private var quickStartColumns: [GridItem] {
+        dynamicTypeSize.isAccessibilitySize
+            ? [GridItem(.flexible(), spacing: 10)]
+            : [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)]
+    }
+
     private var quickStartSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: L("dashboard.quickStart"))
@@ -441,7 +455,7 @@ struct DashboardView: View {
             if appState.physicianProfile == nil {
                 quickStartSkeleton
             } else {
-            LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+            LazyVGrid(columns: quickStartColumns, spacing: 10) {
                 ForEach(Array(quickStartCards.enumerated()), id: \.element.type) { idx, card in
                     Button {
                         AurionHaptics.impact(.light)
@@ -464,7 +478,13 @@ struct DashboardView: View {
                                     Text(card.label)
                                         .aurionFont(16, weight: .semibold, relativeTo: .body)
                                         .foregroundColor(.aurionTextPrimary)
-                                        .lineLimit(2)
+                                        // Cap at 2 lines in the 2-up grid, but
+                                        // let the label wrap freely in the
+                                        // single-column accessibility layout so
+                                        // long visit-type names aren't clipped
+                                        // (#271 DT).
+                                        .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 2)
+                                        .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
                                 }
                             }
                             .frame(maxWidth: .infinity, minHeight: 100, alignment: .leading)
@@ -495,7 +515,7 @@ struct DashboardView: View {
     /// (nil). Mirrors the 2-up Quick Start grid so the layout doesn't jump
     /// when the real cards replace it. Renders no GENERAL fallback (#278).
     private var quickStartSkeleton: some View {
-        LazyVGrid(columns: [GridItem(.flexible(), spacing: 10), GridItem(.flexible(), spacing: 10)], spacing: 10) {
+        LazyVGrid(columns: quickStartColumns, spacing: 10) {
             ForEach(0..<2, id: \.self) { _ in
                 AurionCard(padding: 14) {
                     VStack(alignment: .leading, spacing: 10) {
@@ -565,6 +585,7 @@ struct DashboardView: View {
         }
     }
 
+    @ViewBuilder
     private func recentSessionRow(session: SessionResponse) -> some View {
         let icon: String = {
             switch session.specialty {
@@ -576,30 +597,55 @@ struct DashboardView: View {
             }
         }()
 
-        return HStack(spacing: 12) {
-            ZStack {
-                RoundedRectangle(cornerRadius: 9)
-                    .fill(Color.aurionSurfaceAlt)
-                    .frame(width: 32, height: 32)
-                Image(systemName: icon)
-                    .aurionFont(14, relativeTo: .subheadline)
-                    .foregroundColor(.aurionTextSecondary)
+        let iconBubble = ZStack {
+            RoundedRectangle(cornerRadius: 9)
+                .fill(Color.aurionSurfaceAlt)
+                .frame(width: 32, height: 32)
+            Image(systemName: icon)
+                .aurionFont(14, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextSecondary)
+        }
+
+        // At accessibility sizes the title is allowed to wrap; otherwise it
+        // stays a single line beside the trailing pill (#271 DT).
+        let titleStack = VStack(alignment: .leading, spacing: 2) {
+            Text(localizedSpecialty(session.specialty))
+                .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
+                .foregroundColor(.aurionTextPrimary)
+                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
+                .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
+            Text(formatRelativeTime(session.createdAt))
+                .aurionFont(12, relativeTo: .caption)
+                .foregroundColor(.aurionTextSecondary)
+                .lineLimit(1)
+        }
+
+        let pill = AurionStatusPill(
+            kind: sessionStateKind(session.state),
+            labelOverride: sessionStateLabel(session.state)
+        )
+
+        Group {
+            if dynamicTypeSize.isAccessibilitySize {
+                // The title + pill can't coexist on one line at AX sizes —
+                // the pill would crush the title to an ellipsis. Drop it
+                // below the title/time stack so both read in full (#271 DT).
+                HStack(alignment: .top, spacing: 12) {
+                    iconBubble
+                    VStack(alignment: .leading, spacing: 8) {
+                        titleStack
+                        pill
+                    }
+                    Spacer(minLength: 0)
+                }
+            } else {
+                HStack(spacing: 12) {
+                    iconBubble
+                    titleStack
+                    Spacer()
+                    pill
+                }
             }
-            VStack(alignment: .leading, spacing: 2) {
-                Text(localizedSpecialty(session.specialty))
-                    .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
-                    .foregroundColor(.aurionTextPrimary)
-                    .lineLimit(1)
-                Text(formatRelativeTime(session.createdAt))
-                    .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(.aurionTextSecondary)
-                    .lineLimit(1)
-            }
-            Spacer()
-            AurionStatusPill(
-                kind: sessionStateKind(session.state),
-                labelOverride: sessionStateLabel(session.state)
-            )
         }
         .padding(.horizontal, 16)
         .padding(.vertical, 12)
@@ -823,7 +869,10 @@ struct DashboardView: View {
             Text(L("encounter.anonRoles"))
                 .aurionFont(13, weight: .medium, relativeTo: .footnote)
                 .foregroundColor(.aurionTextSecondary)
-            HStack(spacing: 8) {
+            // Flow layout (not a flat HStack) so the three chips wrap to a
+            // second row at larger Dynamic Type instead of being squeezed
+            // flat and truncating their labels (#271).
+            AurionFlowLayout(spacing: 8, lineSpacing: 8) {
                 ForEach(Self.anonymousRoleChips) { entry in
                     let selected = isRoleChipSelected(entry.role)
                     let capReached = !selected && selectedParticipants.count >= 3
@@ -845,6 +894,7 @@ struct DashboardView: View {
                         Text(L(entry.labelKey))
                             .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                             .foregroundColor(selected ? .white : .aurionTextPrimary)
+                            .fixedSize(horizontal: false, vertical: true)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 7)
                             .background(selected ? Color.aurionNavy : Color.aurionCardBackground)
@@ -859,8 +909,8 @@ struct DashboardView: View {
                     .accessibilityAddTraits(selected ? [.isSelected, .isButton] : .isButton)
                     .accessibilityHint(capReached ? L("encounter.participantCapReached") : "")
                 }
-                Spacer(minLength: 0)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(.leading, 56)
     }
@@ -868,21 +918,61 @@ struct DashboardView: View {
     @State private var traineeName = ""
     @State private var traineeRole = "resident"
 
+    /// Full-text label for an ad-hoc trainee role tag. Used by the role
+    /// menu trigger so the selected role always reads in full.
+    private func traineeRoleLabel(_ role: String) -> String {
+        switch role {
+        case "resident": return L("encounter.role.resident")
+        case "fellow": return L("encounter.role.fellow")
+        case "medical_student": return L("encounter.role.student")
+        default: return role.displayFormatted
+        }
+    }
+
     private var traineeForm: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 10) {
-                AurionField(label: L("encounter.name"), placeholder: L("encounter.namePlaceholder"), text: $traineeName)
-                VStack(alignment: .leading, spacing: 6) {
-                    Text(L("encounter.role"))
-                        .aurionFont(13, weight: .medium, relativeTo: .footnote)
-                        .foregroundColor(.aurionTextSecondary)
+        // Name + Role each get their OWN full-width row (#271). The Role
+        // control was a `.segmented` Picker squeezed into the right half of
+        // an HStack, so its labels truncated to "Resi… / Fellow / Stud…" at
+        // larger Dynamic Type. Segmented controls can't wrap or scale, so
+        // it's now a menu-style picker whose trigger shows the full role
+        // word and whose dropdown lists all three at any text size.
+        VStack(alignment: .leading, spacing: 12) {
+            AurionField(label: L("encounter.name"), placeholder: L("encounter.namePlaceholder"), text: $traineeName)
+            VStack(alignment: .leading, spacing: 6) {
+                Text(L("encounter.role"))
+                    .aurionFont(13, weight: .medium, relativeTo: .footnote)
+                    .foregroundColor(.aurionTextSecondary)
+                Menu {
                     Picker(L("encounter.role"), selection: $traineeRole) {
                         Text(L("encounter.role.resident")).tag("resident")
                         Text(L("encounter.role.fellow")).tag("fellow")
                         Text(L("encounter.role.student")).tag("medical_student")
                     }
-                    .pickerStyle(.segmented)
+                } label: {
+                    HStack(spacing: 8) {
+                        Text(traineeRoleLabel(traineeRole))
+                            .aurionFont(16, relativeTo: .body)
+                            .foregroundColor(.aurionTextPrimary)
+                            // Let the role word wrap rather than truncate at AX
+                            // sizes; the trigger grows vertically to fit.
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                        Image(systemName: "chevron.up.chevron.down")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundColor(.aurionTextSecondary)
+                    }
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 12)
+                    .background(Color.aurionCardBackground)
+                    .clipShape(RoundedRectangle(cornerRadius: AurionRadius.sm))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: AurionRadius.sm)
+                            .stroke(Color.aurionInputBorder, lineWidth: 1)
+                    )
+                    .contentShape(Rectangle())
                 }
+                .accessibilityLabel(L("encounter.role"))
+                .accessibilityValue(traineeRoleLabel(traineeRole))
             }
             HStack {
                 Spacer()
@@ -1056,11 +1146,15 @@ struct DashboardView: View {
     /// sub-line (required vs. choose-or-describe).
     private func contextQuestionHeader(subtitle: String) -> some View {
         VStack(alignment: .leading, spacing: 4) {
-            HStack(spacing: 6) {
+            // firstTextBaseline keeps the gold "required" bullet riding the
+            // first line when the question wraps at larger Dynamic Type; the
+            // fixedSize lets the title grow vertically instead of clipping.
+            HStack(alignment: .firstTextBaseline, spacing: 6) {
                 Text(L("context.question"))
                     .aurionFont(22, weight: .semibold, relativeTo: .title2)
                     .tracking(-0.22)
                     .foregroundColor(.aurionTextPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
                 Text("•")
                     .aurionFont(22, weight: .semibold, relativeTo: .title2)
                     .foregroundColor(.aurionGold)

@@ -39,11 +39,18 @@ struct NoteReadyView: View {
         ZStack {
             Color.aurionBackground.ignoresSafeArea()
 
-            VStack(spacing: 0) {
-                Spacer()
+            // Wrap the centered layout in a ScrollView pinned to at least the
+            // container height: it stays vertically centered when everything
+            // fits, but at larger Dynamic Type the content grows past the
+            // screen and the Review-now / Save-for-later buttons would clip
+            // off the bottom — scrolling keeps both reachable (#271 DT).
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        Spacer(minLength: 0)
 
-                // Icon with gold background and shadow
-                ZStack {
+                        // Icon with gold background and shadow
+                        ZStack {
                     RoundedRectangle(cornerRadius: 24)
                         .fill(Color.aurionGoldBg)
                         .frame(width: 96, height: 96)
@@ -83,19 +90,25 @@ struct NoteReadyView: View {
                         .accessibilityLabel(summary)
                 }
 
-                Spacer()
+                        Spacer(minLength: 0)
 
-                // Buttons
-                VStack(spacing: 10) {
-                    AurionGoldButton(label: L("noteReady.reviewNow"), full: true) {
-                        sessionManager.beginReview()
+                        // Buttons
+                        VStack(spacing: 10) {
+                            AurionGoldButton(label: L("noteReady.reviewNow"), full: true) {
+                                sessionManager.beginReview()
+                            }
+                            AurionGhostButton(label: L("noteReady.saveLater"), full: true) {
+                                sessionManager.saveForLater()
+                            }
+                        }
+                        .padding(.horizontal, 24)
+                        .padding(.bottom, 28)
                     }
-                    AurionGhostButton(label: L("noteReady.saveLater"), full: true) {
-                        sessionManager.saveForLater()
-                    }
+                    // Pin to at least the container height so the content stays
+                    // vertically centered when it fits and the ScrollView only
+                    // engages once it overflows at larger Dynamic Type (#271 DT).
+                    .frame(maxWidth: .infinity, minHeight: proxy.size.height)
                 }
-                .padding(.horizontal, 24)
-                .padding(.bottom, 28)
             }
         }
     }

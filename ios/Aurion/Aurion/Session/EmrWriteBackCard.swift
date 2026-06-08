@@ -43,6 +43,11 @@ struct EmrWriteBackCard: View {
     /// Send would 403 the same way.
     @State private var loadFailed = false
 
+    /// At accessibility text sizes the action bar stacks the connector picker
+    /// above the Send button and the per-row metadata wraps into
+    /// AurionFlowLayout so nothing clips off-screen (#271 DT).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+
     private static let approvedStates: Set<String> = [
         "REVIEW_COMPLETE", "EXPORTED", "PURGED",
     ]
@@ -260,13 +265,25 @@ struct EmrWriteBackCard: View {
         )
     }
 
+    @ViewBuilder
     private var actionBar: some View {
-        HStack(spacing: 10) {
-            if let connectors, connectors.available.count > 1 {
-                connectorPicker(connectors: connectors)
+        // Picker on its own line above the Send button at accessibility sizes —
+        // side-by-side, the picker squeezes the Send label off the row (#271 DT).
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 10) {
+                if let connectors, connectors.available.count > 1 {
+                    connectorPicker(connectors: connectors)
+                }
+                sendButton
             }
-            sendButton
-            Spacer()
+        } else {
+            HStack(spacing: 10) {
+                if let connectors, connectors.available.count > 1 {
+                    connectorPicker(connectors: connectors)
+                }
+                sendButton
+                Spacer()
+            }
         }
     }
 
@@ -316,6 +333,10 @@ struct EmrWriteBackCard: View {
                 Text(sendButtonLabel)
                     .aurionFont(13, weight: .semibold, relativeTo: .footnote)
                     .foregroundColor(isAutoRetryPending ? .aurionTextPrimary : .aurionNavy)
+                    // "Send fresh now" is the longest label — let it wrap to
+                    // two lines and shrink slightly before truncating (#271 DT).
+                    .lineLimit(2)
+                    .minimumScaleFactor(0.8)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
@@ -352,22 +373,16 @@ struct EmrWriteBackCard: View {
                 .frame(width: 22)
 
             VStack(alignment: .leading, spacing: 4) {
-                HStack(spacing: 6) {
-                    statusBadge(for: row.status)
-                    Text(L("emr.viaConnector", row.connector))
-                        .aurionFont(11, relativeTo: .caption2)
-                        .foregroundColor(.aurionTextSecondary)
-                    if row.attemptCount > 1 {
-                        Text("\u{00B7}").foregroundColor(.aurionTextSecondary.opacity(0.4))
-                        Text(L("emr.attemptCount", row.attemptCount))
-                            .aurionFont(11, relativeTo: .caption2)
-                            .foregroundColor(.aurionTextSecondary)
+                // Status badge + connector + attempt count + retry pills wrap
+                // at accessibility sizes so they flow onto extra lines instead
+                // of clipping past the row edge (#271 DT).
+                if dynamicTypeSize.isAccessibilitySize {
+                    AurionFlowLayout(spacing: 6, lineSpacing: 6) {
+                        writeBackMeta(row, isQueued: isQueued, isTerminal: isTerminal)
                     }
-                    if isQueued {
-                        retryQueuedPill
-                    }
-                    if isTerminal {
-                        noMoreRetriesPill
+                } else {
+                    HStack(spacing: 6) {
+                        writeBackMeta(row, isQueued: isQueued, isTerminal: isTerminal)
                     }
                 }
 
@@ -393,14 +408,18 @@ struct EmrWriteBackCard: View {
                         .foregroundColor(.aurionAmber)
                 }
 
-                HStack(spacing: 6) {
-                    Text(relativeTime(row.createdAt))
-                    Text("\u{00B7}").foregroundColor(.aurionTextSecondary.opacity(0.4))
-                    // Fingerprint is a hex digest — monospace it (scales
-                    // with the row via the HStack's aurionFont).
-                    Text(L("emr.fingerprintLabel",
-                            String(row.payloadFingerprint.prefix(12))))
-                        .monospaced()
+                // Timestamp + payload fingerprint wrap at accessibility sizes —
+                // the hex digest pushes the row past the edge otherwise (#271 DT).
+                Group {
+                    if dynamicTypeSize.isAccessibilitySize {
+                        AurionFlowLayout(spacing: 6, lineSpacing: 4) {
+                            writeBackFingerprint(row)
+                        }
+                    } else {
+                        HStack(spacing: 6) {
+                            writeBackFingerprint(row)
+                        }
+                    }
                 }
                 .aurionFont(10, relativeTo: .caption2)
                 .foregroundColor(.aurionTextSecondary)
@@ -409,6 +428,42 @@ struct EmrWriteBackCard: View {
             Spacer()
         }
         .padding(.vertical, 4)
+    }
+
+    /// Status badge + connector + attempt count + retry/terminal pills for one
+    /// write-back row. Shared between the inline HStack and the wrapping
+    /// AurionFlowLayout so the set is defined once (#271 DT).
+    @ViewBuilder
+    private func writeBackMeta(_ row: EmrWriteBackResponse, isQueued: Bool, isTerminal: Bool) -> some View {
+        statusBadge(for: row.status)
+        Text(L("emr.viaConnector", row.connector))
+            .aurionFont(11, relativeTo: .caption2)
+            .foregroundColor(.aurionTextSecondary)
+        if row.attemptCount > 1 {
+            Text("\u{00B7}").foregroundColor(.aurionTextSecondary.opacity(0.4))
+            Text(L("emr.attemptCount", row.attemptCount))
+                .aurionFont(11, relativeTo: .caption2)
+                .foregroundColor(.aurionTextSecondary)
+        }
+        if isQueued {
+            retryQueuedPill
+        }
+        if isTerminal {
+            noMoreRetriesPill
+        }
+    }
+
+    /// Timestamp + payload fingerprint for one write-back row. Shared between
+    /// the inline HStack and the wrapping AurionFlowLayout (#271 DT).
+    @ViewBuilder
+    private func writeBackFingerprint(_ row: EmrWriteBackResponse) -> some View {
+        Text(relativeTime(row.createdAt))
+        Text("\u{00B7}").foregroundColor(.aurionTextSecondary.opacity(0.4))
+        // Fingerprint is a hex digest — monospace it (scales
+        // with the row via the surrounding aurionFont).
+        Text(L("emr.fingerprintLabel",
+                String(row.payloadFingerprint.prefix(12))))
+            .monospaced()
     }
 
     // MARK: Chips + icons

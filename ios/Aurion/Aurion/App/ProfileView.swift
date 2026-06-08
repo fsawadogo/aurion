@@ -6,6 +6,10 @@ struct ProfileView: View {
     @EnvironmentObject var appState: AppState
     @EnvironmentObject var appLock: AppLockManager
     @EnvironmentObject var tour: TourCoordinator
+    /// Drives the Dynamic Type reflows: the Appearance picker switches to a
+    /// menu and the Practice Settings rows stack label-over-value at
+    /// accessibility sizes so long values aren't clipped (#271).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
     /// Whether a biometric "remember me" login is saved — drives the Forget
     /// row in Security. Seeded from the Keychain; cleared in place on tap.
     @State private var hasSavedLogin = KeychainHelper.shared.hasBiometricCredential()
@@ -46,6 +50,26 @@ struct ProfileView: View {
 
     private var displayPracticeType: String {
         localizedPracticeType(appState.physicianProfile?.practiceType ?? "clinic")
+    }
+
+    /// A Practice Settings key/value row. At normal text sizes it reads as a
+    /// standard trailing-value `LabeledContent`; at accessibility sizes the
+    /// value can be long (joined template / visit-type lists) and would be
+    /// truncated to an ellipsis on the right, so it stacks label-over-value
+    /// and wraps in full (#271 DT).
+    @ViewBuilder
+    private func practiceRow(_ label: String, value: String) -> some View {
+        if dynamicTypeSize.isAccessibilitySize {
+            VStack(alignment: .leading, spacing: 2) {
+                Text(label)
+                    .foregroundColor(.aurionTextPrimary)
+                Text(value)
+                    .foregroundColor(.secondary)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        } else {
+            LabeledContent(label, value: value)
+        }
     }
 
     var body: some View {
@@ -110,7 +134,10 @@ struct ProfileView: View {
                             Text(L("profile.voiceEnrolledSub"))
                                 .aurionFont(12, relativeTo: .caption)
                                 .foregroundColor(.aurionTextSecondary)
-                                .lineLimit(2)
+                                // No 2-line cap — let the subtitle wrap to as
+                                // many lines as it needs at larger Dynamic Type
+                                // instead of truncating mid-sentence (#271 DT).
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer()
                     }
@@ -137,7 +164,10 @@ struct ProfileView: View {
                             Text(L("profile.setupVoiceSub"))
                                 .aurionFont(12, relativeTo: .caption)
                                 .foregroundColor(.aurionTextSecondary)
-                                .lineLimit(2)
+                                // No 2-line cap — let the subtitle wrap to as
+                                // many lines as it needs at larger Dynamic Type
+                                // instead of truncating mid-sentence (#271 DT).
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                         Spacer()
                     }
@@ -170,17 +200,17 @@ struct ProfileView: View {
 
             // ── Practice Settings ────────────────────────────
             Section {
-                LabeledContent(L("profile.practiceType"), value: displayPracticeType)
-                LabeledContent(L("profile.primarySpecialty"), value: displaySpecialty)
+                practiceRow(L("profile.practiceType"), value: displayPracticeType)
+                practiceRow(L("profile.primarySpecialty"), value: displaySpecialty)
 
                 if let templates = appState.physicianProfile?.preferredTemplates {
-                    LabeledContent(L("profile.preferredTemplates"), value: templates
+                    practiceRow(L("profile.preferredTemplates"), value: templates
                         .map { localizedSpecialty($0) }
                         .joined(separator: ", "))
                 }
 
                 if let types = appState.physicianProfile?.consultationTypes {
-                    LabeledContent(L("profile.visitTypes"), value: types
+                    practiceRow(L("profile.visitTypes"), value: types
                         .map { localizedConsultationType($0) }
                         .joined(separator: ", "))
                 }
@@ -220,7 +250,11 @@ struct ProfileView: View {
                     Text(L("appearance.light")).tag("light")
                     Text(L("appearance.dark")).tag("dark")
                 }
-                .pickerStyle(.segmented)
+                // Segmented controls can't wrap or scale, so the three labels
+                // truncate at larger Dynamic Type. Fall back to a menu picker
+                // at accessibility sizes where each option reads in full
+                // (#271 DT).
+                .aurionSegmentedOrMenu(menu: dynamicTypeSize.isAccessibilitySize)
                 .sensoryFeedback(.selection, trigger: appState.appearance)
             } header: {
                 SectionHeader(title: L("profile.sectionAppearance"))
@@ -709,5 +743,23 @@ struct ConsentDataItem: Codable {
     enum CodingKeys: String, CodingKey {
         case eventType = "event_type"
         case timestamp = "event_timestamp"
+    }
+}
+
+// MARK: - Dynamic Type picker-style helper (#271)
+
+extension View {
+    /// Applies a menu picker style when `menu` is true, otherwise segmented.
+    /// A plain `.pickerStyle(cond ? .menu : .segmented)` ternary doesn't type
+    /// check — the two styles are distinct concrete types — so this branches
+    /// at the view level instead. Used to fall back from segmented controls
+    /// (which can't wrap or scale) to a menu at accessibility text sizes.
+    @ViewBuilder
+    func aurionSegmentedOrMenu(menu: Bool) -> some View {
+        if menu {
+            self.pickerStyle(.menu)
+        } else {
+            self.pickerStyle(.segmented)
+        }
     }
 }

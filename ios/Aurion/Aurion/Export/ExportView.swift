@@ -11,6 +11,11 @@ import UniformTypeIdentifiers
 struct ExportView: View {
     let sessionId: String
     @EnvironmentObject var sessionManager: SessionManager
+    /// #271 DT: drives the file-info card's two-up → stacked fallback.
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// #271 DT: the file-info card's vertical dividers scale with Dynamic
+    /// Type instead of a hardcoded 32pt so they match the (taller) content.
+    @ScaledMetric private var fileInfoDividerHeight: CGFloat = 32
     @State private var note: NoteResponse?
     /// Most recent purge result — drives the "Local data purged" status
     /// chip in the completion view. nil until purge fires.
@@ -64,25 +69,32 @@ struct ExportView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Format selector pills
+            // Format selector pills — pinned above the scrolling content.
             formatSelector
-                .padding(.top, AurionSpacing.xxl)
+                .padding(.top, AurionSpacing.xl)
                 .padding(.horizontal, AurionSpacing.xl)
 
-            Spacer()
-
-            if exportComplete {
-                completionView
-            } else if isExporting {
-                progressView
-            } else {
-                initialView
+            // #271 DT: the descriptive state content scrolls and the primary
+            // action (Export / Share) rides a pinned bottom footer so the CTA
+            // never clips off-screen at large Dynamic Type sizes. The
+            // min-height frame keeps the content vertically centered when it
+            // fits.
+            GeometryReader { proxy in
+                ScrollView {
+                    VStack(spacing: 0) {
+                        Spacer(minLength: AurionSpacing.xl)
+                        stateContent
+                        Spacer(minLength: AurionSpacing.xl)
+                    }
+                    .frame(maxWidth: .infinity)
+                    .frame(minHeight: proxy.size.height)
+                    .padding(.horizontal, AurionSpacing.xl)
+                }
+                .scrollBounceBehavior(.basedOnSize)
             }
-
-            Spacer()
         }
-        .padding(AurionSpacing.xl)
         .background(Color.aurionBackground.ignoresSafeArea())
+        .safeAreaInset(edge: .bottom) { exportFooter }
         .task {
             // Fetch the LATEST note version once — `getFullNote` returns
             // the Stage 2-enriched version when available so the export
@@ -100,6 +112,61 @@ struct ExportView: View {
         }
     }
 
+    // MARK: - Scrolling content (per state)
+
+    /// The descriptive body for the current state. The actionable CTA lives
+    /// in ``exportFooter`` so it stays pinned + reachable (#271 DT).
+    @ViewBuilder
+    private var stateContent: some View {
+        if exportComplete {
+            completionContent
+        } else if isExporting {
+            progressView
+        } else {
+            initialContent
+        }
+    }
+
+    // MARK: - Footer (pinned primary action)
+
+    /// State-dependent primary action, pinned to the bottom safe area so it
+    /// never scrolls off-screen at large Dynamic Type sizes (#271).
+    @ViewBuilder
+    private var exportFooter: some View {
+        if exportComplete {
+            if let url = exportFileURL {
+                VStack(spacing: AurionSpacing.sm) {
+                    Button {
+                        showShareSheet = true
+                    } label: {
+                        HStack {
+                            Image(systemName: "square.and.arrow.up")
+                            Text(L("export.share", selectedFormat.rawValue))
+                        }
+                    }
+                    .buttonStyle(AurionPrimaryButtonStyle())
+
+                    if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                        Text("\(selectedFormat.rawValue) -- \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))")
+                            .aurionCaption()
+                    }
+                }
+                .padding(.horizontal, AurionSpacing.xl)
+                .padding(.top, AurionSpacing.md)
+                .padding(.bottom, AurionSpacing.sm)
+            }
+        } else if !isExporting {
+            Button(L("export.exportAs", selectedFormat.rawValue)) {
+                exportNote()
+            }
+            .buttonStyle(AurionPrimaryButtonStyle())
+            .padding(.horizontal, AurionSpacing.xl)
+            .padding(.top, AurionSpacing.md)
+            .padding(.bottom, AurionSpacing.sm)
+        }
+        // While exporting there is no action — the progress view owns the screen.
+    }
+
     // MARK: - Format Selector
 
     private var formatSelector: some View {
@@ -113,6 +180,12 @@ struct ExportView: View {
                 } label: {
                     Text(format.rawValue)
                         .aurionFont(13, weight: .bold, relativeTo: .footnote)
+                        // #271 DT: the labels are fixed short tokens
+                        // (DOCX/PDF/Text), so the horizontal 3-up holds at
+                        // accessibility sizes — clamp to one line with a
+                        // shrink floor rather than adding a vertical fallback.
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                         .frame(maxWidth: .infinity)
                         .padding(.vertical, AurionSpacing.sm)
                         .background(
@@ -137,7 +210,9 @@ struct ExportView: View {
 
     // MARK: - Initial State
 
-    private var initialView: some View {
+    /// Descriptive part of the initial state. The "Export as …" button lives
+    /// in ``exportFooter`` (#271 DT) so it can't clip off-screen.
+    private var initialContent: some View {
         VStack(spacing: AurionSpacing.xxl) {
             // Document icon
             ZStack {
@@ -160,25 +235,11 @@ struct ExportView: View {
                     .aurionFont(15, weight: .regular, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, AurionSpacing.xl)
             }
 
-            // File info card
-            HStack(spacing: AurionSpacing.lg) {
-                fileInfoItem(icon: "doc.text", label: L("export.format"), value: selectedFormat.rawValue)
-                Divider().frame(height: 32)
-                fileInfoItem(icon: "internaldrive", label: L("export.estSize"), value: estimatedSizeLabel)
-                Divider().frame(height: 32)
-                fileInfoItem(icon: "lock.shield", label: L("export.phi"), value: L("export.scrubbed"))
-            }
-            .padding(AurionSpacing.lg)
-            .background(Color.aurionCardBackground)
-            .cornerRadius(AurionSpacing.sm)
-
-            Button(L("export.exportAs", selectedFormat.rawValue)) {
-                exportNote()
-            }
-            .buttonStyle(AurionPrimaryButtonStyle())
+            fileInfoCard
 
             if let error = errorMessage {
                 ErrorBanner(
@@ -188,6 +249,33 @@ struct ExportView: View {
                 )
             }
         }
+    }
+
+    // MARK: - File Info Card
+
+    /// Format / size / PHI summary. #271 DT: three columns with scaled
+    /// vertical dividers when they fit; stacks to rows with full-width
+    /// dividers when they can't (accessibility text sizes).
+    private var fileInfoCard: some View {
+        ViewThatFits(in: .horizontal) {
+            HStack(spacing: AurionSpacing.lg) {
+                fileInfoItem(icon: "doc.text", label: L("export.format"), value: selectedFormat.rawValue)
+                Divider().frame(height: fileInfoDividerHeight)
+                fileInfoItem(icon: "internaldrive", label: L("export.estSize"), value: estimatedSizeLabel)
+                Divider().frame(height: fileInfoDividerHeight)
+                fileInfoItem(icon: "lock.shield", label: L("export.phi"), value: L("export.scrubbed"))
+            }
+            VStack(spacing: AurionSpacing.md) {
+                fileInfoItem(icon: "doc.text", label: L("export.format"), value: selectedFormat.rawValue)
+                Divider()
+                fileInfoItem(icon: "internaldrive", label: L("export.estSize"), value: estimatedSizeLabel)
+                Divider()
+                fileInfoItem(icon: "lock.shield", label: L("export.phi"), value: L("export.scrubbed"))
+            }
+        }
+        .padding(AurionSpacing.lg)
+        .background(Color.aurionCardBackground)
+        .cornerRadius(AurionSpacing.sm)
     }
 
     // MARK: - Progress State
@@ -263,7 +351,10 @@ struct ExportView: View {
 
     // MARK: - Completion State
 
-    private var completionView: some View {
+    /// Descriptive part of the completion state. The Share button + size
+    /// label live in ``exportFooter`` (#271 DT); the purge-confirmation chip
+    /// stays here as a status note.
+    private var completionContent: some View {
         VStack(spacing: AurionSpacing.xxl) {
             AurionIconBubble(symbol: "checkmark.circle.fill", tint: .aurionGold, size: 100, symbolWeight: .regular)
                 .transition(AurionTransition.scaleIn)
@@ -276,26 +367,8 @@ struct ExportView: View {
                     .aurionFont(15, weight: .regular, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
                     .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, AurionSpacing.xl)
-            }
-
-            if let url = exportFileURL {
-                VStack(spacing: AurionSpacing.sm) {
-                    Button {
-                        showShareSheet = true
-                    } label: {
-                        HStack {
-                            Image(systemName: "square.and.arrow.up")
-                            Text(L("export.share", selectedFormat.rawValue))
-                        }
-                    }
-                    .buttonStyle(AurionPrimaryButtonStyle())
-
-                    if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize {
-                        Text("\(selectedFormat.rawValue) -- \(ByteCountFormatter.string(fromByteCount: Int64(size), countStyle: .file))")
-                            .aurionCaption()
-                    }
-                }
             }
 
             // M-12: visible confirmation that the local raw bytes were
@@ -308,6 +381,7 @@ struct ExportView: View {
                     Text(Lplural("export.purged", report.totalArtifactsPurged))
                         .aurionFont(12, weight: .medium, relativeTo: .caption)
                         .foregroundColor(.aurionTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
                 .padding(.horizontal, AurionSpacing.md)
                 .padding(.vertical, AurionSpacing.xs)

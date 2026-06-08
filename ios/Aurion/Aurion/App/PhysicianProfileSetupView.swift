@@ -6,6 +6,11 @@ import SwiftUI
 /// Back / Continue bar at bottom.
 struct PhysicianProfileSetupView: View {
     @EnvironmentObject var appState: AppState
+    /// Drives the Dynamic Type reflows: the header step/skip texts scale, the
+    /// consent-reprompt picker switches to a menu, and the custom-visit
+    /// editor's action buttons stack vertically at accessibility sizes
+    /// (#271).
+    @Environment(\.dynamicTypeSize) private var dynamicTypeSize
 
     @State private var step = 0
     // Practice types are multi-select — a clinician may run a clinic AND a
@@ -270,12 +275,23 @@ struct PhysicianProfileSetupView: View {
                 Text(L("setup.step", step + 1, totalSteps))
                     .aurionFont(12, relativeTo: .caption)
                     .foregroundColor(.aurionTextSecondary)
-                Spacer()
+                    // "Step X of Y" (FR "Étape X sur Y") competes with the
+                    // Back + Skip controls on one row; let it scale rather
+                    // than clip the Skip target at larger Dynamic Type
+                    // (#271 DT).
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.7)
+                    .layoutPriority(-1)
+                Spacer(minLength: 8)
                 Button(L("setup.skip")) {
                     appState.hasCompletedProfileSetup = true
                 }
                 .aurionFont(12, relativeTo: .caption)
                 .foregroundColor(.aurionTextSecondary)
+                // Keep the tap target intact and never let the step indicator
+                // squeeze "Skip" to an ellipsis (#271 DT).
+                .lineLimit(1)
+                .fixedSize(horizontal: true, vertical: false)
                 .frame(minWidth: 44, minHeight: 44)
                 .contentShape(Rectangle())
             }
@@ -604,24 +620,21 @@ struct PhysicianProfileSetupView: View {
                     .foregroundColor(.aurionRed)
             }
 
-            HStack(spacing: 12) {
-                Spacer()
-                Button(L("setup.visit.custom.cancel")) {
-                    withAnimation(.aurionIOS) {
-                        isAddingCustomType = false
-                        customTypeDraft = ""
-                        customTypeDraftError = nil
-                    }
+            // Cancel + Add sit side-by-side normally, but the two labels
+            // (longer in FR) crowd one row at accessibility sizes — stack
+            // them so each keeps its full label and 44pt tap target (#271 DT).
+            if dynamicTypeSize.isAccessibilitySize {
+                VStack(alignment: .trailing, spacing: 12) {
+                    customTypeCommitButton
+                    customTypeCancelButton
                 }
-                .aurionFont(15, relativeTo: .subheadline)
-                .foregroundColor(.aurionTextSecondary)
-
-                Button(L("setup.visit.custom.commit")) {
-                    commitCustomType()
+                .frame(maxWidth: .infinity, alignment: .trailing)
+            } else {
+                HStack(spacing: 12) {
+                    Spacer()
+                    customTypeCancelButton
+                    customTypeCommitButton
                 }
-                .disabled(!canCommitCustomType)
-                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
-                .foregroundColor(canCommitCustomType ? .aurionGold : .aurionTextSecondary)
             }
         }
         .padding(.horizontal, 16)
@@ -632,6 +645,27 @@ struct PhysicianProfileSetupView: View {
                 .stroke(Color.aurionBorder, lineWidth: 1)
         )
         .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
+    }
+
+    private var customTypeCancelButton: some View {
+        Button(L("setup.visit.custom.cancel")) {
+            withAnimation(.aurionIOS) {
+                isAddingCustomType = false
+                customTypeDraft = ""
+                customTypeDraftError = nil
+            }
+        }
+        .aurionFont(15, relativeTo: .subheadline)
+        .foregroundColor(.aurionTextSecondary)
+    }
+
+    private var customTypeCommitButton: some View {
+        Button(L("setup.visit.custom.commit")) {
+            commitCustomType()
+        }
+        .disabled(!canCommitCustomType)
+        .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+        .foregroundColor(canCommitCustomType ? .aurionGold : .aurionTextSecondary)
     }
 
     private var canCommitCustomType: Bool {
@@ -715,9 +749,14 @@ struct PhysicianProfileSetupView: View {
                 .foregroundColor(.aurionGoldDark)
                 .frame(width: 28)
             VStack(alignment: .leading, spacing: 2) {
+                // .fixedSize(vertical) lets the title wrap too — at larger
+                // Dynamic Type the toggle's intrinsic width grows and the
+                // title would otherwise truncate / collapse to a narrow
+                // column (#271 DT).
                 Text(title)
                     .aurionFont(16, weight: .semibold, relativeTo: .body)
                     .foregroundColor(.aurionTextPrimary)
+                    .fixedSize(horizontal: false, vertical: true)
                 // .fixedSize(vertical) lets the subtitle wrap to as many
                 // lines as it needs instead of collapsing to a 1-char
                 // column when the toggle's intrinsic width grows under
@@ -816,7 +855,11 @@ struct PhysicianProfileSetupView: View {
                     Text(cadence.label).tag(cadence)
                 }
             }
-            .pickerStyle(.segmented)
+            // Segmented controls can't wrap or scale, so the cadence labels
+            // (Every session / Daily / Weekly; longer in FR) truncate at
+            // larger Dynamic Type. Fall back to a menu picker at accessibility
+            // sizes where each option reads in full (#271 DT).
+            .aurionSegmentedOrMenu(menu: dynamicTypeSize.isAccessibilitySize)
         }
         .padding(16)
         .background(Color.aurionCardBackground)
