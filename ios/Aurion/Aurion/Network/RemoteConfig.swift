@@ -27,7 +27,10 @@ final class RemoteConfig: ObservableObject {
         // team flips this per-session for Phase 2 evaluation runs.
         visualEvidenceMode: .framesOnly,
         clipWindowMs: 7_000,
-        clipTriggerKinds: ["motion", "rom", "gait", "procedural"]
+        clipTriggerKinds: ["motion", "rom", "gait", "procedural"],
+        // Off until AppConfig pushes a non-zero floor (#324). Zero means
+        // no cadence timer is ever created — strict no-op fallback.
+        clipCadenceSeconds: 0
     )
     @Published private(set) var featureFlags = ClientFeatureFlagsResponse(
         // Off for the pilot — matches the backend AppConfig default. This is

@@ -347,6 +347,15 @@ final class SessionManager: ObservableObject {
     /// the coordinator is a no-op and capture continues normally.
     private let liveActivity = LiveActivityCoordinator()
 
+    /// During-recording clip cadence floor (#324). Created on
+    /// `startRecording` when AppConfig's `clip_cadence_seconds > 0` AND the
+    /// active visual-evidence mode emits clips (`.clipsOnly` / `.hybrid`);
+    /// `nil` (and a strict no-op) otherwise — preserving today's
+    /// trigger-only behavior. Owns the repeating timer, the shared
+    /// `lastClipExtractedAt` watermark, and the per-session safety cap.
+    /// Suspended on pause, resumed on resume, invalidated on stop.
+    private var cadenceDriver: CadenceClipDriver?
+
     private let api = APIClient.shared
     private var registry: CaptureSourceRegistry { .shared }
     private var audioSource: CaptureSource { registry.activeAudioSource }
@@ -441,6 +450,9 @@ final class SessionManager: ObservableObject {
             // before that gives us a zero-byte audioPCMData and "No audio
             // captured" later in submitAudio.
             recordingStartedAt = Date()
+            // Clip cadence floor (#324). No-op unless AppConfig pushed a
+            // non-zero clip_cadence_seconds AND the mode emits clips.
+            startCadenceDriverIfEnabled()
         } catch let sourceError as CaptureSourceError {
             self.error = sourceError.localizedDescription
         } catch {
@@ -528,6 +540,10 @@ final class SessionManager: ObservableObject {
         // recording lights. If the backend rejects the transition we surface
         // the error but keep the local pause — better to err on caution.
         for source in activeSourcesForCurrentMode { source.pause() }
+        // Stop emitting cadence clips while paused — pause is a consent
+        // boundary (#324). The watermark + emitted count survive so resume
+        // continues the same cadence.
+        cadenceDriver?.suspend()
         liveActivity.setPaused(true)
         // ReplayKit has no real pause. ScreenCaptureManager.startCapture
         // wipes capturedScreenFrames on resume, so pre-pause frames are
@@ -551,6 +567,9 @@ final class SessionManager: ObservableObject {
 
     func resumeRecording() {
         for source in activeSourcesForCurrentMode { source.resume() }
+        // Re-arm the cadence timer (#324). Same watermark + count as before
+        // the pause; no-op when the driver was never created.
+        cadenceDriver?.resume()
         liveActivity.setPaused(false)
         if let session, wantsScreenCapture(for: session.captureMode) {
             screenCapture.startCapture()
@@ -580,6 +599,11 @@ final class SessionManager: ObservableObject {
         // Clear the start timestamp so a future Resume → Stop pair re-arms
         // the minimum-duration guard from scratch.
         recordingStartedAt = nil
+        // Tear down the cadence floor (#324) BEFORE stopping sources clears
+        // the ring — no new tick should race the ring clear. An in-flight
+        // tick that lands after the clear sees an empty ring and no-ops.
+        cadenceDriver?.invalidate()
+        cadenceDriver = nil
         // Stop local capture FIRST so getRecordedAudioData has a complete buffer
         // by the time submitProcessing fires.
         for source in activeSourcesForCurrentMode { source.stop() }
@@ -814,6 +838,110 @@ final class SessionManager: ObservableObject {
         return .clip(url, duration: clipWindowMs, trigger: trigger)
     }
 
+    // MARK: - Clip Cadence Floor (#324)
+
+    /// True when the during-recording clip cadence floor should run for the
+    /// current session: AppConfig pushed a non-zero `clip_cadence_seconds`
+    /// AND the resolved visual-evidence mode emits clips. `.framesOnly` never
+    /// produces clips, so cadence never runs there. Pure — no side effects —
+    /// so both `startCadenceDriverIfEnabled` and `submitVisualEvidence`
+    /// (which disables the now-redundant post-stop clip path) agree.
+    private func clipCadenceActive(for session: CaptureSession, pipeline: ClientPipelineResponse) -> Bool {
+        guard pipeline.clipCadenceSeconds > 0 else { return false }
+        let mode = Self.resolveEvidenceMode(
+            sessionOverride: session.providerOverrides?.visualEvidenceMode,
+            globalDefault: pipeline.visualEvidenceMode
+        )
+        return mode == .clipsOnly || mode == .hybrid
+    }
+
+    /// Stand up the cadence driver if the feature is on for this session.
+    /// Called at the end of `startRecording`. Requires a video-capable
+    /// `BuiltInCaptureSource` (the ring lives on its manager); audio-only
+    /// modes and the Simulator (no camera) leave `cadenceDriver` nil — a
+    /// strict no-op.
+    private func startCadenceDriverIfEnabled() {
+        cadenceDriver = nil
+        guard let session else { return }
+        let pipeline = RemoteConfig.shared.pipeline
+        guard clipCadenceActive(for: session, pipeline: pipeline) else { return }
+        // The ring buffer lives on the BuiltInCaptureSource's manager. No
+        // built-in video source ⇒ nothing to extract from ⇒ no driver.
+        guard registry.activeVideoSource is BuiltInCaptureSource else { return }
+        let clipWindowMs = pipeline.clipWindowMs
+        let driver = CadenceClipDriver(cadenceSeconds: pipeline.clipCadenceSeconds) { [weak self] in
+            await self?.emitCadenceClip(windowMs: clipWindowMs) ?? false
+        }
+        cadenceDriver = driver
+        driver.start()
+    }
+
+    /// One cadence cycle: extract a trailing clip from the live ring → mask
+    /// on-device → upload the MASKED clip with `source: "cadence"`. Runs
+    /// DURING recording (the ring is cleared on stop, so extraction can't be
+    /// deferred). Returns `true` once a clip is successfully EXTRACTED so the
+    /// driver advances its watermark + count — masking/upload failures
+    /// downstream don't reopen the cadence interval (we don't hammer the
+    /// ring within `N`).
+    ///
+    /// Fail-closed (CLAUDE.md §Privacy): the raw extracted MP4 is deleted the
+    /// instant masking consumes it (success or failure), and `uploadClip` is
+    /// reached ONLY when `maskClip` returned `.success` with a masked file
+    /// URL — a masking failure NEVER uploads bytes. The masked temp file is
+    /// deleted after the upload attempt regardless of its outcome.
+    ///
+    /// Upload-timing choice: extract + mask + upload all happen live. Duty
+    /// cycle is genuinely low (one clip per `N` s) and the ring runs at
+    /// `video_capture_fps` (≈1 fps), so a `clip_window_ms` clip is only a
+    /// handful of frames — masking is cheap (~a few Vision passes), not the
+    /// ~200-frame 30 fps cost. Keeping mask+upload live also avoids
+    /// accumulating RAW unmasked clips on disk across the encounter, which a
+    /// deferred-upload design would require (the privacy surface stays a
+    /// single masked clip at a time).
+    private func emitCadenceClip(windowMs: Int) async -> Bool {
+        guard let session else { return false }
+        guard let source = registry.activeVideoSource as? BuiltInCaptureSource else { return false }
+
+        // Extract the trailing window ending at the current ring clock. nil
+        // ⇒ the ring can't satisfy the window yet (warm-up before the first
+        // frame, or just-cleared on a racing stop) — skip, retry next tick.
+        guard let extracted = await source.extractCadenceClip(windowMs: windowMs) else {
+            return false
+        }
+        let rawURL = extracted.url
+
+        // Mask on-device. maskClip consumes the raw input and writes a NEW
+        // masked MP4; delete the raw bytes immediately afterward either way.
+        let result = await MaskingPipeline.shared.maskClip(rawURL, sessionId: session.id)
+        try? FileManager.default.removeItem(at: rawURL)
+
+        guard result.success, let maskedURL = result.maskedFileURL else {
+            // Masking failed → fail-closed: nothing uploaded, no raw bytes
+            // linger. The interval is still satisfied (we extracted a clip),
+            // so return true rather than retrying every sub-interval.
+            return true
+        }
+
+        do {
+            _ = try await api.uploadClip(
+                sessionId: session.id,
+                clipFileURL: maskedURL,
+                timestampMs: extracted.timestampMs,
+                durationMs: windowMs,
+                triggerSegmentId: "cadence_\(extracted.timestampMs)",
+                framesTotal: result.framesTotal,
+                framesWithFaces: result.framesWithFaces,
+                source: "cadence"
+            )
+        } catch {
+            // Network failure mid-recording is non-fatal — the clip was
+            // extracted + masked; we don't retry it (no post-stop ring to
+            // re-extract from). Clean up below.
+        }
+        try? FileManager.default.removeItem(at: maskedURL)
+        return true
+    }
+
     /// Mask + upload every visual evidence item captured during the
     /// session. Replaces the pre-P1-5 `submitFrames` — backward-compatible
     /// in default mode (`.framesOnly`) because every captured frame still
@@ -850,6 +978,19 @@ final class SessionManager: ObservableObject {
         )
         let clipWindowMs = pipeline.clipWindowMs
         let clipTriggerKinds = pipeline.clipTriggerKinds
+
+        // #324: when the during-recording cadence floor is on, clips were
+        // already extracted + masked + uploaded live by `emitCadenceClip`.
+        // The post-stop clip path below reads a ring that `stopCapture`
+        // cleared, so it can only produce empty/failed extractions — disable
+        // it to guarantee no double-extraction / double-upload.
+        let cadenceActive = clipCadenceActive(for: session, pipeline: pipeline)
+        if cadenceActive && mode == .clipsOnly {
+            // clips_only has no frame path at all; nothing left to do here.
+            // (framesOnly is untouched — cadence never runs in framesOnly.)
+            processingStatus = ""
+            return
+        }
 
         // The trigger classifier lands later; today every captured frame
         // is treated as a `"clinic"` kind trigger so hybrid mode routes
@@ -889,6 +1030,15 @@ final class SessionManager: ObservableObject {
                 // Couldn't build evidence (e.g., ring buffer empty) —
                 // log and continue. Not a masking failure; nothing was
                 // produced to upload in the first place.
+                continue
+            }
+
+            // #324 (hybrid): a trigger that routed to a clip is already
+            // covered by the live cadence floor. Drop the post-stop
+            // extraction (which read the cleared ring anyway) so we never
+            // double-upload. Frame-kind evidence falls through untouched.
+            if cadenceActive, case .clip(let clipURL, _, _) = evidence {
+                try? FileManager.default.removeItem(at: clipURL)
                 continue
             }
 
@@ -2027,6 +2177,11 @@ final class SessionManager: ObservableObject {
 
     func endSession() {
         teardownLiveTranscriber()
+        // Belt-and-suspenders: stopRecording already tears the cadence
+        // driver down on the normal path; this covers abort cases (review
+        // dismissed, crash-recovery discard) that skip stopRecording (#324).
+        cadenceDriver?.invalidate()
+        cadenceDriver = nil
         stopScreenCaptureIfRunning()
         // Belt-and-suspenders end of the Live Activity. `stopRecording`
         // already ends it on the normal path; covers the abort cases

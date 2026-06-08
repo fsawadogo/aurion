@@ -152,6 +152,16 @@ final class BuiltInCaptureSource: CaptureSource {
     /// persistence boundary.
     var clipRingBuffer: VideoRingBuffer { manager.clipRingBuffer }
 
+    /// Extract a trailing cadence clip from the underlying ring DURING
+    /// active recording (#324). Mirrors the `clipRingBuffer` passthrough
+    /// above but performs the extraction on the manager so the wall-clock
+    /// baseline and session-relative timestamp come from the one type that
+    /// owns `sessionStartTime` and the ring. Returns RAW (unmasked) bytes —
+    /// the caller MUST mask before any network/persistence boundary.
+    func extractCadenceClip(windowMs: Int) async -> (url: URL, timestampMs: Int)? {
+        await manager.extractCadenceClip(windowMs: windowMs)
+    }
+
     override func start() throws {
         guard manager.permissionsGranted else {
             throw CaptureSourceError.permissionDenied("camera and microphone")

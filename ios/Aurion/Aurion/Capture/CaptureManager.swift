@@ -670,6 +670,66 @@ final class CaptureManager: NSObject, ObservableObject {
         return buffer
     }
 
+    // MARK: - Cadence Clip Extraction (#324)
+
+    /// Pure window math for `extractCadenceClip`, factored out so the
+    /// trailing-window + session-relative-timestamp arithmetic can be unit
+    /// tested without a live capture session.
+    ///
+    /// The cadence floor wants the clip that ENDS at `now` (the current
+    /// ring clock), NOT one centered on `now`: the post-roll half of a
+    /// centered window hasn't been captured yet at tick time. The ring's
+    /// `extract(around:duration:)` takes a CENTER, so we hand it
+    /// `now - windowMs/2` with the full window duration, which resolves to
+    /// the span `[now - windowMs, now]`.
+    ///
+    /// `now` and `sessionStart` are BOTH on the ring's own wall-clock
+    /// baseline (`Date.timeIntervalSinceReferenceDate`, the same clock
+    /// `VideoRingBuffer.append(_:at:)` stamps each entry with). Using that
+    /// absolute baseline for the extract center is the fix for the existing
+    /// post-stop bug, where a session-RELATIVE timestamp was used to query a
+    /// ring indexed by ABSOLUTE wall-clock and never matched any entry. The
+    /// returned `timestampMs` is session-relative (for the citation anchor),
+    /// clamped at 0.
+    nonisolated static func cadenceClipWindow(
+        now: TimeInterval,
+        sessionStart: TimeInterval,
+        windowMs: Int
+    ) -> (center: TimeInterval, durationSeconds: TimeInterval, timestampMs: Int) {
+        let window = TimeInterval(windowMs) / 1000.0
+        let center = now - window / 2.0
+        let timestampMs = max(0, Int(((now - sessionStart) * 1000.0).rounded()))
+        return (center, window, timestampMs)
+    }
+
+    /// Extract a TRAILING video clip ending at the current ring clock, for
+    /// the during-recording clip cadence floor (#324). This is the ONLY
+    /// place clips can be pulled mid-recording — the ring is cleared on
+    /// `stopCapture`, so the legacy post-stop `submitVisualEvidence` clip
+    /// path reads an empty ring and is effectively non-functional.
+    ///
+    /// Returns the RAW (UNMASKED) MP4 file URL plus the session-relative
+    /// timestamp in ms. Per the `VideoRingBuffer` privacy contract the
+    /// caller MUST run the URL through `MaskingPipeline.maskClip` before any
+    /// network or persistence boundary. Returns `nil` (fail-soft) when the
+    /// ring can't satisfy the window yet (empty / no entries in window) or
+    /// the encode fails — the cadence driver simply skips that tick.
+    func extractCadenceClip(windowMs: Int) async -> (url: URL, timestampMs: Int)? {
+        guard windowMs > 0 else { return nil }
+        // Same wall-clock baseline the ring stamps entries with on append.
+        let now = Date.timeIntervalSinceReferenceDate
+        let w = Self.cadenceClipWindow(now: now, sessionStart: sessionStartTime, windowMs: windowMs)
+        do {
+            let url = try await clipRingBuffer.extract(around: w.center, duration: w.durationSeconds)
+            return (url, w.timestampMs)
+        } catch {
+            // ringEmpty / noEntriesInWindow / writer failure — fail-soft.
+            // No PHI: the error is structural, never patient content.
+            NSLog("[Aurion] extractCadenceClip skipped: %@", String(describing: error))
+            return nil
+        }
+    }
+
     // MARK: - Interruption Handling
 
     private func registerInterruptionObservers() {

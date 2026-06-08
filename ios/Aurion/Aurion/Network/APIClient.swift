@@ -503,7 +503,8 @@ final class APIClient: Sendable {
         durationMs: Int,
         triggerSegmentId: String,
         framesTotal: Int,
-        framesWithFaces: Int
+        framesWithFaces: Int,
+        source: String = "trigger"
     ) async throws -> ClipUploadResponse {
         let prepared = try Self.prepareClipUpload(
             baseURL: baseURL,
@@ -514,6 +515,7 @@ final class APIClient: Sendable {
             triggerSegmentId: triggerSegmentId,
             framesTotal: framesTotal,
             framesWithFaces: framesWithFaces,
+            source: source,
             authToken: KeychainHelper.shared.bearerToken()
         )
         // Belt and suspenders: ensure the body temp file is removed
@@ -546,6 +548,7 @@ final class APIClient: Sendable {
         triggerSegmentId: String,
         framesTotal: Int,
         framesWithFaces: Int,
+        source: String = "trigger",
         authToken: String?
     ) throws -> (request: URLRequest, bodyFileURL: URL) {
         let url = URL(string: "\(baseURL)/clips/\(sessionId)")!
@@ -577,6 +580,11 @@ final class APIClient: Sendable {
         builder.appendField("frames_total", "\(framesTotal)")
         builder.appendField("frames_with_faces", "\(framesWithFaces)")
         builder.appendField("masking_confirmed", "true")
+        // Origin of the clip: "trigger" (transcript-side visual trigger,
+        // the default) vs "cadence" (the during-recording clip cadence
+        // floor, #324). Lets the backend / audit surface tell a
+        // silent-exam cadence clip apart from a trigger-driven one.
+        builder.appendField("source", source)
 
         var prefix = builder.bodySoFar
         prefix.append(builder.headerForFile(name: "clip", filename: "clip.mp4", mime: "video/mp4"))
@@ -2245,6 +2253,15 @@ struct ClientPipelineResponse: Codable, Sendable {
     /// Trigger kinds that route to a clip in `.hybrid` mode. Defaults
     /// mirror the master plan ("motion", "rom", "gait", "procedural").
     let clipTriggerKinds: [String]
+    /// Clip cadence floor in seconds (#324). When `> 0` and the active
+    /// visual-evidence mode emits clips (`.clipsOnly` / `.hybrid`), the
+    /// iOS capture pipeline extracts + masks + uploads a clip every this
+    /// many seconds DURING recording, so a silent physical exam still
+    /// produces clips. `0` disables the cadence driver entirely — no
+    /// timer is created and behavior is byte-identical to today's
+    /// trigger-only path. Defaults to `0` so an un-upgraded backend
+    /// (or the `/config` fallback) is a strict no-op.
+    let clipCadenceSeconds: Int
 
     enum CodingKeys: String, CodingKey {
         case stage1SkipWindowSeconds = "stage1_skip_window_seconds"
@@ -2255,6 +2272,7 @@ struct ClientPipelineResponse: Codable, Sendable {
         case visualEvidenceMode = "visual_evidence_mode"
         case clipWindowMs = "clip_window_ms"
         case clipTriggerKinds = "clip_trigger_kinds"
+        case clipCadenceSeconds = "clip_cadence_seconds"
     }
 
     init(
@@ -2265,7 +2283,8 @@ struct ClientPipelineResponse: Codable, Sendable {
         videoCaptureFps: Int,
         visualEvidenceMode: VisualEvidenceMode = .framesOnly,
         clipWindowMs: Int = 7_000,
-        clipTriggerKinds: [String] = ["motion", "rom", "gait", "procedural"]
+        clipTriggerKinds: [String] = ["motion", "rom", "gait", "procedural"],
+        clipCadenceSeconds: Int = 0
     ) {
         self.stage1SkipWindowSeconds = stage1SkipWindowSeconds
         self.frameWindowClinicMs = frameWindowClinicMs
@@ -2275,6 +2294,7 @@ struct ClientPipelineResponse: Codable, Sendable {
         self.visualEvidenceMode = visualEvidenceMode
         self.clipWindowMs = clipWindowMs
         self.clipTriggerKinds = clipTriggerKinds
+        self.clipCadenceSeconds = clipCadenceSeconds
     }
 
     init(from decoder: Decoder) throws {
@@ -2290,6 +2310,7 @@ struct ClientPipelineResponse: Codable, Sendable {
         visualEvidenceMode = try c.decodeIfPresent(VisualEvidenceMode.self, forKey: .visualEvidenceMode) ?? .framesOnly
         clipWindowMs = try c.decodeIfPresent(Int.self, forKey: .clipWindowMs) ?? 7_000
         clipTriggerKinds = try c.decodeIfPresent([String].self, forKey: .clipTriggerKinds) ?? ["motion", "rom", "gait", "procedural"]
+        clipCadenceSeconds = try c.decodeIfPresent(Int.self, forKey: .clipCadenceSeconds) ?? 0
     }
 }
 
