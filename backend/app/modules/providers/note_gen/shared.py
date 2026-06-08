@@ -84,12 +84,55 @@ Return only valid JSON matching the provided schema. No preamble, no explanation
 _LANGUAGE_NAMES = {"en": "English", "fr": "French"}
 
 
+def render_participants_block(participants: list[dict] | None) -> str:
+    """Render the ENCOUNTER PARTICIPANTS prompt block (#275).
+
+    Fires whenever ``participants`` is non-empty. The enrolling clinician
+    is an implicit second speaker, so even a single chip means the
+    encounter has more than one voice to attribute — the historic
+    ``len(...) > 1`` gate misfired for a single team member and is fixed
+    here.
+
+    Rendering, per chip:
+      * Named member (``name`` present) → ``- {name} ({Role})``.
+      * Anonymous role chip (``name`` is ``None``/empty) → role-only
+        ``- ({Role}), unnamed``. A name is NEVER synthesized for an
+        unnamed speaker — descriptive-mode / citation traceability allows
+        role-only attribution for unnamed speakers and named attribution
+        only for named members.
+
+    Returns ``""`` when there are no participants so cold-path sessions
+    produce a byte-identical prompt to the pre-#275 build.
+    """
+    if not participants:
+        return ""
+    lines: list[str] = []
+    for p in participants:
+        role = str(p.get("role", "") or "").replace("_", " ").title()
+        name = p.get("name")
+        if name:
+            lines.append(f"- {name} ({role})")
+        else:
+            lines.append(f"- ({role}), unnamed")
+    roles_list = "\n".join(lines)
+    return (
+        f"ENCOUNTER PARTICIPANTS:\n{roles_list}\n\n"
+        "More than one person is present. Attribute statements to the "
+        "appropriate role when identifiable from context (e.g., "
+        "'Nurse noted...', 'Resident reported...'). When the speaker is "
+        "ambiguous, use 'It was noted...' rather than attributing to a "
+        "specific person. Never attribute a statement to a named person "
+        "unless their name appears above.\n\n"
+    )
+
+
 def build_user_prompt(
     transcript: Transcript,
     template: Template,
     stage: int,
     output_language: str = "en",
     prior_context_text: str | None = None,
+    participants: list[dict] | None = None,
 ) -> str:
     """Build the user prompt with transcript and template context.
 
@@ -104,6 +147,12 @@ def build_user_prompt(
     additional ground-truth context. Empty / ``None`` skips the section
     entirely so cold-start sessions produce a byte-identical prompt to
     the pre-#61 build.
+
+    ``participants`` (#275) — the encounter participant chips
+    ({name, role, source, is_persistent}). When non-empty an ENCOUNTER
+    PARTICIPANTS block is injected (see :func:`render_participants_block`)
+    so the model can attribute statements by role/name. Empty / ``None``
+    skips it entirely (byte-identical to the pre-#275 build).
     """
     sections_spec = json.dumps(
         [{"id": s.id, "title": s.title, "required": s.required} for s in template.sections],
@@ -124,12 +173,13 @@ def build_user_prompt(
     prior_block = ""
     if prior_context_text:
         prior_block = f"{prior_context_text}\n\n"
+    participants_block = render_participants_block(participants)
     return f"""Generate a Stage {stage} clinical note for specialty: {template.key}
 {language_instruction}
 Template sections (generate each):
 {sections_spec}
 
-{prior_block}Transcript segments:
+{participants_block}{prior_block}Transcript segments:
 {segments_text}
 
 Return JSON with this schema:

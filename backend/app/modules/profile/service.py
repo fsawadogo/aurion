@@ -18,6 +18,12 @@ from app.modules.note_gen.service import get_template, load_templates
 
 logger = logging.getLogger("aurion.profile")
 
+# Hard cap on the allied-health roster (#275 / B5). Raised from the
+# original 2 because a per-day "present today" roster legitimately needs
+# more than two members. Product-adjustable: bump here (the iOS picker +
+# portal read the same effective list, no schema change needed).
+MAX_ALLIED_HEALTH_TEAM_MEMBERS = 8
+
 
 async def get_or_create_profile(
     db: AsyncSession,
@@ -83,8 +89,16 @@ async def update_profile(
         )
     if "allied_health_team" in updates:
         team = updates["allied_health_team"]
-        if len(team) > 2:
-            raise ValueError("Maximum 2 allied health team members allowed")
+        if len(team) > MAX_ALLIED_HEALTH_TEAM_MEMBERS:
+            raise ValueError(
+                f"Maximum {MAX_ALLIED_HEALTH_TEAM_MEMBERS} allied health "
+                "team members allowed"
+            )
+        # #275 / B4 — per-member ``present_today`` / ``present_today_date``
+        # keys (when sent by the client) ride through this list[dict]
+        # unchanged; they carry no PHI and need no normalization here. The
+        # daily auto-reset is computed on READ (see profile route
+        # ``_annotate_team_presence``), so WRITE just persists as-is.
         profile.allied_health_team = json.dumps(team)
     if "output_language" in updates:
         profile.output_language = updates["output_language"]

@@ -11,7 +11,7 @@ import uuid
 from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import (
@@ -53,9 +53,55 @@ router = APIRouter(prefix="/sessions", tags=["sessions"])
 # ── Request/Response Schemas ──────────────────────────────────────────────
 
 class SessionParticipantRequest(BaseModel):
-    name: str
+    """One person present at the encounter (#275).
+
+    ``source`` distinguishes how the chip was added on the iOS sheet:
+      * ``profile``      — picked from the clinician's saved allied-health
+        roster. A ``name`` is required (the saved member is named) and
+        ``is_persistent`` is forced ``True``.
+      * ``adhoc_named``  — typed in for this encounter only, WITH a name.
+      * ``adhoc_role``   — an anonymous role chip ("a nurse was present")
+        carrying NO name — zero PHI. ``name`` MUST be null/empty; it is
+        normalized to ``None`` so the attribution wire never synthesizes a
+        name for an unnamed speaker (descriptive-mode / citation
+        traceability — see ``render_participants_block``).
+
+    Per-member access control is explicitly OUT OF SCOPE for #275 — these
+    chips drive prompt attribution + the day-roster picker only.
+    """
+
+    name: Optional[str] = None  # null = anonymous role chip
     role: str
+    source: Literal["profile", "adhoc_named", "adhoc_role"] = "adhoc_named"
     is_persistent: bool = False
+
+    @model_validator(mode="after")
+    def _normalize_source(self) -> "SessionParticipantRequest":
+        stripped = (self.name or "").strip()
+        if self.source == "adhoc_role":
+            # Anonymous role chip — a name here is a contract violation
+            # (the whole point is zero PHI). Reject rather than silently
+            # drop so a buggy client surfaces it as a 422.
+            if stripped:
+                raise ValueError(
+                    "adhoc_role participants must not carry a name"
+                )
+            self.name = None
+        elif self.source == "profile":
+            if not stripped:
+                raise ValueError("profile participants require a name")
+            self.name = stripped
+        else:  # adhoc_named
+            # Empty name on a named chip degrades to None rather than
+            # persisting "" — keeps the attribution renderer's
+            # name-present check honest.
+            self.name = stripped or None
+        # is_persistent is a derived flag: only roster-sourced members
+        # persist back to the profile. Normalize here so the stored
+        # participants_json is internally consistent regardless of what
+        # the client sent.
+        self.is_persistent = self.source == "profile"
+        return self
 
 
 class ProviderOverridesSchema(BaseModel):
@@ -128,6 +174,16 @@ class SessionResponse(BaseModel):
     # `visual_evidence_mode` and route Stage 2 evidence without a
     # second call. `None` when no overrides were set at creation.
     provider_overrides: Optional[dict] = None
+    # Round-trippable view of `sessions.participants_json` (#275). The row
+    # stores a JSON-encoded list of participant dicts ({name, role,
+    # source, is_persistent}); the response surfaces it so the owning
+    # clinician's client can re-render the chips it set at create time.
+    # Owner-gated exactly like `external_reference_id` — `_to_response`
+    # only ever runs against the caller's own row (see its docstring),
+    # and admin/eval cross-clinician views use a separate response shape
+    # (`EvalSessionResponse`) that never carries participants. Anonymous
+    # role chips (`name: null`) carry zero PHI. `None` when none were set.
+    participants: Optional[list[dict]] = None
     created_at: str
     updated_at: str
 
@@ -565,6 +621,24 @@ def _to_response(session) -> SessionResponse:
                 session.id,
             )
 
+    # Deserialize the JSON-encoded participants list (#275) defensively,
+    # exactly like provider_overrides above: parse, guard that it's a
+    # list, and swallow any JSON error → None so a malformed legacy row
+    # can never 500 the response path.
+    participants: Optional[list[dict]] = None
+    raw_participants = getattr(session, "participants_json", None)
+    if raw_participants:
+        try:
+            parsed_participants = _json.loads(raw_participants)
+            if isinstance(parsed_participants, list):
+                participants = parsed_participants
+        except (ValueError, TypeError):
+            logger.warning(
+                "Failed to decode participants_json for session=%s — "
+                "dropping from response",
+                session.id,
+            )
+
     return SessionResponse(
         id=session.id,
         clinician_id=session.clinician_id,
@@ -574,6 +648,7 @@ def _to_response(session) -> SessionResponse:
         capture_mode=getattr(session, "capture_mode", None) or "multimodal",
         external_reference_id=external_id,
         provider_overrides=overrides,
+        participants=participants,
         created_at=session.created_at.isoformat() if session.created_at else "",
         updated_at=session.updated_at.isoformat() if session.updated_at else "",
     )
