@@ -527,7 +527,13 @@ resource "aws_ecs_task_definition" "api" {
 
       environment = [
         { name = "APP_ENV", value = var.environment },
-        { name = "LOG_LEVEL", value = var.environment == "prod" ? "INFO" : "DEBUG" },
+        # INFO on all deployed envs (incl. dev): the SQLAlchemy engine gates
+        # `echo` on LOG_LEVEL=DEBUG (core/database.py), which logs every SQL
+        # statement + bound params to CloudWatch — a PHI-in-logs risk on the
+        # dev pilot env, which carries real-ish patient data. Local dev keeps
+        # DEBUG via docker-compose (no real PHI there). Set SQL_ECHO-style
+        # verbosity locally, not on a deployed task.
+        { name = "LOG_LEVEL", value = "INFO" },
         { name = "AWS_DEFAULT_REGION", value = var.region },
         { name = "COGNITO_USER_POOL_ID", value = aws_cognito_user_pool.main.id },
         { name = "COGNITO_CLIENT_ID", value = aws_cognito_user_pool_client.main.id },
