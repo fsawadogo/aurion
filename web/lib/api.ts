@@ -54,7 +54,15 @@ function readCookie(name: string): string | null {
 
 function writeCookie(name: string, value: string, maxAge: number): void {
   if (typeof document === "undefined") return;
-  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; SameSite=Strict; max-age=${maxAge}`;
+  // `Secure` whenever the page is served over https (i.e. all deployed
+  // environments) so the bearer + 30-day refresh token are never attached
+  // to a plaintext-HTTP request. Omitted on http://localhost so local dev
+  // still works (localhost is a secure context, but be explicit).
+  const secure =
+    typeof window !== "undefined" && window.location.protocol === "https:"
+      ? "; Secure"
+      : "";
+  document.cookie = `${name}=${encodeURIComponent(value)}; path=/; SameSite=Strict${secure}; max-age=${maxAge}`;
 }
 
 function deleteCookie(name: string): void {
@@ -74,12 +82,26 @@ function clearTokens(): void {
   deleteCookie(REFRESH_COOKIE);
 }
 
-/** Exchange the stored refresh token for a fresh access+refresh pair.
- * The backend rotates the refresh token, so we persist the new pair.
- * Returns true on success; on failure clears tokens (caller redirects). */
-async function refreshAccessToken(): Promise<boolean> {
+/** Outcome of a refresh attempt:
+ *   "ok"     — new token pair stored, retry the request.
+ *   "failed" — server rejected the refresh (revoked/expired); tokens
+ *              cleared, the caller should bounce to /login.
+ *   "error"  — couldn't even reach the server (network blip); tokens kept,
+ *              the caller should surface a transient error, NOT log out. */
+type RefreshOutcome = "ok" | "failed" | "error";
+
+// Single-flight guard. The backend ROTATES the refresh token on every
+// /refresh (the presented token is revoked, a new pair issued). Without
+// this, the dashboard's parallel requests all 401 when the ~30m access
+// token expires, all read the same refresh cookie, and race to redeem it
+// — only one wins; the losers present an already-rotated token, fail, and
+// spuriously bounce the user to /login. Caching the in-flight promise makes
+// concurrent callers share one rotation and all see the same new pair.
+let refreshInFlight: Promise<RefreshOutcome> | null = null;
+
+async function doRefresh(): Promise<RefreshOutcome> {
   const refresh_token = readCookie(REFRESH_COOKIE);
-  if (!refresh_token) return false;
+  if (!refresh_token) return "failed";
   try {
     const res = await fetch(`${API_BASE}/api/v1/auth/refresh`, {
       method: "POST",
@@ -88,13 +110,24 @@ async function refreshAccessToken(): Promise<boolean> {
     });
     if (!res.ok) {
       clearTokens();
-      return false;
+      return "failed";
     }
     storeTokens((await res.json()) as AuthResponse);
-    return true;
+    return "ok";
   } catch {
-    return false; // network blip — keep tokens, let the 401 path retry later
+    return "error"; // network blip — keep tokens, let a later request retry
   }
+}
+
+/** Exchange the stored refresh token for a fresh access+refresh pair,
+ * de-duplicating concurrent callers so the rotating token is redeemed once. */
+function refreshAccessToken(): Promise<RefreshOutcome> {
+  if (!refreshInFlight) {
+    refreshInFlight = doRefresh().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
 }
 
 /* ─── Helpers ────────────────────────────────────────────────────────────── */
@@ -137,16 +170,20 @@ export async function fetchWithAuth(
   });
 
   // One silent refresh + retry on 401 — if the rotated refresh works the
-  // user never sees the redirect. On failure, clear state and bounce.
+  // user never sees the redirect. Concurrent 401s share one refresh via the
+  // single-flight guard, so the rotating token is redeemed exactly once.
   if (response.status === 401 && typeof window !== "undefined") {
-    const refreshed = await refreshAccessToken();
-    if (refreshed) {
+    const outcome = await refreshAccessToken();
+    if (outcome === "ok") {
       response = await fetch(`${API_BASE}${path}`, {
         ...options,
         headers: buildHeaders(),
       });
     }
-    if (response.status === 401) {
+    // Bounce only on a definitive failure (server rejected the refresh, or
+    // the retry is still 401). A transient network error ("error") keeps the
+    // session intact — the caller just sees this 401 and can retry later.
+    if (response.status === 401 && outcome !== "error") {
       clearTokens();
       window.location.href = "/login";
     }

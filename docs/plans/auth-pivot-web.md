@@ -44,11 +44,15 @@ Single auth path against the backend bcrypt-JWT API — same system as iOS.
 
 ## Token storage trade-off
 
-Access + refresh tokens live in non-httpOnly cookies (`aurion_token`,
-`aurion_refresh`) so client JS can attach the bearer header and run
-silent-refresh. This matches the portal's pre-existing `aurion_token` approach
-and is an accepted MVP trade-off for an internal admin portal. **Post-MVP
-hardening:** httpOnly cookies + a server-side refresh proxy.
+Access + refresh tokens live in cookies (`aurion_token`, `aurion_refresh`,
+`SameSite=Strict`, `Secure` whenever served over https) so client JS can attach
+the bearer header and run silent-refresh. They are **not** httpOnly (client JS
+reads them) — an accepted MVP trade-off for an internal admin portal. The
+backend rotates the refresh token on every `/refresh`, so the client uses a
+**single-flight guard** (`refreshInFlight`) to redeem it exactly once across
+concurrent 401s; a transient network error during refresh keeps the session
+(only a server rejection logs out). **Post-MVP hardening:** httpOnly cookies +
+a server-side refresh proxy, and a shorter refresh-cookie lifetime than 30d.
 
 ## Operational follow-ups
 

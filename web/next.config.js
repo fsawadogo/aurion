@@ -13,9 +13,9 @@
  *     - no server components touching cookies / headers at request
  *       time (i18n migrated to client-side LocaleProvider)
  *     - no app/api/* route handlers (Aurion API lives on FastAPI)
- *     - no `dynamic = "force-dynamic"` (the cognito callback page
- *       hydrates and reads the URL on mount — no dynamic flag
- *       needed)
+ *     - no `dynamic = "force-dynamic"` (client pages that read the URL
+ *       on mount, e.g. the login page reading `?reset=success`, hydrate
+ *       under a Suspense boundary — no dynamic flag needed)
  *
  * No `createNextIntlPlugin` wrap: the plugin's purpose is to wire
  * the server-side `getRequestConfig` consumer at `i18n/request.ts`,
