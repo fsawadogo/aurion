@@ -514,6 +514,30 @@ export interface AdoptionResponse {
   by_clinician: ClinicianAdoptionRow[];
 }
 
+/* ─── Operational alerts (admin, #76) ────────────────────────────────────── */
+// Mirrors backend/app/api/v1/admin/alerts.py. `metadata` is structured,
+// PHI-free context (session prefix, provider, counts).
+
+export type AlertSeverity = "info" | "warning" | "critical";
+
+export interface OperationalAlert {
+  id: string;
+  alert_type: string;
+  severity: AlertSeverity;
+  source: string;
+  message: string;
+  metadata: Record<string, unknown> | null;
+  created_at: string;
+  acknowledged_at: string | null;
+  acknowledged_by: string | null;
+}
+
+export interface AlertListResponse {
+  items: OperationalAlert[];
+  limit: number;
+  offset: number;
+}
+
 /* ─── Built-in template management (admin, #72) ──────────────────────────── */
 // Mirrors backend/app/api/v1/admin/templates.py. `is_override` = an admin
 // has saved a custom version of the bundled template (runtime resolution

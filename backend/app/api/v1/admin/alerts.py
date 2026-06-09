@@ -2,8 +2,8 @@
 
 Trigger sites (Stage failures, masking issues, SLA breaches) publish to
 the ``alerts`` table via ``AlertService``. ADMIN + COMPLIANCE_OFFICER
-read here. The acknowledge flow + email/SMS sinks + web UI land as
-follow-ups.
+read and acknowledge here (#76). Delivery sinks (Slack/email) land as
+follow-ups — email is blocked on SES production access (#399).
 """
 
 from __future__ import annotations
@@ -12,7 +12,7 @@ import uuid
 from datetime import datetime
 from typing import Any, Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -91,3 +91,30 @@ async def list_alerts(
         for r in records
     ]
     return AlertListResponse(items=items, limit=limit, offset=offset)
+
+
+@router.patch("/alerts/{alert_id}/acknowledge", response_model=AlertResponse)
+async def acknowledge_alert(
+    alert_id: uuid.UUID,
+    user: CurrentUser = Depends(
+        require_role(UserRole.ADMIN, UserRole.COMPLIANCE_OFFICER)
+    ),
+    db: AsyncSession = Depends(get_db),
+    service: AlertService = Depends(get_alert_service),
+) -> AlertResponse:
+    """Acknowledge an alert (#76). Idempotent — re-acknowledging returns
+    the row unchanged, preserving the first acknowledger."""
+    row = await service.acknowledge(db, alert_id, acknowledged_by=user.user_id)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Alert not found")
+    return AlertResponse(
+        id=row.id,
+        alert_type=row.alert_type,
+        severity=row.severity,
+        source=row.source,
+        message=row.message,
+        metadata=row.alert_metadata,
+        created_at=row.created_at,
+        acknowledged_at=row.acknowledged_at,
+        acknowledged_by=row.acknowledged_by,
+    )

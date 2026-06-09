@@ -23,8 +23,10 @@ import type {
   ProvidersOverview,
   ProviderType,
   AdminTemplateDetail,
+  AlertListResponse,
   AdminTemplateListResponse,
   AdoptionResponse,
+  OperationalAlert,
   ProviderUsageResponse,
   Session,
   TemplateDefinition,
@@ -552,6 +554,32 @@ export async function clearProviderOverride(
  * optional: omitted bounds mean "all recorded usage"; omitted type means
  * all three pipeline stages. ADMIN + COMPLIANCE_OFFICER.
  */
+/* ─── Operational alerts (admin, #76) ────────────────────────────────────── */
+
+export async function listAlerts(opts?: {
+  status?: "open" | "acknowledged";
+  severity?: "info" | "warning" | "critical";
+  limit?: number;
+  offset?: number;
+}): Promise<AlertListResponse> {
+  const params = new URLSearchParams();
+  if (opts?.status) params.set("status", opts.status);
+  if (opts?.severity) params.set("severity", opts.severity);
+  if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  const res = await fetchWithAuth(`/api/v1/admin/alerts${qs ? `?${qs}` : ""}`);
+  return res.json();
+}
+
+/** Idempotent — re-acknowledging preserves the first acknowledger. */
+export async function acknowledgeAlert(id: string): Promise<OperationalAlert> {
+  const res = await fetchWithAuth(`/api/v1/admin/alerts/${id}/acknowledge`, {
+    method: "PATCH",
+  });
+  return res.json();
+}
+
 /* ─── Built-in template management (admin, #72) ──────────────────────────── */
 
 export async function getAdminTemplates(): Promise<AdminTemplateListResponse> {

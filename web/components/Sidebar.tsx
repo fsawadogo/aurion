@@ -24,6 +24,7 @@ import {
   X,
   Zap,
   TrendingUp,
+  Bell,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -71,6 +72,9 @@ const navigation: {
   // — matches the backend _ROLES on /admin/templates. Distinct from the
   // clinician-facing /portal/templates (per-physician custom templates).
   { tKey: "systemTemplates", href: "/portal/admin/templates", icon: LayoutGrid, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },
+  // Operational alerts (#76). ADMIN + COMPLIANCE_OFFICER — matches the
+  // backend gate on /admin/alerts (list + acknowledge).
+  { tKey: "alerts", href: "/portal/admin/alerts", icon: Bell, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },
   // Captured Media (#338) — windowed media-retention review. Visible to the
   // three roles the backend list gate allows (compliance is view-only; the
   // download action is hidden for them in-page). The page itself is also
