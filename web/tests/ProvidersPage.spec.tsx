@@ -15,6 +15,7 @@ import { withIntl } from "./helpers/intl";
 
 vi.mock("@/lib/api", () => ({
   getProviders: vi.fn(),
+  getProviderUsage: vi.fn(),
   setProviderOverride: vi.fn(),
   clearProviderOverride: vi.fn(),
   // pass-through fallback so error copy is deterministic
@@ -23,6 +24,7 @@ vi.mock("@/lib/api", () => ({
 
 import {
   getProviders,
+  getProviderUsage,
   setProviderOverride,
   clearProviderOverride,
 } from "@/lib/api";
@@ -53,6 +55,19 @@ const OVERVIEW = {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getProviders).mockResolvedValue(OVERVIEW as never);
+  // The usage panel (#73) mounts inside the page — give it an empty rollup
+  // so page tests stay focused on the switch behavior.
+  vi.mocked(getProviderUsage).mockResolvedValue({
+    since: null,
+    until: null,
+    provider_type: null,
+    totals: {
+      call_count: 0, success_count: 0, failure_count: 0, fallback_count: 0,
+      avg_latency_ms: 0, total_input_tokens: 0, total_output_tokens: 0,
+      total_cost_usd: 0,
+    },
+    by_provider: [],
+  } as never);
   vi.mocked(setProviderOverride).mockResolvedValue(OVERVIEW as never);
   vi.mocked(clearProviderOverride).mockResolvedValue(OVERVIEW as never);
 });

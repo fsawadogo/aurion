@@ -449,6 +449,38 @@ export interface ProvidersOverview {
   providers: ProviderEffective[];
 }
 
+/* ─── Provider usage & cost (admin, #73) ─────────────────────────────────── */
+// Mirrors backend/app/api/v1/admin/providers.py ProviderUsageResponse.
+// Token/cost totals are partially populated today: cost capture is live for
+// vision; note_generation/transcription fill in once the provider base
+// surfaces per-call usage — the UI renders zeros as "—" rather than $0.00.
+
+export interface ProviderUsageTotals {
+  call_count: number;
+  success_count: number;
+  failure_count: number;
+  fallback_count: number;
+  avg_latency_ms: number;
+  total_input_tokens: number;
+  total_output_tokens: number;
+  total_cost_usd: number;
+}
+
+export interface ProviderUsageRollup extends ProviderUsageTotals {
+  provider_type: ProviderType;
+  provider_name: string;
+  success_rate: number;
+  fallback_rate: number;
+}
+
+export interface ProviderUsageResponse {
+  since: string | null;
+  until: string | null;
+  provider_type: ProviderType | null;
+  totals: ProviderUsageTotals;
+  by_provider: ProviderUsageRollup[];
+}
+
 /* ─── Captured Media (admin, #338) ───────────────────────────────────────── */
 // Mirrors backend/app/api/v1/admin/media.py response models. The list +
 // download surfaces are gated behind the media_review_retention_enabled flag

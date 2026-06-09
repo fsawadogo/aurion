@@ -22,6 +22,7 @@ import type {
   ProviderConfig,
   ProvidersOverview,
   ProviderType,
+  ProviderUsageResponse,
   Session,
   SessionDetail,
   SessionFilters,
@@ -539,6 +540,25 @@ export async function clearProviderOverride(
   const res = await fetchWithAuth(`/api/v1/admin/providers/${providerType}`, {
     method: "DELETE",
   });
+  return res.json();
+}
+
+/**
+ * Aggregated provider call telemetry over a window (#73). All params
+ * optional: omitted bounds mean "all recorded usage"; omitted type means
+ * all three pipeline stages. ADMIN + COMPLIANCE_OFFICER.
+ */
+export async function getProviderUsage(opts?: {
+  since?: string;
+  until?: string;
+  providerType?: ProviderType;
+}): Promise<ProviderUsageResponse> {
+  const params = new URLSearchParams();
+  if (opts?.since) params.set("since", opts.since);
+  if (opts?.until) params.set("until", opts.until);
+  if (opts?.providerType) params.set("provider_type", opts.providerType);
+  const qs = params.toString();
+  const res = await fetchWithAuth(`/api/v1/admin/providers/usage${qs ? `?${qs}` : ""}`);
   return res.json();
 }
 
