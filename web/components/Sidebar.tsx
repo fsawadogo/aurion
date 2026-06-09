@@ -23,6 +23,7 @@ import {
   Users,
   X,
   Zap,
+  TrendingUp,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -63,6 +64,9 @@ const navigation: {
   // Runtime AI-provider switch. ADMIN + COMPLIANCE_OFFICER — matches the
   // backend require_role on /admin/providers (set/clear an override live).
   { tKey: "providers", href: "/portal/admin/providers", icon: Cpu, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },
+  // Adoption & ROI analytics (#71). ADMIN + EVAL_TEAM — matches the backend
+  // require_role on /admin/analytics/adoption (same gate as pilot metrics).
+  { tKey: "analytics", href: "/portal/admin/analytics", icon: TrendingUp, roles: ["ADMIN", "EVAL_TEAM"] },
   // Captured Media (#338) — windowed media-retention review. Visible to the
   // three roles the backend list gate allows (compliance is view-only; the
   // download action is hidden for them in-page). The page itself is also

@@ -22,6 +22,7 @@ import type {
   ProviderConfig,
   ProvidersOverview,
   ProviderType,
+  AdoptionResponse,
   ProviderUsageResponse,
   Session,
   SessionDetail,
@@ -548,6 +549,46 @@ export async function clearProviderOverride(
  * optional: omitted bounds mean "all recorded usage"; omitted type means
  * all three pipeline stages. ADMIN + COMPLIANCE_OFFICER.
  */
+/**
+ * Adoption & ROI rollup (#71). EVAL_TEAM + ADMIN. `baselineMinutesPerNote`
+ * opts time-saved in (echoed back by the backend); omitted → null.
+ */
+export async function getAdoptionAnalytics(opts?: {
+  since?: string;
+  until?: string;
+  baselineMinutesPerNote?: number;
+}): Promise<AdoptionResponse> {
+  const params = new URLSearchParams();
+  if (opts?.since) params.set("since", opts.since);
+  if (opts?.until) params.set("until", opts.until);
+  if (opts?.baselineMinutesPerNote !== undefined) {
+    params.set("baseline_minutes_per_note", String(opts.baselineMinutesPerNote));
+  }
+  const qs = params.toString();
+  const res = await fetchWithAuth(
+    `/api/v1/admin/analytics/adoption${qs ? `?${qs}` : ""}`,
+  );
+  return res.json();
+}
+
+/** Same rollup as CSV (per-clinician rows + TOTAL footer). */
+export async function exportAdoptionCsv(opts?: {
+  since?: string;
+  until?: string;
+  baselineMinutesPerNote?: number;
+}): Promise<Blob> {
+  const params = new URLSearchParams({ format: "csv" });
+  if (opts?.since) params.set("since", opts.since);
+  if (opts?.until) params.set("until", opts.until);
+  if (opts?.baselineMinutesPerNote !== undefined) {
+    params.set("baseline_minutes_per_note", String(opts.baselineMinutesPerNote));
+  }
+  const res = await fetchWithAuth(
+    `/api/v1/admin/analytics/adoption?${params.toString()}`,
+  );
+  return res.blob();
+}
+
 export async function getProviderUsage(opts?: {
   since?: string;
   until?: string;

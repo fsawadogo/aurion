@@ -481,6 +481,39 @@ export interface ProviderUsageResponse {
   by_provider: ProviderUsageRollup[];
 }
 
+/* ─── Adoption & ROI analytics (admin, #71) ──────────────────────────────── */
+// Mirrors backend/app/api/v1/admin/analytics.py. time_saved_minutes is
+// non-null ONLY when the caller passed baseline_minutes_per_note — the
+// estimate is opt-in and traceable to its echoed assumption.
+
+export interface AdoptionTotals {
+  active_clinicians: number;
+  sessions_total: number;
+  sessions_exported: number;
+  notes_per_active_day: number;
+  avg_completeness: number | null;
+  avg_citation_traceability: number | null;
+  avg_edit_rate: number | null;
+  avg_stage1_latency_ms: number | null;
+  avg_stage2_latency_ms: number | null;
+  time_saved_minutes: number | null;
+}
+
+export interface ClinicianAdoptionRow extends AdoptionTotals {
+  clinician_id: string;
+  email: string | null;
+  active_days: number;
+  last_active_at: string | null;
+}
+
+export interface AdoptionResponse {
+  since: string | null;
+  until: string | null;
+  baseline_minutes_per_note: number | null;
+  totals: AdoptionTotals;
+  by_clinician: ClinicianAdoptionRow[];
+}
+
 /* ─── Captured Media (admin, #338) ───────────────────────────────────────── */
 // Mirrors backend/app/api/v1/admin/media.py response models. The list +
 // download surfaces are gated behind the media_review_retention_enabled flag

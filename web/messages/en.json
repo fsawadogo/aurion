@@ -19,7 +19,8 @@
       "aiPrompts": "AI Prompts",
       "featureFlags": "Feature Flags",
       "providers": "AI Providers",
-      "capturedMedia": "Captured Media"
+      "capturedMedia": "Captured Media",
+      "analytics": "Analytics"
     },
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
@@ -987,5 +988,49 @@
         "more": "… and {count} more"
       }
     }
+  },
+  "AdminAnalytics": {
+    "eyebrow": "Admin",
+    "title": "Adoption & ROI",
+    "description": "Measured adoption and quality across clinicians. Time saved is an opt-in estimate — set a baseline to compute it.",
+    "loadError": "Unable to load adoption analytics.",
+    "exportError": "CSV export failed.",
+    "exportCsv": "Export CSV",
+    "rangeLabel": "Time range",
+    "ranges": {
+      "7d": "7 days",
+      "30d": "30 days",
+      "90d": "90 days",
+      "all": "All time"
+    },
+    "baselineLabel": "Baseline:",
+    "baselinePlaceholder": "e.g. 10",
+    "baselineUnit": "min/note",
+    "stats": {
+      "activeClinicians": "Active clinicians",
+      "notesExported": "Notes exported",
+      "notesPerDay": "Notes / active day",
+      "timeSaved": "Time saved"
+    },
+    "timeSavedNeedsBaseline": "Set a baseline (min saved per note) to compute.",
+    "timeSavedAssumption": "Assumes {baseline} min of manual documentation per note.",
+    "quality": {
+      "completeness": "Avg completeness",
+      "citation": "Citation traceability",
+      "editRate": "Avg edit rate",
+      "stage1": "Stage 1 latency"
+    },
+    "table": {
+      "clinician": "Clinician",
+      "sessions": "Sessions",
+      "exported": "Exported",
+      "perDay": "Notes/day",
+      "completeness": "Completeness",
+      "editRate": "Edit rate",
+      "timeSaved": "Time saved",
+      "lastActive": "Last active"
+    },
+    "empty": "No sessions recorded in this window.",
+    "footnote": "All figures are measured from recorded sessions and pilot metrics. Time saved = exported notes × your baseline — an estimate labeled with its assumption, not a measured value."
   }
 }
