@@ -428,6 +428,27 @@ export interface UpdateFeatureFlagsResponse {
   changed_fields: string[];
 }
 
+/* ─── Runtime AI-provider overrides (admin) ──────────────────────────────────
+ *
+ * Mirrors GET/PUT/DELETE /api/v1/admin/providers. `effective_value` is the
+ * value actually in use: the runtime `override_value` when set, else the
+ * AppConfig baseline `appconfig_value`. Switching is immediate (no redeploy)
+ * — the serving task applies it at once, the rest of the fleet converges
+ * within ~10s via the override poller.
+ */
+export type ProviderType = "transcription" | "note_generation" | "vision";
+
+export interface ProviderEffective {
+  provider_type: ProviderType;
+  appconfig_value: string;
+  override_value: string | null;
+  effective_value: string;
+}
+
+export interface ProvidersOverview {
+  providers: ProviderEffective[];
+}
+
 /* ─── Captured Media (admin, #338) ───────────────────────────────────────── */
 // Mirrors backend/app/api/v1/admin/media.py response models. The list +
 // download surfaces are gated behind the media_review_retention_enabled flag

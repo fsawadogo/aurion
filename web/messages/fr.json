@@ -18,6 +18,7 @@
       "myActivity": "Mon activité",
       "aiPrompts": "Invites IA",
       "featureFlags": "Indicateurs",
+      "providers": "Fournisseurs IA",
       "capturedMedia": "Médias capturés"
     },
     "expand": "Déployer le menu",
@@ -413,6 +414,33 @@
       "emr_writeback_card_enabled": {
         "name": "Renvoi vers le DPI",
         "description": "File d’attente sortante qui envoie la note approuvée vers un système de dossier médical."
+      }
+    }
+  },
+  "Providers": {
+    "eyebrow": "Admin",
+    "title": "Fournisseurs IA",
+    "subtitle": "Choisissez quel fournisseur de modèle dessert chaque étape du pipeline. Les changements prennent effet à l’exécution (en ~10 secondes), sans redéploiement. Chaque changement est journalisé.",
+    "loadError": "Impossible de charger la configuration des fournisseurs.",
+    "setError": "Impossible de changer le fournisseur.",
+    "clearError": "Impossible de réinitialiser le fournisseur.",
+    "setSuccess": "{type} utilise désormais {value}.",
+    "clearSuccess": "{type} réinitialisé à son fournisseur par défaut.",
+    "overrideActive": "Remplacement à l’exécution actif · le défaut est {baseline}.",
+    "usingDefault": "Utilise le défaut ({baseline}).",
+    "resetToDefault": "Réinitialiser au défaut",
+    "types": {
+      "note_generation": {
+        "name": "Génération de notes",
+        "description": "Le LLM qui rédige la note SOAP (étape 1 + étape 2) et alimente le créateur de modèles."
+      },
+      "vision": {
+        "name": "Vision",
+        "description": "Le modèle qui décrit les images et clips capturés pour l’enrichissement visuel."
+      },
+      "transcription": {
+        "name": "Transcription",
+        "description": "Le moteur de reconnaissance vocale qui transforme l’audio enregistré en transcription."
       }
     }
   },

@@ -18,6 +18,7 @@
       "myActivity": "My Activity",
       "aiPrompts": "AI Prompts",
       "featureFlags": "Feature Flags",
+      "providers": "AI Providers",
       "capturedMedia": "Captured Media"
     },
     "expand": "Expand sidebar",
@@ -413,6 +414,33 @@
       "emr_writeback_card_enabled": {
         "name": "EMR Write-Back",
         "description": "Outbound queue that sends the approved note to a chart system."
+      }
+    }
+  },
+  "Providers": {
+    "eyebrow": "Admin",
+    "title": "AI providers",
+    "subtitle": "Switch which model provider serves each pipeline stage. Changes take effect at runtime (within ~10 seconds) — no redeploy. Every change is audited.",
+    "loadError": "Couldn't load the provider configuration.",
+    "setError": "Couldn't switch the provider.",
+    "clearError": "Couldn't reset the provider.",
+    "setSuccess": "{type} now uses {value}.",
+    "clearSuccess": "{type} reset to its default provider.",
+    "overrideActive": "Runtime override active · default is {baseline}.",
+    "usingDefault": "Using the default ({baseline}).",
+    "resetToDefault": "Reset to default",
+    "types": {
+      "note_generation": {
+        "name": "Note generation",
+        "description": "The LLM that drafts the SOAP note (Stage 1 + Stage 2) and powers the template builder."
+      },
+      "vision": {
+        "name": "Vision",
+        "description": "The model that describes captured frames and clips for visual enrichment."
+      },
+      "transcription": {
+        "name": "Transcription",
+        "description": "The speech-to-text engine that turns recorded audio into the transcript."
       }
     }
   },
