@@ -1,7 +1,8 @@
 "use client";
 
 import { X } from "lucide-react";
-import { ReactNode, useEffect } from "react";
+import { ReactNode, useEffect, useId, useRef } from "react";
+import { useTranslations } from "next-intl";
 
 /**
  * Width sizes for the modal card. The Phase B PromptUserPromptEditor
@@ -15,6 +16,9 @@ const SIZE_CLASSES: Record<NonNullable<ModalProps["size"]>, string> = {
   xl: "max-w-2xl",
   "2xl": "max-w-4xl",
 };
+
+const FOCUSABLE =
+  'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
 
 interface ModalProps {
   isOpen: boolean;
@@ -33,13 +37,47 @@ export default function Modal({
   footer,
   size = "md",
 }: ModalProps) {
+  const t = useTranslations("Modal");
+  const titleId = useId();
+  const cardRef = useRef<HTMLDivElement>(null);
+
+  // A11y: this is a real dialog. On open, move focus into it and trap Tab
+  // within the card; on close, restore focus to whatever was focused before
+  // (the trigger). Escape closes. Mirrors what the removed native confirm()
+  // gave us for screen-reader + keyboard users.
   useEffect(() => {
     if (!isOpen) return;
-    function handleEsc(e: KeyboardEvent) {
-      if (e.key === "Escape") onClose();
+    const previouslyFocused = document.activeElement as HTMLElement | null;
+    const card = cardRef.current;
+    const firstFocusable = card?.querySelector<HTMLElement>(FOCUSABLE);
+    (firstFocusable ?? card)?.focus();
+
+    function handleKey(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !card) return;
+      const items = Array.from(card.querySelectorAll<HTMLElement>(FOCUSABLE));
+      if (items.length === 0) {
+        e.preventDefault();
+        return;
+      }
+      const first = items[0];
+      const lastEl = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        lastEl.focus();
+      } else if (!e.shiftKey && document.activeElement === lastEl) {
+        e.preventDefault();
+        first.focus();
+      }
     }
-    document.addEventListener("keydown", handleEsc);
-    return () => document.removeEventListener("keydown", handleEsc);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("keydown", handleKey);
+      previouslyFocused?.focus?.();
+    };
   }, [isOpen, onClose]);
 
   if (!isOpen) return null;
@@ -54,16 +92,24 @@ export default function Modal({
 
       {/* Card */}
       <div
-        className={`relative z-10 w-full ${SIZE_CLASSES[size]} animate-modal-in rounded-xl bg-white shadow-2xl ring-1 ring-gray-900/5 max-h-[90vh] overflow-y-auto`}
+        ref={cardRef}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+        tabIndex={-1}
+        className={`relative z-10 w-full ${SIZE_CLASSES[size]} animate-modal-in rounded-xl bg-white shadow-2xl ring-1 ring-gray-900/5 max-h-[90vh] overflow-y-auto focus:outline-none`}
       >
         {/* Title bar */}
         <div className="flex items-center justify-between border-b border-gray-100 px-6 py-4">
-          <h3 className="text-base font-semibold text-navy-700">{title}</h3>
+          <h3 id={titleId} className="text-base font-semibold text-navy-700">
+            {title}
+          </h3>
           <button
             onClick={onClose}
+            aria-label={t("close")}
             className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
           >
-            <X className="h-5 w-5" />
+            <X className="h-5 w-5" aria-hidden="true" />
           </button>
         </div>
 

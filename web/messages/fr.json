@@ -36,6 +36,9 @@
     "light": "Clair",
     "dark": "Sombre"
   },
+  "Modal": {
+    "close": "Fermer"
+  },
   "Locale": {
     "label": "Langue",
     "en": "English",
@@ -776,6 +779,9 @@
     "uploadError": "Échec du téléversement.",
     "deleteError": "Suppression échouée.",
     "deleteConfirm": "Supprimer le modèle personnalisé « {name} »?",
+    "deleteTitle": "Supprimer le modèle",
+    "deleteCancel": "Annuler",
+    "deleteConfirmButton": "Supprimer",
     "emptyTitle": "Aucun modèle personnalisé pour l’instant. Construisez-en un en quelques minutes avec le concepteur conversationnel.",
     "startBuilding": "Commencer",
     "sharedBadge": "Partagé",
@@ -813,6 +819,9 @@
     "saveError": "Échec de l’enregistrement.",
     "deleteError": "Suppression échouée.",
     "deleteConfirm": "Supprimer le modèle personnalisé « {name} »?",
+    "deleteTitle": "Supprimer le modèle",
+    "deleteCancel": "Annuler",
+    "deleteConfirmButton": "Supprimer",
     "invalidJson": "Le JSON n’a pas pu être analysé : {error}",
     "retry": "Réessayer",
     "modePreview": "Aperçu",

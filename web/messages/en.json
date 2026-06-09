@@ -36,6 +36,9 @@
     "light": "Light",
     "dark": "Dark"
   },
+  "Modal": {
+    "close": "Close"
+  },
   "Locale": {
     "label": "Language",
     "en": "English",
@@ -776,6 +779,9 @@
     "uploadError": "Upload failed.",
     "deleteError": "Delete failed.",
     "deleteConfirm": "Delete custom template \"{name}\"?",
+    "deleteTitle": "Delete template",
+    "deleteCancel": "Cancel",
+    "deleteConfirmButton": "Delete",
     "emptyTitle": "No custom templates yet. Build one in a few minutes with the conversational builder.",
     "startBuilding": "Start building",
     "sharedBadge": "Shared",
@@ -813,6 +819,9 @@
     "saveError": "Save failed.",
     "deleteError": "Delete failed.",
     "deleteConfirm": "Delete custom template \"{name}\"?",
+    "deleteTitle": "Delete template",
+    "deleteCancel": "Cancel",
+    "deleteConfirmButton": "Delete",
     "invalidJson": "JSON didn't parse: {error}",
     "retry": "Retry",
     "modePreview": "Preview",
