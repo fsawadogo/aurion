@@ -46,6 +46,11 @@ export default function PortalTemplatesPage() {
   // closed). Latent today since nothing is ever is_shared, correct once
   // community sharing ships.
   const [meId, setMeId] = useState<string | null>(null);
+  // True once getMe() has settled (success OR failure). On failure meId stays
+  // null and we fall back to SHOWING the delete control — the backend DELETE
+  // is owner-scoped (404) so it's safe to defer enforcement to the server
+  // rather than lock the real owner out of their own template.
+  const [meResolved, setMeResolved] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<CustomTemplate | null>(null);
 
   const load = useCallback(async () => {
@@ -66,7 +71,8 @@ export default function PortalTemplatesPage() {
     void load();
     void getMe()
       .then((u) => setMeId(u.user_id))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setMeResolved(true));
   }, [load]);
 
   async function onUpload(file: File) {
@@ -95,6 +101,9 @@ export default function PortalTemplatesPage() {
       setPendingDelete(null);
     } catch (e) {
       setError(humanizeError(e, t("deleteError")));
+      // Close the modal on error too, so the page-level error banner isn't
+      // obscured behind the still-open overlay (matches the detail page).
+      setPendingDelete(null);
     } finally {
       setDeletingId(null);
     }
@@ -210,8 +219,9 @@ export default function PortalTemplatesPage() {
                     {t("open")}
                   </a>
                   {/* Delete only for owned rows — a shared row's DELETE is
-                      owner-scoped server-side (404). */}
-                  {meId !== null && tpl.owner_id === meId && (
+                      owner-scoped server-side (404). On getMe failure (meId
+                      null after resolution) fall back to showing it. */}
+                  {meResolved && (meId === null || tpl.owner_id === meId) && (
                     <button
                       type="button"
                       onClick={() => setPendingDelete(tpl)}

@@ -36,6 +36,9 @@
     "light": "Clair",
     "dark": "Sombre"
   },
+  "Modal": {
+    "close": "Fermer"
+  },
   "Locale": {
     "label": "Langue",
     "en": "English",

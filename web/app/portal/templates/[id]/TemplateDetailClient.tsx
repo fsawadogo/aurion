@@ -58,8 +58,15 @@ export default function TemplateDetailPage() {
   // PATCH/DELETE are owner-scoped server-side (404). Gate Edit/JSON/Delete to
   // the owner; non-owners get read-only Preview. Null until resolved.
   const [meId, setMeId] = useState<string | null>(null);
+  // Settled once getMe() resolves/rejects; gates the skeleton so the owner
+  // doesn't see a read-only flash before ownership is known. On getMe failure
+  // (meId null after resolution) we fall back to treating the viewer as owner
+  // — the backend PATCH/DELETE are owner-scoped (404), so enforcement defers
+  // to the server rather than locking the real owner out of their template.
+  const [meResolved, setMeResolved] = useState(false);
   const [confirmingDelete, setConfirmingDelete] = useState(false);
-  const owned = meId !== null && row !== null && row.owner_id === meId;
+  const owned =
+    row !== null && meResolved && (meId === null || row.owner_id === meId);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -88,7 +95,8 @@ export default function TemplateDetailPage() {
     void load();
     void getMe()
       .then((u) => setMeId(u.user_id))
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => setMeResolved(true));
   }, [load]);
 
   async function onSave() {
@@ -188,7 +196,7 @@ export default function TemplateDetailPage() {
         }
       />
 
-      {loading ? (
+      {loading || !meResolved ? (
         <Card>
           <LoadingSkeleton lines={8} />
         </Card>

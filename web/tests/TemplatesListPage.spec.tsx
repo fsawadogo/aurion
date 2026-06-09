@@ -66,10 +66,12 @@ beforeEach(() => {
 describe("PortalTemplatesPage — ownership gating + delete modal", () => {
   it("shows Delete only for owned rows", async () => {
     render(withIntl(<PortalTemplatesPage />));
-    await waitFor(() => expect(screen.getByText("My Template")).toBeTruthy());
+    // Wait until ownership has resolved and the owned row's Delete renders.
+    await waitFor(() =>
+      expect(screen.getByLabelText("Delete My Template")).toBeTruthy(),
+    );
     expect(screen.getByText("Shared Template")).toBeTruthy();
-    // Owned row has a Delete control; the shared (non-owned) row does not.
-    expect(screen.queryByLabelText("Delete My Template")).toBeTruthy();
+    // The shared (non-owned) row has no Delete control.
     expect(screen.queryByLabelText("Delete Shared Template")).toBeNull();
   });
 
