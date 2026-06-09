@@ -19,7 +19,8 @@
       "aiPrompts": "Invites IA",
       "featureFlags": "Indicateurs",
       "providers": "Fournisseurs IA",
-      "capturedMedia": "Médias capturés"
+      "capturedMedia": "Médias capturés",
+      "analytics": "Analytique"
     },
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
@@ -987,5 +988,49 @@
         "more": "… et {count} de plus"
       }
     }
+  },
+  "AdminAnalytics": {
+    "eyebrow": "Admin",
+    "title": "Adoption et retour sur investissement",
+    "description": "Adoption et qualité mesurées par clinicien. Le temps épargné est une estimation facultative — définissez une référence pour le calculer.",
+    "loadError": "Impossible de charger l’analytique d’adoption.",
+    "exportError": "Échec de l’exportation CSV.",
+    "exportCsv": "Exporter en CSV",
+    "rangeLabel": "Période",
+    "ranges": {
+      "7d": "7 jours",
+      "30d": "30 jours",
+      "90d": "90 jours",
+      "all": "Tout l’historique"
+    },
+    "baselineLabel": "Référence :",
+    "baselinePlaceholder": "p. ex. 10",
+    "baselineUnit": "min/note",
+    "stats": {
+      "activeClinicians": "Cliniciens actifs",
+      "notesExported": "Notes exportées",
+      "notesPerDay": "Notes / jour actif",
+      "timeSaved": "Temps épargné"
+    },
+    "timeSavedNeedsBaseline": "Définissez une référence (min épargnées par note) pour le calculer.",
+    "timeSavedAssumption": "Suppose {baseline} min de documentation manuelle par note.",
+    "quality": {
+      "completeness": "Complétude moy.",
+      "citation": "Traçabilité des citations",
+      "editRate": "Taux de révision moy.",
+      "stage1": "Latence étape 1"
+    },
+    "table": {
+      "clinician": "Clinicien",
+      "sessions": "Séances",
+      "exported": "Exportées",
+      "perDay": "Notes/jour",
+      "completeness": "Complétude",
+      "editRate": "Taux de révision",
+      "timeSaved": "Temps épargné",
+      "lastActive": "Dernière activité"
+    },
+    "empty": "Aucune séance enregistrée dans cette période.",
+    "footnote": "Tous les chiffres sont mesurés à partir des séances enregistrées et des métriques du pilote. Temps épargné = notes exportées × votre référence — une estimation accompagnée de son hypothèse, pas une valeur mesurée."
   }
 }
