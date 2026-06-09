@@ -442,6 +442,74 @@ async def finalize_template_authoring(
     return _to_custom_template_response(custom)
 
 
+# Upload guards (clinical template docs are tiny KB-scale files). The body cap
+# bounds the compressed bytes held in RAM; the uncompressed cap defends against
+# a deflate bomb that python-docx would otherwise eagerly decompress into RAM
+# at `Document()` open, OOM-killing the worker.
+_MAX_UPLOAD_BYTES = 5 * 1024 * 1024  # 5 MB compressed
+_MAX_DOCX_UNCOMPRESSED_BYTES = 25 * 1024 * 1024  # 25 MB inflated
+
+
+def _extract_document_text(filename: Optional[str], body: bytes) -> str:
+    """Plain text from an uploaded template document.
+
+    A .docx is a binary OOXML zip — parse its paragraphs + table cells with
+    python-docx. Everything else (.txt / .json / .md) is decoded as UTF-8
+    (lenient). A .docx python-docx can't open raises 400; an oversized /
+    decompression-bomb .docx raises 413.
+    """
+    if (filename or "").lower().endswith(".docx"):
+        import io
+        import zipfile
+
+        from docx import Document
+
+        # Bound the inflated size BEFORE python-docx decompresses every part
+        # into RAM. Stream each member with a hard cumulative cap — do NOT
+        # trust ZipInfo.file_size (read from the attacker-controllable central
+        # directory; can be under-reported to dodge a declared-size check).
+        try:
+            with zipfile.ZipFile(io.BytesIO(body)) as zf:
+                total = 0
+                for info in zf.infolist():
+                    with zf.open(info) as member:
+                        while True:
+                            chunk = member.read(65536)
+                            if not chunk:
+                                break
+                            total += len(chunk)
+                            if total > _MAX_DOCX_UNCOMPRESSED_BYTES:
+                                raise HTTPException(
+                                    status_code=413,
+                                    detail="Document is too large to process.",
+                                )
+        except zipfile.BadZipFile as exc:
+            raise HTTPException(
+                status_code=400,
+                detail="Could not read the Word document — try exporting it as plain text.",
+            ) from exc
+
+        try:
+            doc = Document(io.BytesIO(body))
+        except Exception as exc:  # noqa: BLE001 — any parse failure → 400
+            raise HTTPException(
+                status_code=400,
+                detail="Could not read the Word document — try exporting it as plain text.",
+            ) from exc
+        parts = [p.text for p in doc.paragraphs if p.text and p.text.strip()]
+        for table in doc.tables:
+            for tr in table.rows:
+                for cell in tr.cells:
+                    if cell.text and cell.text.strip():
+                        parts.append(cell.text)
+        return "\n".join(parts).strip()
+
+    try:
+        return body.decode("utf-8").strip()
+    except UnicodeDecodeError:
+        return body.decode("utf-8", errors="ignore").strip()
+
+
 @router.post(
     "/custom-templates/upload",
     response_model=AuthoringSessionResponse,
@@ -463,16 +531,10 @@ async def upload_template_for_extraction(
     body = await document.read()
     if not body:
         raise HTTPException(status_code=400, detail="Empty document")
+    if len(body) > _MAX_UPLOAD_BYTES:
+        raise HTTPException(status_code=413, detail="Document is too large.")
 
-    # Best-effort decode; non-UTF-8 bytes (e.g. binary DOCX) survive
-    # via `errors='ignore'` so the LLM at least sees readable text. A
-    # full python-docx pre-parse for .docx → .txt is out of scope here
-    # (PR-E can add it on the frontend side via a paste-as-text step).
-    try:
-        text = body.decode("utf-8")
-    except UnicodeDecodeError:
-        text = body.decode("utf-8", errors="ignore")
-    text = text.strip()
+    text = _extract_document_text(document.filename, body)
     if not text:
         raise HTTPException(status_code=400, detail="Document has no extractable text")
 

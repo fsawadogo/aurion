@@ -26,6 +26,7 @@ from typing import Optional
 
 from pydantic import ValidationError
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import CustomTemplateModel
@@ -198,6 +199,28 @@ async def get_by_id(
     return result.scalar_one_or_none()
 
 
+async def _flush_mapping_unique(db: AsyncSession, key: str) -> None:
+    """``db.flush()`` that maps the (owner_id, key) unique-constraint
+    violation to a friendly ``CustomTemplateError`` (→ 409).
+
+    The in-app ``_find_by_owner_and_key`` check catches the common case, but
+    the DB constraint (uq_custom_templates_owner_key) is the race-proof
+    guarantee — if two requests slip past the in-app check concurrently, the
+    loser hits this and gets a clean 409 instead of an unhandled 500.
+    """
+    try:
+        await db.flush()
+    except IntegrityError as exc:
+        # Match the constraint NAME only (asyncpg + psycopg2 both embed it in
+        # str(orig), and it's locale-stable). A bare "unique" substring would
+        # mislabel any other unique violation as a key clash.
+        if "uq_custom_templates_owner_key" in str(getattr(exc, "orig", exc)):
+            raise CustomTemplateError(
+                f"Custom template with key '{key}' already exists for this owner"
+            ) from exc
+        raise
+
+
 async def create_for_owner(
     owner_id: uuid.UUID, payload: dict, db: AsyncSession
 ) -> CustomTemplateModel:
@@ -230,7 +253,7 @@ async def create_for_owner(
         content=template.model_dump_json(),
     )
     db.add(row)
-    await db.flush()
+    await _flush_mapping_unique(db, template.key)
     return row
 
 
@@ -265,7 +288,7 @@ async def update_owned(
     row.version = template.version
     row.content = template.model_dump_json()
     row.updated_at = datetime.now(timezone.utc)
-    await db.flush()
+    await _flush_mapping_unique(db, template.key)
     return row
 
 

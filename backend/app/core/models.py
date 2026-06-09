@@ -16,6 +16,7 @@ from sqlalchemy import (
     LargeBinary,
     String,
     Text,
+    UniqueConstraint,
 )
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
@@ -333,6 +334,13 @@ class CustomTemplateModel(Base):
     """
 
     __tablename__ = "custom_templates"
+    # One custom template per (owner, runtime key). The service layer also
+    # checks this in-app (friendly 409), but the DB constraint is the real
+    # guarantee — without it the finalize/create paths could race two rows
+    # with the same (owner_id, key), and a later scalar_one lookup 500s.
+    __table_args__ = (
+        UniqueConstraint("owner_id", "key", name="uq_custom_templates_owner_key"),
+    )
 
     id: Mapped[uuid.UUID] = mapped_column(
         UUID(as_uuid=True), primary_key=True, default=uuid.uuid4

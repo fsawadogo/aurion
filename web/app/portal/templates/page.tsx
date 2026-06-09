@@ -120,10 +120,9 @@ export default function PortalTemplatesPage() {
             <label className="inline-flex">
               <input
                 type="file"
-                // .docx omitted: the backend decodes the upload as UTF-8
-                // text, so a binary Word doc yields garbage — accept only
-                // the text formats it can actually parse.
-                accept=".txt,.json,.md"
+                // .docx is parsed server-side via python-docx; the rest are
+                // decoded as UTF-8 text.
+                accept=".txt,.json,.md,.docx"
                 className="sr-only"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
