@@ -1,0 +1,54 @@
+name: iOS — Review Status
+
+# On-demand, read-only check of recent TestFlight builds' processing +
+# Beta App Review state, so "is the latest build still in Apple review?"
+# is answerable from the Actions UI (or via `gh workflow run`) without
+# local App Store Connect credentials.
+#
+# The `review_status` fastlane lane (ios/Aurion/fastlane/Fastfile) only
+# hits the App Store Connect API via Spaceship — no Xcode, no build — so
+# this runs on cheap ubuntu, not macOS. It NEVER mutates App Store Connect.
+#
+# workflow_dispatch only: it never runs on push/PR, so it can't fire a
+# build or a TestFlight dispatch.
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_number:
+        description: "Specific build number to check (blank = latest 5 builds)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  review-status:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: ruby/setup-ruby@v1
+        with:
+          ruby-version: "3.3"
+
+      - name: Install fastlane
+        run: gem install fastlane --no-document
+
+      - name: Print TestFlight review status
+        working-directory: ios/Aurion
+        env:
+          APP_STORE_CONNECT_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+          APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+          APP_STORE_CONNECT_KEY_P8:    ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+          # Empty when the input is left blank → the lane lists the latest 5.
+          # Passed via env (never inlined into the command) and validated as
+          # numeric below — it reaches the lane only as a Spaceship API filter.
+          BUILD_NUMBER: ${{ inputs.build_number }}
+        run: |
+          if [ -n "$BUILD_NUMBER" ] && ! printf '%s' "$BUILD_NUMBER" | grep -qE '^[0-9]+$'; then
+            echo "::error::build_number must be numeric (got: '$BUILD_NUMBER')"
+            exit 1
+          fi
+          fastlane review_status
