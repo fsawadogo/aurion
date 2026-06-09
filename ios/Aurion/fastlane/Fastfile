@@ -418,12 +418,16 @@ platform :ios do
     filter = { app: app.id }
     filter[:version] = only unless only.empty?
 
+    # get_builds returns a Spaceship::ConnectAPI::Response (Enumerable),
+    # NOT an Array — `.first`/`.each`/`.map` work but `.empty?`/`.length`
+    # don't. `.to_a` materializes the Build models into a real Array so the
+    # Array-only methods below are safe across fastlane versions.
     builds = Spaceship::ConnectAPI.get_builds(
       filter:   filter,
       includes: "buildBetaDetail,preReleaseVersion",
       sort:     "-uploadedDate",
       limit:    only.empty? ? 5 : 1,
-    )
+    ).to_a
 
     if builds.empty?
       UI.important(only.empty? ? "No builds found for the app." : "No build #{only} found.")
