@@ -140,14 +140,33 @@ def _clear_template_cache() -> None:
 def get_template(specialty: str) -> Template:
     """Get a specialty template by key.
 
-    Falls back to 'general' if the requested specialty is not found.
+    Resolution order (#72): runtime admin override (in-memory cache, fed
+    by the admin CRUD + ~10s poller) > disk-bundled JSON. Falls back to
+    'general' (same order) if the requested specialty is not found.
     Raises ValueError if no template is available at all.
     """
+    # Local import — template_override_cache imports core only, but keeping
+    # the dependency out of module import time preserves the existing
+    # import graph for the many service.py consumers.
+    from app.modules.note_gen.template_override_cache import get_cached_override
+
+    override = get_cached_override(specialty)
+    if override is not None:
+        return override
+
     templates = load_templates()
 
     template = templates.get(specialty)
     if template:
         return template
+
+    general_override = get_cached_override("general")
+    if general_override is not None:
+        logger.warning(
+            "Specialty template '%s' not found, falling back to 'general' (override)",
+            specialty,
+        )
+        return general_override
 
     general = templates.get("general")
     if general:
