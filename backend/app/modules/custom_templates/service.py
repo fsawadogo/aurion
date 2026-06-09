@@ -38,6 +38,108 @@ class CustomTemplateError(Exception):
     """Service-layer error. Route handlers map to 400/409/etc."""
 
 
+def _schema_error_msg(exc: ValidationError) -> str:
+    """Compact, input-free summary of a Pydantic ``ValidationError``.
+
+    Joins each error's location + message but NEVER the offending input value
+    (clinician-authored content). Pydantic's default ``str(exc)`` interpolates
+    ``input_value=...``, so we format from ``.errors()`` to keep submitted text
+    out of the 4xx response body.
+    """
+    parts = []
+    for e in exc.errors():
+        loc = ".".join(str(p) for p in e.get("loc", ())) or "template"
+        parts.append(f"{loc}: {e.get('msg', 'invalid')}")
+    summary = "; ".join(parts) or "invalid template"
+    return f"Template failed schema validation ({summary})"
+
+
+# Field caps for CUSTOM templates only — deliberately NOT applied to the base
+# `Template` schema, which the trusted on-disk built-in specialty templates
+# also flow through (tightening that schema could break note generation).
+#
+# Two tiers, enforced differently (see `_validate_custom_template_fields`):
+#   * key / display_name / version — mirror the `custom_templates` String(50)/
+#     (100)/(20) columns, so over-long input would DataError->500 at flush.
+#     Enforced on EVERY write (create + update). Plus the >=1-section rule.
+#   * section length/count caps — NOT DB-backed (sections live in the unbounded
+#     `content` JSON Text column). These are create-time PRODUCT limits only:
+#     enforcing them on update would lock a clinician out of editing a template
+#     whose sections predate the caps (even a metadata-only rename re-validates
+#     the whole body), so the update path skips them.
+_KEY_MAX = 50
+_DISPLAY_NAME_MAX = 100
+_VERSION_MAX = 20
+_SECTION_ID_MAX = 50
+_SECTION_TITLE_MAX = 100
+_SECTION_DESC_MAX = 500
+_KEYWORD_MAX = 50
+_MAX_SECTIONS = 50
+_MAX_KEYWORDS_PER_SECTION = 50
+
+
+def _validate_custom_template_fields(
+    template: Template, *, check_section_caps: bool = True
+) -> None:
+    """Enforce custom-template field caps. Raises ``CustomTemplateError`` (→400).
+
+    DB-backed caps (key/display_name/version) and the >=1-section rule run on
+    every write. The section-level length/count caps are create-time product
+    limits and are skipped when ``check_section_caps`` is False (the update
+    path) so a pre-existing over-cap template stays editable.
+    """
+    key = (template.key or "").strip()
+    if not key:
+        raise CustomTemplateError("Template key is required")
+    if len(key) > _KEY_MAX:
+        raise CustomTemplateError(f"Template key exceeds {_KEY_MAX} characters")
+    name = (template.display_name or "").strip()
+    if not name:
+        raise CustomTemplateError("Template display name is required")
+    if len(name) > _DISPLAY_NAME_MAX:
+        raise CustomTemplateError(
+            f"Template display name exceeds {_DISPLAY_NAME_MAX} characters"
+        )
+    if len(template.version or "") > _VERSION_MAX:
+        raise CustomTemplateError(
+            f"Template version exceeds {_VERSION_MAX} characters"
+        )
+    if not template.sections:
+        raise CustomTemplateError("Template must have at least one section")
+    if not check_section_caps:
+        return
+    if len(template.sections) > _MAX_SECTIONS:
+        raise CustomTemplateError(f"Template exceeds {_MAX_SECTIONS} sections")
+    for sec in template.sections:
+        sid = (sec.id or "").strip()
+        if not sid:
+            raise CustomTemplateError("Each section needs an id")
+        if len(sid) > _SECTION_ID_MAX:
+            raise CustomTemplateError(
+                f"Section id exceeds {_SECTION_ID_MAX} characters"
+            )
+        title = (sec.title or "").strip()
+        if not title:
+            raise CustomTemplateError("Each section needs a title")
+        if len(title) > _SECTION_TITLE_MAX:
+            raise CustomTemplateError(
+                f"Section title exceeds {_SECTION_TITLE_MAX} characters"
+            )
+        if len(sec.description or "") > _SECTION_DESC_MAX:
+            raise CustomTemplateError(
+                f"Section description exceeds {_SECTION_DESC_MAX} characters"
+            )
+        if len(sec.visual_trigger_keywords) > _MAX_KEYWORDS_PER_SECTION:
+            raise CustomTemplateError(
+                f"A section has more than {_MAX_KEYWORDS_PER_SECTION} keywords"
+            )
+        for kw in sec.visual_trigger_keywords:
+            if len(kw) > _KEYWORD_MAX:
+                raise CustomTemplateError(
+                    f"A visual-trigger keyword exceeds {_KEYWORD_MAX} characters"
+                )
+
+
 async def list_for_owner(
     owner_id: uuid.UUID, db: AsyncSession, include_shared: bool = True
 ) -> list[CustomTemplateModel]:
@@ -109,7 +211,8 @@ async def create_for_owner(
     try:
         template = Template.model_validate(payload)
     except ValidationError as exc:
-        raise CustomTemplateError(f"Template schema validation failed: {exc}") from exc
+        raise CustomTemplateError(_schema_error_msg(exc)) from exc
+    _validate_custom_template_fields(template)
 
     existing = await _find_by_owner_and_key(owner_id, template.key, db)
     if existing is not None:
@@ -143,7 +246,12 @@ async def update_owned(
     try:
         template = Template.model_validate(payload)
     except ValidationError as exc:
-        raise CustomTemplateError(f"Template schema validation failed: {exc}") from exc
+        raise CustomTemplateError(_schema_error_msg(exc)) from exc
+    # check_section_caps=False on update: the section length/count caps aren't
+    # DB-backed and re-validating the whole body on every edit would lock a
+    # clinician out of a template whose sections predate the caps (incl. a
+    # metadata-only rename). DB-backed caps + the >=1-section rule still apply.
+    _validate_custom_template_fields(template, check_section_caps=False)
 
     if template.key != row.key:
         clash = await _find_by_owner_and_key(row.owner_id, template.key, db)
@@ -164,12 +272,11 @@ async def update_owned(
 async def delete_owned(row: CustomTemplateModel, db: AsyncSession) -> None:
     """Hard delete the row.
 
-    The plan calls this "soft delete (keep row for audit, flag
-    inactive)" — but `CustomTemplateModel` doesn't have an is_active
-    column yet, and adding one would expand PR-B scope. For now a hard
-    delete is fine: the audit log already records template lifecycle
-    events, so the historical trail is preserved out-of-band. A
-    follow-up PR can add an is_active column + flip this to soft.
+    `CustomTemplateModel` has no is_active column, so this is a hard
+    delete. The trail is preserved out-of-band: the route writes an
+    append-only ``CUSTOM_TEMPLATE_DELETED`` audit event (DynamoDB) before
+    committing, so the lifecycle stays reconstructable. A follow-up PR can
+    add an is_active column and flip this to a soft delete if needed.
     """
     await db.delete(row)
     await db.flush()
@@ -181,12 +288,20 @@ async def delete_owned(row: CustomTemplateModel, db: AsyncSession) -> None:
 async def _find_by_owner_and_key(
     owner_id: uuid.UUID, key: str, db: AsyncSession
 ) -> Optional[CustomTemplateModel]:
-    stmt = select(CustomTemplateModel).where(
-        CustomTemplateModel.owner_id == owner_id,
-        CustomTemplateModel.key == key,
+    # `.first()` (not `scalar_one_or_none`) so a pre-existing duplicate
+    # (owner_id, key) pair — possible from the old finalize path that
+    # skipped this check — reports "already exists" rather than blowing up
+    # the uniqueness probe itself with MultipleResultsFound (500).
+    stmt = (
+        select(CustomTemplateModel)
+        .where(
+            CustomTemplateModel.owner_id == owner_id,
+            CustomTemplateModel.key == key,
+        )
+        .limit(1)
     )
     result = await db.execute(stmt)
-    return result.scalar_one_or_none()
+    return result.scalars().first()
 
 
 def template_to_dict(row: CustomTemplateModel) -> dict:

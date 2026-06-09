@@ -218,6 +218,14 @@ async def create_my_custom_template(
         msg = str(exc)
         status_code = 409 if "already exists" in msg else 400
         raise HTTPException(status_code=status_code, detail=msg)
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=str(row.id),
+        event_type=AuditEventType.CUSTOM_TEMPLATE_CREATED,
+        actor_id=str(user.user_id),
+        template_id=str(row.id),
+        template_key=row.key,
+    )
     await db.commit()
     return _to_custom_template_response(row)
 
@@ -240,6 +248,14 @@ async def update_my_custom_template(
         msg = str(exc)
         status_code = 409 if "already exists" in msg else 400
         raise HTTPException(status_code=status_code, detail=msg)
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=str(row.id),
+        event_type=AuditEventType.CUSTOM_TEMPLATE_UPDATED,
+        actor_id=str(user.user_id),
+        template_id=str(row.id),
+        template_key=row.key,
+    )
     await db.commit()
     return _to_custom_template_response(row)
 
@@ -255,7 +271,17 @@ async def delete_my_custom_template(
     row = await custom_templates_service.get_owned(template_id, user.user_id, db)
     if row is None:
         raise HTTPException(status_code=404, detail="Template not found")
+    template_id_str = str(row.id)
+    template_key = row.key
     await custom_templates_service.delete_owned(row, db)
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=template_id_str,
+        event_type=AuditEventType.CUSTOM_TEMPLATE_DELETED,
+        actor_id=str(user.user_id),
+        template_id=template_id_str,
+        template_key=template_key,
+    )
     await db.commit()
 
 
@@ -398,6 +424,20 @@ async def finalize_template_authoring(
         custom = await template_authoring_service.finalize_authoring(row, db)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
+    except custom_templates_service.CustomTemplateError as exc:
+        # finalize now routes through create_for_owner, which raises on a
+        # per-owner key clash or a field-cap violation in the draft.
+        msg = str(exc)
+        status_code = 409 if "already exists" in msg else 400
+        raise HTTPException(status_code=status_code, detail=msg)
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=str(custom.id),
+        event_type=AuditEventType.CUSTOM_TEMPLATE_CREATED,
+        actor_id=str(user.user_id),
+        template_id=str(custom.id),
+        template_key=custom.key,
+    )
     await db.commit()
     return _to_custom_template_response(custom)
 

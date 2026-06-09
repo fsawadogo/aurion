@@ -26,6 +26,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.modules.custom_templates.service import CustomTemplateError
 from app.modules.providers.base import ChatMessage
 from app.modules.template_authoring import service as ta_service
 
@@ -289,13 +290,22 @@ async def test_finalize_promotes_draft_and_marks_completed(stub_db):
         "key": "final",
         "display_name": "Final",
         "version": "1.0",
-        "sections": [],
+        # ≥1 section now required (custom-template field cap); an empty draft
+        # is correctly rejected — see test_finalize_rejects_empty_draft.
+        "sections": [{"id": "summary", "title": "Summary", "required": True}],
     }
     row = MagicMock()
     row.id = uuid.uuid4()
     row.owner_id = uuid.uuid4()
     row.status = "active"
     row.draft_template_json = json.dumps(template_json)
+
+    # finalize now routes through custom_templates.create_for_owner, which
+    # probes for a per-owner key clash via db.execute(...).scalars().first().
+    # Return None → no clash.
+    no_clash = MagicMock()
+    no_clash.scalars.return_value.first.return_value = None
+    stub_db.execute = AsyncMock(return_value=no_clash)
 
     custom = await ta_service.finalize_authoring(row, stub_db)
 
@@ -304,6 +314,49 @@ async def test_finalize_promotes_draft_and_marks_completed(stub_db):
     assert custom.owner_id == row.owner_id
     assert row.status == "completed"
     stub_db.add.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_finalize_rejects_empty_draft(stub_db):
+    """A draft that validates against the base schema but has no sections is
+    rejected at finalize (custom-template field cap), not promoted into a
+    useless template."""
+    row = MagicMock()
+    row.id = uuid.uuid4()
+    row.owner_id = uuid.uuid4()
+    row.status = "active"
+    row.draft_template_json = json.dumps({
+        "key": "empty", "display_name": "Empty", "version": "1.0", "sections": [],
+    })
+    no_clash = MagicMock()
+    no_clash.scalars.return_value.first.return_value = None
+    stub_db.execute = AsyncMock(return_value=no_clash)
+
+    with pytest.raises(CustomTemplateError, match="at least one section"):
+        await ta_service.finalize_authoring(row, stub_db)
+    stub_db.add.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_finalize_rejects_duplicate_key(stub_db):
+    """finalize now enforces per-owner key uniqueness (routes through
+    create_for_owner) — a draft whose key already exists for the owner is
+    rejected instead of forming a duplicate (owner_id, key) row."""
+    row = MagicMock()
+    row.id = uuid.uuid4()
+    row.owner_id = uuid.uuid4()
+    row.status = "active"
+    row.draft_template_json = json.dumps({
+        "key": "dup", "display_name": "Dup", "version": "1.0",
+        "sections": [{"id": "s", "title": "S", "required": True}],
+    })
+    clash = MagicMock()
+    clash.scalars.return_value.first.return_value = MagicMock()
+    stub_db.execute = AsyncMock(return_value=clash)
+
+    with pytest.raises(CustomTemplateError, match="already exists"):
+        await ta_service.finalize_authoring(row, stub_db)
+    stub_db.add.assert_not_called()
 
 
 @pytest.mark.asyncio
