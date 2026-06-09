@@ -2,6 +2,7 @@
 
 import { Send } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import Button from "@/components/ui/Button";
 import type { ChatMessage } from "@/types";
 
@@ -29,6 +30,7 @@ export default function TemplateChat({
   busy,
   onSend,
 }: TemplateChatProps) {
+  const t = useTranslations("TemplateChat");
   const [draft, setDraft] = useState("");
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -54,13 +56,13 @@ export default function TemplateChat({
         aria-live="polite"
       >
         {messages.map((m, i) => (
-          <Bubble key={i} message={m} />
+          <Bubble key={i} message={m} emptyLabel={t("draftUpdated")} />
         ))}
         {busy && (
           <div className="flex">
             <span className="inline-flex items-center gap-1.5 rounded-2xl rounded-bl-md bg-gray-100 px-3 py-2 text-sm text-gray-500">
               <Dots />
-              <span>Thinking…</span>
+              <span>{t("thinking")}</span>
             </span>
           </div>
         )}
@@ -68,9 +70,7 @@ export default function TemplateChat({
       <div className="border-t border-gray-100 p-3 flex items-center gap-2">
         <input
           className="form-input flex-1"
-          placeholder={
-            busy ? "Sending…" : "Type a reply… (Enter to send)"
-          }
+          placeholder={busy ? t("sending") : t("inputPlaceholder")}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -80,7 +80,7 @@ export default function TemplateChat({
             }
           }}
           disabled={busy}
-          aria-label="Reply to template builder"
+          aria-label={t("inputAria")}
         />
         <Button
           variant="primary"
@@ -96,7 +96,13 @@ export default function TemplateChat({
   );
 }
 
-function Bubble({ message }: { message: ChatMessage }) {
+function Bubble({
+  message,
+  emptyLabel,
+}: {
+  message: ChatMessage;
+  emptyLabel: string;
+}) {
   const isUser = message.role === "user";
   const cleaned = isUser ? message.content : stripDraftBlock(message.content);
   return (
@@ -109,7 +115,7 @@ function Bubble({ message }: { message: ChatMessage }) {
             : "rounded-bl-md bg-gray-100 text-gray-800")
         }
       >
-        {cleaned || "(draft updated — see preview)"}
+        {cleaned || emptyLabel}
       </span>
     </div>
   );
