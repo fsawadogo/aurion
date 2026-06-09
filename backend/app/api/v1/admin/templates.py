@@ -1,10 +1,12 @@
 """Template + visual-trigger keyword management (issue #72 foundation).
 
 Storage + CRUD over the disk-bundled specialty templates. PUT/DELETE
-writes go through ``template_overrides`` repo; runtime integration
-(cache + poller) lands in the next slice — until then the pipeline
-still reads disk templates. The override store is the read source for
-this admin viewer.
+writes go through the ``template_overrides`` repo AND the runtime cache
+(#72): the serving task honours the edit immediately via
+``set_cached``/``clear_cached``; other tasks converge within ~10s via
+``template_override_cache``'s poller. ``get_template()`` resolves
+override > disk, so edits are live in the note pipeline without a
+restart.
 """
 
 from __future__ import annotations
@@ -21,6 +23,10 @@ from app.core.database import get_db
 from app.core.types import Template, UserRole
 from app.modules.auth.service import CurrentUser, require_role
 from app.modules.note_gen.service import load_templates
+from app.modules.note_gen.template_override_cache import (
+    clear_cached,
+    set_cached,
+)
 from app.modules.note_gen.template_overrides import (
     delete_override,
     get_effective_template,
@@ -51,9 +57,9 @@ class TemplateDetailResponse(BaseModel):
     is_override: bool
     updated_at: datetime | None
     note: str = (
-        "Runtime integration (override-aware pipeline reads) ships in the "
-        "next slice. Today, edits persist here but the running note "
-        "pipeline still uses disk-bundled templates until that lands."
+        "Edits are live: the note pipeline resolves admin overrides ahead "
+        "of the disk-bundled template (immediately on this task, within "
+        "~10s fleet-wide)."
     )
 
 
@@ -134,6 +140,9 @@ async def upsert_template(
             ),
         )
     saved = await upsert_override(db, template_key, body, updated_by=user.user_id)
+    # #72 runtime integration: the serving task honours the edit
+    # immediately; the rest of the fleet converges via the ~10s poller.
+    set_cached(template_key, saved)
     await write_audit(
         # No session_id is meaningful here — use a sentinel UUID matching
         # how other "global" admin actions audit (see provider_overrides
@@ -162,6 +171,9 @@ async def revert_template(
     If no override exists, returns 204 anyway (idempotent).
     """
     deleted = await delete_override(db, template_key)
+    # Always evict — idempotent like the delete itself, and it heals a
+    # cache entry that somehow outlived its row.
+    clear_cached(template_key)
     if deleted:
         await write_audit(
             "system",
