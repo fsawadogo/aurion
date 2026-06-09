@@ -356,6 +356,11 @@ final class SessionManager: ObservableObject {
     /// Suspended on pause, resumed on resume, invalidated on stop.
     private var cadenceDriver: CadenceClipDriver?
 
+    /// Per-session clip-pipeline counters (#390), flushed as a
+    /// CLIP_PIPELINE_SUMMARY beacon on stop. Reset at record start. Mutated
+    /// only on the main actor (this class is `@MainActor`).
+    private var clipCounters = ClipPipelineCounters()
+
     private let api = APIClient.shared
     private var registry: CaptureSourceRegistry { .shared }
     private var audioSource: CaptureSource { registry.activeAudioSource }
@@ -619,8 +624,16 @@ final class SessionManager: ObservableObject {
         // Tear down the cadence floor (#324) BEFORE stopping sources clears
         // the ring — no new tick should race the ring clear. An in-flight
         // tick that lands after the clear sees an empty ring and no-ops.
+        let cadenceWasActive = cadenceDriver != nil
         cadenceDriver?.invalidate()
         cadenceDriver = nil
+        // #390: flush the per-session clip-pipeline summary while the ring
+        // still holds its frames-appended total — only when cadence actually
+        // ran this session (driver-not-started + config are already beaconed
+        // at start, so a no-cadence session needs no summary).
+        if cadenceWasActive {
+            flushClipPipelineSummary(sessionId: session.id)
+        }
         // Stop local capture FIRST so getRecordedAudioData has a complete buffer
         // by the time submitProcessing fires.
         for source in activeSourcesForCurrentMode { source.stop() }
@@ -879,32 +892,47 @@ final class SessionManager: ObservableObject {
     /// strict no-op.
     private func startCadenceDriverIfEnabled() {
         cadenceDriver = nil
+        clipCounters.reset()   // #390: fresh per-session counters
         guard let session else {
             print("[Cadence] not started: no active session")
             return
         }
         let pipeline = RemoteConfig.shared.pipeline
-        // Inlined (rather than the shared `clipCadenceActive`) so each bail
-        // names its specific reason in the device log — the prior silent
-        // no-op made "zero clips" indistinguishable from "config OFF". The
-        // gate is identical: cadence>0 AND a clips/hybrid mode AND a built-in
-        // video source feeding the ring.
-        if pipeline.clipCadenceSeconds <= 0 {
-            print("[Cadence] not started: clip_cadence_seconds=\(pipeline.clipCadenceSeconds) (AppConfig cadence OFF or stale snapshot); visual_evidence_mode=\(pipeline.visualEvidenceMode.rawValue)")
-            return
-        }
         let mode = Self.resolveEvidenceMode(
             sessionOverride: session.providerOverrides?.visualEvidenceMode,
             globalDefault: pipeline.visualEvidenceMode
         )
+        // #390: snapshot the RESOLVED clip config + app build at record-start,
+        // for EVERY recording — so a stale AppConfig snapshot or an old build
+        // is visible server-side (the #324 root cause was a config field the
+        // device defaulted away, invisible after the fact).
+        emitClipConfigSnapshot(sessionId: session.id, pipeline: pipeline, resolvedMode: mode)
+        // Inlined (rather than the shared `clipCadenceActive`) so each bail
+        // names its specific reason in the device log AND emits a #390
+        // CLIP_DROPPED beacon — the prior silent no-op made "zero clips"
+        // indistinguishable from "config OFF". The gate is identical:
+        // cadence>0 AND a clips/hybrid mode AND a built-in video source.
+        if pipeline.clipCadenceSeconds <= 0 {
+            print("[Cadence] not started: clip_cadence_seconds=\(pipeline.clipCadenceSeconds) (AppConfig cadence OFF or stale snapshot); visual_evidence_mode=\(pipeline.visualEvidenceMode.rawValue)")
+            emitClipDrop(sessionId: session.id, reason: .cadenceSecondsZero)
+            return
+        }
         guard mode == .clipsOnly || mode == .hybrid else {
             print("[Cadence] not started: resolved visual_evidence_mode=\(mode.rawValue) does not emit clips (need clips_only or hybrid)")
+            emitClipDrop(sessionId: session.id, reason: .modeNotClipsOrHybrid)
             return
         }
         // The ring buffer lives on the BuiltInCaptureSource's manager. No
-        // built-in video source ⇒ nothing to extract from ⇒ no driver.
+        // built-in video source ⇒ nothing to extract from ⇒ no driver. Two
+        // distinct reasons: an audio-only capture mode (no video at all) vs a
+        // video source that isn't the built-in camera (e.g. Meta glasses,
+        // whose frames don't feed the ring).
         guard registry.activeVideoSource is BuiltInCaptureSource else {
+            let reason: ClipDropReason = session.captureMode.includesVideo
+                ? .videoSourceNotBuiltin
+                : .captureModeNotMultimodal
             print("[Cadence] not started: no built-in video source (capture mode=\(session.captureMode.rawValue), includesVideo=\(session.captureMode.includesVideo)) — cadence clips need multimodal capture")
+            emitClipDrop(sessionId: session.id, reason: reason)
             return
         }
         let clipWindowMs = pipeline.clipWindowMs
@@ -914,6 +942,66 @@ final class SessionManager: ObservableObject {
         }
         cadenceDriver = driver
         driver.start()
+    }
+
+    // MARK: - Clip-pipeline telemetry beacons (#390)
+
+    // The beacon bodies are `[String: Any]` (not Sendable), so they're built
+    // INSIDE the Task closure — the helpers capture only Sendable primitives
+    // (Strings/Ints/structs of Ints) + a weak self. `Task { @MainActor in }`
+    // mirrors the established CadenceClipDriver pattern; the POST is
+    // fire-and-forget (`try?`) so telemetry never affects capture.
+
+    /// Fire-and-forget a single CLIP_DROPPED beacon. `timestampMs` is set
+    /// only for per-tick drops; the driver-not-started reasons carry none.
+    private func emitClipDrop(
+        sessionId: String,
+        reason: ClipDropReason,
+        timestampMs: Int? = nil
+    ) {
+        let reasonRaw = reason.rawValue
+        Task { @MainActor [weak self] in
+            var body: [String: Any] = ["kind": "drop", "reason": reasonRaw]
+            if let timestampMs { body["timestamp_ms"] = timestampMs }
+            try? await self?.api.recordClipTelemetry(sessionId: sessionId, body: body)
+        }
+    }
+
+    /// Fire-and-forget the record-start CLIP_CONFIG_SNAPSHOT beacon.
+    private func emitClipConfigSnapshot(
+        sessionId: String,
+        pipeline: ClientPipelineResponse,
+        resolvedMode: VisualEvidenceMode
+    ) {
+        let modeRaw = resolvedMode.rawValue
+        let cadence = pipeline.clipCadenceSeconds
+        let fps = pipeline.videoCaptureFps
+        let windowMs = pipeline.clipWindowMs
+        let build = "\(AppVersion.short) (\(AppVersion.build))"
+        Task { @MainActor [weak self] in
+            let body: [String: Any] = [
+                "kind": "config_snapshot",
+                "visual_evidence_mode": modeRaw,
+                "clip_cadence_seconds": cadence,
+                "video_capture_fps": fps,
+                "clip_window_ms": windowMs,
+                "app_build": build,
+            ]
+            try? await self?.api.recordClipTelemetry(sessionId: sessionId, body: body)
+        }
+    }
+
+    /// Fire-and-forget the per-session CLIP_PIPELINE_SUMMARY beacon. Reads
+    /// the ring's frames-appended total SYNCHRONOUSLY (before sources stop +
+    /// clear the ring), then posts the aggregated counters.
+    private func flushClipPipelineSummary(sessionId: String) {
+        let ringFrames = (registry.activeVideoSource as? BuiltInCaptureSource)?
+            .clipRingBuffer.framesAppendedTotal
+        let counters = clipCounters
+        Task { @MainActor [weak self] in
+            let body = counters.summaryBody(ringFramesAppended: ringFrames)
+            try? await self?.api.recordClipTelemetry(sessionId: sessionId, body: body)
+        }
     }
 
     /// One cadence cycle: extract a trailing clip from the live ring → mask
@@ -947,9 +1035,11 @@ final class SessionManager: ObservableObject {
         // frame, or just-cleared on a racing stop) — skip, retry next tick.
         guard let extracted = await source.extractCadenceClip(windowMs: windowMs) else {
             print("[Cadence] clip dropped: ring not ready (extractCadenceClip returned nil) — camera warm-up or just-stopped; retry next tick")
+            clipCounters.dropsRingEmpty += 1   // #390
             return false
         }
         let rawURL = extracted.url
+        clipCounters.clipsExtracted += 1       // #390
 
         // Mask on-device. maskClip consumes the raw input and writes a NEW
         // masked MP4; delete the raw bytes immediately afterward either way.
@@ -961,8 +1051,10 @@ final class SessionManager: ObservableObject {
             // linger. The interval is still satisfied (we extracted a clip),
             // so return true rather than retrying every sub-interval.
             print("[Cadence] clip dropped: on-device masking failed (fail-closed — nothing uploaded)")
+            clipCounters.dropsMaskingFailed += 1   // #390
             return true
         }
+        clipCounters.clipsMasked += 1          // #390
 
         do {
             _ = try await api.uploadClip(
@@ -976,11 +1068,13 @@ final class SessionManager: ObservableObject {
                 source: "cadence"
             )
             print("[Cadence] clip uploaded: ts=\(extracted.timestampMs)ms frames=\(result.framesTotal) withFaces=\(result.framesWithFaces)")
+            clipCounters.clipsUploaded += 1    // #390
         } catch {
             // Network failure mid-recording is non-fatal — the clip was
             // extracted + masked; we don't retry it (no post-stop ring to
             // re-extract from). Clean up below.
             print("[Cadence] clip upload failed (non-fatal, not retried): \(error.localizedDescription)")
+            clipCounters.dropsUploadFailed += 1   // #390
         }
         try? FileManager.default.removeItem(at: maskedURL)
         return true

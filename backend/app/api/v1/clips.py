@@ -25,10 +25,11 @@ from __future__ import annotations
 
 import logging
 import uuid
+from enum import StrEnum
 from typing import Literal
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import (
@@ -41,6 +42,7 @@ from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.s3 import FRAMES_BUCKET, get_s3_client
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.config.schema import VisualEvidenceMode
 
 logger = logging.getLogger("aurion.api.clips")
 
@@ -58,6 +60,30 @@ _SESSION_LOG_PREFIX_LEN = 8
 
 def _session_log_prefix(session_id: uuid.UUID) -> str:
     return str(session_id)[:_SESSION_LOG_PREFIX_LEN]
+
+
+class ClipDropReason(StrEnum):
+    """Why a cadence clip never reached S3 (#390).
+
+    The first three are per-tick drops inside iOS `emitCadenceClip`; the
+    next four are the once-per-session driver-not-started reasons inside
+    `startCadenceDriverIfEnabled`; the last is server-side, emitted only by
+    the S3 PutObject failure path in `upload_clip`. ``SERVER_S3_PUT_FAILED``
+    is server-only — a client beacon claiming it is rejected (a device
+    cannot observe a server-side S3 failure).
+    """
+
+    # Per-tick (iOS emitCadenceClip)
+    RING_EMPTY = "ring_empty"
+    MASKING_FAILED = "masking_failed"
+    UPLOAD_FAILED = "upload_failed"
+    # Driver-not-started (iOS startCadenceDriverIfEnabled)
+    CADENCE_SECONDS_ZERO = "cadence_seconds_zero"
+    MODE_NOT_CLIPS_OR_HYBRID = "mode_not_clips_or_hybrid"
+    VIDEO_SOURCE_NOT_BUILTIN = "video_source_not_builtin"
+    CAPTURE_MODE_NOT_MULTIMODAL = "capture_mode_not_multimodal"
+    # Server-only (clips.py S3 failure path)
+    SERVER_S3_PUT_FAILED = "server_s3_put_failed"
 
 
 class ClipUploadResponse(BaseModel):
@@ -175,6 +201,26 @@ async def upload_clip(
             "Clip upload failed: session=%s key=%s error=%s",
             _session_log_prefix(session_id), key[:32], exc,
         )
+        # #390: leave a server-side audit row on the S3 failure path.
+        # Previously this branch only logged + 500'd, so a clip that the
+        # device successfully extracted + masked + sent but that died at the
+        # S3 write was invisible after the fact — indistinguishable from a
+        # clip the device never attempted. The drop beacon (origin="server")
+        # makes the difference greppable in the audit trail. Never let an
+        # audit write mask the original upload failure.
+        try:
+            await write_audit(
+                session_id,
+                AuditEventType.CLIP_DROPPED,
+                reason=ClipDropReason.SERVER_S3_PUT_FAILED.value,
+                origin="server",
+                timestamp_ms=timestamp_ms,
+            )
+        except Exception:  # noqa: BLE001 — audit is best-effort here
+            logger.exception(
+                "Failed to write CLIP_DROPPED audit on S3 failure path: session=%s",
+                _session_log_prefix(session_id),
+            )
         raise HTTPException(status_code=500, detail=f"Clip upload failed: {exc}")
 
     # 6. Audit event. Whitelisted kwargs per `ALLOWED_AUDIT_KWARGS` —
@@ -206,3 +252,142 @@ async def upload_clip(
         bytes_uploaded=len(body),
         duration_ms=duration_ms,
     )
+
+
+# ── Clip-pipeline drop-site telemetry (#390) ─────────────────────────────────
+
+
+class ClipTelemetryBeacon(BaseModel):
+    """A single iOS clip-pipeline telemetry beacon.
+
+    One model, three ``kind``s (validated per-kind in the handler so an
+    invalid combination is a clean 400, not a silently-empty audit row):
+
+    - ``drop``            a once-per-session driver-not-started reason —
+                          requires ``reason`` (a client-observable
+                          ``ClipDropReason``; the server-only
+                          ``server_s3_put_failed`` is rejected).
+    - ``summary``         per-session pipeline counters, flushed on stop.
+                          Per-tick drops (ring_empty / masking_failed /
+                          upload_failed) are reported here in aggregate
+                          rather than as a beacon-per-tick, so a noisy
+                          camera warm-up can't flood the audit log
+                          mid-recording.
+    - ``config_snapshot`` the resolved clip config + app build at
+                          record-start, so a stale AppConfig snapshot or an
+                          old build is visible server-side.
+
+    Every field is non-PHI: enums, counts, tuning values, and a build
+    string. No identifiers, no S3 keys, no bodies.
+    """
+
+    kind: Literal["drop", "summary", "config_snapshot"]
+
+    # kind="drop"
+    reason: ClipDropReason | None = None
+    timestamp_ms: int | None = Field(None, ge=0)
+
+    # kind="summary" — counters (all monotonic, non-negative)
+    ring_frames_appended: int | None = Field(None, ge=0)
+    clips_extracted: int | None = Field(None, ge=0)
+    clips_masked: int | None = Field(None, ge=0)
+    clips_uploaded: int | None = Field(None, ge=0)
+    clips_dropped: int | None = Field(None, ge=0)
+    drops_ring_empty: int | None = Field(None, ge=0)
+    drops_masking_failed: int | None = Field(None, ge=0)
+    drops_upload_failed: int | None = Field(None, ge=0)
+
+    # kind="config_snapshot"
+    visual_evidence_mode: VisualEvidenceMode | None = None
+    clip_cadence_seconds: int | None = Field(None, ge=0)
+    video_capture_fps: float | None = Field(None, ge=0)
+    clip_window_ms: int | None = Field(None, ge=0)
+    app_build: str | None = Field(None, max_length=64)
+
+
+class ClipTelemetryResponse(BaseModel):
+    session_id: str
+    kind: str
+    recorded: bool = True
+
+
+# The summary kwargs that ride into the CLIP_PIPELINE_SUMMARY audit row,
+# in declaration order. Only those actually present on the beacon are
+# emitted (the audit whitelist accepts a subset).
+_SUMMARY_FIELDS: tuple[str, ...] = (
+    "ring_frames_appended",
+    "clips_extracted",
+    "clips_masked",
+    "clips_uploaded",
+    "clips_dropped",
+    "drops_ring_empty",
+    "drops_masking_failed",
+    "drops_upload_failed",
+)
+
+_CONFIG_FIELDS: tuple[str, ...] = (
+    "clip_cadence_seconds",
+    "video_capture_fps",
+    "clip_window_ms",
+    "app_build",
+)
+
+
+@router.post("/{session_id}/telemetry", response_model=ClipTelemetryResponse)
+async def record_clip_telemetry(
+    session_id: uuid.UUID,
+    body: ClipTelemetryBeacon,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> ClipTelemetryResponse:
+    """Record one iOS clip-pipeline telemetry beacon as an append-only
+    audit event (#390).
+
+    No state precondition (unlike `/export-audit`): drop + config-snapshot
+    beacons fire DURING recording and the summary fires on stop, so the
+    session can legitimately be in any state. Owner assertion still applies
+    — a clinician can only beacon their own sessions. No bytes cross here;
+    this is pure count/enum telemetry.
+    """
+    await get_owned_session_or_404(db, session_id, user)
+
+    if body.kind == "drop":
+        if body.reason is None:
+            raise HTTPException(
+                status_code=400, detail="kind='drop' requires a 'reason'."
+            )
+        if body.reason is ClipDropReason.SERVER_S3_PUT_FAILED:
+            # Server-only reason — a device can't observe a server S3
+            # failure, so reject it rather than let a client forge one.
+            raise HTTPException(
+                status_code=400,
+                detail="reason 'server_s3_put_failed' is server-emitted only.",
+            )
+        fields: dict[str, object] = {"reason": body.reason.value, "origin": "ios"}
+        if body.timestamp_ms is not None:
+            fields["timestamp_ms"] = body.timestamp_ms
+        await write_audit(session_id, AuditEventType.CLIP_DROPPED, **fields)
+
+    elif body.kind == "summary":
+        fields = {"origin": "ios"}
+        for name in _SUMMARY_FIELDS:
+            value = getattr(body, name)
+            if value is not None:
+                fields[name] = value
+        await write_audit(session_id, AuditEventType.CLIP_PIPELINE_SUMMARY, **fields)
+
+    else:  # config_snapshot
+        fields = {"origin": "ios"}
+        if body.visual_evidence_mode is not None:
+            fields["visual_evidence_mode"] = body.visual_evidence_mode.value
+        for name in _CONFIG_FIELDS:
+            value = getattr(body, name)
+            if value is not None:
+                fields[name] = value
+        await write_audit(session_id, AuditEventType.CLIP_CONFIG_SNAPSHOT, **fields)
+
+    logger.info(
+        "Clip telemetry: session=%s kind=%s",
+        _session_log_prefix(session_id), body.kind,
+    )
+    return ClipTelemetryResponse(session_id=str(session_id), kind=body.kind)

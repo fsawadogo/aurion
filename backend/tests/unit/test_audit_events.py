@@ -62,6 +62,10 @@ EXPECTED_VALUES: dict[str, str] = {
     "CLIP_UPLOADED": "clip_uploaded",
     "CLIP_MASKED": "clip_masked",
     "CLIP_DISCARDED": "clip_discarded",
+    # Clip-pipeline drop-site telemetry (#390)
+    "CLIP_DROPPED": "clip_dropped",
+    "CLIP_PIPELINE_SUMMARY": "clip_pipeline_summary",
+    "CLIP_CONFIG_SNAPSHOT": "clip_config_snapshot",
     # Notes
     "STAGE1_APPROVED": "stage1_approved",
     "STAGE1_FAILED": "stage1_failed",
@@ -281,6 +285,61 @@ def test_evidence_downloaded_accepts_its_count_kwargs() -> None:
     assert validate_audit_kwargs(
         AuditEventType.EVIDENCE_DOWNLOADED, ["actor_id", "s3_key"]
     ) == {"s3_key"}
+
+
+def test_clip_dropped_accepts_reason_origin_timestamp() -> None:
+    """#390 — CLIP_DROPPED carries a reason enum, an origin, and an
+    optional trigger timestamp — and nothing else (no S3 key, no body)."""
+    assert (
+        validate_audit_kwargs(
+            AuditEventType.CLIP_DROPPED, ["reason", "origin", "timestamp_ms"]
+        )
+        == set()
+    )
+    # An S3 key must not ride on a drop beacon.
+    assert validate_audit_kwargs(
+        AuditEventType.CLIP_DROPPED, ["reason", "s3_key"]
+    ) == {"s3_key"}
+
+
+def test_clip_pipeline_summary_accepts_its_counters() -> None:
+    """#390 — the per-session summary carries only PHI-free counters."""
+    assert (
+        validate_audit_kwargs(
+            AuditEventType.CLIP_PIPELINE_SUMMARY,
+            [
+                "origin",
+                "ring_frames_appended",
+                "clips_extracted",
+                "clips_masked",
+                "clips_uploaded",
+                "clips_dropped",
+                "drops_ring_empty",
+                "drops_masking_failed",
+                "drops_upload_failed",
+            ],
+        )
+        == set()
+    )
+
+
+def test_clip_config_snapshot_accepts_its_fields() -> None:
+    """#390 — the record-start snapshot carries resolved tuning values +
+    app build, no identifiers."""
+    assert (
+        validate_audit_kwargs(
+            AuditEventType.CLIP_CONFIG_SNAPSHOT,
+            [
+                "origin",
+                "visual_evidence_mode",
+                "clip_cadence_seconds",
+                "video_capture_fps",
+                "clip_window_ms",
+                "app_build",
+            ],
+        )
+        == set()
+    )
 
 
 def test_validate_is_permissive_for_raw_string_event_types() -> None:

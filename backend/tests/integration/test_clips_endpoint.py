@@ -520,6 +520,432 @@ async def test_invalid_source_rejected(
     mock_audit.write_event.assert_not_called()
 
 
+# ── #390 clip-pipeline drop telemetry: S3-failure path ───────────────────────
+
+
+async def test_s3_failure_writes_server_drop_audit(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+    mock_s3: MagicMock,
+) -> None:
+    """#390: when S3 PutObject raises, the endpoint 500s AND leaves a
+    CLIP_DROPPED(origin="server", reason="server_s3_put_failed") audit row
+    so a clip that died at the S3 write is no longer invisible after the
+    fact. Previously this branch only logged + 500'd."""
+    mock_s3.put_object.side_effect = RuntimeError("S3 unavailable")
+
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        data, files = _multipart_body(timestamp_ms=14500)
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}",
+            headers=auth_headers,
+            data=data,
+            files=files,
+        )
+
+    assert response.status_code == 500, response.text
+    # The drop beacon was written (the only audit on this path — no
+    # CLIP_UPLOADED, since the write never landed).
+    mock_audit.write_event.assert_called_once()
+    audit_call = mock_audit.write_event.call_args.kwargs
+    assert audit_call["event_type"].value == "clip_dropped"
+    assert audit_call["reason"] == "server_s3_put_failed"
+    assert audit_call["origin"] == "server"
+    assert audit_call["timestamp_ms"] == 14500
+
+
+async def test_s3_failure_audit_error_does_not_mask_500(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+    mock_s3: MagicMock,
+) -> None:
+    """#390: if the drop-beacon audit write itself fails, the original S3
+    500 still surfaces (audit is best-effort on the failure path)."""
+    mock_s3.put_object.side_effect = RuntimeError("S3 unavailable")
+    mock_audit.write_event.side_effect = RuntimeError("DynamoDB unavailable")
+
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        data, files = _multipart_body()
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}",
+            headers=auth_headers,
+            data=data,
+            files=files,
+        )
+
+    assert response.status_code == 500, response.text
+
+
+# ── #390 clip-pipeline drop telemetry: POST /clips/{id}/telemetry ─────────────
+
+
+async def test_telemetry_drop_beacon_writes_audit(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """kind='drop' with a driver-not-started reason → 200 + CLIP_DROPPED
+    audit (origin='ios')."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "drop", "reason": "cadence_seconds_zero"},
+        )
+
+    assert response.status_code == 200, response.text
+    assert response.json()["kind"] == "drop"
+    mock_audit.write_event.assert_called_once()
+    audit_call = mock_audit.write_event.call_args.kwargs
+    assert audit_call["event_type"].value == "clip_dropped"
+    assert audit_call["reason"] == "cadence_seconds_zero"
+    assert audit_call["origin"] == "ios"
+    # No timestamp on a driver-not-started drop.
+    assert "timestamp_ms" not in audit_call
+
+
+async def test_telemetry_drop_requires_reason(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """kind='drop' without a reason → 400, no audit."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "drop"},
+        )
+
+    assert response.status_code == 400, response.text
+    mock_audit.write_event.assert_not_called()
+
+
+async def test_telemetry_drop_rejects_server_only_reason(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """A client can't forge the server-only 'server_s3_put_failed' reason
+    → 400, no audit."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "drop", "reason": "server_s3_put_failed"},
+        )
+
+    assert response.status_code == 400, response.text
+    mock_audit.write_event.assert_not_called()
+
+
+async def test_telemetry_drop_invalid_reason_422(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """A reason outside the ClipDropReason enum → 422 (schema validation)."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "drop", "reason": "bogus_reason"},
+        )
+
+    assert response.status_code == 422, response.text
+    mock_audit.write_event.assert_not_called()
+
+
+async def test_telemetry_per_tick_reason_carries_timestamp(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """A per-tick drop (e.g. ring_empty) may carry a trigger timestamp."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "drop", "reason": "ring_empty", "timestamp_ms": 8200},
+        )
+
+    assert response.status_code == 200, response.text
+    audit_call = mock_audit.write_event.call_args.kwargs
+    assert audit_call["reason"] == "ring_empty"
+    assert audit_call["timestamp_ms"] == 8200
+
+
+async def test_telemetry_summary_writes_counters(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """kind='summary' → CLIP_PIPELINE_SUMMARY with the per-session counts."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={
+                "kind": "summary",
+                "ring_frames_appended": 240,
+                "clips_extracted": 12,
+                "clips_masked": 11,
+                "clips_uploaded": 10,
+                "clips_dropped": 2,
+                "drops_ring_empty": 1,
+                "drops_masking_failed": 1,
+                "drops_upload_failed": 0,
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    audit_call = mock_audit.write_event.call_args.kwargs
+    assert audit_call["event_type"].value == "clip_pipeline_summary"
+    assert audit_call["origin"] == "ios"
+    assert audit_call["ring_frames_appended"] == 240
+    assert audit_call["clips_extracted"] == 12
+    assert audit_call["clips_uploaded"] == 10
+    assert audit_call["drops_ring_empty"] == 1
+    assert audit_call["drops_upload_failed"] == 0
+
+
+async def test_telemetry_summary_omits_absent_counters(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """Only counters actually present on the beacon ride into the audit
+    row — absent ones aren't emitted as null (the whitelist accepts a
+    subset)."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "summary", "clips_uploaded": 5},
+        )
+
+    assert response.status_code == 200, response.text
+    audit_call = mock_audit.write_event.call_args.kwargs
+    assert audit_call["clips_uploaded"] == 5
+    assert "ring_frames_appended" not in audit_call
+    assert "drops_ring_empty" not in audit_call
+
+
+async def test_telemetry_config_snapshot_writes_audit(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """kind='config_snapshot' → CLIP_CONFIG_SNAPSHOT with the resolved
+    config + app build."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={
+                "kind": "config_snapshot",
+                "visual_evidence_mode": "hybrid",
+                "clip_cadence_seconds": 30,
+                "video_capture_fps": 1.0,
+                "clip_window_ms": 3000,
+                "app_build": "1.4.0 (212)",
+            },
+        )
+
+    assert response.status_code == 200, response.text
+    audit_call = mock_audit.write_event.call_args.kwargs
+    assert audit_call["event_type"].value == "clip_config_snapshot"
+    assert audit_call["origin"] == "ios"
+    assert audit_call["visual_evidence_mode"] == "hybrid"
+    # Tighten beyond the string value: the mode must be serialized as a plain
+    # str (the endpoint's `.value` extraction), not a VisualEvidenceMode
+    # member. A str-enum compares == to its value, so a dropped `.value`
+    # would slip past a bare `== "hybrid"` — this catches it.
+    assert type(audit_call["visual_evidence_mode"]) is str
+    assert audit_call["clip_cadence_seconds"] == 30
+    assert audit_call["video_capture_fps"] == 1.0
+    assert audit_call["app_build"] == "1.4.0 (212)"
+
+
+async def test_telemetry_config_snapshot_accepts_integer_fps(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """iOS types `videoCaptureFps` as Int and sends a JSON integer; the
+    backend field is float. Confirm Pydantic coerces int→float so the real
+    client payload round-trips (the other test uses a float literal)."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "config_snapshot", "video_capture_fps": 1},
+        )
+
+    assert response.status_code == 200, response.text
+    audit_call = mock_audit.write_event.call_args.kwargs
+    assert audit_call["video_capture_fps"] == 1.0
+
+
+async def test_config_snapshot_does_not_emit_summary(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """#390 contract guard: a config-snapshot beacon writes exactly ONE
+    audit row, of kind clip_config_snapshot — it never implies a summary.
+
+    The whole point of #390 is that the absence of a CLIP_PIPELINE_SUMMARY
+    (iOS only flushes one when cadence actually ran) is the signal that
+    distinguishes "never attempted" from "attempted but dropped". This pins
+    the server side of that contract: the two beacon kinds are independent
+    rows, so a no-cadence session (config snapshot + a driver-not-started
+    drop, no summary) reads unambiguously."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "config_snapshot", "visual_evidence_mode": "frames_only"},
+        )
+
+    assert response.status_code == 200, response.text
+    mock_audit.write_event.assert_called_once()
+    assert (
+        mock_audit.write_event.call_args.kwargs["event_type"].value
+        == "clip_config_snapshot"
+    )
+
+
+async def test_telemetry_config_snapshot_rejects_bad_mode_422(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """visual_evidence_mode outside the VisualEvidenceMode enum → 422,
+    so we never persist an arbitrary mode string."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "config_snapshot", "visual_evidence_mode": "nonsense"},
+        )
+
+    assert response.status_code == 422, response.text
+    mock_audit.write_event.assert_not_called()
+
+
+async def test_telemetry_invalid_kind_422(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """A kind outside the {drop, summary, config_snapshot} Literal → 422."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "bogus"},
+        )
+
+    assert response.status_code == 422, response.text
+    mock_audit.write_event.assert_not_called()
+
+
+async def test_telemetry_owner_assertion_blocks_cross_clinician(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_other: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """A clinician can only beacon their own sessions → 404 cross-clinician,
+    no audit."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_other),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "drop", "reason": "cadence_seconds_zero"},
+        )
+
+    assert response.status_code == 404, response.text
+    mock_audit.write_event.assert_not_called()
+
+
 # ── PHI scan ────────────────────────────────────────────────────────────────
 
 

@@ -84,6 +84,29 @@ class AuditEventType(StrEnum):
     CLIP_UPLOADED = "clip_uploaded"
     CLIP_MASKED = "clip_masked"
     CLIP_DISCARDED = "clip_discarded"
+    # Clip-pipeline drop-site telemetry (#390). Distinguishes "the device
+    # never attempted a clip" from "the device attempted but dropped it
+    # client-side" — every prior server signal (S3 object, CLIP_UPLOADED,
+    # pilot_metrics, CLIP_DISCARDED) sits DOWNSTREAM of a successful upload,
+    # so a zero-clips session was previously a black box (cost a full
+    # investigation in #324). All three are count-only / enum-only — never
+    # PHI, never an S3 key or body.
+    #   CLIP_DROPPED        a single drop, with a reason enum. iOS emits it
+    #                       for the once-per-session driver-not-started
+    #                       reasons; the server emits it on the S3 PutObject
+    #                       failure path in clips.py (origin distinguishes).
+    #   CLIP_PIPELINE_SUMMARY  flushed by iOS on stop — the per-session
+    #                       pipeline counters (frames appended / clips
+    #                       extracted / masked / uploaded / dropped-by-reason)
+    #                       so per-tick drops are visible in aggregate without
+    #                       a beacon storm during recording.
+    #   CLIP_CONFIG_SNAPSHOT  the resolved clip config + app build captured at
+    #                       record-start, so a stale AppConfig snapshot or an
+    #                       old build is visible server-side (the #324 root
+    #                       cause was a config field the device defaulted away).
+    CLIP_DROPPED = "clip_dropped"
+    CLIP_PIPELINE_SUMMARY = "clip_pipeline_summary"
+    CLIP_CONFIG_SNAPSHOT = "clip_config_snapshot"
 
     # ── Notes / review ───────────────────────────────────────────────────
     STAGE1_APPROVED = "stage1_approved"
@@ -559,6 +582,38 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     # post-hoc analyze what dropped out.
     AuditEventType.CLIP_DISCARDED: frozenset(
         {"s3_key", "confidence", "confidence_reason"}
+    ),
+    # Clip drop-site telemetry (#390). PHI-free: a drop-reason enum, an
+    # origin ("ios" | "server"), and an optional trigger-anchor timestamp.
+    AuditEventType.CLIP_DROPPED: frozenset({"reason", "origin", "timestamp_ms"}),
+    # Per-session clip-pipeline counters, flushed by iOS on stop. Flat
+    # per-reason drop counts (rather than a nested map) keep the row
+    # greppable + the whitelist exhaustive. All counts, never PHI.
+    AuditEventType.CLIP_PIPELINE_SUMMARY: frozenset(
+        {
+            "origin",
+            "ring_frames_appended",
+            "clips_extracted",
+            "clips_masked",
+            "clips_uploaded",
+            "clips_dropped",
+            "drops_ring_empty",
+            "drops_masking_failed",
+            "drops_upload_failed",
+        }
+    ),
+    # Resolved clip config + app build captured at record-start. The
+    # mode/cadence/fps are non-PHI tuning values; app_build is the client
+    # version string. No identifiers.
+    AuditEventType.CLIP_CONFIG_SNAPSHOT: frozenset(
+        {
+            "origin",
+            "visual_evidence_mode",
+            "clip_cadence_seconds",
+            "video_capture_fps",
+            "clip_window_ms",
+            "app_build",
+        }
     ),
     # Transcription
     AuditEventType.TRANSCRIPTION_COMPLETE: frozenset({"provider_used", "segment_count"}),
