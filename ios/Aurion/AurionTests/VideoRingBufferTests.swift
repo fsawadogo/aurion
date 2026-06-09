@@ -277,6 +277,56 @@ struct VideoRingBufferTests {
         #expect(nominalFrameRate > 0)
     }
 
+    // MARK: #390 — framesAppendedTotal (clip-pipeline summary signal)
+    //
+    // `framesAppendedTotal` is the SOLE source of the summary beacon's
+    // `ring_frames_appended`, which distinguishes "the camera never produced
+    // frames" from "frames flowed but extraction kept failing". A regression
+    // where `append()` stops bumping it would surface only as a permanently-
+    // zero metric — invisible without these tests.
+
+    @Test func framesAppendedTotal_startsAtZero() {
+        let ring = VideoRingBuffer(maxItems: 5, captureFPS: 1.0)
+        #expect(ring.framesAppendedTotal == 0)
+    }
+
+    @Test func framesAppendedTotal_incrementsMonotonically() {
+        let ring = VideoRingBuffer(maxItems: 10, captureFPS: 1.0)
+        for i in 0..<6 {
+            let sb = makeSyntheticSampleBuffer()
+            #expect(sb != nil)
+            ring.append(sb!, at: TimeInterval(i))
+        }
+        #expect(ring.framesAppendedTotal == 6)
+    }
+
+    @Test func framesAppendedTotal_isIndependentOfEviction() {
+        // The cap bounds `count` (current depth) but NOT the appended total:
+        // every frame the ring RECEIVED is counted, even after eviction.
+        let cap = 3
+        let ring = VideoRingBuffer(maxItems: cap, captureFPS: 1.0)
+        let appends = cap + 5
+        for i in 0..<appends {
+            let sb = makeSyntheticSampleBuffer()
+            #expect(sb != nil)
+            ring.append(sb!, at: TimeInterval(i))
+        }
+        #expect(ring.count == cap)                    // depth capped
+        #expect(ring.framesAppendedTotal == appends)  // total uncapped
+    }
+
+    @Test func framesAppendedTotal_resetsOnClear() {
+        let ring = VideoRingBuffer(maxItems: 5, captureFPS: 1.0)
+        for i in 0..<4 {
+            let sb = makeSyntheticSampleBuffer()
+            #expect(sb != nil)
+            ring.append(sb!, at: TimeInterval(i))
+        }
+        #expect(ring.framesAppendedTotal == 4)
+        ring.clear()
+        #expect(ring.framesAppendedTotal == 0)
+    }
+
     // MARK: Init contract
 
     @Test func init_acceptsConfigValues() {

@@ -11,10 +11,11 @@
 //     reset(), and the summaryBody dict shape (keys + ring-frames omission).
 //
 
-import XCTest
+import Foundation
+import Testing
 @testable import Aurion
 
-final class ClipPipelineTelemetryTests: XCTestCase {
+struct ClipPipelineTelemetryTests {
 
     // MARK: - Wire-enum contract
 
@@ -22,40 +23,40 @@ final class ClipPipelineTelemetryTests: XCTestCase {
     /// in app/api/v1/clips.py. If either side renames a case, this pins the
     /// iOS side so the drift is caught in CI rather than at runtime (the
     /// backend rejects an unknown reason with a 422).
-    func testDropReasonRawValuesMatchWire() {
-        XCTAssertEqual(ClipDropReason.ringEmpty.rawValue, "ring_empty")
-        XCTAssertEqual(ClipDropReason.maskingFailed.rawValue, "masking_failed")
-        XCTAssertEqual(ClipDropReason.uploadFailed.rawValue, "upload_failed")
-        XCTAssertEqual(ClipDropReason.cadenceSecondsZero.rawValue, "cadence_seconds_zero")
-        XCTAssertEqual(ClipDropReason.modeNotClipsOrHybrid.rawValue, "mode_not_clips_or_hybrid")
-        XCTAssertEqual(ClipDropReason.videoSourceNotBuiltin.rawValue, "video_source_not_builtin")
-        XCTAssertEqual(ClipDropReason.captureModeNotMultimodal.rawValue, "capture_mode_not_multimodal")
+    @Test func dropReasonRawValuesMatchWire() {
+        #expect(ClipDropReason.ringEmpty.rawValue == "ring_empty")
+        #expect(ClipDropReason.maskingFailed.rawValue == "masking_failed")
+        #expect(ClipDropReason.uploadFailed.rawValue == "upload_failed")
+        #expect(ClipDropReason.cadenceSecondsZero.rawValue == "cadence_seconds_zero")
+        #expect(ClipDropReason.modeNotClipsOrHybrid.rawValue == "mode_not_clips_or_hybrid")
+        #expect(ClipDropReason.videoSourceNotBuiltin.rawValue == "video_source_not_builtin")
+        #expect(ClipDropReason.captureModeNotMultimodal.rawValue == "capture_mode_not_multimodal")
     }
 
     /// iOS must never emit the server-only reason — there is no case for it.
-    func testNoServerOnlyReasonCase() {
-        XCTAssertNil(ClipDropReason(rawValue: "server_s3_put_failed"))
+    @Test func noServerOnlyReasonCase() {
+        #expect(ClipDropReason(rawValue: "server_s3_put_failed") == nil)
     }
 
     // MARK: - Counters
 
-    func testCountersStartAtZero() {
+    @Test func countersStartAtZero() {
         let c = ClipPipelineCounters()
-        XCTAssertEqual(c.clipsExtracted, 0)
-        XCTAssertEqual(c.clipsMasked, 0)
-        XCTAssertEqual(c.clipsUploaded, 0)
-        XCTAssertEqual(c.clipsDropped, 0)
+        #expect(c.clipsExtracted == 0)
+        #expect(c.clipsMasked == 0)
+        #expect(c.clipsUploaded == 0)
+        #expect(c.clipsDropped == 0)
     }
 
-    func testClipsDroppedSumsAllReasons() {
+    @Test func clipsDroppedSumsAllReasons() {
         var c = ClipPipelineCounters()
         c.dropsRingEmpty = 3
         c.dropsMaskingFailed = 2
         c.dropsUploadFailed = 1
-        XCTAssertEqual(c.clipsDropped, 6)
+        #expect(c.clipsDropped == 6)
     }
 
-    func testResetClearsEveryCounter() {
+    @Test func resetClearsEveryCounter() {
         var c = ClipPipelineCounters()
         c.clipsExtracted = 5
         c.clipsMasked = 4
@@ -64,15 +65,15 @@ final class ClipPipelineTelemetryTests: XCTestCase {
         c.dropsMaskingFailed = 1
         c.dropsUploadFailed = 1
         c.reset()
-        XCTAssertEqual(c.clipsExtracted, 0)
-        XCTAssertEqual(c.clipsMasked, 0)
-        XCTAssertEqual(c.clipsUploaded, 0)
-        XCTAssertEqual(c.clipsDropped, 0)
+        #expect(c.clipsExtracted == 0)
+        #expect(c.clipsMasked == 0)
+        #expect(c.clipsUploaded == 0)
+        #expect(c.clipsDropped == 0)
     }
 
     // MARK: - summaryBody
 
-    func testSummaryBodyCarriesAllCountersAndKind() {
+    @Test func summaryBodyCarriesAllCountersAndKind() {
         var c = ClipPipelineCounters()
         c.clipsExtracted = 12
         c.clipsMasked = 11
@@ -83,25 +84,25 @@ final class ClipPipelineTelemetryTests: XCTestCase {
 
         let body = c.summaryBody(ringFramesAppended: 240)
 
-        XCTAssertEqual(body["kind"] as? String, "summary")
-        XCTAssertEqual(body["clips_extracted"] as? Int, 12)
-        XCTAssertEqual(body["clips_masked"] as? Int, 11)
-        XCTAssertEqual(body["clips_uploaded"] as? Int, 10)
-        XCTAssertEqual(body["clips_dropped"] as? Int, 2)   // 1 + 1 + 0
-        XCTAssertEqual(body["drops_ring_empty"] as? Int, 1)
-        XCTAssertEqual(body["drops_masking_failed"] as? Int, 1)
-        XCTAssertEqual(body["drops_upload_failed"] as? Int, 0)
-        XCTAssertEqual(body["ring_frames_appended"] as? Int, 240)
+        #expect(body["kind"] as? String == "summary")
+        #expect(body["clips_extracted"] as? Int == 12)
+        #expect(body["clips_masked"] as? Int == 11)
+        #expect(body["clips_uploaded"] as? Int == 10)
+        #expect(body["clips_dropped"] as? Int == 2)   // 1 + 1 + 0
+        #expect(body["drops_ring_empty"] as? Int == 1)
+        #expect(body["drops_masking_failed"] as? Int == 1)
+        #expect(body["drops_upload_failed"] as? Int == 0)
+        #expect(body["ring_frames_appended"] as? Int == 240)
     }
 
     /// Audio-only sessions have no video ring, so ringFramesAppended is nil
     /// and the key must be ABSENT (not null) — the backend whitelist accepts
     /// a subset, and a null would be a needless field.
-    func testSummaryBodyOmitsRingFramesWhenNil() {
+    @Test func summaryBodyOmitsRingFramesWhenNil() {
         let body = ClipPipelineCounters().summaryBody(ringFramesAppended: nil)
-        XCTAssertNil(body["ring_frames_appended"])
+        #expect(body["ring_frames_appended"] == nil)
         // The counter keys are still present (all zero).
-        XCTAssertEqual(body["clips_uploaded"] as? Int, 0)
-        XCTAssertEqual(body["clips_dropped"] as? Int, 0)
+        #expect(body["clips_uploaded"] as? Int == 0)
+        #expect(body["clips_dropped"] as? Int == 0)
     }
 }

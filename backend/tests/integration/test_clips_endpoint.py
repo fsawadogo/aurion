@@ -807,10 +807,75 @@ async def test_telemetry_config_snapshot_writes_audit(
     assert response.status_code == 200, response.text
     audit_call = mock_audit.write_event.call_args.kwargs
     assert audit_call["event_type"].value == "clip_config_snapshot"
+    assert audit_call["origin"] == "ios"
     assert audit_call["visual_evidence_mode"] == "hybrid"
+    # Tighten beyond the string value: the mode must be serialized as a plain
+    # str (the endpoint's `.value` extraction), not a VisualEvidenceMode
+    # member. A str-enum compares == to its value, so a dropped `.value`
+    # would slip past a bare `== "hybrid"` — this catches it.
+    assert type(audit_call["visual_evidence_mode"]) is str
     assert audit_call["clip_cadence_seconds"] == 30
     assert audit_call["video_capture_fps"] == 1.0
     assert audit_call["app_build"] == "1.4.0 (212)"
+
+
+async def test_telemetry_config_snapshot_accepts_integer_fps(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """iOS types `videoCaptureFps` as Int and sends a JSON integer; the
+    backend field is float. Confirm Pydantic coerces int→float so the real
+    client payload round-trips (the other test uses a float literal)."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "config_snapshot", "video_capture_fps": 1},
+        )
+
+    assert response.status_code == 200, response.text
+    audit_call = mock_audit.write_event.call_args.kwargs
+    assert audit_call["video_capture_fps"] == 1.0
+
+
+async def test_config_snapshot_does_not_emit_summary(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """#390 contract guard: a config-snapshot beacon writes exactly ONE
+    audit row, of kind clip_config_snapshot — it never implies a summary.
+
+    The whole point of #390 is that the absence of a CLIP_PIPELINE_SUMMARY
+    (iOS only flushes one when cadence actually ran) is the signal that
+    distinguishes "never attempted" from "attempted but dropped". This pins
+    the server side of that contract: the two beacon kinds are independent
+    rows, so a no-cadence session (config snapshot + a driver-not-started
+    drop, no summary) reads unambiguously."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ):
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "config_snapshot", "visual_evidence_mode": "frames_only"},
+        )
+
+    assert response.status_code == 200, response.text
+    mock_audit.write_event.assert_called_once()
+    assert (
+        mock_audit.write_event.call_args.kwargs["event_type"].value
+        == "clip_config_snapshot"
+    )
 
 
 async def test_telemetry_config_snapshot_rejects_bad_mode_422(
