@@ -761,6 +761,20 @@ final class APIClient: Sendable {
         )
     }
 
+    /// Post a clip-pipeline telemetry beacon (#390): a `drop`, a per-session
+    /// `summary`, or a record-start `config_snapshot`. No bytes cross — pure
+    /// count/enum telemetry the server records as an append-only audit event.
+    /// Callers fire-and-forget (`try?`); a telemetry failure must never
+    /// affect capture. The `body` shape is built by `ClipPipelineCounters`
+    /// and `SessionManager`'s beacon helpers.
+    @discardableResult
+    func recordClipTelemetry(
+        sessionId: String,
+        body: [String: Any]
+    ) async throws -> ClipTelemetryResponse {
+        return try await post(path: "/clips/\(sessionId)/telemetry", body: body)
+    }
+
     // MARK: - Generic HTTP
 
     private func get<T: Decodable>(path: String) async throws -> T {
@@ -1328,6 +1342,21 @@ struct ExportAuditResponse: Codable, Sendable {
         case sessionId = "session_id"
         case sessionState = "session_state"
         case auditWritten = "audit_written"
+    }
+}
+
+/// Wire response from POST /clips/{id}/telemetry (#390). No-bytes; iOS
+/// fire-and-forgets the beacon, so the only field of interest is the echoed
+/// `kind` (handy when logging a failed decode).
+struct ClipTelemetryResponse: Codable, Sendable {
+    let sessionId: String
+    let kind: String
+    let recorded: Bool
+
+    enum CodingKeys: String, CodingKey {
+        case sessionId = "session_id"
+        case kind
+        case recorded
     }
 }
 

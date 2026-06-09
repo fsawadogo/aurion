@@ -160,6 +160,14 @@ final class VideoRingBuffer: @unchecked Sendable {
     /// async-safe replacement required by Swift 6 strict-concurrency.
     private let state: OSAllocatedUnfairLock<[Entry]>
 
+    /// Monotonic count of frames appended since the last `clear()` (#390).
+    /// Distinct from `count` (the current ring DEPTH, capped at `maxItems`):
+    /// this is the total the ring RECEIVED this capture cycle, which the
+    /// clip-pipeline summary beacon uses to tell "the camera never produced
+    /// frames" from "frames flowed but extraction kept failing". Its own
+    /// lock — independent state, no ordering coupling with the deque lock.
+    private let appendedTotalState = OSAllocatedUnfairLock(initialState: 0)
+
     /// Snapshot count for the audit/log surface. Cheap, takes the lock.
     ///
     /// `nonisolated` so the property is callable from `CaptureManager`'s
@@ -167,6 +175,13 @@ final class VideoRingBuffer: @unchecked Sendable {
     /// is the safety boundary; isolation inference adds nothing.
     nonisolated var count: Int {
         state.withLock { $0.count }
+    }
+
+    /// Frames appended since the last `clear()` (#390). `nonisolated` for the
+    /// same reason as `count` — read from `SessionManager` at stop, before
+    /// the sources stop and clear the ring.
+    nonisolated var framesAppendedTotal: Int {
+        appendedTotalState.withLock { $0 }
     }
 
     // MARK: - Append
@@ -199,6 +214,9 @@ final class VideoRingBuffer: @unchecked Sendable {
                 entries.removeFirst(entries.count - maxItems)
             }
         }
+        // #390: monotonic — counts every frame the ring received this cycle,
+        // independent of the maxItems eviction that bounds `count`.
+        appendedTotalState.withLock { $0 += 1 }
     }
 
     /// Drops every retained sample buffer. Called on session stop / reset
@@ -211,6 +229,11 @@ final class VideoRingBuffer: @unchecked Sendable {
         state.withLock { entries in
             entries.removeAll(keepingCapacity: true)
         }
+        // #390: reset the per-cycle total so the next recording's summary
+        // starts from zero. SessionManager reads framesAppendedTotal BEFORE
+        // sources stop (which triggers this clear), so the stop-time read
+        // still sees this cycle's count.
+        appendedTotalState.withLock { $0 = 0 }
     }
 
     // MARK: - Extract
