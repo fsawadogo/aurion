@@ -13,6 +13,8 @@
 #   upload_testflight        — local build + TestFlight upload (mirror of CI)
 #   invite_pilot_physicians  — add pilot physician emails as TestFlight testers
 #   list_testers             — print current testers (sanity check)
+#   review_status            — print recent builds' processing + Beta App
+#                              Review state (is the latest build in review?)
 
 # ---------------------------------------------------------------------------
 # Auth helper — turns the 3 env vars into the hash fastlane expects.
@@ -373,6 +375,87 @@ platform :ios do
     end
 
     UI.success "Build #{build_number} distributed."
+  end
+
+  # -------------------------------------------------------------------------
+  # review_status — print the TestFlight state of recent builds so you can
+  # see at a glance whether the latest build is still in Apple's Beta App
+  # Review, ready for external testers, or rejected — without digging through
+  # the App Store Connect UI.
+  #
+  #   cd ios/Aurion && fastlane review_status
+  #   cd ios/Aurion && BUILD_NUMBER=212 fastlane review_status   # one build
+  #
+  # Reads two per-build TestFlight states from BuildBetaDetail:
+  #   • internal_build_state — internal team members (auto-delivered, no review)
+  #   • external_build_state — the external "Pilot Physicians" group; THIS is
+  #     the one gated by Apple Beta App Review:
+  #       WAITING_FOR_BETA_REVIEW   → queued for review
+  #       IN_BETA_REVIEW            → Apple reviewing now
+  #       READY_FOR_BETA_TESTING /
+  #       IN_BETA_TESTING           → approved, external testers can install
+  #       BETA_REJECTED             → rejected (ASC shows the reason)
+  # processing_state (PROCESSING/VALID/INVALID/FAILED) is the upstream
+  # transcode/scan stage that must reach VALID before review can begin.
+  # Read-only — never mutates anything in App Store Connect.
+  # -------------------------------------------------------------------------
+  desc "Print the TestFlight processing + Beta App Review state of recent builds"
+  lane :review_status do
+    %w[APP_STORE_CONNECT_KEY_ID APP_STORE_CONNECT_ISSUER_ID APP_STORE_CONNECT_KEY_P8].each do |k|
+      UI.user_error!("#{k} is not set — export the ASC API key creds first") if ENV[k].to_s.empty?
+    end
+
+    Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
+      key_id:    ENV["APP_STORE_CONNECT_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key:       Base64.decode64(ENV["APP_STORE_CONNECT_KEY_P8"]),
+      duration:  1200,
+    )
+    app = Spaceship::ConnectAPI::App.find("com.aurionclinical.physician")
+    UI.user_error!("App not found — run `fastlane bootstrap` first") unless app
+
+    only = ENV["BUILD_NUMBER"].to_s.strip
+    filter = { app: app.id }
+    filter[:version] = only unless only.empty?
+
+    builds = Spaceship::ConnectAPI.get_builds(
+      filter:   filter,
+      includes: "buildBetaDetail,preReleaseVersion",
+      sort:     "-uploadedDate",
+      limit:    only.empty? ? 5 : 1,
+    )
+
+    if builds.empty?
+      UI.important(only.empty? ? "No builds found for the app." : "No build #{only} found.")
+      next
+    end
+
+    # external_build_state → a one-line plain-English read of where the
+    # build sits relative to Apple's external Beta App Review gate.
+    hint = lambda do |state|
+      case state
+      when "WAITING_FOR_BETA_REVIEW"             then "queued for Apple Beta App Review"
+      when "IN_BETA_REVIEW"                      then "Apple is reviewing NOW"
+      when "READY_FOR_BETA_TESTING", "IN_BETA_TESTING" then "APPROVED — external testers can install"
+      when "BETA_REJECTED"                       then "REJECTED — check App Store Connect for the reason"
+      when "READY_FOR_BETA_SUBMISSION"           then "processed, not yet submitted to review"
+      when "PROCESSING", "PROCESSING_EXCEPTION"  then "still processing upstream"
+      when nil, "—"                              then "no external distribution yet"
+      else state
+      end
+    end
+
+    UI.header("TestFlight status — #{builds.length} most-recent build#{'s' unless builds.length == 1}")
+    builds.each do |b|
+      detail   = b.build_beta_detail
+      version  = b.pre_release_version&.version || "?"
+      internal = detail&.internal_build_state || "—"
+      external = detail&.external_build_state || "—"
+      UI.message "build #{b.version} (v#{version})  uploaded=#{b.uploaded_date}"
+      UI.message "    processing : #{b.processing_state}"
+      UI.message "    internal   : #{internal}  (team members, auto-delivered)"
+      UI.message "    external   : #{external}  → #{hint.call(detail&.external_build_state)}"
+    end
   end
 
   # -------------------------------------------------------------------------
