@@ -20,7 +20,8 @@
       "featureFlags": "Indicateurs",
       "providers": "Fournisseurs IA",
       "capturedMedia": "Médias capturés",
-      "analytics": "Analytique"
+      "analytics": "Analytique",
+      "systemTemplates": "Modèles système"
     },
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
@@ -1032,5 +1033,25 @@
     },
     "empty": "Aucune séance enregistrée dans cette période.",
     "footnote": "Tous les chiffres sont mesurés à partir des séances enregistrées et des métriques du pilote. Temps épargné = notes exportées × votre référence — une estimation accompagnée de son hypothèse, pas une valeur mesurée."
+  },
+  "AdminTemplates": {
+    "eyebrow": "Admin",
+    "title": "Modèles système",
+    "description": "Modifiez les modèles de spécialité intégrés et leurs mots-clés de déclenchement visuel par section. Les modifications sont actives dans le pipeline de notes — sans redéploiement.",
+    "loadError": "Impossible de charger les modèles.",
+    "saveError": "Échec de l’enregistrement.",
+    "saveSuccess": "Modèle enregistré — actif dans ~10 secondes sur toute la flotte.",
+    "revertError": "Échec du rétablissement.",
+    "revertSuccess": "Remplacement supprimé — le modèle par défaut est de nouveau actif.",
+    "metadata": "v{version} · {count, plural, one {# section} other {# sections}}",
+    "overrideBadge": "Modifié",
+    "liveOverrideHint": "Un remplacement administrateur est actif pour ce modèle.",
+    "liveDefaultHint": "Affichage du modèle intégré par défaut. Enregistrer crée un remplacement actif.",
+    "save": "Enregistrer",
+    "revert": "Rétablir le défaut",
+    "revertTitle": "Rétablir le modèle intégré par défaut ?",
+    "revertBody": "Le remplacement administrateur de « {key} » sera supprimé et le modèle intégré reprendra effet (immédiatement sur ce serveur, ~10 s sur la flotte).",
+    "revertCancel": "Annuler",
+    "revertConfirm": "Rétablir"
   }
 }
