@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, LayoutGrid } from "lucide-react";
+import { Check, LayoutGrid, Sparkles, SlidersHorizontal } from "lucide-react";
 import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { Suspense, useCallback, useEffect, useState } from "react";
@@ -11,25 +11,33 @@ import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
 import TemplateChat from "@/components/portal/TemplateChat";
 import TemplateDraftPreview from "@/components/portal/TemplateDraftPreview";
+import TemplateSectionEditor, {
+  blankTemplate,
+  normalizeTemplate,
+  validateTemplate,
+} from "@/components/portal/TemplateSectionEditor";
 import {
   continueTemplateAuthoring,
+  createMyCustomTemplate,
   finalizeTemplateAuthoring,
   getTemplateAuthoring,
   startTemplateAuthoring,
 } from "@/lib/portal-api";
-import type { TemplateAuthoringSession } from "@/types";
+import type { TemplateAuthoringSession, TemplateDefinition } from "@/types";
 
 /**
- * /portal/templates/new — conversational template builder.
+ * /portal/templates/new — create a custom note template.
  *
- * Two-column layout: chat (left) + draft preview (right). The chat
- * starts with the LLM's hardcoded bootstrap message ("what specialty
- * is this for?") or — if `?session=<id>` is in the URL — resumes an
- * existing authoring session (used by the upload flow on the list
- * page).
+ * Two modes:
+ *   * "manual" (default) — a deterministic structured section editor
+ *     (TemplateSectionEditor → createMyCustomTemplate). No LLM, so it works
+ *     even when the note provider is down / rate-limited.
+ *   * "ai" — the conversational builder (chat + draft preview → finalize).
+ *     Forced when resuming an authoring session via `?session=<id>` (the
+ *     upload flow lands here).
  *
- * On finalize the draft is promoted to a custom_templates row and the
- * user lands on `/portal/templates/[id]` for the read view.
+ * On save the template is persisted and the user lands on
+ * /portal/templates/[id] for the read view.
  */
 export default function NewTemplatePage() {
   return (
@@ -39,11 +47,142 @@ export default function NewTemplatePage() {
   );
 }
 
+type Mode = "manual" | "ai";
+
 function NewTemplateInner() {
   const t = useTranslations("TemplateNew");
+  const te = useTranslations("TemplateEditor");
   const search = useSearchParams();
   const resumeId = search.get("session");
 
+  // Resuming an authoring session (upload flow) forces AI mode; otherwise the
+  // deterministic manual editor is the default.
+  const [mode, setMode] = useState<Mode>(resumeId ? "ai" : "manual");
+  // Lazy-mount the AI builder so we don't mint an authoring session until the
+  // user actually enters AI mode; once mounted it stays mounted (hidden), so
+  // toggling back and forth preserves the conversation instead of restarting.
+  const [aiActivated, setAiActivated] = useState<boolean>(!!resumeId);
+
+  // Both builders stay mounted and the inactive one is hidden with `hidden`
+  // (display:none) rather than conditionally rendered — so switching tabs
+  // never unmounts the active builder and silently discards in-progress work.
+  return (
+    <div className="aurion-page-padded aurion-container">
+      <PageHeader
+        breadcrumb={[
+          { label: t("breadcrumbTemplates"), href: "/portal/templates" },
+          { label: t("breadcrumbNew") },
+        ]}
+        eyebrow={t("eyebrow")}
+        title={t("title")}
+        description={t("description")}
+      />
+
+      {/* Mode toggle — resuming an upload session pins AI mode. */}
+      {!resumeId && (
+        <div className="mb-4 inline-flex items-center gap-1 rounded-aurion-md border border-gray-200 p-1">
+          <ModeButton
+            active={mode === "manual"}
+            onClick={() => setMode("manual")}
+            icon={<SlidersHorizontal className="h-4 w-4" />}
+            label={t("modeManual")}
+          />
+          <ModeButton
+            active={mode === "ai"}
+            onClick={() => {
+              setAiActivated(true);
+              setMode("ai");
+            }}
+            icon={<Sparkles className="h-4 w-4" />}
+            label={t("modeAi")}
+          />
+        </div>
+      )}
+
+      <div className={mode === "manual" ? "" : "hidden"}>
+        <ManualBuilder t={t} te={te} />
+      </div>
+      {aiActivated && (
+        <div className={mode === "ai" ? "" : "hidden"}>
+          <AiBuilder t={t} resumeId={resumeId} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ── Manual structured builder (deterministic, no LLM) ──────────────────── */
+
+function ManualBuilder({
+  t,
+  te,
+}: {
+  t: ReturnType<typeof useTranslations>;
+  te: ReturnType<typeof useTranslations>;
+}) {
+  const [draft, setDraft] = useState<TemplateDefinition>(() => blankTemplate());
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onSave() {
+    const validationKey = validateTemplate(draft);
+    if (validationKey) {
+      setError(te(validationKey));
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const created = await createMyCustomTemplate(normalizeTemplate(draft));
+      // Hard navigation for the dynamic /portal/templates/[id] route under
+      // static export (see web/lib/use-route-segment.ts).
+      window.location.assign(`/portal/templates/${created.id}`);
+    } catch (e) {
+      setError(humanizeError(e, t("saveError")));
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <Card>
+        <p className="mb-4 text-aurion-callout text-navy-500">{t("manualHint")}</p>
+        <TemplateSectionEditor value={draft} onChange={setDraft} disabled={saving} />
+      </Card>
+
+      {error && (
+        <div
+          role="alert"
+          className="rounded-aurion-md border border-red-200 bg-red-50 px-4 py-3 text-aurion-callout text-red-700"
+        >
+          {error}
+        </div>
+      )}
+
+      <div className="flex justify-end">
+        <Button
+          variant="primary"
+          onClick={() => void onSave()}
+          loading={saving}
+          disabled={saving}
+        >
+          <Check className="mr-1 h-4 w-4" />
+          {t("createButton")}
+        </Button>
+      </div>
+    </div>
+  );
+}
+
+/* ── Conversational AI builder (unchanged behavior) ─────────────────────── */
+
+function AiBuilder({
+  t,
+  resumeId,
+}: {
+  t: ReturnType<typeof useTranslations>;
+  resumeId: string | null;
+}) {
   const [authSession, setAuthSession] = useState<TemplateAuthoringSession | null>(
     null,
   );
@@ -75,9 +214,6 @@ function NewTemplateInner() {
     if (!authSession || busy) return;
     setBusy(true);
     setError(null);
-    // Optimistic user message — appears immediately rather than waiting
-    // for the round-trip. Backend echoes the same content on the next
-    // GET so there's no drift to reconcile.
     setAuthSession({
       ...authSession,
       messages: [...authSession.messages, { role: "user", content: message }],
@@ -87,7 +223,6 @@ function NewTemplateInner() {
       setAuthSession(updated);
     } catch (e) {
       setError(humanizeError(e, t("replyError")));
-      // Roll back the optimistic message so the user can retry.
       void getTemplateAuthoring(authSession.id).then(setAuthSession).catch(() => {});
     } finally {
       setBusy(false);
@@ -100,9 +235,6 @@ function NewTemplateInner() {
     setError(null);
     try {
       const custom = await finalizeTemplateAuthoring(authSession.id);
-      // Hard navigation for dynamic `/portal/templates/[id]` — Next
-      // router collapses the URL under static export. See
-      // web/lib/use-route-segment.ts.
       window.location.assign(`/portal/templates/${custom.id}`);
     } catch (e) {
       setError(humanizeError(e, t("saveError")));
@@ -110,79 +242,97 @@ function NewTemplateInner() {
     }
   }
 
-  return (
-    <div className="aurion-page-padded aurion-container">
-      <PageHeader
-        breadcrumb={[
-          { label: t("breadcrumbTemplates"), href: "/portal/templates" },
-          { label: t("breadcrumbNew") },
-        ]}
-        eyebrow={t("eyebrow")}
-        title={t("title")}
-        description={t("description")}
-      />
+  if (bootstrapping) {
+    return (
+      <Card>
+        <LoadingSkeleton lines={8} />
+      </Card>
+    );
+  }
+  if (error && !authSession) {
+    return (
+      <Card>
+        <p className="text-sm text-red-600">{error}</p>
+        <Button variant="secondary" className="mt-3" onClick={() => void bootstrap()}>
+          {t("retry")}
+        </Button>
+      </Card>
+    );
+  }
+  if (!authSession) return null;
 
-      {bootstrapping ? (
-        <Card>
-          <LoadingSkeleton lines={8} />
-        </Card>
-      ) : error && !authSession ? (
-        <Card>
-          <p className="text-sm text-red-600">{error}</p>
-          <Button variant="secondary" className="mt-3" onClick={() => void bootstrap()}>
-            {t("retry")}
-          </Button>
-        </Card>
-      ) : authSession ? (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          <div className="h-[calc(100vh-220px)] min-h-[480px]">
-            <h2 className="aurion-micro mb-2">
-              {t("conversationLabel")}
-            </h2>
-            <TemplateChat
-              messages={authSession.messages}
-              busy={busy}
-              onSend={onSend}
-            />
+  return (
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="h-[calc(100vh-260px)] min-h-[480px]">
+        <h2 className="aurion-micro mb-2">{t("conversationLabel")}</h2>
+        <TemplateChat messages={authSession.messages} busy={busy} onSend={onSend} />
+      </div>
+      <div className="space-y-3">
+        <h2 className="aurion-micro mb-0">{t("draftPreviewLabel")}</h2>
+        {error && (
+          <div
+            role="alert"
+            className="rounded-aurion-md border border-red-200 bg-red-50 px-3 py-2 text-aurion-callout text-red-700"
+          >
+            {error}
           </div>
-          <div className="space-y-3">
-            <h2 className="aurion-micro mb-0">
-              {t("draftPreviewLabel")}
-            </h2>
-            {error && (
-              <div className="rounded-aurion-md bg-red-50 border border-red-200 px-3 py-2 text-aurion-callout text-red-700">
-                {error}
+        )}
+        {authSession.draft_template ? (
+          <>
+            <TemplateDraftPreview template={authSession.draft_template} />
+            <Button
+              variant="primary"
+              onClick={() => void onFinalize()}
+              loading={finalizing}
+              disabled={finalizing}
+              fullWidth
+            >
+              <Check className="mr-1 h-4 w-4" />
+              {t("saveTemplate")}
+            </Button>
+          </>
+        ) : (
+          <Card>
+            <div className="flex flex-col items-center justify-center py-6 text-center">
+              <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-navy-50 text-navy-400">
+                <LayoutGrid className="h-6 w-6" />
               </div>
-            )}
-            {authSession.draft_template ? (
-              <>
-                <TemplateDraftPreview template={authSession.draft_template} />
-                <Button
-                  variant="primary"
-                  onClick={() => void onFinalize()}
-                  loading={finalizing}
-                  disabled={finalizing}
-                  fullWidth
-                >
-                  <Check className="h-4 w-4 mr-1" />
-                  {t("saveTemplate")}
-                </Button>
-              </>
-            ) : (
-              <Card>
-                <div className="flex flex-col items-center justify-center py-6 text-center">
-                  <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-navy-50 text-navy-400">
-                    <LayoutGrid className="h-6 w-6" />
-                  </div>
-                  <p className="text-aurion-callout italic text-navy-500 max-w-[34ch]">
-                    {t("draftPlaceholder")}
-                  </p>
-                </div>
-              </Card>
-            )}
-          </div>
-        </div>
-      ) : null}
+              <p className="text-aurion-callout italic text-navy-500 max-w-[34ch]">
+                {t("draftPlaceholder")}
+              </p>
+            </div>
+          </Card>
+        )}
+      </div>
     </div>
+  );
+}
+
+function ModeButton({
+  active,
+  onClick,
+  icon,
+  label,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={
+        "inline-flex items-center gap-1.5 rounded-aurion-xs px-3 py-1.5 text-xs font-medium transition-colors duration-short " +
+        (active
+          ? "bg-navy-50 text-navy-800"
+          : "text-navy-500 hover:bg-canvas hover:text-navy-700")
+      }
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

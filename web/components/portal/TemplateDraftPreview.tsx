@@ -1,3 +1,5 @@
+"use client";
+
 /**
  * Preview card for a draft / saved template.
  *
@@ -13,6 +15,7 @@
  * the "Save" button at the page level.
  */
 
+import { useTranslations } from "next-intl";
 import Badge from "@/components/ui/Badge";
 import type { TemplateDefinition } from "@/types";
 
@@ -25,6 +28,7 @@ export default function TemplateDraftPreview({
   template,
   showDescription = true,
 }: TemplateDraftPreviewProps) {
+  const t = useTranslations("TemplateDraftPreview");
   return (
     <div className="rounded-lg border border-gray-200 bg-white p-4">
       <div className="mb-3">
@@ -36,11 +40,11 @@ export default function TemplateDraftPreview({
         </p>
       </div>
       {template.sections.length === 0 ? (
-        <p className="text-sm text-gray-500 italic">No sections yet.</p>
+        <p className="text-sm text-gray-500 italic">{t("noSections")}</p>
       ) : (
         <ol className="space-y-3">
           {template.sections.map((section, idx) => (
-            <li key={section.id} className="relative pl-7">
+            <li key={section.id || idx} className="relative pl-7">
               <span className="absolute left-0 top-0.5 inline-flex h-5 w-5 items-center justify-center rounded-full bg-navy-50 text-[10px] font-semibold text-navy-700">
                 {idx + 1}
               </span>
@@ -49,14 +53,15 @@ export default function TemplateDraftPreview({
                   {section.title || section.id}
                 </span>
                 {section.required ? (
-                  <Badge variant="success" dot>Required</Badge>
+                  <Badge variant="success" dot>{t("required")}</Badge>
                 ) : (
-                  <Badge variant="neutral">Optional</Badge>
+                  <Badge variant="neutral">{t("optional")}</Badge>
                 )}
                 {section.visual_trigger_keywords.length > 0 && (
                   <Badge variant="info">
-                    {section.visual_trigger_keywords.length} visual trigger
-                    {section.visual_trigger_keywords.length === 1 ? "" : "s"}
+                    {t("triggerCount", {
+                      count: section.visual_trigger_keywords.length,
+                    })}
                   </Badge>
                 )}
               </div>
@@ -67,7 +72,7 @@ export default function TemplateDraftPreview({
               )}
               {section.visual_trigger_keywords.length > 0 && (
                 <p className="mt-1 text-[11px] text-gray-500">
-                  Triggers:{" "}
+                  {t("triggersLabel")}:{" "}
                   {section.visual_trigger_keywords
                     .map((k) => `“${k}”`)
                     .join(", ")}

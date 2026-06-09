@@ -1,6 +1,6 @@
 "use client";
 
-import { Code2, Download, LayoutGrid } from "lucide-react";
+import { Code2, Download, LayoutGrid, SlidersHorizontal } from "lucide-react";
 import { humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -11,6 +11,10 @@ import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
 import TemplateDraftPreview from "@/components/portal/TemplateDraftPreview";
+import TemplateSectionEditor, {
+  normalizeTemplate,
+  validateTemplate,
+} from "@/components/portal/TemplateSectionEditor";
 import {
   deleteMyCustomTemplate,
   listMyCustomTemplates,
@@ -33,6 +37,7 @@ import type { CustomTemplate, TemplateDefinition } from "@/types";
  */
 export default function TemplateDetailPage() {
   const t = useTranslations("TemplateDetail");
+  const te = useTranslations("TemplateEditor");
   const router = useRouter();
   // Static-export gotcha — see web/lib/use-route-segment.ts. `useParams()`
   // returns the build-time "_" sentinel under `output: "export"`; the hook
@@ -42,8 +47,10 @@ export default function TemplateDetailPage() {
   const [row, setRow] = useState<CustomTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [mode, setMode] = useState<"preview" | "json">("preview");
+  const [mode, setMode] = useState<"preview" | "edit" | "json">("preview");
   const [draftJson, setDraftJson] = useState<string>("");
+  // Structured-editor draft, initialized from the loaded template.
+  const [draftEdit, setDraftEdit] = useState<TemplateDefinition | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -62,6 +69,7 @@ export default function TemplateDetailPage() {
       }
       setRow(found);
       setDraftJson(JSON.stringify(found.template, null, 2));
+      setDraftEdit(found.template);
     } catch (e) {
       setError(humanizeError(e, t("loadError")));
     } finally {
@@ -89,6 +97,34 @@ export default function TemplateDetailPage() {
     try {
       const updated = await updateMyCustomTemplate(row.id, parsed);
       setRow(updated);
+      setDraftJson(JSON.stringify(updated.template, null, 2));
+      // Keep the structured-editor draft in step with the just-saved content
+      // so a later switch to the Edit tab + Save can't silently revert this.
+      setDraftEdit(updated.template);
+      setMode("preview");
+    } catch (e) {
+      setError(humanizeError(e, t("saveError")));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onSaveStructured() {
+    if (!row || !draftEdit) return;
+    // enforceSectionCaps:false mirrors the backend's update path so editing a
+    // template whose sections predate the caps isn't blocked (the raw-JSON
+    // tab is the escape hatch for the always-on rules).
+    const validationKey = validateTemplate(draftEdit, { enforceSectionCaps: false });
+    if (validationKey) {
+      setError(te(validationKey));
+      return;
+    }
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await updateMyCustomTemplate(row.id, normalizeTemplate(draftEdit));
+      setRow(updated);
+      setDraftEdit(updated.template);
       setDraftJson(JSON.stringify(updated.template, null, 2));
       setMode("preview");
     } catch (e) {
@@ -164,6 +200,12 @@ export default function TemplateDetailPage() {
                 label={t("modePreview")}
               />
               <ModeButton
+                active={mode === "edit"}
+                onClick={() => setMode("edit")}
+                icon={<SlidersHorizontal className="h-4 w-4" />}
+                label={t("modeEdit")}
+              />
+              <ModeButton
                 active={mode === "json"}
                 onClick={() => setMode("json")}
                 icon={<Code2 className="h-4 w-4" />}
@@ -188,17 +230,57 @@ export default function TemplateDetailPage() {
           </div>
 
           {error && (
-            <div className="rounded-aurion-md bg-red-50 border border-red-200 px-4 py-3 text-aurion-callout text-red-700">
+            <div
+              role="alert"
+              className="rounded-aurion-md bg-red-50 border border-red-200 px-4 py-3 text-aurion-callout text-red-700"
+            >
               {error}
             </div>
           )}
 
           {mode === "preview" ? (
             <TemplateDraftPreview template={row.template} />
+          ) : mode === "edit" ? (
+            <Card>
+              <p className="text-aurion-caption text-navy-500 mb-3">{t("editHint")}</p>
+              {draftEdit && (
+                <TemplateSectionEditor
+                  value={draftEdit}
+                  onChange={setDraftEdit}
+                  disabled={saving}
+                />
+              )}
+              {error && (
+                <p role="alert" className="mt-3 text-aurion-callout text-red-700">
+                  {error}
+                </p>
+              )}
+              <div className="mt-4 flex gap-2">
+                <Button
+                  variant="primary"
+                  size="sm"
+                  loading={saving}
+                  disabled={saving}
+                  onClick={() => void onSaveStructured()}
+                >
+                  {t("saveChanges")}
+                </Button>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => setDraftEdit(row.template)}
+                >
+                  {t("resetToSaved")}
+                </Button>
+              </div>
+            </Card>
           ) : (
             <Card>
-              <p className="text-aurion-caption text-navy-500 mb-2">{t("jsonHint")}</p>
+              <p id="json-hint" className="text-aurion-caption text-navy-500 mb-2">{t("jsonHint")}</p>
               <textarea
+                aria-label={t("jsonLabel")}
+                aria-describedby="json-hint"
                 className="form-input w-full h-[60vh] font-mono text-xs leading-snug resize-y"
                 value={draftJson}
                 onChange={(e) => setDraftJson(e.target.value)}
