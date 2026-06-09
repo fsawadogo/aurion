@@ -12,6 +12,7 @@ from fastapi import APIRouter
 
 from app.api.v1.admin import (
     alerts,
+    analytics,
     audit,
     compliance,
     config,
@@ -42,3 +43,4 @@ router.include_router(emr.router)
 router.include_router(probe.router)
 router.include_router(feature_flags.router)
 router.include_router(media.router)
+router.include_router(analytics.router)
