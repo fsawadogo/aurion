@@ -13,7 +13,7 @@
 
 import { BarChart3 } from "lucide-react";
 import { useEffect, useState } from "react";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import { getProviderUsage, humanizeError } from "@/lib/api";
@@ -46,9 +46,10 @@ function latency(ms: number): string {
   return ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`;
 }
 
-function tokens(input: number, output: number): string {
+/** Combined token count, or null when nothing was recorded ("—"). */
+function tokenTotal(input: number, output: number): number | null {
   const total = input + output;
-  return total === 0 ? "—" : total.toLocaleString();
+  return total === 0 ? null : total;
 }
 
 function cost(usd: number): string {
@@ -57,6 +58,10 @@ function cost(usd: number): string {
 
 export default function ProviderUsagePanel() {
   const t = useTranslations("Providers.usage");
+  // Locale-aware number formatting — bare .toLocaleString() follows the
+  // BROWSER locale, not the page locale (FR page on an en-US browser would
+  // show 60,000 instead of 60 000).
+  const format = useFormatter();
 
   const [range, setRange] = useState<RangeKey>("7d");
   const [data, setData] = useState<ProviderUsageResponse | null>(null);
@@ -107,7 +112,7 @@ export default function ProviderUsagePanel() {
               <button
                 key={r.key}
                 type="button"
-                disabled={active}
+                disabled={active || loading}
                 onClick={() => setRange(r.key)}
                 aria-pressed={active}
                 data-testid={`usage-range-${r.key}`}
@@ -154,7 +159,7 @@ export default function ProviderUsagePanel() {
           <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {(
               [
-                ["calls", totals.call_count.toLocaleString()],
+                ["calls", format.number(totals.call_count)],
                 ["successRate", pct(totals.call_count ? totals.success_count / totals.call_count : 0)],
                 ["avgLatency", latency(totals.avg_latency_ms)],
                 ["estCost", cost(totals.total_cost_usd)],
@@ -206,7 +211,7 @@ export default function ProviderUsagePanel() {
                       {VALUE_LABEL[row.provider_name] ?? row.provider_name}
                     </td>
                     <td className="px-4 py-3 text-aurion-callout tabular-nums text-navy-700">
-                      {row.call_count.toLocaleString()}
+                      {format.number(row.call_count)}
                     </td>
                     <td className="px-4 py-3 text-aurion-callout tabular-nums text-navy-700">
                       {pct(row.success_rate)}
@@ -218,7 +223,10 @@ export default function ProviderUsagePanel() {
                       {latency(row.avg_latency_ms)}
                     </td>
                     <td className="px-4 py-3 text-aurion-callout tabular-nums text-navy-700">
-                      {tokens(row.total_input_tokens, row.total_output_tokens)}
+                      {(() => {
+                        const total = tokenTotal(row.total_input_tokens, row.total_output_tokens);
+                        return total === null ? "—" : format.number(total);
+                      })()}
                     </td>
                     <td className="px-4 py-3 text-aurion-callout tabular-nums text-navy-700">
                       {cost(row.total_cost_usd)}

@@ -95,7 +95,7 @@ describe("ProviderUsagePanel", () => {
     expect(visionRow).toHaveTextContent("Gemini");
     expect(visionRow).toHaveTextContent("96.8%"); // success_rate fraction → %
     expect(visionRow).toHaveTextContent("890 ms"); // <1s stays in ms
-    expect(visionRow).toHaveTextContent("60,000"); // input+output tokens
+    expect(visionRow.textContent).toMatch(/60[,\u00A0\u202F ]000/); // input+output tokens, delimiter-agnostic
     expect(visionRow).toHaveTextContent("$0.4321"); // sub-$1 cost gets 4 dp
 
     const noteRow = screen.getByTestId("usage-row-note_generation-gemini");
@@ -128,6 +128,36 @@ describe("ProviderUsagePanel", () => {
       ).toBeInTheDocument(),
     );
     expect(screen.queryByTestId("usage-stat-calls")).not.toBeInTheDocument();
+  });
+
+  it("renders the FR catalog at parity (house rule: EN+FR)", async () => {
+    render(withIntl(<ProviderUsagePanel />, "fr"));
+
+    await waitFor(() =>
+      expect(screen.getByText("Utilisation et coûts")).toBeInTheDocument(),
+    );
+    // A dynamic-key sample from each nested group, so a dropped FR key
+    // fails here rather than shipping silently.
+    expect(screen.getByTestId("usage-range-all")).toHaveTextContent(
+      "Tout l’historique",
+    );
+    expect(screen.getByText("Génération de notes")).toBeInTheDocument();
+  });
+
+  it("pins the cost precision boundary: 4dp under $1, 2dp at $1+", async () => {
+    vi.mocked(getProviderUsage).mockResolvedValue({
+      ...USAGE,
+      by_provider: [
+        { ...USAGE.by_provider[1], provider_name: "openai", total_cost_usd: 0.9999 },
+        { ...USAGE.by_provider[1], provider_name: "anthropic", total_cost_usd: 1.0 },
+      ],
+    } as never);
+    render(withIntl(<ProviderUsagePanel />));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("usage-row-vision-openai")).toHaveTextContent("$0.9999"),
+    );
+    expect(screen.getByTestId("usage-row-vision-anthropic")).toHaveTextContent("$1.00");
   });
 
   it("surfaces a load error without crashing the panel", async () => {
