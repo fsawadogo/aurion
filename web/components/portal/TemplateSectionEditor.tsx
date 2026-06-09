@@ -175,21 +175,26 @@ export default function TemplateSectionEditor({
             maxLength={20}
           />
         </label>
-        <label className="sm:col-span-3">
-          <span className={fieldLabel}>{t("key")}</span>
-          <input
-            className="form-input w-full font-mono"
-            value={value.key}
-            onChange={(e) => setMeta({ key: e.target.value })}
-            onBlur={(e) => e.target.value && setMeta({ key: slugify(e.target.value) })}
-            placeholder={t("keyPlaceholder")}
-            disabled={disabled}
-            maxLength={50}
-          />
-          <span className="mt-1 block text-aurion-caption text-navy-400">
+        <div className="sm:col-span-3">
+          <label className="block">
+            <span className={fieldLabel}>{t("key")}</span>
+            <input
+              className="form-input w-full font-mono"
+              value={value.key}
+              onChange={(e) => setMeta({ key: e.target.value })}
+              onBlur={(e) => e.target.value && setMeta({ key: slugify(e.target.value) })}
+              placeholder={t("keyPlaceholder")}
+              disabled={disabled}
+              maxLength={50}
+              aria-describedby="tmpl-key-hint"
+            />
+          </label>
+          {/* Hint sits OUTSIDE the <label> so it isn't folded into the
+              input's accessible name; linked via aria-describedby. */}
+          <span id="tmpl-key-hint" className="mt-1 block text-aurion-caption text-navy-400">
             {t("keyHint")}
           </span>
-        </label>
+        </div>
       </div>
 
       {/* ── Sections ──────────────────────────────────────────────────── */}
@@ -274,25 +279,31 @@ export default function TemplateSectionEditor({
                 />
               </label>
 
-              <label className="mt-2 block">
-                <span className={fieldLabel}>{t("sectionKeywords")}</span>
-                <input
-                  className="form-input w-full"
-                  value={sec.visual_trigger_keywords.join(", ")}
-                  onChange={(e) =>
-                    setSection(idx, {
-                      // keep empties while typing so a trailing comma works;
-                      // normalizeTemplate strips them before save.
-                      visual_trigger_keywords: e.target.value.split(",").map((k) => k.trimStart()),
-                    })
-                  }
-                  placeholder={t("sectionKeywordsPlaceholder")}
-                  disabled={disabled}
-                />
-                <span className="mt-1 block text-aurion-caption text-navy-400">
+              <div className="mt-2">
+                <label className="block">
+                  <span className={fieldLabel}>{t("sectionKeywords")}</span>
+                  <input
+                    className="form-input w-full"
+                    value={sec.visual_trigger_keywords.join(", ")}
+                    onChange={(e) =>
+                      setSection(idx, {
+                        // keep empties while typing so a trailing comma works;
+                        // normalizeTemplate strips them before save.
+                        visual_trigger_keywords: e.target.value.split(",").map((k) => k.trimStart()),
+                      })
+                    }
+                    placeholder={t("sectionKeywordsPlaceholder")}
+                    disabled={disabled}
+                    aria-describedby={`sec-kw-hint-${idx}`}
+                  />
+                </label>
+                <span
+                  id={`sec-kw-hint-${idx}`}
+                  className="mt-1 block text-aurion-caption text-navy-400"
+                >
                   {t("sectionKeywordsHint")}
                 </span>
-              </label>
+              </div>
 
               <label className="mt-2 flex items-center gap-2">
                 <input

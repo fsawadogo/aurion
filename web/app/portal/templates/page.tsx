@@ -1,7 +1,7 @@
 "use client";
 
 import { LayoutGrid, MessagesSquare, Plus, SquarePen, Trash2, Upload } from "lucide-react";
-import { humanizeError } from "@/lib/api";
+import { getMe, humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -10,6 +10,7 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/portal/PageHeader";
 import {
   deleteMyCustomTemplate,
@@ -38,6 +39,14 @@ export default function PortalTemplatesPage() {
   const [error, setError] = useState<string | null>(null);
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  // Current user id for ownership gating. The list can include shared
+  // templates owned by others (is_shared) — those aren't deletable by the
+  // caller (the backend DELETE is owner-scoped → 404), so the Delete control
+  // is shown only for rows the caller owns. Null until resolved (gate stays
+  // closed). Latent today since nothing is ever is_shared, correct once
+  // community sharing ships.
+  const [meId, setMeId] = useState<string | null>(null);
+  const [pendingDelete, setPendingDelete] = useState<CustomTemplate | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -55,6 +64,9 @@ export default function PortalTemplatesPage() {
 
   useEffect(() => {
     void load();
+    void getMe()
+      .then((u) => setMeId(u.user_id))
+      .catch(() => {});
   }, [load]);
 
   async function onUpload(file: File) {
@@ -73,12 +85,14 @@ export default function PortalTemplatesPage() {
     }
   }
 
-  async function onDelete(tpl: CustomTemplate) {
-    if (!confirm(t("deleteConfirm", { name: tpl.display_name }))) return;
+  async function confirmDelete() {
+    const tpl = pendingDelete;
+    if (!tpl) return;
     setDeletingId(tpl.id);
     try {
       await deleteMyCustomTemplate(tpl.id);
       setList(list.filter((x) => x.id !== tpl.id));
+      setPendingDelete(null);
     } catch (e) {
       setError(humanizeError(e, t("deleteError")));
     } finally {
@@ -195,21 +209,60 @@ export default function PortalTemplatesPage() {
                     <SquarePen className="h-4 w-4" />
                     {t("open")}
                   </a>
-                  <button
-                    type="button"
-                    onClick={() => void onDelete(tpl)}
-                    className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 transition-colors duration-short"
-                    disabled={deletingId === tpl.id}
-                    aria-label={t("deleteAria", { name: tpl.display_name })}
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  {/* Delete only for owned rows — a shared row's DELETE is
+                      owner-scoped server-side (404). */}
+                  {meId !== null && tpl.owner_id === meId && (
+                    <button
+                      type="button"
+                      onClick={() => setPendingDelete(tpl)}
+                      className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 transition-colors duration-short"
+                      disabled={deletingId === tpl.id}
+                      aria-label={t("deleteAria", { name: tpl.display_name })}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  )}
                 </div>
               </li>
             ))}
           </ul>
         )}
       </Card>
+
+      <Modal
+        isOpen={pendingDelete !== null}
+        onClose={() => {
+          if (!deletingId) setPendingDelete(null);
+        }}
+        title={t("deleteTitle")}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={!!deletingId}
+              onClick={() => setPendingDelete(null)}
+            >
+              {t("deleteCancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              loading={!!deletingId}
+              disabled={!!deletingId}
+              onClick={() => void confirmDelete()}
+            >
+              {t("deleteConfirmButton")}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-aurion-callout text-navy-600">
+          {pendingDelete
+            ? t("deleteConfirm", { name: pendingDelete.display_name })
+            : ""}
+        </p>
+      </Modal>
     </div>
   );
 }

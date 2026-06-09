@@ -1,7 +1,7 @@
 "use client";
 
 import { Code2, Download, LayoutGrid, SlidersHorizontal } from "lucide-react";
-import { humanizeError } from "@/lib/api";
+import { getMe, humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -9,6 +9,7 @@ import { useRouteSegment } from "@/lib/use-route-segment";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/portal/PageHeader";
 import TemplateDraftPreview from "@/components/portal/TemplateDraftPreview";
 import TemplateSectionEditor, {
@@ -53,6 +54,12 @@ export default function TemplateDetailPage() {
   const [draftEdit, setDraftEdit] = useState<TemplateDefinition | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  // Ownership: the list can surface shared templates owned by others, whose
+  // PATCH/DELETE are owner-scoped server-side (404). Gate Edit/JSON/Delete to
+  // the owner; non-owners get read-only Preview. Null until resolved.
+  const [meId, setMeId] = useState<string | null>(null);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const owned = meId !== null && row !== null && row.owner_id === meId;
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -79,6 +86,9 @@ export default function TemplateDetailPage() {
 
   useEffect(() => {
     void load();
+    void getMe()
+      .then((u) => setMeId(u.user_id))
+      .catch(() => {});
   }, [load]);
 
   async function onSave() {
@@ -134,9 +144,8 @@ export default function TemplateDetailPage() {
     }
   }
 
-  async function onDelete() {
+  async function confirmDelete() {
     if (!row) return;
-    if (!confirm(t("deleteConfirm", { name: row.display_name }))) return;
     setDeleting(true);
     try {
       await deleteMyCustomTemplate(row.id);
@@ -144,6 +153,7 @@ export default function TemplateDetailPage() {
     } catch (e) {
       setError(humanizeError(e, t("deleteError")));
       setDeleting(false);
+      setConfirmingDelete(false);
     }
   }
 
@@ -199,33 +209,40 @@ export default function TemplateDetailPage() {
                 icon={<LayoutGrid className="h-4 w-4" />}
                 label={t("modePreview")}
               />
-              <ModeButton
-                active={mode === "edit"}
-                onClick={() => setMode("edit")}
-                icon={<SlidersHorizontal className="h-4 w-4" />}
-                label={t("modeEdit")}
-              />
-              <ModeButton
-                active={mode === "json"}
-                onClick={() => setMode("json")}
-                icon={<Code2 className="h-4 w-4" />}
-                label={t("modeJson")}
-              />
+              {/* Edit/JSON only for the owner — PATCH is owner-scoped (404). */}
+              {owned && (
+                <>
+                  <ModeButton
+                    active={mode === "edit"}
+                    onClick={() => setMode("edit")}
+                    icon={<SlidersHorizontal className="h-4 w-4" />}
+                    label={t("modeEdit")}
+                  />
+                  <ModeButton
+                    active={mode === "json"}
+                    onClick={() => setMode("json")}
+                    icon={<Code2 className="h-4 w-4" />}
+                    label={t("modeJson")}
+                  />
+                </>
+              )}
             </div>
             <div className="flex items-center gap-2">
               <Button variant="secondary" size="sm" onClick={onExportJson}>
                 <Download className="h-4 w-4 mr-1" />
                 {t("exportButton")}
               </Button>
-              <Button
-                variant="secondary"
-                size="sm"
-                onClick={() => void onDelete()}
-                loading={deleting}
-                disabled={deleting}
-              >
-                {t("deleteButton")}
-              </Button>
+              {owned && (
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setConfirmingDelete(true)}
+                  loading={deleting}
+                  disabled={deleting}
+                >
+                  {t("deleteButton")}
+                </Button>
+              )}
             </div>
           </div>
 
@@ -311,6 +328,39 @@ export default function TemplateDetailPage() {
           )}
         </div>
       ) : null}
+
+      <Modal
+        isOpen={confirmingDelete}
+        onClose={() => {
+          if (!deleting) setConfirmingDelete(false);
+        }}
+        title={t("deleteTitle")}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={deleting}
+              onClick={() => setConfirmingDelete(false)}
+            >
+              {t("deleteCancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              loading={deleting}
+              disabled={deleting}
+              onClick={() => void confirmDelete()}
+            >
+              {t("deleteConfirmButton")}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-aurion-callout text-navy-600">
+          {row ? t("deleteConfirm", { name: row.display_name }) : ""}
+        </p>
+      </Modal>
     </div>
   );
 }
