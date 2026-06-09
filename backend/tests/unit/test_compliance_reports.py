@@ -18,6 +18,8 @@ from app.modules.compliance.reports_service import (
     ReportType,
     _filter_window,
     build_audit_csv,
+    build_masking_csv,
+    build_retention_csv,
     get_compliance_reports_service,
 )
 
@@ -117,18 +119,24 @@ class TestGenerate:
         db.flush.assert_awaited_once()
 
     @pytest.mark.asyncio
-    async def test_generate_rejects_unwired_report_type(self) -> None:
+    @pytest.mark.parametrize("rtype", list(ReportType))
+    async def test_generate_supports_every_report_type(self, rtype) -> None:
+        """#77: all three types are wired — audit, masking, retention.
+        (Replaces the foundation-era rejects-unwired test.)"""
         svc = ComplianceReportsService()
         db = _mock_db()
-        with pytest.raises(NotImplementedError):
-            await svc.generate(
-                db,
-                report_type=ReportType.MASKING,
-                events=[],
-                since=None,
-                until=None,
-                generated_by=None,
-            )
+        record = await svc.generate(
+            db,
+            report_type=rtype,
+            events=[],
+            since=None,
+            until=None,
+            generated_by=None,
+        )
+        assert record.report_type == rtype.value
+        assert record.sha256 == hashlib.sha256(record.content_bytes).hexdigest()
+        # Even an empty report carries its header row.
+        assert record.content_bytes.startswith(b"session_id,event_timestamp,event_type")
 
     @pytest.mark.asyncio
     async def test_generate_applies_window(self) -> None:
@@ -157,3 +165,57 @@ class TestServiceFactory:
         a = get_compliance_reports_service()
         b = get_compliance_reports_service()
         assert a is b
+
+
+class TestMaskingBuilder:
+    def test_filters_to_masking_events_and_types_columns(self) -> None:
+        now = datetime.now(timezone.utc)
+        events = [
+            {**_evt("s1", now, "clip_uploaded"), "masking_status": "success",
+             "frames_total": 7, "frames_with_faces": 7, "faces_blurred": 7},
+            _evt("s1", now, "consent_confirmed"),          # not masking-relevant
+            {**_evt("s2", now, "clip_dropped"), "reason": "masking_failed",
+             "origin": "ios"},
+            {**_evt("s3", now, "clip_dropped"), "reason": "ring_empty"},  # excluded
+        ]
+        body = build_masking_csv(events).decode("utf-8")
+        lines = body.strip().splitlines()
+        header, rows = lines[0], lines[1:]
+        assert "masking_status" in header
+        assert "faces_blurred" in header
+        assert len(rows) == 2                      # clip_uploaded + masking drop
+        assert "clip_uploaded" in rows[0] and ",7," in rows[0]
+        assert "masking_failed" in rows[1]
+        assert all("ring_empty" not in r for r in rows)
+        assert all("consent_confirmed" not in r for r in rows)
+
+
+class TestRetentionBuilder:
+    def test_filters_to_retention_lifecycle(self) -> None:
+        now = datetime.now(timezone.utc)
+        events = [
+            {**_evt("s1", now, "audio_purged"), "audio_count": 1},
+            {**_evt("s1", now, "evidence_downloaded"),
+             "evidence_kind": "session_media", "audio_count": 1, "clip_count": 3},
+            {**_evt("s1", now, "note_exported"), "format": "docx"},
+            _evt("s1", now, "recording_started"),  # not retention-relevant
+        ]
+        body = build_retention_csv(events).decode("utf-8")
+        lines = body.strip().splitlines()
+        header, rows = lines[0], lines[1:]
+        assert "evidence_kind" in header and "clip_count" in header
+        assert len(rows) == 3
+        assert any("audio_purged" in r for r in rows)
+        assert any("session_media" in r and ",3," in r for r in rows)
+        assert any("docx" in r for r in rows)
+        assert all("recording_started" not in r for r in rows)
+
+    def test_window_applies_to_all_types(self) -> None:
+        """generate() filters the window BEFORE the builder for every type —
+        spot-check via the public builder + _filter_window composition."""
+        now = datetime.now(timezone.utc)
+        old_evt = {**_evt("s1", now - timedelta(days=40), "audio_purged")}
+        new_evt = {**_evt("s1", now, "audio_purged")}
+        windowed = _filter_window([old_evt, new_evt], now - timedelta(days=7), None)
+        body = build_retention_csv(windowed).decode("utf-8")
+        assert body.count("audio_purged") == 1

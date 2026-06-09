@@ -2,8 +2,10 @@
 
 Generates a persisted, sha256-signed CSV snapshot of compliance-relevant
 audit data so a clinic can hand an institution a verifiable archive.
-Foundation wires the ``audit`` report type; ``masking`` + ``retention``
-follow the same shape and land as follow-ups.
+Three report types (#77): ``audit`` (the full trail), ``masking`` (the
+PHI-masking proof per session — Law 25's "show me every frame was masked"
+artifact), and ``retention`` (the purge/retained-media-access lifecycle).
+Scheduled generation + delivery land post-SES (#399).
 """
 
 from __future__ import annotations
@@ -31,7 +33,6 @@ class ReportType(str, enum.Enum):
     """Stable string values — persisted in `compliance_reports.report_type`."""
 
     AUDIT = "audit"
-    # Wired in follow-ups:
     MASKING = "masking"
     RETENTION = "retention"
 
@@ -54,6 +55,139 @@ def _filter_window(events: list[dict[str, Any]], since: datetime | None, until: 
             continue
         out.append(evt)
     return out
+
+
+# ── Masking report (#77) ─────────────────────────────────────────────────────
+#
+# The PHI-masking proof: every masking confirmation (frames + clips +
+# screen), every vision-side rejection, and every client-side drop whose
+# reason was a masking failure. The typed columns are the fields a
+# compliance officer checks row-by-row; everything else rides in `details`.
+
+_MASKING_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "masking_confirmed",
+        "clip_masked",
+        "frame_uploaded",
+        "clip_uploaded",
+        "screen_frame_processed",
+        "vision_frame_failed",
+    }
+)
+
+_MASKING_TYPED_COLUMNS = (
+    "masking_status",
+    "frame_type",
+    "frames_total",
+    "frames_with_faces",
+    "faces_blurred",
+    "phi_regions_redacted",
+)
+
+
+def _is_masking_relevant(evt: dict[str, Any]) -> bool:
+    etype = str(evt.get("event_type", ""))
+    if etype in _MASKING_EVENT_TYPES:
+        return True
+    # Drop telemetry counts as masking evidence ONLY when the drop reason
+    # was a masking failure (ring_empty/upload_failed etc. are not).
+    return etype == "clip_dropped" and evt.get("reason") == "masking_failed"
+
+
+def build_masking_csv(events: list[dict[str, Any]]) -> bytes:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        ["session_id", "event_timestamp", "event_type", *_MASKING_TYPED_COLUMNS, "details"]
+    )
+    for evt in events:
+        if not _is_masking_relevant(evt):
+            continue
+        details = {
+            k: v
+            for k, v in evt.items()
+            if k
+            not in (
+                "session_id",
+                "event_timestamp",
+                "event_type",
+                "event_id",
+                *_MASKING_TYPED_COLUMNS,
+            )
+        }
+        writer.writerow(
+            [
+                evt.get("session_id", ""),
+                evt.get("event_timestamp", ""),
+                evt.get("event_type", ""),
+                *(evt.get(c, "") for c in _MASKING_TYPED_COLUMNS),
+                json.dumps(details),
+            ]
+        )
+    return buf.getvalue().encode("utf-8")
+
+
+# ── Retention report (#77) ───────────────────────────────────────────────────
+#
+# The purge / retained-media lifecycle: raw-media purges (audio, frames,
+# whole sessions), cleanup failures, eval-frame migrations, exports, and
+# every retained-media access (replay / download) — the rows an
+# institution audits for "data deleted on schedule, every access logged".
+
+_RETENTION_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        "audio_purged",
+        "frames_purged",
+        "session_purged",
+        "session_discarded",
+        "cleanup_partial_failure",
+        "eval_frames_migrated",
+        "evidence_replayed",
+        "evidence_downloaded",
+        "note_exported",
+    }
+)
+
+_RETENTION_TYPED_COLUMNS = ("evidence_kind", "audio_count", "clip_count", "format")
+
+
+def build_retention_csv(events: list[dict[str, Any]]) -> bytes:
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow(
+        ["session_id", "event_timestamp", "event_type", *_RETENTION_TYPED_COLUMNS, "details"]
+    )
+    for evt in events:
+        if str(evt.get("event_type", "")) not in _RETENTION_EVENT_TYPES:
+            continue
+        details = {
+            k: v
+            for k, v in evt.items()
+            if k
+            not in (
+                "session_id",
+                "event_timestamp",
+                "event_type",
+                "event_id",
+                *_RETENTION_TYPED_COLUMNS,
+            )
+        }
+        writer.writerow(
+            [
+                evt.get("session_id", ""),
+                evt.get("event_timestamp", ""),
+                evt.get("event_type", ""),
+                *(evt.get(c, "") for c in _RETENTION_TYPED_COLUMNS),
+                json.dumps(details),
+            ]
+        )
+    return buf.getvalue().encode("utf-8")
+
+
+_BUILDERS = {
+    # ReportType → CSV builder over the (window-filtered) audit events.
+    # Populated after the function definitions below.
+}
 
 
 def build_audit_csv(events: list[dict[str, Any]]) -> bytes:
@@ -82,6 +216,15 @@ def build_audit_csv(events: list[dict[str, Any]]) -> bytes:
     return buf.getvalue().encode("utf-8")
 
 
+_BUILDERS.update(
+    {
+        ReportType.AUDIT: build_audit_csv,
+        ReportType.MASKING: build_masking_csv,
+        ReportType.RETENTION: build_retention_csv,
+    }
+)
+
+
 class ComplianceReportsService:
     """Thin service around the ``compliance_reports`` table."""
 
@@ -103,16 +246,9 @@ class ComplianceReportsService:
         also apply the window here so the persisted bytes correspond
         to exactly the metadata's ``since``/``until``.
         """
-        if report_type != ReportType.AUDIT:
-            # Other types follow in a follow-up PR; explicit error is
-            # better than silently producing an empty CSV.
-            raise NotImplementedError(
-                f"report_type={report_type.value} not wired yet "
-                f"(foundation supports 'audit' only)"
-            )
-
+        builder = _BUILDERS[report_type]
         filtered = _filter_window(events, since, until)
-        content_bytes = build_audit_csv(filtered)
+        content_bytes = builder(filtered)
         sha256 = hashlib.sha256(content_bytes).hexdigest()
 
         record = ComplianceReportModel(
