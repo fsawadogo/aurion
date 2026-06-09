@@ -53,6 +53,9 @@ class AuditEventType(StrEnum):
     MACRO_CREATED = "macro_created"
     MACRO_UPDATED = "macro_updated"
     MACRO_DELETED = "macro_deleted"
+    CUSTOM_TEMPLATE_CREATED = "custom_template_created"
+    CUSTOM_TEMPLATE_UPDATED = "custom_template_updated"
+    CUSTOM_TEMPLATE_DELETED = "custom_template_deleted"
     PATIENT_SUMMARY_GENERATED = "patient_summary_generated"
     PATIENT_SUMMARY_EDITED = "patient_summary_edited"
     ORDERS_EXTRACTED = "orders_extracted"
@@ -349,6 +352,18 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.MACRO_DELETED: frozenset(
         {"actor_id", "macro_id", "shortcut"}
+    ),
+    # Custom-template lifecycle — never carry the template body/sections
+    # (clinician-authored prose we wouldn't want quoted in an audit query).
+    # template_id + template_key + actor is enough to reconstruct the change.
+    AuditEventType.CUSTOM_TEMPLATE_CREATED: frozenset(
+        {"actor_id", "template_id", "template_key"}
+    ),
+    AuditEventType.CUSTOM_TEMPLATE_UPDATED: frozenset(
+        {"actor_id", "template_id", "template_key"}
+    ),
+    AuditEventType.CUSTOM_TEMPLATE_DELETED: frozenset(
+        {"actor_id", "template_id", "template_key"}
     ),
     # Patient summary lifecycle — never carry the body text; the
     # summary itself is PHI and would be permanent in the audit log.

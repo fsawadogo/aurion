@@ -200,16 +200,17 @@ async def finalize_authoring(
     except ValidationError as exc:
         raise ValueError(f"Draft no longer valid against Template schema: {exc}") from exc
 
-    custom = CustomTemplateModel(
-        id=uuid.uuid4(),
-        key=draft.key,
-        display_name=draft.display_name,
-        version=draft.version,
-        owner_id=row.owner_id,
-        is_shared=False,
-        content=draft.model_dump_json(),
+    # Route the finalized draft through the canonical create path so the
+    # per-owner key-uniqueness check AND the custom-template field caps apply
+    # here too. Constructing the row directly used to skip both, letting
+    # duplicate (owner_id, key) rows form silently — a later lookup then 500s
+    # with MultipleResultsFound. Function-level import to avoid module-level
+    # coupling (and any import cycle) between the two service modules.
+    from app.modules.custom_templates import service as custom_templates_service
+
+    custom = await custom_templates_service.create_for_owner(
+        row.owner_id, draft.model_dump(), db
     )
-    db.add(custom)
 
     row.status = "completed"
     row.updated_at = datetime.now(timezone.utc)
