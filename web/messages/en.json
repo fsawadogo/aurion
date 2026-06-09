@@ -21,7 +21,8 @@
       "providers": "AI Providers",
       "capturedMedia": "Captured Media",
       "analytics": "Analytics",
-      "systemTemplates": "System Templates"
+      "systemTemplates": "System Templates",
+      "alerts": "Alerts"
     },
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
@@ -1053,5 +1054,26 @@
     "revertBody": "The admin override for “{key}” will be deleted and the disk-bundled template takes effect again (immediately on this server, ~10 s fleet-wide).",
     "revertCancel": "Cancel",
     "revertConfirm": "Revert"
+  },
+  "AdminAlerts": {
+    "eyebrow": "Admin",
+    "title": "Operational alerts",
+    "description": "Pipeline failures, masking issues, and SLA breaches published by the backend trigger sites. Acknowledging records who took ownership.",
+    "loadError": "Unable to load alerts.",
+    "ackError": "Acknowledge failed.",
+    "filterLabel": "Filter",
+    "filters": {
+      "open": "Open",
+      "acknowledged": "Acknowledged",
+      "all": "All"
+    },
+    "severity": {
+      "critical": "Critical",
+      "warning": "Warning",
+      "info": "Info"
+    },
+    "empty": "No alerts — all clear.",
+    "acknowledge": "Acknowledge",
+    "acknowledgedAt": "acknowledged {when}"
   }
 }

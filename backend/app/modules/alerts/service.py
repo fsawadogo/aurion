@@ -102,6 +102,31 @@ class AlertService:
         result = await db.execute(stmt)
         return list(result.scalars().all())
 
+    async def acknowledge(
+        self,
+        db: AsyncSession,
+        alert_id: uuid.UUID,
+        *,
+        acknowledged_by: uuid.UUID,
+    ) -> AlertModel | None:
+        """Mark an alert acknowledged; return the row, or None if absent.
+
+        Idempotent: an already-acknowledged alert is returned unchanged
+        (the FIRST acknowledger is preserved — a second click must not
+        rewrite who took ownership of the alert).
+        """
+        result = await db.execute(
+            select(AlertModel).where(AlertModel.id == alert_id)
+        )
+        row = result.scalar_one_or_none()
+        if row is None:
+            return None
+        if row.acknowledged_at is None:
+            row.acknowledged_at = utcnow()
+            row.acknowledged_by = acknowledged_by
+            await db.flush()
+        return row
+
 
 _INSTANCE: AlertService | None = None
 

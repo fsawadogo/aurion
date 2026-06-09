@@ -21,7 +21,8 @@
       "providers": "Fournisseurs IA",
       "capturedMedia": "Médias capturés",
       "analytics": "Analytique",
-      "systemTemplates": "Modèles système"
+      "systemTemplates": "Modèles système",
+      "alerts": "Alertes"
     },
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
@@ -1053,5 +1054,26 @@
     "revertBody": "Le remplacement administrateur de « {key} » sera supprimé et le modèle intégré reprendra effet (immédiatement sur ce serveur, ~10 s sur la flotte).",
     "revertCancel": "Annuler",
     "revertConfirm": "Rétablir"
+  },
+  "AdminAlerts": {
+    "eyebrow": "Admin",
+    "title": "Alertes opérationnelles",
+    "description": "Échecs du pipeline, problèmes de masquage et dépassements de SLA publiés par les points de déclenchement du backend. Accuser réception consigne qui a pris l’alerte en charge.",
+    "loadError": "Impossible de charger les alertes.",
+    "ackError": "Échec de l’accusé de réception.",
+    "filterLabel": "Filtre",
+    "filters": {
+      "open": "Ouvertes",
+      "acknowledged": "Accusées",
+      "all": "Toutes"
+    },
+    "severity": {
+      "critical": "Critique",
+      "warning": "Avertissement",
+      "info": "Info"
+    },
+    "empty": "Aucune alerte — tout est en ordre.",
+    "acknowledge": "Accuser réception",
+    "acknowledgedAt": "accusée {when}"
   }
 }
