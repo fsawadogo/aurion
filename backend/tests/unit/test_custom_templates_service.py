@@ -14,6 +14,7 @@ import uuid
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.exc import IntegrityError
 
 from app.modules.custom_templates import service as svc
 
@@ -209,3 +210,68 @@ async def test_update_key_change_no_clash_succeeds():
     result = await svc.update_owned(row, _tmpl(key="newkey"), db)
     assert result is row
     assert row.key == "newkey"
+
+
+# ── DB unique-constraint mapping (race-proof 409, #3) ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_create_maps_db_unique_violation_to_clash():
+    """If a concurrent insert slips past the in-app check, the DB constraint
+    (uq_custom_templates_owner_key) fires at flush — mapped to a friendly
+    CustomTemplateError (→ 409), not an unhandled 500."""
+    db = AsyncMock()
+    db.add = MagicMock()
+    nc = MagicMock()
+    nc.scalars.return_value.first.return_value = None  # in-app check passes
+    db.execute = AsyncMock(return_value=nc)
+    db.flush = AsyncMock(
+        side_effect=IntegrityError(
+            "INSERT",
+            {},
+            Exception(
+                'duplicate key value violates unique constraint '
+                '"uq_custom_templates_owner_key"'
+            ),
+        )
+    )
+    with pytest.raises(svc.CustomTemplateError, match="already exists"):
+        await svc.create_for_owner(uuid.uuid4(), _tmpl(), db)
+
+
+@pytest.mark.asyncio
+async def test_create_reraises_non_unique_integrity_error():
+    """A different IntegrityError (e.g. a NOT NULL violation) is NOT swallowed
+    as a clash — it propagates."""
+    db = AsyncMock()
+    db.add = MagicMock()
+    nc = MagicMock()
+    nc.scalars.return_value.first.return_value = None
+    db.execute = AsyncMock(return_value=nc)
+    db.flush = AsyncMock(
+        side_effect=IntegrityError(
+            "INSERT", {}, Exception('null value in column "content"')
+        )
+    )
+    with pytest.raises(IntegrityError):
+        await svc.create_for_owner(uuid.uuid4(), _tmpl(), db)
+
+
+@pytest.mark.asyncio
+async def test_create_reraises_unrelated_unique_violation():
+    """A unique violation on some OTHER constraint isn't mislabeled as a
+    per-owner key clash — only uq_custom_templates_owner_key maps to 409."""
+    db = AsyncMock()
+    db.add = MagicMock()
+    nc = MagicMock()
+    nc.scalars.return_value.first.return_value = None
+    db.execute = AsyncMock(return_value=nc)
+    db.flush = AsyncMock(
+        side_effect=IntegrityError(
+            "INSERT",
+            {},
+            Exception('duplicate key value violates unique constraint "some_other_uq"'),
+        )
+    )
+    with pytest.raises(IntegrityError):
+        await svc.create_for_owner(uuid.uuid4(), _tmpl(), db)
