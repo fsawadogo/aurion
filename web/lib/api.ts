@@ -20,6 +20,8 @@ import type {
   PaginatedResponse,
   PilotMetric,
   ProviderConfig,
+  ProvidersOverview,
+  ProviderType,
   Session,
   SessionDetail,
   SessionFilters,
@@ -504,6 +506,38 @@ export async function updateFeatureFlags(
   const res = await fetchWithAuth("/api/v1/admin/feature-flags", {
     method: "POST",
     body: JSON.stringify(payload),
+  });
+  return res.json();
+}
+
+/* ─── Runtime AI-provider overrides (admin / compliance) ─────────────────────
+ *
+ * GET shows per-type AppConfig baseline + active override + effective value.
+ * PUT pins a runtime override (immediate, audited); DELETE clears it so the
+ * type falls back to its AppConfig baseline. ADMIN or COMPLIANCE_OFFICER.
+ */
+export async function getProviders(): Promise<ProvidersOverview> {
+  const res = await fetchWithAuth("/api/v1/admin/providers");
+  return res.json();
+}
+
+export async function setProviderOverride(
+  providerType: ProviderType,
+  value: string,
+  reason?: string,
+): Promise<ProvidersOverview> {
+  const res = await fetchWithAuth(`/api/v1/admin/providers/${providerType}`, {
+    method: "PUT",
+    body: JSON.stringify({ value, reason }),
+  });
+  return res.json();
+}
+
+export async function clearProviderOverride(
+  providerType: ProviderType,
+): Promise<ProvidersOverview> {
+  const res = await fetchWithAuth(`/api/v1/admin/providers/${providerType}`, {
+    method: "DELETE",
   });
   return res.json();
 }

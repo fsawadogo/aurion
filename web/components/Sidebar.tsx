@@ -7,6 +7,7 @@ import {
   ChevronRight,
   CircleUser,
   ClipboardList,
+  Cpu,
   FileText,
   Film,
   Flag,
@@ -59,6 +60,9 @@ const navigation: {
   // hosted-version, and the corresponding require_role gate rejects
   // every other role.
   { tKey: "featureFlags", href: "/portal/admin/feature-flags", icon: Flag, roles: ["ADMIN"] },
+  // Runtime AI-provider switch. ADMIN + COMPLIANCE_OFFICER — matches the
+  // backend require_role on /admin/providers (set/clear an override live).
+  { tKey: "providers", href: "/portal/admin/providers", icon: Cpu, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },
   // Captured Media (#338) — windowed media-retention review. Visible to the
   // three roles the backend list gate allows (compliance is view-only; the
   // download action is hidden for them in-page). The page itself is also
