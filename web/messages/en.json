@@ -20,7 +20,8 @@
       "featureFlags": "Feature Flags",
       "providers": "AI Providers",
       "capturedMedia": "Captured Media",
-      "analytics": "Analytics"
+      "analytics": "Analytics",
+      "systemTemplates": "System Templates"
     },
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
@@ -1032,5 +1033,25 @@
     },
     "empty": "No sessions recorded in this window.",
     "footnote": "All figures are measured from recorded sessions and pilot metrics. Time saved = exported notes × your baseline — an estimate labeled with its assumption, not a measured value."
+  },
+  "AdminTemplates": {
+    "eyebrow": "Admin",
+    "title": "System templates",
+    "description": "Edit the built-in specialty templates and their per-section visual-trigger keywords. Edits are live in the note pipeline — no redeploy.",
+    "loadError": "Unable to load templates.",
+    "saveError": "Save failed.",
+    "saveSuccess": "Template saved — live within ~10 seconds fleet-wide.",
+    "revertError": "Revert failed.",
+    "revertSuccess": "Override removed — the disk default is live again.",
+    "metadata": "v{version} · {count, plural, one {# section} other {# sections}}",
+    "overrideBadge": "Edited",
+    "liveOverrideHint": "An admin override is live for this template.",
+    "liveDefaultHint": "Showing the built-in default. Saving creates a live override.",
+    "save": "Save",
+    "revert": "Revert to default",
+    "revertTitle": "Revert to the built-in default?",
+    "revertBody": "The admin override for “{key}” will be deleted and the disk-bundled template takes effect again (immediately on this server, ~10 s fleet-wide).",
+    "revertCancel": "Cancel",
+    "revertConfirm": "Revert"
   }
 }

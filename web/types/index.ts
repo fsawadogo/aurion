@@ -514,6 +514,30 @@ export interface AdoptionResponse {
   by_clinician: ClinicianAdoptionRow[];
 }
 
+/* ─── Built-in template management (admin, #72) ──────────────────────────── */
+// Mirrors backend/app/api/v1/admin/templates.py. `is_override` = an admin
+// has saved a custom version of the bundled template (runtime resolution
+// is override > disk since PR #403).
+
+export interface AdminTemplateSummary {
+  template_key: string;
+  display_name: string;
+  version: string;
+  section_count: number;
+  is_override: boolean;
+}
+
+export interface AdminTemplateListResponse {
+  items: AdminTemplateSummary[];
+}
+
+export interface AdminTemplateDetail {
+  template: TemplateDefinition;
+  is_override: boolean;
+  updated_at: string | null;
+  note: string;
+}
+
 /* ─── Captured Media (admin, #338) ───────────────────────────────────────── */
 // Mirrors backend/app/api/v1/admin/media.py response models. The list +
 // download surfaces are gated behind the media_review_retention_enabled flag

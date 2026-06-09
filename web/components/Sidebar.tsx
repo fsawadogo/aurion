@@ -67,6 +67,10 @@ const navigation: {
   // Adoption & ROI analytics (#71). ADMIN + EVAL_TEAM — matches the backend
   // require_role on /admin/analytics/adoption (same gate as pilot metrics).
   { tKey: "analytics", href: "/portal/admin/analytics", icon: TrendingUp, roles: ["ADMIN", "EVAL_TEAM"] },
+  // Built-in specialty template management (#72). ADMIN + COMPLIANCE_OFFICER
+  // — matches the backend _ROLES on /admin/templates. Distinct from the
+  // clinician-facing /portal/templates (per-physician custom templates).
+  { tKey: "systemTemplates", href: "/portal/admin/templates", icon: LayoutGrid, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },
   // Captured Media (#338) — windowed media-retention review. Visible to the
   // three roles the backend list gate allows (compliance is view-only; the
   // download action is hidden for them in-page). The page itself is also

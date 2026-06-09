@@ -22,9 +22,12 @@ import type {
   ProviderConfig,
   ProvidersOverview,
   ProviderType,
+  AdminTemplateDetail,
+  AdminTemplateListResponse,
   AdoptionResponse,
   ProviderUsageResponse,
   Session,
+  TemplateDefinition,
   SessionDetail,
   SessionFilters,
   UpdateFeatureFlagsResponse,
@@ -549,6 +552,37 @@ export async function clearProviderOverride(
  * optional: omitted bounds mean "all recorded usage"; omitted type means
  * all three pipeline stages. ADMIN + COMPLIANCE_OFFICER.
  */
+/* ─── Built-in template management (admin, #72) ──────────────────────────── */
+
+export async function getAdminTemplates(): Promise<AdminTemplateListResponse> {
+  const res = await fetchWithAuth("/api/v1/admin/templates");
+  return res.json();
+}
+
+export async function getAdminTemplateDetail(
+  key: string,
+): Promise<AdminTemplateDetail> {
+  const res = await fetchWithAuth(`/api/v1/admin/templates/${key}`);
+  return res.json();
+}
+
+/** Save an admin override for a bundled template (live at runtime). */
+export async function putAdminTemplate(
+  key: string,
+  template: TemplateDefinition,
+): Promise<AdminTemplateDetail> {
+  const res = await fetchWithAuth(`/api/v1/admin/templates/${key}`, {
+    method: "PUT",
+    body: JSON.stringify(template),
+  });
+  return res.json();
+}
+
+/** Delete the override — the template reverts to its disk default. */
+export async function revertAdminTemplate(key: string): Promise<void> {
+  await fetchWithAuth(`/api/v1/admin/templates/${key}`, { method: "DELETE" });
+}
+
 /**
  * Adoption & ROI rollup (#71). EVAL_TEAM + ADMIN. `baselineMinutesPerNote`
  * opts time-saved in (echoed back by the backend); omitted → null.
