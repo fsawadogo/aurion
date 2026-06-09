@@ -445,6 +445,41 @@
         "name": "Transcription",
         "description": "Le moteur de reconnaissance vocale qui transforme l’audio enregistré en transcription."
       }
+    },
+    "usage": {
+      "title": "Utilisation et coûts",
+      "subtitle": "Télémétrie agrégée des appels par fournisseur — latence, succès, replis et dépense estimée.",
+      "rangeLabel": "Période",
+      "ranges": {
+        "24h": "24 h",
+        "7d": "7 jours",
+        "30d": "30 jours",
+        "all": "Tout l’historique"
+      },
+      "loadError": "Impossible de charger l’utilisation des fournisseurs.",
+      "empty": "Aucun appel de fournisseur enregistré dans cette période pour l’instant.",
+      "stats": {
+        "calls": "Appels",
+        "successRate": "Taux de succès",
+        "avgLatency": "Latence moy.",
+        "estCost": "Coût est."
+      },
+      "stages": {
+        "note_generation": "Génération de notes",
+        "vision": "Vision",
+        "transcription": "Transcription"
+      },
+      "table": {
+        "stage": "Étape",
+        "provider": "Fournisseur",
+        "callsCol": "Appels",
+        "success": "Succès",
+        "fallback": "Repli",
+        "latencyCol": "Latence moy.",
+        "tokensCol": "Jetons",
+        "costCol": "Coût est."
+      },
+      "costFootnote": "La capture des jetons et des coûts est partielle : les coûts de vision sont enregistrés aujourd’hui; ceux de la génération de notes et de la transcription apparaîtront avec le déploiement du suivi d’utilisation des fournisseurs. « — » signifie absence de données, pas une dépense nulle."
     }
   },
   "CapturedMedia": {

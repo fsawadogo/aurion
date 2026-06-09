@@ -445,6 +445,41 @@
         "name": "Transcription",
         "description": "The speech-to-text engine that turns recorded audio into the transcript."
       }
+    },
+    "usage": {
+      "title": "Usage & cost",
+      "subtitle": "Aggregated call telemetry per provider — latency, success, fallbacks, and estimated spend.",
+      "rangeLabel": "Time range",
+      "ranges": {
+        "24h": "24 h",
+        "7d": "7 days",
+        "30d": "30 days",
+        "all": "All time"
+      },
+      "loadError": "Unable to load provider usage.",
+      "empty": "No provider calls recorded in this window yet.",
+      "stats": {
+        "calls": "Calls",
+        "successRate": "Success rate",
+        "avgLatency": "Avg latency",
+        "estCost": "Est. cost"
+      },
+      "stages": {
+        "note_generation": "Note generation",
+        "vision": "Vision",
+        "transcription": "Transcription"
+      },
+      "table": {
+        "stage": "Stage",
+        "provider": "Provider",
+        "callsCol": "Calls",
+        "success": "Success",
+        "fallback": "Fallback",
+        "latencyCol": "Avg latency",
+        "tokensCol": "Tokens",
+        "costCol": "Est. cost"
+      },
+      "costFootnote": "Token and cost capture is partial: vision costs are recorded today; note generation and transcription costs appear as provider usage reporting rolls out. “—” means no data, not zero spend."
     }
   },
   "CapturedMedia": {
