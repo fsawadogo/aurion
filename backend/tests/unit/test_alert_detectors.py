@@ -149,3 +149,47 @@ async def test_pass_errors_are_swallowed() -> None:
     ):
         n = await detectors.run_detector_pass()
     assert n == 0  # never raises
+
+
+# ── #76 thresholds: env > AppConfig > default ────────────────────────────────
+
+
+def test_thresholds_default_to_appconfig_schema_defaults(monkeypatch) -> None:
+    """With no env override and no AppConfig client running, thresholds
+    resolve to the AlertingConfig schema defaults."""
+    for var in ("AURION_SLA_STAGE1_MS", "AURION_SLA_STAGE2_MS", "AURION_PURGE_GAP_HOURS"):
+        monkeypatch.delenv(var, raising=False)
+    assert detectors.sla_stage1_ms() == 30_000
+    assert detectors.sla_stage2_ms() == 300_000
+    assert detectors.purge_gap_hours() == 24
+
+
+def test_thresholds_read_appconfig_when_env_unset(monkeypatch) -> None:
+    """AC-3a: AppConfig is the primary source."""
+    from app.modules.config.schema import AlertingConfig
+
+    monkeypatch.delenv("AURION_SLA_STAGE1_MS", raising=False)
+    with patch.object(
+        detectors, "_alerting_config",
+        return_value=AlertingConfig(sla_stage1_ms=45_000, purge_gap_hours=48),
+    ):
+        assert detectors.sla_stage1_ms() == 45_000
+        assert detectors.purge_gap_hours() == 48
+
+
+def test_env_overrides_appconfig(monkeypatch) -> None:
+    """AC-3b: the env var (ops escape hatch) wins over AppConfig."""
+    from app.modules.config.schema import AlertingConfig
+
+    monkeypatch.setenv("AURION_SLA_STAGE1_MS", "90000")
+    with patch.object(
+        detectors, "_alerting_config",
+        return_value=AlertingConfig(sla_stage1_ms=45_000),
+    ):
+        assert detectors.sla_stage1_ms() == 90_000
+
+
+def test_appconfig_value_clamped_to_detector_bounds() -> None:
+    """A wild AppConfig value (schema bounds are wider than sensible for
+    a given deployment) is still clamped by the resolver."""
+    assert detectors._threshold("AURION_NOT_SET_VAR", 10, 1_000, 3_600_000) == 1_000

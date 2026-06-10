@@ -209,6 +209,21 @@ class FeatureFlagsConfig(BaseModel):
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────
 
+class AlertingConfig(BaseModel):
+    """Synthesized-alert detector thresholds (#76, detectors in #408).
+
+    Runtime-tunable via AppConfig like every other pipeline knob; the
+    matching ``AURION_SLA_STAGE{1,2}_MS`` / ``AURION_PURGE_GAP_HOURS`` env
+    vars remain an ops escape hatch that overrides these when set
+    (precedence: env > AppConfig > these defaults). Defaults mirror the
+    MVP success criteria: Stage 1 < 30 s, Stage 2 < 5 min.
+    """
+
+    sla_stage1_ms: int = Field(default=30_000, ge=1_000, le=3_600_000)
+    sla_stage2_ms: int = Field(default=300_000, ge=1_000, le=86_400_000)
+    purge_gap_hours: int = Field(default=24, ge=1, le=336)
+
+
 class AppConfigSchema(BaseModel):
     """Full AppConfig document schema.
 
@@ -221,6 +236,8 @@ class AppConfigSchema(BaseModel):
     model_params: ModelParamsConfig = Field(default_factory=ModelParamsConfig)
     pipeline: PipelineConfig = Field(default_factory=PipelineConfig)
     feature_flags: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
+    # Optional — absent in older hosted content; defaults preserve behavior.
+    alerting: AlertingConfig = Field(default_factory=AlertingConfig)
 
     @model_validator(mode="after")
     def validate_frame_windows(self) -> "AppConfigSchema":

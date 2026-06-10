@@ -223,6 +223,21 @@ resource "aws_appconfig_configuration_profile" "main" {
             media_review_retention_enabled = { type = "boolean" }
           }
         }
+        # Synthesized-alert detector thresholds (#76; detectors shipped in
+        # PR #408). NOT in the root `required` list so every existing hosted
+        # document (which predates the block) still validates under
+        # additionalProperties = false — the backend Pydantic schema
+        # (AlertingConfig) supplies the defaults (30000 / 300000 / 24).
+        # Bounds MUST mirror backend/app/modules/config/schema.py.
+        alerting = {
+          type                 = "object"
+          additionalProperties = false
+          properties = {
+            sla_stage1_ms   = { type = "integer", minimum = 1000, maximum = 3600000 }
+            sla_stage2_ms   = { type = "integer", minimum = 1000, maximum = 86400000 }
+            purge_gap_hours = { type = "integer", minimum = 1, maximum = 336 }
+          }
+        }
       }
     })
   }
