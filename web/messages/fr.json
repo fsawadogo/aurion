@@ -22,7 +22,8 @@
       "capturedMedia": "Médias capturés",
       "analytics": "Analytique",
       "systemTemplates": "Modèles système",
-      "alerts": "Alertes"
+      "alerts": "Alertes",
+      "complianceReports": "Rapports de conformité"
     },
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
@@ -1075,5 +1076,32 @@
     "empty": "Aucune alerte — tout est en ordre.",
     "acknowledge": "Accuser réception",
     "acknowledgedAt": "accusée {when}"
+  },
+  "AdminCompliance": {
+    "eyebrow": "Admin",
+    "title": "Rapports de conformité",
+    "description": "Instantanés CSV persistés et signés SHA-256 qu’une institution peut vérifier : la piste d’audit complète, la preuve de masquage des RPS et le cycle de purge/rétention.",
+    "loadError": "Impossible de charger les rapports.",
+    "generateError": "Échec de la génération du rapport.",
+    "downloadError": "Échec du téléchargement.",
+    "generate": "Générer {type}",
+    "generateSuccess": "Rapport {type} généré — sha256 {sha}…",
+    "types": {
+      "audit": "Audit",
+      "masking": "Masquage",
+      "retention": "Rétention"
+    },
+    "table": {
+      "type": "Type",
+      "generated": "Généré",
+      "window": "Période",
+      "size": "Taille",
+      "sha": "SHA-256",
+      "actions": ""
+    },
+    "fullHistory": "Historique complet",
+    "download": "Télécharger",
+    "empty": "Aucun rapport pour l’instant — générez-en un ci-dessus.",
+    "footnote": "Chaque téléchargement renvoie son SHA-256 dans l’en-tête X-Aurion-Sha256; comparez-le au hachage affiché ici pour vérifier que le fichier remis est bien celui qui a été généré."
   }
 }

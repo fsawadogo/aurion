@@ -22,7 +22,8 @@
       "capturedMedia": "Captured Media",
       "analytics": "Analytics",
       "systemTemplates": "System Templates",
-      "alerts": "Alerts"
+      "alerts": "Alerts",
+      "complianceReports": "Compliance Reports"
     },
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
@@ -1075,5 +1076,32 @@
     "empty": "No alerts — all clear.",
     "acknowledge": "Acknowledge",
     "acknowledgedAt": "acknowledged {when}"
+  },
+  "AdminCompliance": {
+    "eyebrow": "Admin",
+    "title": "Compliance reports",
+    "description": "Persisted, SHA-256-signed CSV snapshots an institution can verify: the full audit trail, the PHI-masking proof, and the purge/retention lifecycle.",
+    "loadError": "Unable to load reports.",
+    "generateError": "Report generation failed.",
+    "downloadError": "Download failed.",
+    "generate": "Generate {type}",
+    "generateSuccess": "{type} report generated — sha256 {sha}…",
+    "types": {
+      "audit": "Audit",
+      "masking": "Masking",
+      "retention": "Retention"
+    },
+    "table": {
+      "type": "Type",
+      "generated": "Generated",
+      "window": "Window",
+      "size": "Size",
+      "sha": "SHA-256",
+      "actions": ""
+    },
+    "fullHistory": "Full history",
+    "download": "Download",
+    "empty": "No reports yet — generate one above.",
+    "footnote": "Each download echoes its SHA-256 in the X-Aurion-Sha256 header; compare against the hash shown here to verify the file you hand off is the one that was generated."
   }
 }

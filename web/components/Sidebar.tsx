@@ -25,6 +25,7 @@ import {
   Zap,
   TrendingUp,
   Bell,
+  FileCheck2,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -75,6 +76,9 @@ const navigation: {
   // Operational alerts (#76). ADMIN + COMPLIANCE_OFFICER — matches the
   // backend gate on /admin/alerts (list + acknowledge).
   { tKey: "alerts", href: "/portal/admin/alerts", icon: Bell, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },
+  // Signed compliance reports (#77). ADMIN + COMPLIANCE_OFFICER — matches
+  // the backend gate on /admin/compliance/reports.
+  { tKey: "complianceReports", href: "/portal/admin/compliance", icon: FileCheck2, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },
   // Captured Media (#338) — windowed media-retention review. Visible to the
   // three roles the backend list gate allows (compliance is view-only; the
   // download action is hidden for them in-page). The page itself is also

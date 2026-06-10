@@ -514,6 +514,29 @@ export interface AdoptionResponse {
   by_clinician: ClinicianAdoptionRow[];
 }
 
+/* ─── Compliance reports (admin, #77) ────────────────────────────────────── */
+// Mirrors backend/app/api/v1/admin/compliance.py. Reports are persisted,
+// sha256-signed CSV snapshots; download echoes the hash in X-Aurion-Sha256.
+
+export type ComplianceReportType = "audit" | "masking" | "retention";
+
+export interface ComplianceReportMetadata {
+  id: string;
+  report_type: ComplianceReportType;
+  since: string | null;
+  until: string | null;
+  generated_at: string;
+  generated_by: string | null;
+  sha256: string;
+  byte_size: number;
+}
+
+export interface ComplianceReportListResponse {
+  items: ComplianceReportMetadata[];
+  limit: number;
+  offset: number;
+}
+
 /* ─── Operational alerts (admin, #76) ────────────────────────────────────── */
 // Mirrors backend/app/api/v1/admin/alerts.py. `metadata` is structured,
 // PHI-free context (session prefix, provider, counts).
