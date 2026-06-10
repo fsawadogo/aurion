@@ -35,6 +35,10 @@ from app.modules.alerts.detectors import (
     start_alert_detectors,
     stop_alert_detectors,
 )
+from app.modules.compliance.scheduler import (
+    start_report_scheduler,
+    stop_report_scheduler,
+)
 from app.modules.config.appconfig_client import get_appconfig_client
 from app.modules.config.provider_overrides import (
     start_override_polling,
@@ -62,9 +66,11 @@ async def lifespan(app: FastAPI):
     # No-op when disabled, so safe to call unconditionally.
     await start_emr_worker()
     await start_alert_detectors()
+    await start_report_scheduler()
     yield
     # Shutdown — reverse order. EMR worker first so an in-flight
     # drain pass can finish before the DB connection closes.
+    await stop_report_scheduler()
     await stop_alert_detectors()
     await stop_emr_worker()
     await stop_override_polling()
