@@ -157,3 +157,46 @@ class TestAppConfigSchema:
         assert config.providers.note_generation == NoteGenerationProviderKey.GEMINI
         assert config.providers.transcription == TranscriptionProviderKey.WHISPER  # default
         assert config.providers.vision == VisionProviderKey.OPENAI  # default
+
+
+# ── #76 alerting thresholds ──────────────────────────────────────────────────
+
+
+def test_alerting_absent_parses_to_defaults():
+    """AC-1: hosted content predating the `alerting` block still parses,
+    with defaults matching the MVP SLA targets + 24h purge window."""
+    cfg = AppConfigSchema.model_validate(
+        {"providers": {}, "model_params": {}, "pipeline": {}, "feature_flags": {}}
+    )
+    assert cfg.alerting.sla_stage1_ms == 30_000
+    assert cfg.alerting.sla_stage2_ms == 300_000
+    assert cfg.alerting.purge_gap_hours == 24
+
+
+def test_alerting_block_overrides_and_bounds():
+    """AC-2: an explicit block overrides; out-of-range fails validation."""
+    cfg = AppConfigSchema.model_validate(
+        {
+            "providers": {},
+            "model_params": {},
+            "pipeline": {},
+            "feature_flags": {},
+            "alerting": {"sla_stage1_ms": 60_000, "purge_gap_hours": 48},
+        }
+    )
+    assert cfg.alerting.sla_stage1_ms == 60_000
+    assert cfg.alerting.sla_stage2_ms == 300_000  # untouched key keeps default
+    assert cfg.alerting.purge_gap_hours == 48
+
+    import pytest as _pytest
+
+    with _pytest.raises(Exception):
+        AppConfigSchema.model_validate(
+            {
+                "providers": {},
+                "model_params": {},
+                "pipeline": {},
+                "feature_flags": {},
+                "alerting": {"sla_stage1_ms": 1},  # below ge=1000
+            }
+        )

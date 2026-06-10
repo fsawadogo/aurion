@@ -27,9 +27,12 @@ restart or a second replica never spams duplicates.
     Unlike the EMR worker (which mutates an external system and is
     opt-in), detectors only read state and insert alert rows.
   AURION_ALERT_DETECT_INTERVAL_SECONDS — default 300, clamped [60, 3600].
-  AURION_SLA_STAGE1_MS             — default 30000  (MVP: Stage 1 < 30 s)
-  AURION_SLA_STAGE2_MS             — default 300000 (MVP: Stage 2 < 5 min)
-  AURION_PURGE_GAP_HOURS           — default 24
+  Thresholds come from AppConfig (``alerting`` block: sla_stage1_ms /
+  sla_stage2_ms / purge_gap_hours — #76 "configurable thresholds"); the
+  env vars below OVERRIDE AppConfig when set (ops escape hatch):
+  AURION_SLA_STAGE1_MS             — AppConfig default 30000  (Stage 1 < 30 s)
+  AURION_SLA_STAGE2_MS             — AppConfig default 300000 (Stage 2 < 5 min)
+  AURION_PURGE_GAP_HOURS           — AppConfig default 24
 """
 
 from __future__ import annotations
@@ -81,16 +84,45 @@ def detectors_enabled() -> bool:
     )
 
 
+def _threshold(env_name: str, appconfig_value: int, lo: int, hi: int) -> int:
+    """Resolve a detector threshold: env override > AppConfig > schema
+    default (the AppConfig value already carries the schema default when
+    the hosted content omits the ``alerting`` block). The env var is the
+    ops escape hatch and is clamped to the same bounds as the schema."""
+    if os.getenv(env_name) is not None:
+        return _env_int(env_name, appconfig_value, lo, hi)
+    return min(max(appconfig_value, lo), hi)
+
+
+def _alerting_config():
+    """Late import so unit tests can run detectors without the AppConfig
+    client started; falls back to schema defaults on any client error."""
+    try:
+        from app.modules.config.appconfig_client import get_config
+
+        return get_config().alerting
+    except Exception:  # noqa: BLE001 — detector pass must survive config hiccups
+        from app.modules.config.schema import AlertingConfig
+
+        return AlertingConfig()
+
+
 def sla_stage1_ms() -> int:
-    return _env_int("AURION_SLA_STAGE1_MS", 30_000, 1_000, 3_600_000)
+    return _threshold(
+        "AURION_SLA_STAGE1_MS", _alerting_config().sla_stage1_ms, 1_000, 3_600_000
+    )
 
 
 def sla_stage2_ms() -> int:
-    return _env_int("AURION_SLA_STAGE2_MS", 300_000, 1_000, 86_400_000)
+    return _threshold(
+        "AURION_SLA_STAGE2_MS", _alerting_config().sla_stage2_ms, 1_000, 86_400_000
+    )
 
 
 def purge_gap_hours() -> int:
-    return _env_int("AURION_PURGE_GAP_HOURS", 24, 1, 24 * 14)
+    return _threshold(
+        "AURION_PURGE_GAP_HOURS", _alerting_config().purge_gap_hours, 1, 24 * 14
+    )
 
 
 async def _already_alerted(
