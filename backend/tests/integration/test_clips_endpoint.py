@@ -688,6 +688,61 @@ async def test_telemetry_drop_invalid_reason_422(
     mock_audit.write_event.assert_not_called()
 
 
+async def test_telemetry_masking_failed_drop_publishes_critical_alert(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    """#76: a masking_failed drop beacon also publishes a CRITICAL alert
+    (Slack-eligible) — fail-closed protected the data; the alert makes the
+    failure visible. Other drop reasons do not alert."""
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ), patch(
+        "app.api.v1.clips.try_publish_alert", AsyncMock()
+    ) as mock_alert:
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "drop", "reason": "masking_failed"},
+        )
+
+    assert response.status_code == 200, response.text
+    mock_alert.assert_called_once()
+    call = mock_alert.call_args.kwargs
+    assert call["alert_type"] == "masking_failed"
+    assert call["severity"].value == "critical"
+    assert call["metadata"]["session_id"] == str(session_uuid)
+    # The audit row still landed alongside the alert.
+    assert mock_audit.write_event.call_args.kwargs["reason"] == "masking_failed"
+
+
+async def test_telemetry_non_masking_drop_does_not_alert(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    session_uuid: uuid.UUID,
+    session_owned_by_clinician: SessionModel,
+    mock_audit: MagicMock,
+) -> None:
+    with patch(
+        "app.api.v1._helpers.get_session",
+        AsyncMock(return_value=session_owned_by_clinician),
+    ), patch(
+        "app.api.v1.clips.try_publish_alert", AsyncMock()
+    ) as mock_alert:
+        response = await app_client.post(
+            f"/api/v1/clips/{session_uuid}/telemetry",
+            headers=auth_headers,
+            json={"kind": "drop", "reason": "ring_empty", "timestamp_ms": 100},
+        )
+
+    assert response.status_code == 200, response.text
+    mock_alert.assert_not_called()
+
+
 async def test_telemetry_per_tick_reason_carries_timestamp(
     app_client: AsyncClient,
     auth_headers: dict[str, str],
