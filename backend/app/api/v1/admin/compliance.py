@@ -34,7 +34,9 @@ _ROLES = (UserRole.ADMIN, UserRole.COMPLIANCE_OFFICER)
 
 
 class GenerateReportRequest(BaseModel):
-    report_type: ReportType = Field(..., description="'audit' is currently the only wired type.")
+    report_type: ReportType = Field(
+        ..., description="One of: audit, masking, retention (all wired, #407)."
+    )
     since: datetime | None = None
     until: datetime | None = None
 
