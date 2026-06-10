@@ -41,6 +41,7 @@ from app.api.v1._helpers import (
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.s3 import FRAMES_BUCKET, get_s3_client
+from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.config.schema import VisualEvidenceMode
 
@@ -367,6 +368,21 @@ async def record_clip_telemetry(
         if body.timestamp_ms is not None:
             fields["timestamp_ms"] = body.timestamp_ms
         await write_audit(session_id, AuditEventType.CLIP_DROPPED, **fields)
+        # #76: a client-side masking failure is a compliance signal, not
+        # just telemetry — surface it as a CRITICAL alert (Slack-eligible
+        # via the #406 sink). Fail-closed already protected the data; the
+        # alert makes the failure visible. Best-effort, own session.
+        if body.reason is ClipDropReason.MASKING_FAILED:
+            await try_publish_alert(
+                alert_type="masking_failed",
+                severity=AlertSeverity.CRITICAL,
+                source="ios_clip_pipeline",
+                message=(
+                    "On-device clip masking failed (fail-closed, nothing "
+                    f"uploaded) for session {_session_log_prefix(session_id)}"
+                ),
+                metadata={"session_id": str(session_id)},
+            )
 
     elif body.kind == "summary":
         fields = {"origin": "ios"}

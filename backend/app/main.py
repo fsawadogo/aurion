@@ -31,6 +31,10 @@ from app.api.v1.vision import router as vision_router
 from app.api.v1.websocket import router as ws_router
 from app.core.database import close_db
 from app.core.logging import setup_logging
+from app.modules.alerts.detectors import (
+    start_alert_detectors,
+    stop_alert_detectors,
+)
 from app.modules.config.appconfig_client import get_appconfig_client
 from app.modules.config.provider_overrides import (
     start_override_polling,
@@ -57,9 +61,11 @@ async def lifespan(app: FastAPI):
     # EMR retry worker — opt-in via AURION_EMR_RETRY_WORKER_ENABLED.
     # No-op when disabled, so safe to call unconditionally.
     await start_emr_worker()
+    await start_alert_detectors()
     yield
     # Shutdown — reverse order. EMR worker first so an in-flight
     # drain pass can finish before the DB connection closes.
+    await stop_alert_detectors()
     await stop_emr_worker()
     await stop_override_polling()
     await stop_template_override_polling()
