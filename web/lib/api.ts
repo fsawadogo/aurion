@@ -24,6 +24,9 @@ import type {
   ProviderType,
   AdminTemplateDetail,
   AlertListResponse,
+  ComplianceReportListResponse,
+  ComplianceReportMetadata,
+  ComplianceReportType,
   AdminTemplateListResponse,
   AdoptionResponse,
   OperationalAlert,
@@ -554,6 +557,48 @@ export async function clearProviderOverride(
  * optional: omitted bounds mean "all recorded usage"; omitted type means
  * all three pipeline stages. ADMIN + COMPLIANCE_OFFICER.
  */
+/* ─── Compliance reports (admin, #77) ────────────────────────────────────── */
+
+export async function listComplianceReports(opts?: {
+  reportType?: ComplianceReportType;
+  limit?: number;
+  offset?: number;
+}): Promise<ComplianceReportListResponse> {
+  const params = new URLSearchParams();
+  if (opts?.reportType) params.set("report_type", opts.reportType);
+  if (opts?.limit !== undefined) params.set("limit", String(opts.limit));
+  if (opts?.offset !== undefined) params.set("offset", String(opts.offset));
+  const qs = params.toString();
+  const res = await fetchWithAuth(
+    `/api/v1/admin/compliance/reports${qs ? `?${qs}` : ""}`,
+  );
+  return res.json();
+}
+
+/** Generate a new signed snapshot. Omitted bounds = full history. */
+export async function generateComplianceReport(
+  reportType: ComplianceReportType,
+  opts?: { since?: string; until?: string },
+): Promise<ComplianceReportMetadata> {
+  const res = await fetchWithAuth("/api/v1/admin/compliance/reports", {
+    method: "POST",
+    body: JSON.stringify({
+      report_type: reportType,
+      since: opts?.since ?? null,
+      until: opts?.until ?? null,
+    }),
+  });
+  return res.json();
+}
+
+/** Download the persisted CSV bytes (sha256 echoed in X-Aurion-Sha256). */
+export async function downloadComplianceReport(id: string): Promise<Blob> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/compliance/reports/${id}/download`,
+  );
+  return res.blob();
+}
+
 /* ─── Operational alerts (admin, #76) ────────────────────────────────────── */
 
 export async function listAlerts(opts?: {
