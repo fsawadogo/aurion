@@ -184,16 +184,32 @@ final class WatchSessionBridge: NSObject, ObservableObject {
         // Validate against current state so a stale watch tap can't drive an
         // illegal transition. SessionManager also guards each method, but
         // rejecting here keeps us from firing a no-op network call.
+        // Async commands re-publish AFTER their await completes — several
+        // mutate state that the `$state` observer alone wouldn't surface:
+        //   • confirmConsent sets `consentMethod` WITHOUT changing the state
+        //     (stays CONSENT_PENDING) — without this push the watch would
+        //     never learn consent was confirmed and couldn't advance to the
+        //     start-recording step.
+        //   • startRecording stamps `recordingStartedAt` just after the
+        //     state flips, so an explicit push guarantees the elapsed anchor
+        //     reaches the watch.
         switch message.command {
         case .confirmConsent:
             guard state == .consentPending, !session.isConsentConfirmed else { break }
             let method = message.consentMethod
                 .flatMap(ConsentMethod.init(rawValue:)) ?? .verbal
-            Task { await manager.confirmConsent(method: method); self.send(haptic: .consentConfirmed) }
+            Task {
+                await manager.confirmConsent(method: method)
+                self.send(haptic: .consentConfirmed)
+                self.publishState()
+            }
 
         case .start:
             guard state == .consentPending, session.isConsentConfirmed else { break }
-            Task { await manager.startRecording() }
+            Task {
+                await manager.startRecording()
+                self.publishState()
+            }
 
         case .pause:
             guard state == .recording else { break }
@@ -205,11 +221,15 @@ final class WatchSessionBridge: NSObject, ObservableObject {
 
         case .stop:
             guard state == .recording || state == .paused, manager.stopAllowed() else { break }
-            Task { await manager.stopRecording() }
+            Task {
+                await manager.stopRecording()
+                self.publishState()
+            }
         }
 
-        // Whatever we did (or rejected), push the authoritative state so the
-        // watch re-syncs and never sits on a stale optimistic toggle.
+        // Whatever we did synchronously (or rejected), push the authoritative
+        // state so the watch re-syncs and never sits on a stale optimistic
+        // toggle. (Async paths above push again once their await settles.)
         publishState()
     }
 }

@@ -5,6 +5,8 @@
 "watch.consent.verbal" = "Verbal";
 "watch.consent.paper" = "Paper form";
 "watch.consent.digital" = "Digital form";
+"watch.start.title" = "Consent confirmed";
+"watch.action.record" = "Start recording";
 "watch.action.pause" = "Pause";
 "watch.action.resume" = "Resume";
 "watch.action.stop" = "Stop";

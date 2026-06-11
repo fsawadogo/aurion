@@ -16,7 +16,14 @@ struct RootView: View {
     private var content: some View {
         switch client.sessionState.state {
         case "CONSENT_PENDING":
-            ConsentView()
+            // Pick a consent method first; once the phone confirms it
+            // (consentConfirmed flips true) advance to the wrist
+            // start-recording step.
+            if client.sessionState.consentConfirmed {
+                StartView()
+            } else {
+                ConsentView()
+            }
         case "RECORDING":
             ControlsView(isRecording: true)
         case "PAUSED":

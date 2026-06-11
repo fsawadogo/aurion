@@ -7,6 +7,8 @@
 "watch.consent.verbal" = "Verbal";
 "watch.consent.paper" = "Formulaire papier";
 "watch.consent.digital" = "Formulaire num\U00E9rique";
+"watch.start.title" = "Consentement confirm\U00E9";
+"watch.action.record" = "D\U00E9marrer l\U2019enregistrement";
 "watch.action.pause" = "Pause";
 "watch.action.resume" = "Reprendre";
 "watch.action.stop" = "Arr\U00EAter";
