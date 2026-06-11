@@ -219,3 +219,38 @@ class TestRetentionBuilder:
         windowed = _filter_window([old_evt, new_evt], now - timedelta(days=7), None)
         body = build_retention_csv(windowed).decode("utf-8")
         assert body.count("audio_purged") == 1
+
+
+class TestDecimalSafety:
+    """DynamoDB returns numbers as decimal.Decimal — the builders' detail
+    JSON must serialize them (this crashed all three builders + the audit
+    CSV export the moment the table scan returned real rows)."""
+
+    def test_builders_serialize_decimal_details(self) -> None:
+        from decimal import Decimal
+
+        now = datetime.now(timezone.utc)
+        evt = {
+            **_evt("s1", now, "clip_uploaded"),
+            "timestamp_ms": Decimal("14500"),
+            "bytes": Decimal("482133"),
+            "frames_total": Decimal("7"),
+            "masking_status": "success",
+        }
+        purge = {**_evt("s1", now, "audio_purged"), "audio_count": Decimal("1")}
+
+        for builder, events in (
+            (build_audit_csv, [evt]),
+            (build_masking_csv, [evt]),
+            (build_retention_csv, [purge]),
+        ):
+            body = builder(events).decode("utf-8")  # must not raise
+            assert "14500" in body or "audio_purged" in body
+
+    def test_dump_details_renders_decimals_as_strings(self) -> None:
+        from decimal import Decimal
+
+        from app.modules.compliance.reports_service import dump_details
+
+        out = dump_details({"bytes": Decimal("123"), "rate": Decimal("0.5")})
+        assert '"123"' in out and '"0.5"' in out

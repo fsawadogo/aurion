@@ -9,7 +9,6 @@ from __future__ import annotations
 
 import csv
 import io
-import json
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, Query
@@ -26,6 +25,7 @@ from app.api.v1.admin._shared import (
 from app.core.types import UserRole
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, require_role
+from app.modules.compliance.reports_service import dump_details
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -114,7 +114,7 @@ async def export_audit_csv(
             evt.get("event_timestamp", ""),
             evt.get("event_type", ""),
             evt.get("event_id", ""),
-            json.dumps(details),
+            dump_details(details),
         ])
 
     output.seek(0)
