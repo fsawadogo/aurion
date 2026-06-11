@@ -5,16 +5,16 @@ login completes. Default False (server_default) so the column is inert on
 add — enforcement is opt-in via the admin toggle; the global policy is a
 CTO decision, not a migration.
 
-Revision ID: 0037
-Revises: 0036
+Revision ID: 0039
+Revises: 0038
 """
 
 import sqlalchemy as sa
 
 from alembic import op
 
-revision = "0037"
-down_revision = "0036"
+revision = "0039"
+down_revision = "0038"
 branch_labels = None
 depends_on = None
 
