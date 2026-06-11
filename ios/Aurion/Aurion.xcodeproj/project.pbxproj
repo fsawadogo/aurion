@@ -95,8 +95,6 @@
 		EDBD3E5A16266442A517C5FC /* StartSessionWidget.swift */ = {isa = PBXFileReference; includeInIndex = 1; lastKnownFileType = sourcecode.swift; path = StartSessionWidget.swift; sourceTree = "<group>"; };
 		EDFC027F24A3EF463400D8F3 /* AurionWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = AurionWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		F710367A2FDAF85E0069F327 /* AurionWatch Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "AurionWatch Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
-		F71036862FDAF8600069F327 /* AurionWatch Watch AppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "AurionWatch Watch AppTests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
-		F71036902FDAF8600069F327 /* AurionWatch Watch AppUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = "AurionWatch Watch AppUITests.xctest"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7BD2FE82F8B528A000E70A0 /* Aurion.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Aurion.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7BD2FF52F8B528B000E70A0 /* AurionTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AurionTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		F7BD2FFF2F8B528B000E70A0 /* AurionUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = AurionUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -105,31 +103,29 @@
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		F710367B2FDAF85E0069F327 /* AurionWatch Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = "AurionWatch Watch App";
-			sourceTree = "<group>";
-		};
-		F71036892FDAF8600069F327 /* AurionWatch Watch AppTests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "AurionWatch Watch AppTests";
-			sourceTree = "<group>";
-		};
-		F71036932FDAF8600069F327 /* AurionWatch Watch AppUITests */ = {
-			isa = PBXFileSystemSynchronizedRootGroup;
-			path = "AurionWatch Watch AppUITests";
 			sourceTree = "<group>";
 		};
 		F7BD2FEA2F8B528A000E70A0 /* Aurion */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = Aurion;
 			sourceTree = "<group>";
 		};
 		F7BD2FF82F8B528B000E70A0 /* AurionTests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = AurionTests;
 			sourceTree = "<group>";
 		};
 		F7BD30022F8B528B000E70A0 /* AurionUITests */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+			);
 			path = AurionUITests;
 			sourceTree = "<group>";
 		};
@@ -145,20 +141,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F71036772FDAF85E0069F327 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		F71036832FDAF8600069F327 /* Frameworks */ = {
-			isa = PBXFrameworksBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		F710368D2FDAF8600069F327 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -223,8 +205,6 @@
 				F7BD2FF82F8B528B000E70A0 /* AurionTests */,
 				F7BD30022F8B528B000E70A0 /* AurionUITests */,
 				F710367B2FDAF85E0069F327 /* AurionWatch Watch App */,
-				F71036892FDAF8600069F327 /* AurionWatch Watch AppTests */,
-				F71036932FDAF8600069F327 /* AurionWatch Watch AppUITests */,
 				F7BD2FE92F8B528A000E70A0 /* Products */,
 				D6C9F21CA4FD9B1D2204044C /* Frameworks */,
 				3522090724D031EE1DA1CF78 /* AurionWidgets */,
@@ -240,8 +220,6 @@
 				F7BD2FFF2F8B528B000E70A0 /* AurionUITests.xctest */,
 				EDFC027F24A3EF463400D8F3 /* AurionWidgets.appex */,
 				F710367A2FDAF85E0069F327 /* AurionWatch Watch App.app */,
-				F71036862FDAF8600069F327 /* AurionWatch Watch AppTests.xctest */,
-				F71036902FDAF8600069F327 /* AurionWatch Watch AppUITests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -282,57 +260,9 @@
 				F710367B2FDAF85E0069F327 /* AurionWatch Watch App */,
 			);
 			name = "AurionWatch Watch App";
-			packageProductDependencies = (
-			);
 			productName = "AurionWatch Watch App";
 			productReference = F710367A2FDAF85E0069F327 /* AurionWatch Watch App.app */;
 			productType = "com.apple.product-type.application";
-		};
-		F71036852FDAF8600069F327 /* AurionWatch Watch AppTests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = F71036A32FDAFCC40069F327 /* Build configuration list for PBXNativeTarget "AurionWatch Watch AppTests" */;
-			buildPhases = (
-				F71036822FDAF8600069F327 /* Sources */,
-				F71036832FDAF8600069F327 /* Frameworks */,
-				F71036842FDAF8600069F327 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				F71036882FDAF8600069F327 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				F71036892FDAF8600069F327 /* AurionWatch Watch AppTests */,
-			);
-			name = "AurionWatch Watch AppTests";
-			packageProductDependencies = (
-			);
-			productName = "AurionWatch Watch AppTests";
-			productReference = F71036862FDAF8600069F327 /* AurionWatch Watch AppTests.xctest */;
-			productType = "com.apple.product-type.bundle.unit-test";
-		};
-		F710368F2FDAF8600069F327 /* AurionWatch Watch AppUITests */ = {
-			isa = PBXNativeTarget;
-			buildConfigurationList = F71036A42FDAFCC40069F327 /* Build configuration list for PBXNativeTarget "AurionWatch Watch AppUITests" */;
-			buildPhases = (
-				F710368C2FDAF8600069F327 /* Sources */,
-				F710368D2FDAF8600069F327 /* Frameworks */,
-				F710368E2FDAF8600069F327 /* Resources */,
-			);
-			buildRules = (
-			);
-			dependencies = (
-				F71036922FDAF8600069F327 /* PBXTargetDependency */,
-			);
-			fileSystemSynchronizedGroups = (
-				F71036932FDAF8600069F327 /* AurionWatch Watch AppUITests */,
-			);
-			name = "AurionWatch Watch AppUITests";
-			packageProductDependencies = (
-			);
-			productName = "AurionWatch Watch AppUITests";
-			productReference = F71036902FDAF8600069F327 /* AurionWatch Watch AppUITests.xctest */;
-			productType = "com.apple.product-type.bundle.ui-testing";
 		};
 		F7BD2FE72F8B528A000E70A0 /* Aurion */ = {
 			isa = PBXNativeTarget;
@@ -454,8 +384,6 @@
 				F7BD2FFE2F8B528B000E70A0 /* AurionUITests */,
 				DD800677623DD8903CA3DB6F /* AurionWidgets */,
 				F71036792FDAF85E0069F327 /* AurionWatch Watch App */,
-				F71036852FDAF8600069F327 /* AurionWatch Watch AppTests */,
-				F710368F2FDAF8600069F327 /* AurionWatch Watch AppUITests */,
 			);
 		};
 /* End PBXProject section */
@@ -469,20 +397,6 @@
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 		F71036782FDAF85E0069F327 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		F71036842FDAF8600069F327 /* Resources */ = {
-			isa = PBXResourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		F710368E2FDAF8600069F327 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -531,20 +445,6 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		F71036822FDAF8600069F327 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
-		F710368C2FDAF8600069F327 /* Sources */ = {
-			isa = PBXSourcesBuildPhase;
-			buildActionMask = 2147483647;
-			files = (
-			);
-			runOnlyForDeploymentPostprocessing = 0;
-		};
 		F7BD2FE42F8B528A000E70A0 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
@@ -574,16 +474,6 @@
 			name = AurionWidgets;
 			target = DD800677623DD8903CA3DB6F /* AurionWidgets */;
 			targetProxy = AFA784FCEAE192237DC04AB3 /* PBXContainerItemProxy */;
-		};
-		F71036882FDAF8600069F327 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = F71036792FDAF85E0069F327 /* AurionWatch Watch App */;
-			targetProxy = F71036872FDAF8600069F327 /* PBXContainerItemProxy */;
-		};
-		F71036922FDAF8600069F327 /* PBXTargetDependency */ = {
-			isa = PBXTargetDependency;
-			target = F71036792FDAF85E0069F327 /* AurionWatch Watch App */;
-			targetProxy = F71036912FDAF8600069F327 /* PBXContainerItemProxy */;
 		};
 		F71036992FDAF8600069F327 /* PBXTargetDependency */ = {
 			isa = PBXTargetDependency;
@@ -1110,24 +1000,6 @@
 			buildConfigurations = (
 				F710369C2FDAF8600069F327 /* Debug */,
 				F710369D2FDAF8600069F327 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		F71036A32FDAFCC40069F327 /* Build configuration list for PBXNativeTarget "AurionWatch Watch AppTests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				F710369E2FDAF8600069F327 /* Debug */,
-				F710369F2FDAF8600069F327 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
-		F71036A42FDAFCC40069F327 /* Build configuration list for PBXNativeTarget "AurionWatch Watch AppUITests" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				F71036A02FDAF8600069F327 /* Debug */,
-				F71036A12FDAF8600069F327 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
