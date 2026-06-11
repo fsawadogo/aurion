@@ -105,6 +105,8 @@ async def update_profile(
     if "ui_theme" in updates:
         # Route layer validates against the enum; service trusts.
         profile.ui_theme = updates["ui_theme"]
+    if "accent_color" in updates and updates["accent_color"] is not None:
+        profile.accent_color = updates["accent_color"]
     if "ui_language" in updates:
         # Route layer validates against the supported locales; service trusts.
         profile.ui_language = updates["ui_language"]

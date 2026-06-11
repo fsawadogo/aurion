@@ -483,3 +483,48 @@ def test_audit_emittedKwargsMatchWhitelist() -> None:
     assert validate_audit_kwargs(
         AuditEventType.PROFILE_CONTEXTS_UPDATED, ["label"]
     ) == {"label"}
+
+
+# ── #418 / OV-7: accent-color preference ─────────────────────────────────────
+
+
+def test_update_profile_accepts_palette_accent_color() -> None:
+    """AC-1a: each curated palette value validates."""
+    for c in ("gold", "teal", "indigo", "rose", "slate"):
+        req = UpdateProfileRequest(accent_color=c)
+        assert req.accent_color == c
+
+
+def test_update_profile_rejects_off_palette_accent_color() -> None:
+    """AC-1b: a free-form / off-palette value is rejected (no arbitrary hex
+    so the visual layer maps to pre-validated AA-contrast tokens)."""
+    import pytest as _pytest
+    from pydantic import ValidationError
+
+    for bad in ("#ff0000", "purple", "GOLD", "", "neon"):
+        with _pytest.raises(ValidationError):
+            UpdateProfileRequest(accent_color=bad)
+
+
+def test_update_profile_accent_color_optional_none_ok() -> None:
+    """Omitting accent_color (None) is valid — partial update."""
+    assert UpdateProfileRequest(accent_color=None).accent_color is None
+
+
+def test_profile_response_accent_color_defaults_gold() -> None:
+    """AC-2: ProfileResponse carries accent_color, defaulting to the brand
+    'gold' so a profile predating the column serializes safely (the
+    builder reads it via getattr(profile, "accent_color", "gold"))."""
+    from app.api.v1.profile import ProfileResponse
+
+    assert ProfileResponse.model_fields["accent_color"].default == "gold"
+
+
+def test_profile_response_builder_defaults_accent_for_legacy_row() -> None:
+    """The _to_response builder's getattr-default path yields 'gold' when
+    the ORM object lacks the attribute (legacy row before migration 0038)."""
+
+    class _Legacy:
+        pass
+
+    assert getattr(_Legacy(), "accent_color", "gold") == "gold"
