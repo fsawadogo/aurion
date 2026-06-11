@@ -57,6 +57,10 @@ async def upsert_score(
     soap_section_scores: dict[str, int] | None = None,
     hallucination_count: int | None = None,
     discrepancies: list[str] | None = None,
+    # Provider attribution (#74 / OV-1) — stamped by the route from the
+    # scored note's latest version; nullable like the spec fields.
+    provider_used: str | None = None,
+    model_name: str | None = None,
 ) -> EvalScoreModel:
     """Insert or overwrite the canonical score for ``session_id``.
 
@@ -84,6 +88,8 @@ async def upsert_score(
         soap_section_scores=soap_section_scores,
         hallucination_count=hallucination_count,
         discrepancies=discrepancies,
+        provider_used=provider_used,
+        model_name=model_name,
     )
     update_set = {k: v for k, v in values.items() if k != "session_id"}
     stmt = pg_insert(EvalScoreModel).values(**values).on_conflict_do_update(
