@@ -21,6 +21,7 @@ from app.modules.providers.note_gen.shared import (
     build_user_prompt,
     parse_note_response,
 )
+from app.modules.providers.usage_context import set_call_usage
 
 logger = logging.getLogger("aurion.providers.note_gen.anthropic")
 
@@ -102,6 +103,12 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
                 )
                 response.raise_for_status()
                 data = response.json()
+                usage = data.get("usage") or {}
+                set_call_usage(
+                    input_tokens=int(usage.get("input_tokens", 0)),
+                    output_tokens=int(usage.get("output_tokens", 0)),
+                    model=_MODEL,
+                )
                 # Tool-use response: content blocks include a tool_use
                 # block whose `input` is the schema-validated JSON. Fall
                 # back to a text block if the model declined the tool

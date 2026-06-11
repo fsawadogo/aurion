@@ -20,6 +20,7 @@ from app.modules.providers.note_gen.shared import (
     build_user_prompt,
     parse_note_response,
 )
+from app.modules.providers.usage_context import set_call_usage
 
 logger = logging.getLogger("aurion.providers.note_gen.openai")
 
@@ -84,6 +85,12 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
                 )
                 response.raise_for_status()
                 data = response.json()
+                usage = data.get("usage") or {}
+                set_call_usage(
+                    input_tokens=int(usage.get("prompt_tokens", 0)),
+                    output_tokens=int(usage.get("completion_tokens", 0)),
+                    model=_MODEL,
+                )
                 content = data["choices"][0]["message"]["content"]
                 return parse_note_response(content, transcript, template, stage, "openai")
 

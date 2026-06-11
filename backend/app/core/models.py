@@ -431,7 +431,7 @@ class PilotMetricsModel(Base):
     #
     # Cost is stored as USD micros (1 USD = 1_000_000 micros) — integer
     # arithmetic preserves precision across Phase 2 aggregations; the
-    # cost rate sheet lives in app/modules/vision/cost_rates.py.
+    # cost rate sheet lives in app/core/cost_rates.py.
     clip_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     clip_bytes_uploaded: Mapped[int | None] = mapped_column(
         Integer, nullable=True

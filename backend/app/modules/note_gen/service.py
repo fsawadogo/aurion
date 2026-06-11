@@ -21,6 +21,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_events import AuditEventType
+from app.core.cost_rates import USD_MICROS_PER_DOLLAR, estimate_cost_usd_micros
 from app.core.models import NoteVersionModel, SessionModel
 from app.core.types import (
     Note,
@@ -44,6 +45,7 @@ from app.modules.note_gen.few_shot import get_few_shot_examples, render_examples
 from app.modules.note_gen.specialty_style import get_specialty_style
 from app.modules.prompts import assemble_prompt_for_session
 from app.modules.providers.note_gen.shared import render_participants_block
+from app.modules.providers.usage_context import consume_call_usage
 from app.modules.providers.usage_service import get_provider_usage_service
 
 logger = logging.getLogger("aurion.note_gen")
@@ -461,7 +463,21 @@ async def _record_provider_usage(
     Swallows any DB error so a telemetry hiccup never alters the
     surrounding code path. Mirrors the wrapping pattern used at the
     alerts trigger sites (#76).
+
+    OV-2 (#73): consumes the provider's ContextVar usage (read-once —
+    consumed even on failure so stale tokens can never attach to a later
+    call) and prices it via the shared core rate sheet.
     """
+    usage = consume_call_usage()
+    input_tokens = usage.input_tokens if usage else None
+    output_tokens = usage.output_tokens if usage else None
+    model_name = usage.model if usage else None
+    cost_usd: float | None = None
+    if usage is not None and success:
+        micros = estimate_cost_usd_micros(
+            provider_name, usage.model, usage.input_tokens, usage.output_tokens
+        )
+        cost_usd = micros / USD_MICROS_PER_DOLLAR
     try:
         await get_provider_usage_service().record(
             db,
@@ -471,6 +487,10 @@ async def _record_provider_usage(
             latency_ms=latency_ms,
             success=success,
             session_id=uuid.UUID(session_id) if session_id else None,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            model_name=model_name,
+            cost_usd=cost_usd,
         )
     except Exception:  # noqa: BLE001 — telemetry is best-effort
         logger.warning(
