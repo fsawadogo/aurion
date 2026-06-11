@@ -1,5 +1,28 @@
 # Runbook — adding the AurionWatch target (#65)
 
+> ✅ **DONE (2026-06-11).** The watchOS target **"AurionWatch Watch App"**
+> was created in Xcode and committed, and the source was reconciled: the
+> hand-written watch files now live in `ios/Aurion/AurionWatch Watch App/`
+> (the target's synchronized folder), Xcode's stub `ContentView.swift` was
+> removed, and the watch target carries its own byte-identical copy of the
+> `WatchMessage` wire contract (the iOS and watch apps are separate modules
+> — see the ⚠️ banner in both `WatchMessage.swift` files). Verified:
+> `xcodebuild -scheme Aurion -destination 'platform=iOS Simulator,name=iPhone 17' build`
+> → **BUILD SUCCEEDED** (builds the iOS app **and** the embedded watchOS app),
+> and the `AurionTests` watch/accent suites pass. The Embed Watch Content
+> phase + `WKCompanionAppBundleIdentifier = com.aurionclinical.physician`
+> are wired, so the watch app ships inside the iOS app's single TestFlight
+> build.
+>
+> **Remaining (human):** (1) on-device verification per `docs/plans/watch-companion.md` §10;
+> (2) watch `Localizable.strings` (EN+FR) — copy goes through `WL()`;
+> (3) optional cleanup — Xcode also created `AurionWatch Watch AppTests`/`UITests`
+> stub targets (Testing System wasn't set to None); harmless, delete in Xcode if undesired.
+
+The sections below are the original creation steps, kept for reference.
+
+---
+
 This PR ships **all the source** for the Apple Watch companion (phone-side
 bridge + the watchOS app's Swift files) plus device-independent unit tests.
 The one step that **must be done in Xcode by a human** is creating the
