@@ -27,6 +27,8 @@ import type {
   ComplianceReportListResponse,
   ComplianceReportMetadata,
   ComplianceReportType,
+  ProviderCompareResponse,
+  ProviderQualityCompareResponse,
   AdminTemplateListResponse,
   AdoptionResponse,
   OperationalAlert,
@@ -694,6 +696,42 @@ export async function exportAdoptionCsv(opts?: {
     `/api/v1/admin/analytics/adoption?${params.toString()}`,
   );
   return res.blob();
+}
+
+/** Operational A-B compare over the usage telemetry (#73/#74). */
+export async function compareProviders(opts: {
+  a: string;
+  b: string;
+  providerType: ProviderType;
+  since?: string;
+  until?: string;
+}): Promise<ProviderCompareResponse> {
+  const params = new URLSearchParams({
+    a: opts.a,
+    b: opts.b,
+    provider_type: opts.providerType,
+  });
+  if (opts.since) params.set("since", opts.since);
+  if (opts.until) params.set("until", opts.until);
+  const res = await fetchWithAuth(
+    `/api/v1/admin/providers/compare?${params.toString()}`,
+  );
+  return res.json();
+}
+
+/** Quality A-B compare from eval scores (#74). EVAL_TEAM + ADMIN. */
+export async function compareProviderQuality(opts?: {
+  since?: string;
+  until?: string;
+}): Promise<ProviderQualityCompareResponse> {
+  const params = new URLSearchParams();
+  if (opts?.since) params.set("since", opts.since);
+  if (opts?.until) params.set("until", opts.until);
+  const qs = params.toString();
+  const res = await fetchWithAuth(
+    `/api/v1/admin/providers/compare-quality${qs ? `?${qs}` : ""}`,
+  );
+  return res.json();
 }
 
 export async function getProviderUsage(opts?: {
