@@ -253,6 +253,14 @@ class PhysicianProfileModel(Base):
     ui_theme: Mapped[str] = mapped_column(
         String(16), nullable=False, default="system"
     )
+    # Physician accent color (#418 / OV-7) — personalization primitive.
+    # A curated palette key (gold/teal/indigo/rose/slate), NOT free-form
+    # hex, so the visual layer maps each to a pre-validated AA-contrast
+    # token. "gold" = today's brand default → no visible change until the
+    # picker + token wiring ship (the reviewed frontend slice).
+    accent_color: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="gold"
+    )
     # Portal/iOS chrome language. Orthogonal to output_language:
     # physicians may dictate in English and read the chrome in
     # French (or vice versa). "en" / "fr" today; IETF tags like

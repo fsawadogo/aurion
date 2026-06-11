@@ -292,12 +292,18 @@ class ProfileResponse(BaseModel):
     # `output_language`: a physician may dictate in English and read
     # the chrome in French. `ui_theme` is "system" / "light" / "dark".
     ui_theme: str = "system"
+    accent_color: str = "gold"
     ui_language: str = "en"
     auto_upload: bool = True
     retention_days: int = 7
     consent_reprompt: str = "every_session"
 
     model_config = {"from_attributes": True}
+
+
+# #418/OV-7 curated accent palette — values map to pre-validated AA-contrast
+# tokens in the frontend; not free-form hex (compliance surfaces stay fixed).
+_ACCENT_PALETTE = {"gold", "teal", "indigo", "rose", "slate"}
 
 
 class UpdateProfileRequest(BaseModel):
@@ -321,6 +327,7 @@ class UpdateProfileRequest(BaseModel):
     allied_health_team: Optional[list[dict]] = None
     output_language: Optional[str] = None
     ui_theme: Optional[str] = None
+    accent_color: Optional[str] = None
     ui_language: Optional[str] = None
     auto_upload: Optional[bool] = None
     retention_days: Optional[int] = None
@@ -333,6 +340,17 @@ class UpdateProfileRequest(BaseModel):
             return v
         if v not in {"system", "light", "dark"}:
             raise ValueError("ui_theme must be one of: system, light, dark")
+        return v
+
+    @field_validator("accent_color")
+    @classmethod
+    def _validate_accent_color(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if v not in _ACCENT_PALETTE:
+            raise ValueError(
+                "accent_color must be one of: " + ", ".join(sorted(_ACCENT_PALETTE))
+            )
         return v
 
     @field_validator("ui_language")
@@ -806,6 +824,7 @@ def _to_response(profile) -> ProfileResponse:
         ),
         output_language=profile.output_language,
         ui_theme=getattr(profile, "ui_theme", "system"),
+        accent_color=getattr(profile, "accent_color", "gold"),
         ui_language=getattr(profile, "ui_language", "en"),
         auto_upload=getattr(profile, "auto_upload", True),
         retention_days=getattr(profile, "retention_days", 7),
