@@ -121,7 +121,9 @@ async def test_update_user_no_change_when_same() -> None:
 
 
 def test_enrollment_and_challenge_tokens_are_distinct_types() -> None:
-    import jwt as pyjwt
+    # The codebase signs with python-jose (jose.jwt), not PyJWT — read the
+    # claims via jose's unverified reader to inspect the `type` claim.
+    from jose import jwt
 
     from app.modules.auth.jwt_tokens import (
         mint_mfa_challenge_token,
@@ -131,9 +133,8 @@ def test_enrollment_and_challenge_tokens_are_distinct_types() -> None:
     uid = uuid.uuid4()
     enroll = mint_mfa_enrollment_token(user_id=uid, email="d@a.com")
     challenge = mint_mfa_challenge_token(user_id=uid, email="d@a.com")
-    # Decode without verification just to read the type claim.
-    enroll_claims = pyjwt.decode(enroll, options={"verify_signature": False})
-    challenge_claims = pyjwt.decode(challenge, options={"verify_signature": False})
+    enroll_claims = jwt.get_unverified_claims(enroll)
+    challenge_claims = jwt.get_unverified_claims(challenge)
     assert enroll_claims["type"] == "mfa_enrollment"
     assert challenge_claims["type"] == "mfa_challenge"
     assert enroll_claims["type"] != challenge_claims["type"]
