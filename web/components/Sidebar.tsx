@@ -33,6 +33,7 @@ import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { getMe, logout } from "@/lib/api";
 import { getMyProfile } from "@/lib/portal-api";
+import { applyAccent } from "@/lib/accent";
 import type { CurrentUser, UserRole } from "@/types";
 import { AurionLogo } from "@/components/AurionLogo";
 import LocaleSwitcher from "@/components/portal/LocaleSwitcher";
@@ -167,6 +168,10 @@ export default function Sidebar() {
         if (p.ui_theme && ["system", "light", "dark"].includes(p.ui_theme)) {
           setTheme(p.ui_theme);
         }
+        // Accent (#418) — the backend column is the cross-device source
+        // of truth. applyAccent clears the attribute for the "gold"
+        // default (byte-identical render) and sets data-accent otherwise.
+        applyAccent(p.accent_color);
         // If the backend's stored ui_language disagrees with the
         // cookie that drove this render, fix the cookie + refresh
         // so the chrome catches up. Skip if they agree (avoid an

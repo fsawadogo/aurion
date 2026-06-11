@@ -1,3 +1,5 @@
+import type { AccentKey } from "@/lib/accent";
+
 /* ─── Roles ──────────────────────────────────────────────────────────────── */
 
 export type UserRole =
@@ -907,6 +909,11 @@ export interface PhysicianProfile {
   ui_theme: "system" | "light" | "dark";
   /** Portal/iOS chrome language. Orthogonal to output_language. */
   ui_language: "en" | "fr";
+  /** Portal/iOS accent color (#418). Curated palette (single source of
+   *  truth: ACCENT_KEYS in lib/accent.ts, mirroring the backend
+   *  `_ACCENT_PALETTE` validator). "gold" is the product default and
+   *  renders with no `data-accent` override. */
+  accent_color: AccentKey;
   auto_upload: boolean;
   retention_days: number;
   consent_reprompt: "every_session" | "daily" | "weekly";
@@ -936,6 +943,9 @@ export interface PhysicianProfileUpdate {
   /** Portal/iOS chrome language. Locked to en/fr today; widen the union
    *  when the supported locales grow (matches backend's enum). */
   ui_language?: "en" | "fr";
+  /** Portal/iOS accent color (#418). Validated server-side against the
+   *  curated palette; an out-of-set value 422s. */
+  accent_color?: AccentKey;
   auto_upload?: boolean;
   retention_days?: number;
   consent_reprompt?: "every_session" | "daily" | "weekly";

@@ -44,18 +44,23 @@ const config: Config = {
           800: "#081226", // aurionNavyDark
           900: "#050A15",
         },
+        // #418 accent theming: the gold scale reads CSS variables
+        // (RGB triplets so /NN opacity modifiers compose). :root holds
+        // today's gold values → byte-identical default; html[data-accent=X]
+        // in globals.css swaps the whole scale per the physician preference.
+        // Compliance tokens (accent.red/amber, navy) are separate — not themeable.
         gold: {
-          DEFAULT: "#C9A84C",
-          50: "#FCF8EE",
-          100: "#F5ECCD",
-          200: "#EDDFAB",
-          300: "#E5D082", // aurionGoldLight
-          400: "#D6BC62",
-          500: "#C9A84C", // aurionGold (canonical)
-          600: "#B5953D", // aurionGoldDark
-          700: "#8A712E",
-          800: "#655222",
-          900: "#403416",
+          DEFAULT: "rgb(var(--accent-500) / <alpha-value>)",
+          50: "rgb(var(--accent-50) / <alpha-value>)",
+          100: "rgb(var(--accent-100) / <alpha-value>)",
+          200: "rgb(var(--accent-200) / <alpha-value>)",
+          300: "rgb(var(--accent-300) / <alpha-value>)",
+          400: "rgb(var(--accent-400) / <alpha-value>)",
+          500: "rgb(var(--accent-500) / <alpha-value>)",
+          600: "rgb(var(--accent-600) / <alpha-value>)",
+          700: "rgb(var(--accent-700) / <alpha-value>)",
+          800: "rgb(var(--accent-800) / <alpha-value>)",
+          900: "rgb(var(--accent-900) / <alpha-value>)",
         },
         // ── Semantic (iOS aurionAmber/Green/Red/Blue) ────────────
         accent: {

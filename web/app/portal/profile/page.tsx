@@ -12,7 +12,9 @@ import ConsultationTypesEditor from "@/components/portal/ConsultationTypesEditor
 import VisitTypeContextsEditor, {
   type ContextCustomTemplate,
 } from "@/components/portal/VisitTypeContextsEditor";
+import AccentPicker from "@/components/portal/AccentPicker";
 import PageHeader from "@/components/portal/PageHeader";
+import type { AccentKey } from "@/lib/accent";
 import {
   getMyProfile,
   listMyCustomTemplates,
@@ -63,6 +65,7 @@ export default function PortalProfilePage() {
   const tIdentity = useTranslations("Profile.identity");
   const tPractice = useTranslations("Profile.practice");
   const tRecording = useTranslations("Profile.recording");
+  const tAppearance = useTranslations("Profile.appearance");
   const tPracticeTypes = useTranslations("Profile.practiceTypes");
   const tSpecialties = useTranslations("Specialties");
   const [profile, setProfile] = useState<PhysicianProfile | null>(null);
@@ -305,6 +308,28 @@ export default function PortalProfilePage() {
                 }
               />
             </div>
+          </Card>
+
+          <Card title={tAppearance("title")}>
+            <Field label={tAppearance("accentLabel")}>
+              <p className="text-xs text-gray-500 mb-3">
+                {tAppearance("accentHint")}
+              </p>
+              {/* Persists immediately (like ThemeToggle) — not part of the
+                  draft Save flow. Sync both profile + draft so the page's
+                  dirty check stays honest. */}
+              <AccentPicker
+                value={draft.accent_color}
+                onChange={(next: AccentKey) => {
+                  setProfile((prev) =>
+                    prev ? { ...prev, accent_color: next } : prev,
+                  );
+                  setDraft((prev) =>
+                    prev ? { ...prev, accent_color: next } : prev,
+                  );
+                }}
+              />
+            </Field>
           </Card>
 
           <div className="sticky bottom-4 z-10 flex items-center gap-3 rounded-lg border border-gray-200 bg-white/95 backdrop-blur px-4 py-3 shadow-sm">
