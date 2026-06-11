@@ -40,6 +40,14 @@ final class AppState: ObservableObject {
     @Published var appearance: String {
         didSet { Self.defaults.set(appearance, forKey: Keys.appearance) }
     }
+    /// #418 — physician accent color (one of `AurionAccent`'s raw values).
+    /// Persisted to the key the Theme tokens read (`AurionAccent.current`),
+    /// so a change recolors the gold-token surfaces on the next render.
+    /// Synced from the backend profile on load + PUT back on change, so it
+    /// matches the portal cross-device.
+    @Published var accentColor: String {
+        didSet { Self.defaults.set(accentColor, forKey: Keys.accent) }
+    }
 
     /// The override to hand `.preferredColorScheme`. `nil` = follow the
     /// system; otherwise force light/dark.
@@ -80,6 +88,7 @@ final class AppState: ObservableObject {
         _hasSeenTour = Published(initialValue: tour)
         _appLanguage = Published(initialValue: lang)
         _appearance = Published(initialValue: Self.defaults.string(forKey: Keys.appearance) ?? "system")
+        _accentColor = Published(initialValue: Self.defaults.string(forKey: Keys.accent) ?? "gold")
         currentUserId = userId
         Localization.setLanguage(lang)
         if let role = KeychainHelper.shared.loadUserRole(),
@@ -144,6 +153,9 @@ final class AppState: ObservableObject {
         static let tour = "aurion.tour_seen"
         static let language = "aurion.app_language"
         static let appearance = "aurion.appearance"
+        // Shared with the Theme tokens, which read this key via
+        // `AurionAccent.current` — keep them pointed at the same string.
+        static let accent = AurionAccent.defaultsKey
     }
 }
 

@@ -525,6 +525,12 @@
 "appearance.system" = "Syst\U00E8me";
 "appearance.light" = "Clair";
 "appearance.dark" = "Sombre";
+"profile.accent" = "Couleur d'accent";
+"accent.gold" = "Or";
+"accent.teal" = "Sarcelle";
+"accent.indigo" = "Indigo";
+"accent.rose" = "Rose";
+"accent.slate" = "Ardoise";
 "profile.sessionAlerts" = "Alertes de session";
 "profile.noteReady" = "Note pr\U00EAte";
 "profile.sectionNotifications" = "Pr\U00E9f\U00E9rences de notification";

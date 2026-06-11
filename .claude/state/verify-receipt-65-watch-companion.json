@@ -1,0 +1,12 @@
+{
+  "task_id": "#65-watch-companion + #418-ios-accent",
+  "branch": "lane-ios/65-watch-companion",
+  "verified_at": "2026-06-11T08:35:00Z",
+  "checks": {
+    "ios_build": "xcodebuild -scheme Aurion -sdk iphonesimulator -configuration Debug build CODE_SIGNING_ALLOWED=NO -> ** BUILD SUCCEEDED ** (phone-side: WatchMessage, WatchSessionBridge, ContentView wiring, AurionAccent, Theme, AppState, APIClient, ProfileView). No warnings on new files.",
+    "ios_tests": "xcodebuild test -scheme Aurion -destination 'iPhone 17' targeted -> exit 0; AurionAccentTests + WatchCommandMessageTests + WatchSessionStateTests + WatchHapticCueTests all passed (incl. gold byte-identical-to-brand guard)",
+    "watch_target": "NOT built — AurionWatch/ files are outside the Aurion scheme until the human creates the watchOS target (File > New > Target). Handoff: docs/runbooks/watch-companion-xcode-setup.md. On-device WCSession/haptics verification per design doc §10 is the human gate.",
+    "acceptance_criteria": "AC-1 build OK; AC-2 codec+haptic-cue tests; AC-3 gold byte-identical + accent picker PUT; AC-4 targeted tests green + EN/FR iOS strings at parity; AC-5 (watch target + on-device) = human steps documented",
+    "posture": "Opened for HUMAN REVIEW (not auto-merge): wires the live capture-control surface + needs the Xcode target + on-device test. Bundles with #418 iOS accent so both land in ONE TestFlight build."
+  }
+}

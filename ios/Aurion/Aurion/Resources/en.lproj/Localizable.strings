@@ -537,6 +537,12 @@
 "appearance.system" = "System";
 "appearance.light" = "Light";
 "appearance.dark" = "Dark";
+"profile.accent" = "Accent color";
+"accent.gold" = "Gold";
+"accent.teal" = "Teal";
+"accent.indigo" = "Indigo";
+"accent.rose" = "Rose";
+"accent.slate" = "Slate";
 "profile.sessionAlerts" = "Session Alerts";
 "profile.noteReady" = "Note Ready";
 "profile.sectionNotifications" = "Notification Preferences";

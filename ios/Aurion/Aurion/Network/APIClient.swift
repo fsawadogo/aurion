@@ -2018,6 +2018,10 @@ struct PhysicianProfileResponse: Codable, Sendable {
     let autoUpload: Bool
     let retentionDays: Int
     let consentReprompt: String
+    /// #418 — physician accent color (one of `AurionAccent`'s raw values).
+    /// Decoded with a "gold" default so a backend on an older schema (or a
+    /// profile that never set one) reads as the brand default.
+    let accentColor: String
 
     enum CodingKeys: String, CodingKey {
         case clinicianId = "clinician_id"
@@ -2032,6 +2036,7 @@ struct PhysicianProfileResponse: Codable, Sendable {
         case autoUpload = "auto_upload"
         case retentionDays = "retention_days"
         case consentReprompt = "consent_reprompt"
+        case accentColor = "accent_color"
     }
 
     init(from decoder: Decoder) throws {
@@ -2050,6 +2055,7 @@ struct PhysicianProfileResponse: Codable, Sendable {
         autoUpload = try c.decodeIfPresent(Bool.self, forKey: .autoUpload) ?? true
         retentionDays = try c.decodeIfPresent(Int.self, forKey: .retentionDays) ?? 7
         consentReprompt = try c.decodeIfPresent(String.self, forKey: .consentReprompt) ?? "every_session"
+        accentColor = try c.decodeIfPresent(String.self, forKey: .accentColor) ?? "gold"
     }
 }
 
