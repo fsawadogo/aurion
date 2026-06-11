@@ -180,6 +180,7 @@ async def update_user(
         full_name=body.full_name,
         role=body.role,
         is_active=body.is_active,
+        mfa_required=body.mfa_required,
     )
     if result is None:
         raise HTTPException(status_code=404, detail="User not found")

@@ -16,6 +16,8 @@ export interface User {
   role: UserRole;
   is_active: boolean;
   voice_enrolled: boolean;
+  mfa_required: boolean;
+  mfa_enrolled: boolean;
   created_at: string;
   last_login_at: string | null;
 }
@@ -31,6 +33,7 @@ export interface UpdateUserPayload {
   full_name?: string;
   role?: UserRole;
   is_active?: boolean;
+  mfa_required?: boolean;
 }
 
 /* ─── Audit ──────────────────────────────────────────────────────────────── */

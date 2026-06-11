@@ -76,6 +76,14 @@ class UserModel(Base):
     # follow-up PR (we never enforce a hard rotation cadence here; the
     # column is the data anchor that lets a future policy do so without
     # a schema migration).
+    # MFA enforcement (#397 / OV-5). When True, this user CANNOT finish a
+    # password login until TOTP is enrolled (login returns
+    # enroll_required). Default False everywhere → opt-in per user by an
+    # ADMIN; the global "require for all" POLICY is the CTO's call, not
+    # code. Ships dark: flipping nobody changes nothing.
+    mfa_required: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     mfa_secret_encrypted: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True
     )

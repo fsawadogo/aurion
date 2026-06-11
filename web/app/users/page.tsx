@@ -123,6 +123,18 @@ export default function UsersPage() {
     }
   }
 
+  async function handleSetMfaRequired(userId: string, required: boolean) {
+    try {
+      // #397: when an admin requires MFA, the user must enroll TOTP
+      // before their next login completes (the backend returns
+      // enroll_required instead of a session).
+      await updateUser(userId, { mfa_required: required });
+      await fetchUsers();
+    } catch (err) {
+      setError(humanizeError(err, "Failed to update user"));
+    }
+  }
+
   return (
     <>
       <Header
@@ -221,6 +233,24 @@ export default function UsersPage() {
                         {relativeTime(user.last_login_at)}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleSetMfaRequired(user.id, !user.mfa_required)}
+                          data-testid={`mfa-toggle-${user.id}`}
+                          className={
+                            user.mfa_required
+                              ? "text-gold-700 hover:bg-gold-50"
+                              : "text-gray-500 hover:bg-gray-50"
+                          }
+                          title={
+                            user.mfa_required
+                              ? "MFA required — user must enroll TOTP to sign in"
+                              : "MFA optional — click to require it"
+                          }
+                        >
+                          {user.mfa_required ? "MFA: required" : "MFA: optional"}
+                        </Button>
                         {user.is_active ? (
                           <Button
                             variant="ghost"
