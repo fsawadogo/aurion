@@ -21,6 +21,10 @@ from typing import Optional
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.audit_events import AuditEventType
+from app.core.cost_rates import (
+    USD_MICROS_PER_DOLLAR,
+    estimate_audio_cost_usd_micros,
+)
 from app.core.retry import with_retry
 from app.core.s3 import AUDIO_BUCKET, get_s3_client
 from app.core.types import ProviderError, Transcript, TranscriptSegment
@@ -187,6 +191,12 @@ async def transcribe_audio(
             len(transcript.segments),
         )
         # Issue #73 — capture per-call telemetry; best-effort.
+        # OV-2 (#73): transcription is priced per audio-hour; duration is
+        # recoverable from the last segment's end anchor (0 segments → 0s
+        # → cost 0, the honest value for an empty capture).
+        audio_seconds = (
+            transcript.segments[-1].end_ms / 1000.0 if transcript.segments else 0.0
+        )
         await try_record_provider_usage(
             provider_type="transcription",
             provider_name=transcript.provider_used,
@@ -194,6 +204,10 @@ async def transcribe_audio(
             latency_ms=int((time.monotonic() - _started) * 1000),
             success=True,
             session_id=session_id,
+            cost_usd=(
+                estimate_audio_cost_usd_micros(transcript.provider_used, audio_seconds)
+                / USD_MICROS_PER_DOLLAR
+            ),
         )
         return transcript
     except ProviderError:

@@ -21,6 +21,7 @@ from app.modules.providers.note_gen.shared import (
     build_user_prompt,
     parse_note_response,
 )
+from app.modules.providers.usage_context import set_call_usage
 
 logger = logging.getLogger("aurion.providers.note_gen.gemini")
 
@@ -86,6 +87,12 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
                 )
                 response.raise_for_status()
                 data = response.json()
+                usage = data.get("usageMetadata") or {}
+                set_call_usage(
+                    input_tokens=int(usage.get("promptTokenCount", 0)),
+                    output_tokens=int(usage.get("candidatesTokenCount", 0)),
+                    model=_MODEL,
+                )
                 content = data["candidates"][0]["content"]["parts"][0]["text"]
                 return parse_note_response(content, transcript, template, stage, "gemini")
 

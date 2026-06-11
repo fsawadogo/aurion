@@ -24,16 +24,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.core.cost_rates import (
+    USD_MICROS_PER_DOLLAR,
+    VISION_RATES_USD_PER_MT,
+    estimate_cost_usd_micros,
+)
 from app.core.models import PilotMetricsModel, SessionModel
 from app.modules.vision.clip_metrics import (
     ClipTelemetry,
     aggregate_clip_metrics,
     record_clip_metrics,
-)
-from app.modules.vision.cost_rates import (
-    USD_MICROS_PER_DOLLAR,
-    VISION_RATES_USD_PER_MT,
-    estimate_cost_usd_micros,
 )
 
 
@@ -45,14 +45,14 @@ def _reset_aurion_loggers():
     Alembic's ``env.py`` invokes ``logging.config.fileConfig(...)``
     which has ``disable_existing_loggers=True`` by default. Any logger
     that was instantiated before fileConfig fires (e.g. by an earlier
-    import of ``app.modules.vision.cost_rates``) gets ``disabled=True``,
+    import of ``app.core.cost_rates``) gets ``disabled=True``,
     and ``caplog`` then captures nothing.
 
     Reaching into the logger registry is the simplest fix that keeps
     Alembic's own logger config untouched.
     """
     for name in (
-        "aurion.vision.cost_rates",
+        "aurion.cost_rates",
         "aurion.vision.clip_metrics",
     ):
         lg = logging.getLogger(name)
@@ -197,7 +197,7 @@ class TestEstimateCostUsdMicros:
     def test_unknown_provider_returns_zero_and_logs_info(self, caplog) -> None:
         """AC-5: unknown provider returns 0 + emits an INFO log so the
         eval team can spot the missing rate without breaking the metric."""
-        with caplog.at_level(logging.INFO, logger="aurion.vision.cost_rates"):
+        with caplog.at_level(logging.INFO, logger="aurion.cost_rates"):
             result = estimate_cost_usd_micros(
                 provider="cohere",
                 model="command-r-plus",
@@ -210,7 +210,7 @@ class TestEstimateCostUsdMicros:
         ), f"Expected 'unknown provider' INFO log; got {[r.message for r in caplog.records]}"
 
     def test_unknown_model_returns_zero_and_logs_info(self, caplog) -> None:
-        with caplog.at_level(logging.INFO, logger="aurion.vision.cost_rates"):
+        with caplog.at_level(logging.INFO, logger="aurion.cost_rates"):
             result = estimate_cost_usd_micros(
                 provider="openai",
                 model="gpt-5-turbo",

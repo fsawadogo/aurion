@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import logging
 
-logger = logging.getLogger("aurion.vision.cost_rates")
+logger = logging.getLogger("aurion.cost_rates")
 
 # {provider: {model: {"input": USD/MT, "output": USD/MT}}}
 #
@@ -82,7 +82,7 @@ def estimate_cost_usd_micros(
     provider_rates = VISION_RATES_USD_PER_MT.get(provider_key)
     if provider_rates is None:
         logger.info(
-            "vision cost_rates: unknown provider=%s (model=%s) — returning 0",
+            "cost_rates: unknown provider=%s (model=%s) — returning 0",
             provider_key,
             model_key,
         )
@@ -90,7 +90,7 @@ def estimate_cost_usd_micros(
     rates = provider_rates.get(model_key)
     if rates is None:
         logger.info(
-            "vision cost_rates: unknown model=%s for provider=%s — returning 0",
+            "cost_rates: unknown model=%s for provider=%s — returning 0",
             model_key,
             provider_key,
         )
@@ -109,3 +109,28 @@ def estimate_cost_usd_micros(
         / TOKENS_PER_MT
     )
     return input_micros + output_micros
+
+
+# ── Audio-duration pricing (transcription, #73/OV-2) ─────────────────────────
+#
+# Transcription is priced per audio-hour, not per token. Approximate, like
+# the token table. Last updated: 2026-06-11. Source: provider pricing pages
+# (AssemblyAI universal tier). Whisper is self-hosted on our own compute —
+# $0 marginal API cost by definition (infra cost lives in the ECS bill).
+AUDIO_RATES_USD_PER_HOUR: dict[str, float] = {
+    "assemblyai": 0.12,
+    "whisper": 0.0,
+}
+
+
+def estimate_audio_cost_usd_micros(provider: str, audio_seconds: float) -> int:
+    """Estimated transcription cost in USD micros for a clip of
+    ``audio_seconds``. Unknown provider or non-positive duration → 0 with
+    an INFO log (same fail-soft contract as the token estimator)."""
+    if audio_seconds <= 0:
+        return 0
+    rate = AUDIO_RATES_USD_PER_HOUR.get(provider.lower())
+    if rate is None:
+        logger.info("no audio rate for provider=%s — cost recorded as 0", provider)
+        return 0
+    return int(round(rate * (audio_seconds / 3600.0) * USD_MICROS_PER_DOLLAR))

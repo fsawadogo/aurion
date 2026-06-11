@@ -33,8 +33,8 @@ from typing import Optional
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.core.cost_rates import estimate_cost_usd_micros
 from app.core.models import PilotMetricsModel, SessionModel
-from app.modules.vision.cost_rates import estimate_cost_usd_micros
 
 logger = logging.getLogger("aurion.vision.clip_metrics")
 
