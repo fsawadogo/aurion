@@ -199,6 +199,12 @@ resource "aws_iam_role_policy" "api_task_policy" {
           "dynamodb:PutItem",
           "dynamodb:GetItem",
           "dynamodb:Query",
+          # Scan powers the admin audit list/export, the PHI-masking
+          # report, and the compliance-report builders (all documented
+          # "pilot-scale scan is acceptable"). Its absence made the
+          # audit page silently empty — the scan helper swallowed the
+          # AccessDenied (fixed alongside in _shared.py).
+          "dynamodb:Scan",
           "dynamodb:BatchWriteItem"
         ]
         Resource = [
