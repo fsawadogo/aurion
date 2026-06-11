@@ -29,6 +29,19 @@ from app.core.models import ComplianceReportModel
 logger = logging.getLogger("aurion.compliance")
 
 
+def dump_details(details: dict[str, Any]) -> str:
+    """JSON-serialize an audit event's detail fields for a CSV cell.
+
+    DynamoDB (boto3 resource) returns every number as ``decimal.Decimal``,
+    which stock ``json.dumps`` refuses — this crashed all three report
+    builders (and the audit CSV export) the moment the table scan started
+    returning real rows (#413 IAM fix made the latent bug live).
+    ``default=str`` renders Decimals (and any other exotic type) as their
+    string form — the right trade for a human-audited CSV cell.
+    """
+    return json.dumps(details, default=str)
+
+
 class ReportType(str, enum.Enum):
     """Stable string values — persisted in `compliance_reports.report_type`."""
 
@@ -121,7 +134,7 @@ def build_masking_csv(events: list[dict[str, Any]]) -> bytes:
                 evt.get("event_timestamp", ""),
                 evt.get("event_type", ""),
                 *(evt.get(c, "") for c in _MASKING_TYPED_COLUMNS),
-                json.dumps(details),
+                dump_details(details),
             ]
         )
     return buf.getvalue().encode("utf-8")
@@ -178,7 +191,7 @@ def build_retention_csv(events: list[dict[str, Any]]) -> bytes:
                 evt.get("event_timestamp", ""),
                 evt.get("event_type", ""),
                 *(evt.get(c, "") for c in _RETENTION_TYPED_COLUMNS),
-                json.dumps(details),
+                dump_details(details),
             ]
         )
     return buf.getvalue().encode("utf-8")
@@ -210,7 +223,7 @@ def build_audit_csv(events: list[dict[str, Any]]) -> bytes:
                 evt.get("event_timestamp", ""),
                 evt.get("event_type", ""),
                 evt.get("event_id", ""),
-                json.dumps(details),
+                dump_details(details),
             ]
         )
     return buf.getvalue().encode("utf-8")
