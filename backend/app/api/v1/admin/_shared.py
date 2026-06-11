@@ -11,6 +11,7 @@ parse, in-memory lookup). Each is consumed by 1-3 endpoint modules.
 from __future__ import annotations
 
 import json
+import logging
 from typing import Any, Iterable, Optional
 
 from pydantic import BaseModel, Field
@@ -336,6 +337,9 @@ class ConfigChangeEvent(BaseModel):
     appconfig_version: int
 
 
+logger = logging.getLogger("aurion.api.admin")
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────
 
 
@@ -359,6 +363,12 @@ async def scan_audit_events(audit_service) -> list[dict[str, Any]]:
         items.sort(key=lambda x: x.get("event_timestamp", ""), reverse=True)
         return items
     except Exception:
+        # Degrade to empty rather than 500 the admin surface — but LOUDLY.
+        # A swallowed AccessDenied here once made the audit page, the CSV
+        # export, the masking report, and the compliance reports all read
+        # as "no events" for days (task role lacked dynamodb:Scan). The
+        # boto error carries no PHI.
+        logger.exception("audit table scan failed — returning empty result")
         return []
 
 
