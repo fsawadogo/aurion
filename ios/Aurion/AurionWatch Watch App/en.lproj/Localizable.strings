@@ -1,0 +1,22 @@
+/* #65 — AurionWatch control-surface copy. Keys mirror WL(key, default)
+   in the watch source (search `WL(`). Kept at EN+FR parity per CLAUDE.md
+   / the premium-UI memory. The watch shows control state only — no PHI. */
+"watch.consent.title" = "Confirm consent";
+"watch.consent.verbal" = "Verbal";
+"watch.consent.paper" = "Paper form";
+"watch.consent.digital" = "Digital form";
+"watch.start.title" = "Consent confirmed";
+"watch.action.record" = "Start recording";
+"watch.action.pause" = "Pause";
+"watch.action.resume" = "Resume";
+"watch.action.stop" = "Stop";
+"watch.state.recording" = "Recording";
+"watch.state.paused" = "Paused";
+"watch.disconnected" = "iPhone unreachable";
+"watch.idle.title" = "No active session";
+"watch.idle.sub" = "Start a session on iPhone";
+"watch.processing.title" = "Processing";
+"watch.processing.sub" = "Finishing on iPhone\U2026";
+"watch.review.title" = "Ready to review";
+"watch.review.sub" = "Open Aurion on iPhone";
+"watch.done.title" = "Encounter complete";

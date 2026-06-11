@@ -107,6 +107,12 @@ struct AurionApp: App {
                         if appState.physicianProfile == nil {
                             appState.physicianProfile = try? await APIClient.shared.getProfile()
                         }
+                        // #418 — adopt the physician's chosen accent so the
+                        // chrome matches their portal choice cross-device.
+                        // The Theme gold tokens read this on the next render.
+                        if let accent = appState.physicianProfile?.accentColor {
+                            appState.accentColor = accent
+                        }
                         // Drain any encounters captured offline in a prior
                         // session and arm reconnect-driven sync. Gated on auth
                         // because the upload needs a bearer token.

@@ -1,0 +1,24 @@
+/* #65 — Copie de l\U2019interface AurionWatch. Cl\U00E9s align\U00E9es sur
+   WL(cl\U00E9, d\U00E9faut). Parit\U00E9 EN+FR (CLAUDE.md). Terminologie
+   align\U00E9e sur l\U2019app iOS (Enregistrement / En pause / Reprendre /
+   Arr\U00EAter / Formulaire papier|num\U00E9rique). La montre n\U2019affiche
+   que l\U2019\U00E9tat de contr\U00F4le \U2014 aucune donn\U00E9e patient. */
+"watch.consent.title" = "Confirmer le consentement";
+"watch.consent.verbal" = "Verbal";
+"watch.consent.paper" = "Formulaire papier";
+"watch.consent.digital" = "Formulaire num\U00E9rique";
+"watch.start.title" = "Consentement confirm\U00E9";
+"watch.action.record" = "D\U00E9marrer l\U2019enregistrement";
+"watch.action.pause" = "Pause";
+"watch.action.resume" = "Reprendre";
+"watch.action.stop" = "Arr\U00EAter";
+"watch.state.recording" = "Enregistrement";
+"watch.state.paused" = "En pause";
+"watch.disconnected" = "iPhone injoignable";
+"watch.idle.title" = "Aucune session active";
+"watch.idle.sub" = "D\U00E9marrez une session sur l\U2019iPhone";
+"watch.processing.title" = "Traitement";
+"watch.processing.sub" = "Finalisation sur l\U2019iPhone\U2026";
+"watch.review.title" = "Pr\U00EAt \U00E0 r\U00E9viser";
+"watch.review.sub" = "Ouvrez Aurion sur l\U2019iPhone";
+"watch.done.title" = "Rencontre termin\U00E9e";

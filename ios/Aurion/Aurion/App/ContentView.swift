@@ -9,6 +9,10 @@ struct ContentView: View {
     @EnvironmentObject var resetLinkPayload: ResetLinkPayload
     @StateObject private var sessionManager = SessionManager()
     @StateObject private var tour = TourCoordinator()
+    /// #65 — Apple Watch companion bridge. Mirrors `sessionManager`'s
+    /// state to the wrist and routes wrist commands back through the same
+    /// SessionManager path. Dormant (cheap OS no-op) when no watch is paired.
+    @StateObject private var watchBridge = WatchSessionBridge()
     @State private var showRecoveryAlert = false
     @State private var recoveredSession: CaptureSession?
     @State private var showSplash = true

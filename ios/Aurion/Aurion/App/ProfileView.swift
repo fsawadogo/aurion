@@ -256,6 +256,44 @@ struct ProfileView: View {
                 // (#271 DT).
                 .aurionSegmentedOrMenu(menu: dynamicTypeSize.isAccessibilitySize)
                 .sensoryFeedback(.selection, trigger: appState.appearance)
+
+                // #418 — accent color. Five curated swatches; tapping one
+                // recolors the gold-token chrome instantly (local apply)
+                // and persists to the profile (cross-device with the
+                // portal). Clinical-safety colors are fixed and unaffected.
+                VStack(alignment: .leading, spacing: 10) {
+                    Text(L("profile.accent"))
+                        .foregroundColor(.aurionTextPrimary)
+                    HStack(spacing: 14) {
+                        ForEach(AurionAccent.allCases) { accent in
+                            let isSelected = appState.accentColor == accent.rawValue
+                            Button {
+                                Task { await updateAccent(accent.rawValue) }
+                            } label: {
+                                Circle()
+                                    .fill(accent.base)
+                                    .frame(width: 30, height: 30)
+                                    .overlay {
+                                        if isSelected {
+                                            Image(systemName: "checkmark")
+                                                .font(.system(size: 13, weight: .bold))
+                                                .foregroundColor(.white)
+                                        }
+                                    }
+                                    .overlay {
+                                        Circle().stroke(
+                                            Color.aurionTextPrimary.opacity(isSelected ? 0.55 : 0),
+                                            lineWidth: 2
+                                        )
+                                    }
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(L("accent.\(accent.rawValue)"))
+                            .accessibilityAddTraits(isSelected ? [.isSelected] : [])
+                        }
+                    }
+                }
+                .sensoryFeedback(.selection, trigger: appState.accentColor)
             } header: {
                 SectionHeader(title: L("profile.sectionAppearance"))
             }
@@ -620,6 +658,23 @@ struct ProfileView: View {
             AurionHaptics.notification(.success)
         } catch {
             // Revert will happen on next profile load
+        }
+    }
+
+    /// #418 — apply the chosen accent locally (instant chrome recolor; the
+    /// Theme tokens read `appState.accentColor`'s persisted value) then
+    /// persist to the profile so it matches the portal cross-device. A
+    /// failed PUT leaves the local apply in place; the next profile load
+    /// reconciles.
+    private func updateAccent(_ accent: String) async {
+        guard appState.accentColor != accent else { return }
+        appState.accentColor = accent
+        do {
+            let profile = try await APIClient.shared.updateProfile(["accent_color": accent])
+            appState.physicianProfile = profile
+            AurionHaptics.notification(.success)
+        } catch {
+            // Local apply already happened; next profile load reconciles.
         }
     }
 

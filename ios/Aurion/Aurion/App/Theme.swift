@@ -26,16 +26,20 @@ extension Color {
     static let aurionNavyLight = Color(red: 22/255, green: 40/255, blue: 78/255)  // #16284E (lighter shade, kept for accents)
     static let aurionNavyDark = Color(red: 8/255, green: 18/255, blue: 38/255)    // #081226 (deeper, for gradient base)
 
-    // Gold ramp
-    static let aurionGold = Color(red: 201/255, green: 168/255, blue: 76/255)      // #C9A84C (brand)
-    static let aurionGoldLight = Color(red: 229/255, green: 208/255, blue: 130/255) // #E5D082
-    static let aurionGoldDark = Color(red: 181/255, green: 149/255, blue: 61/255)  // #B5953D
-    // Soft cream surface on light; warm-tinted dark slate on dark so
-    // gold-accent cards still read as "warmer than canvas".
-    static let aurionGoldBg = Color(
-        light: Color(red: 251/255, green: 246/255, blue: 230/255),  // #FBF6E6
-        dark:  Color(red: 44/255, green: 38/255, blue: 26/255)       // #2C261A
-    )
+    // Gold ramp — #418: these read the physician's chosen `AurionAccent`
+    // so selecting an accent recolors every gold-token surface at once
+    // (the iOS analogue of the portal's CSS-variable swap). The "gold"
+    // default resolves to the exact brand values the app always shipped,
+    // so a default user's UI is byte-identical. Computed (not `let`) so a
+    // mid-session change re-resolves on the next view render. The token
+    // name stays `aurionGold` to avoid churning ~every callsite; renaming
+    // to `aurionAccent` is a deferred codemod.
+    static var aurionGold: Color { AurionAccent.current.base }
+    static var aurionGoldLight: Color { AurionAccent.current.light }
+    static var aurionGoldDark: Color { AurionAccent.current.dark }
+    // Soft accent-card surface (cream on light / warm slate on dark for
+    // the gold default; analogous hue tints for other accents).
+    static var aurionGoldBg: Color { AurionAccent.current.softBg }
 
     // Semantic — foreground
     static let aurionAmber = Color(red: 217/255, green: 148/255, blue: 31/255)     // #D9941F
@@ -193,21 +197,27 @@ enum AurionGradients {
         endPoint: .bottom
     )
 
-    // Gold accent gradient for avatars — radial with off-center highlight
-    // matches design: radial-gradient(circle at 30% 30%, #E5C97A, #B5953D)
-    static let goldAvatar = RadialGradient(
-        colors: [Color.aurionGoldLight, Color.aurionGoldDark],
-        center: UnitPoint(x: 0.3, y: 0.3),
-        startRadius: 2,
-        endRadius: 30
-    )
+    // Gold accent gradient for avatars — radial with off-center highlight.
+    // #418: computed so it tracks the chosen accent (the gold tokens it
+    // reads are now accent-driven).
+    static var goldAvatar: RadialGradient {
+        RadialGradient(
+            colors: [Color.aurionGoldLight, Color.aurionGoldDark],
+            center: UnitPoint(x: 0.3, y: 0.3),
+            startRadius: 2,
+            endRadius: 30
+        )
+    }
 
-    // Linear gold for progress bars and other surfaces
-    static let goldShimmer = LinearGradient(
-        colors: [Color.aurionGold, Color.aurionGoldLight],
-        startPoint: .leading,
-        endPoint: .trailing
-    )
+    // Linear gold for progress bars and other surfaces. #418: computed so
+    // it tracks the chosen accent.
+    static var goldShimmer: LinearGradient {
+        LinearGradient(
+            colors: [Color.aurionGold, Color.aurionGoldLight],
+            startPoint: .leading,
+            endPoint: .trailing
+        )
+    }
 
     /// Capture-screen radial: ellipse-at-top from navy-light → navy → navy-dark.
     /// SwiftUI radials are circular not elliptical, but the visual effect matches.
