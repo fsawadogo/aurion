@@ -1103,5 +1103,43 @@
     "download": "Download",
     "empty": "No reports yet — generate one above.",
     "footnote": "Each download echoes its SHA-256 in the X-Aurion-Sha256 header; compare against the hash shown here to verify the file you hand off is the one that was generated."
+  },
+  "ProviderCompare": {
+    "title": "A-B compare",
+    "subtitle": "Operational telemetry side-by-side, plus eval-team quality averages per provider.",
+    "loadError": "Unable to load the comparison.",
+    "typeLabel": "Stage",
+    "providerA": "Provider A",
+    "providerB": "Provider B",
+    "rangeLabel": "Time range",
+    "ranges": {
+      "7d": "7 days",
+      "30d": "30 days",
+      "all": "All time"
+    },
+    "types": {
+      "note_generation": "Note generation",
+      "vision": "Vision",
+      "transcription": "Transcription"
+    },
+    "rows": {
+      "metric": "Metric",
+      "calls": "Calls",
+      "success": "Success rate",
+      "fallback": "Fallback rate",
+      "latency": "Avg latency",
+      "cost": "Est. cost"
+    },
+    "quality": {
+      "provider": "Provider",
+      "scored": "Scored sessions",
+      "overall": "Overall",
+      "accuracy": "Transcript accuracy",
+      "citation": "Citation correctness",
+      "compliance": "Descriptive compliance",
+      "hallucinations": "Avg hallucinations",
+      "empty": "No attributed eval scores yet — scores recorded from now on carry their provider.",
+      "caption": "Quality averages come from eval-team scoring. At pilot sample sizes these are directional, not statistically significant — the scored-session counts are part of the data."
+    }
   }
 }

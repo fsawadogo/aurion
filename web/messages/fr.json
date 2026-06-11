@@ -1103,5 +1103,43 @@
     "download": "Télécharger",
     "empty": "Aucun rapport pour l’instant — générez-en un ci-dessus.",
     "footnote": "Chaque téléchargement renvoie son SHA-256 dans l’en-tête X-Aurion-Sha256; comparez-le au hachage affiché ici pour vérifier que le fichier remis est bien celui qui a été généré."
+  },
+  "ProviderCompare": {
+    "title": "Comparaison A-B",
+    "subtitle": "Télémétrie opérationnelle côte à côte, plus les moyennes de qualité de l’équipe d’évaluation par fournisseur.",
+    "loadError": "Impossible de charger la comparaison.",
+    "typeLabel": "Étape",
+    "providerA": "Fournisseur A",
+    "providerB": "Fournisseur B",
+    "rangeLabel": "Période",
+    "ranges": {
+      "7d": "7 jours",
+      "30d": "30 jours",
+      "all": "Tout l’historique"
+    },
+    "types": {
+      "note_generation": "Génération de notes",
+      "vision": "Vision",
+      "transcription": "Transcription"
+    },
+    "rows": {
+      "metric": "Métrique",
+      "calls": "Appels",
+      "success": "Taux de succès",
+      "fallback": "Taux de repli",
+      "latency": "Latence moy.",
+      "cost": "Coût est."
+    },
+    "quality": {
+      "provider": "Fournisseur",
+      "scored": "Séances évaluées",
+      "overall": "Globale",
+      "accuracy": "Exactitude de la transcription",
+      "citation": "Exactitude des citations",
+      "compliance": "Conformité descriptive",
+      "hallucinations": "Hallucinations moy.",
+      "empty": "Aucun score d’évaluation attribué pour l’instant — les scores enregistrés dorénavant portent leur fournisseur.",
+      "caption": "Les moyennes de qualité proviennent de l’évaluation par l’équipe. Aux tailles d’échantillon du pilote, elles sont indicatives et non statistiquement significatives — le nombre de séances évaluées fait partie des données."
+    }
   }
 }

@@ -23,6 +23,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
+import ProviderComparePanel from "@/components/portal/ProviderComparePanel";
 import ProviderUsagePanel from "@/components/portal/ProviderUsagePanel";
 import {
   clearProviderOverride,
@@ -223,6 +224,9 @@ export default function ProvidersPage() {
       {/* Usage & cost rollup (#73) — same role gate as the switch above;
           fetches independently so a usage hiccup never blocks switching. */}
       <ProviderUsagePanel />
+
+      {/* A-B compare (#73/#74) — operational + eval-quality side-by-side. */}
+      <ProviderComparePanel />
     </div>
   );
 }

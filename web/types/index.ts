@@ -481,6 +481,42 @@ export interface ProviderUsageResponse {
   by_provider: ProviderUsageRollup[];
 }
 
+/* ─── Provider A-B compare (admin, #73/#74) ──────────────────────────────── */
+// Mirrors backend/app/api/v1/admin/providers.py compare + compare-quality.
+
+export interface ProviderCompareDelta {
+  avg_latency_ms: number;
+  success_rate: number;
+  fallback_rate: number;
+}
+
+export interface ProviderCompareResponse {
+  provider_type: ProviderType;
+  a: string;
+  b: string;
+  since: string | null;
+  until: string | null;
+  a_rollup: ProviderUsageRollup | null;
+  b_rollup: ProviderUsageRollup | null;
+  delta: ProviderCompareDelta;
+}
+
+export interface ProviderQualityRow {
+  provider_name: string;
+  scored_sessions: number;
+  avg_overall: number | null;
+  avg_transcript_accuracy: number | null;
+  avg_citation_correctness: number | null;
+  avg_descriptive_mode_compliance: number | null;
+  avg_hallucination_count: number | null;
+}
+
+export interface ProviderQualityCompareResponse {
+  since: string | null;
+  until: string | null;
+  providers: ProviderQualityRow[];
+}
+
 /* ─── Adoption & ROI analytics (admin, #71) ──────────────────────────────── */
 // Mirrors backend/app/api/v1/admin/analytics.py. time_saved_minutes is
 // non-null ONLY when the caller passed baseline_minutes_per_note — the
