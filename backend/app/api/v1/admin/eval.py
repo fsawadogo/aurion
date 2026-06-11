@@ -284,6 +284,11 @@ async def submit_eval_score(
         1,
     )
 
+    # OV-1 (#74): stamp provider attribution from the scored note so
+    # quality scores join to providers without chasing the chain later.
+    latest_note = await note_repo.get_latest_version(db, sid_uuid)
+    provider_used = latest_note.provider_used if latest_note else None
+
     row = await eval_repo.upsert_score(
         db,
         session_id=sid_uuid,
@@ -297,6 +302,7 @@ async def submit_eval_score(
         soap_section_scores=body.soap_section_scores,
         hallucination_count=body.hallucination_count,
         discrepancies=body.discrepancies,
+        provider_used=provider_used,
     )
 
     await write_audit(

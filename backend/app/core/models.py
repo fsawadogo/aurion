@@ -526,6 +526,14 @@ class EvalScoreModel(Base):
     hallucination_count: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
     discrepancies: Mapped[Optional[list]] = mapped_column(JSONB, nullable=True)
 
+    # Provider attribution (#74 / OV-1, migration 0036). Denormalized from
+    # the scored note at submit time so quality scores join to providers
+    # without chasing the session→note_version chain at query time.
+    # Nullable: pre-0036 rows are backfilled where a note exists;
+    # model_name stays NULL until per-call usage records carry it.
+    provider_used: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    model_name: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+
 
 class EvalAssignmentModel(Base):
     """Per-session eval-team assignment.
