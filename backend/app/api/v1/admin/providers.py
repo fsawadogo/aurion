@@ -18,6 +18,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.database import get_db
 from app.core.types import UserRole
 from app.modules.auth.service import CurrentUser, require_role
+from app.modules.eval.repository import aggregate_scores_by_provider
 from app.modules.providers.usage_service import (
     ComparisonResult,
     ProviderUsageService,
@@ -155,4 +156,47 @@ async def provider_usage(
         provider_type=provider_type,
         totals=TotalsResponse(**totals.__dict__),
         by_provider=[ProviderRollupResponse(**r.__dict__) for r in by_provider],
+    )
+
+
+# ── Quality A-B compare (#74 / OV-3) ─────────────────────────────────────────
+
+
+class ProviderQualityRow(BaseModel):
+    provider_name: str
+    scored_sessions: int
+    avg_overall: float | None
+    avg_transcript_accuracy: float | None
+    avg_citation_correctness: float | None
+    avg_descriptive_mode_compliance: float | None
+    avg_hallucination_count: float | None
+
+
+class ProviderQualityCompareResponse(BaseModel):
+    since: datetime | None
+    until: datetime | None
+    providers: list[ProviderQualityRow]
+
+
+@router.get(
+    "/providers/compare-quality", response_model=ProviderQualityCompareResponse
+)
+async def compare_provider_quality(
+    since: Optional[datetime] = Query(None),
+    until: Optional[datetime] = Query(None),
+    user: CurrentUser = Depends(require_role(UserRole.EVAL_TEAM, UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+) -> ProviderQualityCompareResponse:
+    """Per-provider quality averages from eval scores (#74).
+
+    Pre-attribution scores (provider unknown) are excluded; counts are
+    surfaced so a reviewer can judge sample size honestly — at pilot N,
+    differences are directional, not significant, and the UI labels them
+    as such. EVAL_TEAM + ADMIN (the roles that see the underlying scores).
+    """
+    rows = await aggregate_scores_by_provider(db, since=since, until=until)
+    return ProviderQualityCompareResponse(
+        since=since,
+        until=until,
+        providers=[ProviderQualityRow(**r) for r in rows],
     )

@@ -8,9 +8,10 @@ prior in-memory ``_EVAL_SCORES`` dict.
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Iterable
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -100,6 +101,65 @@ async def upsert_score(
     row = await db.get(EvalScoreModel, sid)
     assert row is not None  # we just upserted; impossible to be missing
     return row
+
+
+async def aggregate_scores_by_provider(
+    db: AsyncSession,
+    *,
+    since: datetime | None = None,
+    until: datetime | None = None,
+) -> list[dict]:
+    """Per-provider quality averages over eval_scores (#74 / OV-3).
+
+    Rows without provider attribution (pre-OV-1 scores whose session had
+    no note to backfill from) are EXCLUDED — they can't be compared.
+    Returns plain dicts ordered by scored count desc.
+    """
+    stmt = (
+        select(
+            EvalScoreModel.provider_used,
+            func.count().label("scored_sessions"),
+            func.avg(EvalScoreModel.overall).label("avg_overall"),
+            func.avg(EvalScoreModel.transcript_accuracy).label("avg_transcript_accuracy"),
+            func.avg(EvalScoreModel.citation_correctness).label("avg_citation_correctness"),
+            func.avg(EvalScoreModel.descriptive_mode_compliance).label(
+                "avg_descriptive_mode_compliance"
+            ),
+            func.avg(EvalScoreModel.hallucination_count).label("avg_hallucination_count"),
+        )
+        .where(EvalScoreModel.provider_used.is_not(None))
+        .group_by(EvalScoreModel.provider_used)
+        .order_by(func.count().desc())
+    )
+    if since is not None:
+        stmt = stmt.where(EvalScoreModel.scored_at >= since)
+    if until is not None:
+        stmt = stmt.where(EvalScoreModel.scored_at <= until)
+    result = await db.execute(stmt)
+    return [
+        {
+            "provider_name": r.provider_used,
+            "scored_sessions": r.scored_sessions,
+            "avg_overall": float(r.avg_overall) if r.avg_overall is not None else None,
+            "avg_transcript_accuracy": (
+                float(r.avg_transcript_accuracy)
+                if r.avg_transcript_accuracy is not None else None
+            ),
+            "avg_citation_correctness": (
+                float(r.avg_citation_correctness)
+                if r.avg_citation_correctness is not None else None
+            ),
+            "avg_descriptive_mode_compliance": (
+                float(r.avg_descriptive_mode_compliance)
+                if r.avg_descriptive_mode_compliance is not None else None
+            ),
+            "avg_hallucination_count": (
+                float(r.avg_hallucination_count)
+                if r.avg_hallucination_count is not None else None
+            ),
+        }
+        for r in result.all()
+    ]
 
 
 # ── Assignments ────────────────────────────────────────────────────────────
