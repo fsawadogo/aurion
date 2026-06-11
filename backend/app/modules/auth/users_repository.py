@@ -73,6 +73,7 @@ async def update_user(
     full_name: str | None = None,
     role: UserRole | None = None,
     is_active: bool | None = None,
+    mfa_required: bool | None = None,
 ) -> tuple[UserModel, dict[str, Any]] | None:
     """Apply a partial update and return ``(user, changes)``.
 
@@ -94,6 +95,9 @@ async def update_user(
     if is_active is not None and is_active != user.is_active:
         changes["is_active"] = {"previous": user.is_active, "new": is_active}
         user.is_active = is_active
+    if mfa_required is not None and mfa_required != user.mfa_required:
+        changes["mfa_required"] = {"previous": user.mfa_required, "new": mfa_required}
+        user.mfa_required = mfa_required
 
     if changes:
         await db.flush()

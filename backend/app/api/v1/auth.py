@@ -64,6 +64,7 @@ from app.modules.auth.jwt_tokens import (
     hash_refresh_token,
     mint_access_token,
     mint_mfa_challenge_token,
+    mint_mfa_enrollment_token,
     mint_refresh_token,
     verify_mfa_challenge_token,
 )
@@ -173,6 +174,17 @@ class LoginSuccessResponse(BaseModel):
 class LoginMfaRequiredResponse(BaseModel):
     mfa_required: bool = True
     mfa_challenge_token: str
+    user_email: str
+
+
+class LoginEnrollmentRequiredResponse(BaseModel):
+    """#397/OV-5: returned when a user with ``mfa_required`` set hasn't
+    enrolled TOTP yet — password verified, but no session until they
+    enroll. The scoped enrollment token authorizes only the enroll
+    ceremony (clients route the physician to MFA setup)."""
+
+    enroll_required: bool = True
+    mfa_enrollment_token: str
     user_email: str
 
 
@@ -341,6 +353,17 @@ async def login(
     # (Lockout was handled above: any KNOWN, ACTIVE, currently-locked user
     # returned a 429 before reaching the generic-fail branch, so a user
     # arriving here is guaranteed not locked.)
+
+    # MFA enforcement (#397/OV-5) — a user REQUIRED to use MFA but not yet
+    # enrolled cannot finish a password-only login. Returns an enrollment
+    # authorization, never tokens. Default mfa_required=False → this branch
+    # is dormant until an admin opts the user in (ships dark).
+    if user.mfa_required and user.mfa_enrolled_at is None:
+        enroll_token = mint_mfa_enrollment_token(user_id=user.id, email=user.email)
+        return LoginEnrollmentRequiredResponse(
+            mfa_enrollment_token=enroll_token,
+            user_email=user.email,
+        )
 
     # MFA gate — if enrolled, return the challenge token instead of
     # finishing the login. The challenge wraps user_id + 5-minute exp.

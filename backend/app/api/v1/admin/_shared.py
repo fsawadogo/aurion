@@ -31,6 +31,8 @@ class UserResponse(BaseModel):
     role: UserRole
     is_active: bool
     voice_enrolled: bool
+    mfa_required: bool = False
+    mfa_enrolled: bool = False
     created_at: str
     last_login_at: Optional[str] = None
 
@@ -46,6 +48,8 @@ class UpdateUserRequest(BaseModel):
     full_name: Optional[str] = None
     role: Optional[UserRole] = None
     is_active: Optional[bool] = None
+    # #397/OV-5 — require this user to use MFA (enroll before next login).
+    mfa_required: Optional[bool] = None
 
 
 # ── Audit schemas ──────────────────────────────────────────────────────────
@@ -427,6 +431,8 @@ def user_to_response(user: UserModel) -> UserResponse:
         role=user.role,
         is_active=user.is_active,
         voice_enrolled=user.voice_enrolled,
+        mfa_required=bool(user.mfa_required),
+        mfa_enrolled=user.mfa_enrolled_at is not None,
         created_at=user.created_at.isoformat() if user.created_at else "",
         last_login_at=user.last_login_at.isoformat() if user.last_login_at else None,
     )

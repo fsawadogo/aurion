@@ -59,6 +59,10 @@ def test_user_to_response_shape() -> None:
     assert response.is_active is True
     assert response.voice_enrolled is True
     assert response.last_login_at is None
+    # #397/OV-5: new fields default-safe even on an in-memory model whose
+    # column default hasn't been applied.
+    assert response.mfa_required is False
+    assert response.mfa_enrolled is False
 
 
 def test_user_to_response_handles_last_login() -> None:

@@ -212,8 +212,10 @@ def compare_token_hashes(left: bytes, right: bytes) -> bool:
 # cleanly.
 
 
-def mint_mfa_challenge_token(*, user_id: uuid.UUID, email: str) -> str:
-    """Mint a 5-minute MFA challenge token bound to ``user_id``."""
+def _mint_scoped_mfa_token(*, user_id: uuid.UUID, email: str, token_type: str) -> str:
+    """Mint a 5-minute scoped MFA token. ``token_type`` is the ``type``
+    claim ("mfa_challenge" or "mfa_enrollment") the verifier checks so
+    one scoped token can't be replayed as the other."""
     now = int(utcnow().timestamp())
     claims = {
         "sub": str(user_id),
@@ -222,9 +224,26 @@ def mint_mfa_challenge_token(*, user_id: uuid.UUID, email: str) -> str:
         "exp": now + MFA_CHALLENGE_TTL_SECONDS,
         "iss": _JWT_ISSUER,
         "aud": _JWT_AUDIENCE,
-        "type": "mfa_challenge",
+        "type": token_type,
     }
     return jwt.encode(claims, _SIGNING_KEY, algorithm=_JWT_ALGORITHM)
+
+
+def mint_mfa_challenge_token(*, user_id: uuid.UUID, email: str) -> str:
+    """Mint a 5-minute MFA challenge token bound to ``user_id`` (used
+    after a password login when the user is already enrolled)."""
+    return _mint_scoped_mfa_token(user_id=user_id, email=email, token_type="mfa_challenge")
+
+
+def mint_mfa_enrollment_token(*, user_id: uuid.UUID, email: str) -> str:
+    """Mint a 5-minute MFA ENROLLMENT token (#397/OV-5).
+
+    Issued at login when a user has ``mfa_required`` set but hasn't
+    enrolled — it authorizes ONLY the enroll-then-verify ceremony, not a
+    session. Distinct ``type`` from the challenge token so a challenge
+    can't be replayed as an enrollment authorization and vice versa.
+    """
+    return _mint_scoped_mfa_token(user_id=user_id, email=email, token_type="mfa_enrollment")
 
 
 def verify_mfa_challenge_token(token: str) -> MfaChallengePayload | None:
@@ -242,6 +261,38 @@ def verify_mfa_challenge_token(token: str) -> MfaChallengePayload | None:
         return None
 
     if claims.get("type") != "mfa_challenge":
+        return None
+
+    try:
+        user_id = uuid.UUID(claims["sub"])
+    except (KeyError, ValueError):
+        return None
+
+    return MfaChallengePayload(
+        user_id=user_id,
+        email=claims.get("email", ""),
+        expires_at=int(claims.get("exp", 0)),
+    )
+
+
+def verify_mfa_enrollment_token(token: str) -> MfaChallengePayload | None:
+    """Verify an MFA ENROLLMENT token; None on any failure. Rejects any
+    token whose ``type`` is not "mfa_enrollment" — so a session/access or
+    challenge token can never be replayed as enrollment authorization.
+    Reuses MfaChallengePayload (same {user_id, email, expires_at} shape)."""
+    try:
+        claims = jwt.decode(
+            token,
+            _SIGNING_KEY,
+            algorithms=[_JWT_ALGORITHM],
+            audience=_JWT_AUDIENCE,
+            issuer=_JWT_ISSUER,
+            options={"verify_at_hash": False},
+        )
+    except JWTError:
+        return None
+
+    if claims.get("type") != "mfa_enrollment":
         return None
 
     try:
