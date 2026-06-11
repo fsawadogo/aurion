@@ -647,6 +647,21 @@
       "consentDaily": "Daily",
       "consentWeekly": "Weekly"
     },
+    "appearance": {
+      "title": "Appearance",
+      "accentLabel": "Accent color",
+      "accentHint": "Personalize the portal chrome. Clinical safety colors (conflict, masking, and audit indicators) are fixed and never change."
+    },
+    "accent": {
+      "label": "Accent color",
+      "swatch": {
+        "gold": "Gold",
+        "teal": "Teal",
+        "indigo": "Indigo",
+        "rose": "Rose",
+        "slate": "Slate"
+      }
+    },
     "practiceTypes": {
       "clinic": "Clinic",
       "surgical_center": "Surgical Center",

@@ -1,0 +1,13 @@
+{
+  "task_id": "#418-accent-visual",
+  "branch": "lane-web/418-accent-visual",
+  "verified_at": "2026-06-11T08:02:00Z",
+  "checks": {
+    "web_tests": "vitest run: 33 files / 327 passed (incl. AccentPicker.spec.tsx 11: AC-1 picker renders 5 swatches + persists + live DOM swap, AC-2/AC-3 applyAccent gold-clears/other-sets, palette parity)",
+    "web_build": "npm run build -> compiled + static export OK; /portal/profile 7.07kB; postbuild copied .well-known",
+    "lint": "eslint AccentPicker.tsx, accent.ts, types/index.ts, profile/page.tsx, Sidebar.tsx -> clean",
+    "ios_builds": "n/a — no ios/** files in diff (iOS accent deferred, bundles with #65)",
+    "acceptance_criteria": "AC-1 picker 5 swatches + click persists/applies; AC-2 Sidebar applies stored accent on load (applyAccent); AC-3 default gold => no data-accent override (byte-identical); AC-4 full suite + build green; EN+FR parity asserted",
+    "simplify": "4 agents; 3 fix-now applied (derive accent_color from AccentKey; AccentPicker controlled off value prop; cross-layer parity test); skips/defers in PR Deferred section"
+  }
+}

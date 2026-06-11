@@ -647,6 +647,21 @@
       "consentDaily": "Quotidienne",
       "consentWeekly": "Hebdomadaire"
     },
+    "appearance": {
+      "title": "Apparence",
+      "accentLabel": "Couleur d’accent",
+      "accentHint": "Personnalisez l’interface du portail. Les couleurs de sécurité clinique (indicateurs de conflit, de masquage et d’audit) sont fixes et ne changent jamais."
+    },
+    "accent": {
+      "label": "Couleur d’accent",
+      "swatch": {
+        "gold": "Or",
+        "teal": "Sarcelle",
+        "indigo": "Indigo",
+        "rose": "Rose",
+        "slate": "Ardoise"
+      }
+    },
     "practiceTypes": {
       "clinic": "Clinique",
       "surgical_center": "Centre chirurgical",
