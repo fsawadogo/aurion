@@ -24,16 +24,16 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.core.cost_rates import (
+    USD_MICROS_PER_DOLLAR,
+    VISION_RATES_USD_PER_MT,
+    estimate_cost_usd_micros,
+)
 from app.core.models import PilotMetricsModel, SessionModel
 from app.modules.vision.clip_metrics import (
     ClipTelemetry,
     aggregate_clip_metrics,
     record_clip_metrics,
-)
-from app.core.cost_rates import (
-    USD_MICROS_PER_DOLLAR,
-    VISION_RATES_USD_PER_MT,
-    estimate_cost_usd_micros,
 )
 
 
