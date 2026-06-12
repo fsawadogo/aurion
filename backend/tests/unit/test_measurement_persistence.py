@@ -22,9 +22,17 @@ from fastapi import HTTPException
 
 from app.api.v1 import me_measurements as route
 from app.core.audit_events import AuditEventType
-from app.core.types import MeasurementCitation
+from app.core.types import MeasurementCitation, Note, NoteSection
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
+
+def _note(session_id: uuid.UUID, specialty: str, *section_ids: str) -> Note:
+    return Note(
+        session_id=str(session_id), stage=1, provider_used="anthropic",
+        specialty=specialty,
+        sections=[NoteSection(id=sid, title=sid) for sid in section_ids],
+    )
 
 
 def _cfg(*, enabled: bool = True, methods=None, min_confidence: str = "medium"):
@@ -162,6 +170,8 @@ class TestIngestPersist:
              patch.object(route, "get_config", return_value=_cfg()), \
              patch.object(route.measurement_repo, "persist",
                           AsyncMock(return_value=(row, True))), \
+             patch.object(route, "get_latest_note", AsyncMock(return_value=None)), \
+             patch.object(route, "create_note_version", AsyncMock()) as version, \
              patch.object(route, "write_audit", AsyncMock()) as audit:
             result = await route.ingest_measurement(
                 sid, _citation(str(sid)), user=_user(), db=db
@@ -179,6 +189,49 @@ class TestIngestPersist:
         # PHI guard: the numeric value is never an audit kwarg.
         for c in audit.call_args_list:
             assert "value" not in c.kwargs
+        # No note yet → nothing to inject into, no version written.
+        version.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_confirmed_with_note_injects_claim_and_writes_version(self):
+        sid = uuid.uuid4()
+        note = _note(sid, "plastic_surgery", "wound_assessment")
+        with patch.object(route, "get_owned_session_or_404", AsyncMock()), \
+             patch.object(route, "get_config", return_value=_cfg()), \
+             patch.object(route.measurement_repo, "persist",
+                          AsyncMock(return_value=(_row(sid, confirmed=True), True))), \
+             patch.object(route, "get_latest_note", AsyncMock(return_value=note)), \
+             patch.object(route, "create_note_version", AsyncMock()) as version, \
+             patch.object(route, "write_audit", AsyncMock()):
+            await route.ingest_measurement(
+                sid, _citation(str(sid)), user=_user(), db=AsyncMock()
+            )
+
+        # The real inject ran on the note: a measurement claim landed in the
+        # routed section, and a new version was written.
+        section = note.get_section("wound_assessment")
+        assert len(section.claims) == 1
+        assert section.claims[0].source_type == "measurement"
+        assert section.claims[0].source_id == "meas_001"
+        version.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_confirmed_with_note_but_no_target_section_skips_version(self):
+        sid = uuid.uuid4()
+        note = _note(sid, "general", "chief_complaint")
+        with patch.object(route, "get_owned_session_or_404", AsyncMock()), \
+             patch.object(route, "get_config", return_value=_cfg()), \
+             patch.object(route.measurement_repo, "persist",
+                          AsyncMock(return_value=(_row(sid, confirmed=True), True))), \
+             patch.object(route, "get_latest_note", AsyncMock(return_value=note)), \
+             patch.object(route, "create_note_version", AsyncMock()) as version, \
+             patch.object(route, "write_audit", AsyncMock()):
+            await route.ingest_measurement(
+                sid, _citation(str(sid)), user=_user(), db=AsyncMock()
+            )
+
+        assert note.get_section("chief_complaint").claims == []
+        version.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_unconfirmed_audits_generated_only(self):
