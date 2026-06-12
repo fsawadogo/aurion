@@ -113,3 +113,36 @@ async def test_config_clip_cadence_default_off(
 
     assert response.status_code == 200, response.text
     assert response.json()["pipeline"]["clip_cadence_seconds"] == 0
+
+
+async def test_config_surfaces_measurement_flag_dark_by_default(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    """GET /config surfaces feature_flags.measurement_enabled so the iOS AR
+    instrument can gate itself; it ships dark (False) by default (#63)."""
+    cfg = AppConfigSchema()  # all defaults
+    monkeypatch.setattr("app.api.v1.config.get_config", lambda: cfg)
+
+    response = await app_client.get("/api/v1/config", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["feature_flags"]["measurement_enabled"] is False
+
+
+async def test_config_surfaces_measurement_flag_when_enabled(
+    app_client: AsyncClient,
+    auth_headers: dict[str, str],
+    monkeypatch,
+) -> None:
+    """When ADMIN flips measurement_enabled, the endpoint echoes True."""
+    from app.modules.config.schema import FeatureFlagsConfig
+
+    cfg = AppConfigSchema(feature_flags=FeatureFlagsConfig(measurement_enabled=True))
+    monkeypatch.setattr("app.api.v1.config.get_config", lambda: cfg)
+
+    response = await app_client.get("/api/v1/config", headers=auth_headers)
+
+    assert response.status_code == 200, response.text
+    assert response.json()["feature_flags"]["measurement_enabled"] is True

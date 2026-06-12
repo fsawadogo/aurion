@@ -70,6 +70,11 @@ class FeatureFlagsResponse(BaseModel):
     coding_card_enabled: bool
     patient_summary_card_enabled: bool
     emr_writeback_card_enabled: bool
+    # ── In-encounter visual measurement (#63) ────────────────────────────
+    # Master gate for the iOS AR measurement instrument (wound L/W + ROM).
+    # Ships dark; the instrument stays hidden until ADMIN flips this. iOS
+    # defaults it False when absent, so older clients are unaffected.
+    measurement_enabled: bool
 
 
 class ClientConfigResponse(BaseModel):
@@ -111,5 +116,6 @@ async def get_client_config(_: CurrentUser = Depends(get_current_user)):
             coding_card_enabled=cfg.feature_flags.coding_card_enabled,
             patient_summary_card_enabled=cfg.feature_flags.patient_summary_card_enabled,
             emr_writeback_card_enabled=cfg.feature_flags.emr_writeback_card_enabled,
+            measurement_enabled=cfg.feature_flags.measurement_enabled,
         ),
     )
