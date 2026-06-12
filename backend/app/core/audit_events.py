@@ -309,6 +309,20 @@ class AuditEventType(StrEnum):
     # content.
     LONGITUDINAL_CONTEXT_LOADED = "longitudinal_context_loaded"
 
+    # ── #63 on-device visual measurement (wound L/W + ROM) ──────────────
+    # Provenance for the measurement lifecycle. PHI-free: kwargs carry the
+    # opaque measurement_id + descriptive metadata (kind/method/unit/
+    # confidence/masking_status/reason) — NEVER the numeric value. A
+    # measurement joined to a session is derived PHI (design §6.2); the
+    # value lives only in the MeasurementCitation, behind KMS + the same
+    # purge/erasure path as notes. GENERATED = computed on-device;
+    # REVIEWED = physician confirmed/rejected; EDITED = physician nudged an
+    # endpoint/angle; SUPPRESSED = below the refusal bar (not_measurable).
+    MEASUREMENT_GENERATED = "measurement_generated"
+    MEASUREMENT_REVIEWED = "measurement_reviewed"
+    MEASUREMENT_EDITED = "measurement_edited"
+    MEASUREMENT_SUPPRESSED = "measurement_suppressed"
+
 
 # ── Q-03 — kwarg whitelist ────────────────────────────────────────────────
 #
@@ -331,6 +345,18 @@ class AuditEventType(StrEnum):
 #     through unannounced.
 
 ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
+    # #63 measurement lifecycle — PHI-free provenance only (NEVER the value).
+    AuditEventType.MEASUREMENT_GENERATED: frozenset(
+        {"measurement_id", "kind", "method", "unit", "confidence",
+         "scale_source", "masking_status"}
+    ),
+    AuditEventType.MEASUREMENT_REVIEWED: frozenset(
+        {"measurement_id", "kind", "physician_confirmed"}
+    ),
+    AuditEventType.MEASUREMENT_EDITED: frozenset({"measurement_id", "kind", "method"}),
+    AuditEventType.MEASUREMENT_SUPPRESSED: frozenset(
+        {"measurement_id", "kind", "method", "reason"}
+    ),
     # Lifecycle (state transitions write with no kwargs)
     AuditEventType.SESSION_CREATED: frozenset({"clinician_id", "specialty"}),
     AuditEventType.CONSENT_CONFIRMED: frozenset({"consent_method"}),

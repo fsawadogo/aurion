@@ -159,6 +159,11 @@ class FeatureFlagsConfig(BaseModel):
     note_versioning_enabled: bool = True
     session_pause_resume_enabled: bool = True
     per_session_provider_override: bool = True
+    # #63 on-device visual measurement (wound L/W + ROM). Ships DARK — off
+    # until flipped (and further gated by device + the MeasurementConfig
+    # method/confidence floor). PHI/SaMD-sensitive (derived clinical
+    # numbers), so opt-in only.
+    measurement_enabled: bool = False
     # Gates the Meta Wearables Device Access Toolkit integration. Off until
     # Meta partner approval lands; flipping this on requires the iOS bundle
     # to be signed by an approved partner team.
@@ -224,6 +229,36 @@ class AlertingConfig(BaseModel):
     purge_gap_hours: int = Field(default=24, ge=1, le=336)
 
 
+class MeasurementConfig(BaseModel):
+    """On-device visual measurement (#63) runtime gating, tunable via
+    AppConfig. The feature is off unless ``feature_flags.measurement_enabled``
+    is True; this block then scopes WHICH methods may run and the confidence
+    floor below which the app emits ``not_measurable`` instead of a number.
+
+    Phase A defaults enable the iPhone paths only (LiDAR / world-tracking
+    wound L/W + the AR goniometer); the glasses fiducial path and 3D-pose
+    auto-suggest stay out until their phases.
+
+    ``min_confidence`` is a PLACEHOLDER pending the accuracy-characterization
+    study (design §5/§6) — the real refusal floor must be clinically
+    validated, not assumed. ``allow_non_lidar`` is the §8.4 decision: LiDAR
+    iPhones get the high-confidence path, non-LiDAR A15 still measures at
+    documentation-grade (True) rather than being suppressed (False).
+    """
+
+    methods_allowed: list[
+        Literal[
+            "arkit_lidar",
+            "arkit_world",
+            "ar_goniometer",
+            "fiducial_homography",
+            "vision_pose_3d",
+        ]
+    ] = Field(default_factory=lambda: ["arkit_lidar", "arkit_world", "ar_goniometer"])
+    min_confidence: Literal["high", "medium", "low"] = "medium"
+    allow_non_lidar: bool = True
+
+
 class AppConfigSchema(BaseModel):
     """Full AppConfig document schema.
 
@@ -238,6 +273,9 @@ class AppConfigSchema(BaseModel):
     feature_flags: FeatureFlagsConfig = Field(default_factory=FeatureFlagsConfig)
     # Optional — absent in older hosted content; defaults preserve behavior.
     alerting: AlertingConfig = Field(default_factory=AlertingConfig)
+    # #63 — optional; absent in older hosted content. Feature is off via
+    # feature_flags.measurement_enabled regardless of this block.
+    measurement: MeasurementConfig = Field(default_factory=MeasurementConfig)
 
     @model_validator(mode="after")
     def validate_frame_windows(self) -> "AppConfigSchema":
