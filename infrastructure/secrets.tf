@@ -132,3 +132,50 @@ output "secret_arn_identifier_hmac_key" {
   description = "ARN of the patient identifier HMAC key secret"
   value       = aws_secretsmanager_secret.identifier_hmac_key.arn
 }
+
+# -----------------------------------------------------------------------------
+# Resend API key — transactional email sender (replaces SES; #399 / #76 / #77)
+# -----------------------------------------------------------------------------
+# SES production access was denied (#399), capping SES at the sandbox
+# (verified recipients only). Resend is an HTTP email API with no AWS-sandbox
+# gate. `app/core/email_sender.py` reads RESEND_API_KEY from the env, which
+# ECS injects from this secret (see ecs.tf). Same discipline as the provider
+# API keys: the value is NOT in Terraform state — the placeholder seeds a
+# fresh account; the operator rotates the real key in after creating it in
+# Resend:
+#
+#   aws secretsmanager put-secret-value \
+#     --secret-id aurion/$ENV/resend-api-key \
+#     --secret-string "$(op read 'op://Aurion/Resend API Key/credential')"
+#
+# Setup (verify the sending domain first) is documented in
+# docs/runbooks/resend-email-setup.md.
+
+resource "aws_secretsmanager_secret" "resend_api_key" {
+  name        = "aurion/${var.environment}/resend-api-key"
+  description = "Resend API key — transactional email sender (password reset; alert + compliance delivery once #76/#77 build on it)."
+  kms_key_id  = aws_kms_key.main.id
+
+  recovery_window_in_days = var.environment == "prod" ? 30 : 7
+
+  tags = {
+    Name        = "aurion-resend-api-key-${var.environment}"
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "resend_api_key" {
+  secret_id     = aws_secretsmanager_secret.resend_api_key.id
+  secret_string = "PLACEHOLDER - set via 'aws secretsmanager put-secret-value' after creating the Resend API key"
+
+  lifecycle {
+    # The real key is rotated in via console / CLI / 1Password. Terraform
+    # must not clobber it on the next apply — same pattern as the AI keys.
+    ignore_changes = [secret_string]
+  }
+}
+
+output "secret_arn_resend_api_key" {
+  description = "ARN of the Resend API key secret"
+  value       = aws_secretsmanager_secret.resend_api_key.arn
+}
