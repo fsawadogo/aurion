@@ -5,7 +5,8 @@ audit data so a clinic can hand an institution a verifiable archive.
 Three report types (#77): ``audit`` (the full trail), ``masking`` (the
 PHI-masking proof per session — Law 25's "show me every frame was masked"
 artifact), and ``retention`` (the purge/retained-media-access lifecycle).
-Scheduled generation + delivery land post-SES (#399).
+Scheduled generation ships; scheduled delivery is its own slice — now
+unblocked via Resend (app/core/email_sender.py; was gated on SES #399).
 """
 
 from __future__ import annotations

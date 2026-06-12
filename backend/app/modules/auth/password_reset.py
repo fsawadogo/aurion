@@ -2,7 +2,7 @@
 
 * ``issue_reset_token(user)`` — generate a fresh 24-hour, single-use
   token, persist its hash to ``password_reset_tokens``, return the raw
-  token to the caller (who emails it via the SES helper).
+  token to the caller (who emails it via the email helper).
 * ``verify_and_consume(raw_token)`` — look up the matching row, check
   not-revoked + not-expired, set ``consumed_at``, return the user.
 

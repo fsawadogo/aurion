@@ -3,7 +3,9 @@
 Trigger sites (Stage failures, masking issues, SLA breaches) publish to
 the ``alerts`` table via ``AlertService``. ADMIN + COMPLIANCE_OFFICER
 read and acknowledge here (#76). Delivery sinks (Slack/email) land as
-follow-ups — email is blocked on SES production access (#399).
+follow-ups — the email leg is now UNBLOCKED (email moved off SES to
+Resend; see app/core/email_sender.py) and can call
+``core.email_sender.send_email`` directly.
 """
 
 from __future__ import annotations

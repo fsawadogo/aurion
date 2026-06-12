@@ -8,7 +8,8 @@ full cadence window for the first ever).
 
 Reports land in the same persisted + sha256-signed table the portal page
 lists — **generation is scheduled; delivery is not** (emailing the file
-is blocked on SES production access, #399, and lands as its own slice).
+lands as its own slice — now UNBLOCKED via Resend, see
+app/core/email_sender.py; was gated on SES production access, #399).
 
 ## Configuration (env, mirroring the EMR worker / alert detectors)
 

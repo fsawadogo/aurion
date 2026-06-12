@@ -574,16 +574,24 @@ resource "aws_ecs_task_definition" "api" {
         # provider defaults to localhost:8001 (wrong host + wrong port) and
         # every Stage 1 fails with a connection error.
         { name = "WHISPER_API_URL", value = local.whisper_api_url },
-        # AUTH-EMAIL-RESET-WIRING — turn on real SES delivery for
-        # password-reset emails. Flipping AUTH_EMAIL_ENABLED to "true"
-        # routes the call through SES instead of the dev-only log line
-        # (see backend/app/modules/auth/email.py:84 — the false branch
-        # logs the reset link, the true branch hits SES). AUTH_EMAIL_FROM
-        # is the verified sender identity; AUTH_PASSWORD_RESET_URL_BASE
-        # is the URL the reset link points to — the backend appends
-        # `?token=<token>` to whatever this value is, so the user lands
-        # at portal.aurionclinical.com/reset-password?token=<token>.
+        # AUTH-EMAIL-RESET-WIRING — turn on real email delivery for
+        # password-reset (and, once #76/#77 build on it, alert + compliance
+        # delivery). Flipping AUTH_EMAIL_ENABLED to "true" routes the call
+        # through the configured provider instead of the dev-only log line
+        # (see backend/app/modules/auth/email.py — the false branch logs the
+        # reset link, the true branch sends). EMAIL_PROVIDER picks the sender:
+        # "resend" (default) hits the Resend HTTP API with RESEND_API_KEY
+        # (below); "ses" hits AWS SES. We use Resend because SES production
+        # access was denied (#399) — SES is stuck in sandbox. AUTH_EMAIL_FROM
+        # is the verified sender identity (a verified domain in Resend);
+        # AUTH_PASSWORD_RESET_URL_BASE is the URL the reset link points to —
+        # the backend appends `?token=<token>`, so the user lands at
+        # portal.aurionclinical.com/reset-password?token=<token>.
+        # NOTE: until the Resend API key is set in Secrets Manager (see
+        # docs/runbooks/resend-email-setup.md), sends fail gracefully —
+        # forgot-password still returns 204 and logs a redacted failure.
         { name = "AUTH_EMAIL_ENABLED", value = "true" },
+        { name = "EMAIL_PROVIDER", value = "resend" },
         { name = "AUTH_EMAIL_FROM", value = "noreply@aurionclinical.com" },
         { name = "AUTH_PASSWORD_RESET_URL_BASE", value = "https://${var.web_portal_subdomain}/reset-password" },
         # Semantic trigger classifier (Tier 2) — embeddings fallback that
@@ -622,6 +630,13 @@ resource "aws_ecs_task_definition" "api" {
         {
           name      = "ASSEMBLYAI_API_KEY"
           valueFrom = aws_secretsmanager_secret.provider_api_key["assemblyai"].arn
+        },
+        # Resend API key — transactional email sender (see secrets.tf,
+        # EMAIL_PROVIDER above). Placeholder until rotated in; sends fail
+        # gracefully (logged, no PHI) until then.
+        {
+          name      = "RESEND_API_KEY"
+          valueFrom = aws_secretsmanager_secret.resend_api_key.arn
         },
       ]
 
