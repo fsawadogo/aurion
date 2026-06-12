@@ -594,6 +594,11 @@ resource "aws_ecs_task_definition" "api" {
         { name = "EMAIL_PROVIDER", value = "resend" },
         { name = "AUTH_EMAIL_FROM", value = "noreply@aurionclinical.com" },
         { name = "AUTH_PASSWORD_RESET_URL_BASE", value = "https://${var.web_portal_subdomain}/reset-password" },
+        # #76 CRITICAL operational-alert email sink. Empty by default →
+        # no-op (alerts stay portal-only + Slack). Set var.alert_email_recipients
+        # (per-env tfvars) to activate; uses the same Resend sender. Not a
+        # secret — plain addresses, so a plain env var (not a taskdef secret).
+        { name = "ALERT_EMAIL_RECIPIENTS", value = var.alert_email_recipients },
         # #77 scheduled compliance-report delivery. Recipients empty by
         # default → no-op (reports stay portal-only). The notice links to the
         # portal Compliance page (auth-gated download) and carries metadata

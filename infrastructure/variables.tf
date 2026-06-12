@@ -120,6 +120,12 @@ variable "web_portal_subdomain" {
   default     = "portal-dev.aurionclinical.com"
 }
 
+variable "alert_email_recipients" {
+  description = "Comma-separated recipient list for the #76 CRITICAL operational-alert email sink (e.g. 'ops@aurionclinical.com,compliance@aurionclinical.com'). Empty = the email sink is a no-op (alerts stay portal-only + Slack). Not a secret — plain addresses; injected as the ALERT_EMAIL_RECIPIENTS task env. Delivery also requires the Resend email service configured (RESEND_API_KEY + verified sender)."
+  type        = string
+  default     = ""
+}
+
 variable "compliance_report_recipients" {
   description = "Comma-separated recipient list for the #77 scheduled compliance-report delivery notice (e.g. 'compliance@aurionclinical.com'). Empty = no-op (reports stay portal-only). Not a secret — plain addresses; injected as the COMPLIANCE_REPORT_RECIPIENTS task env. The notice carries metadata + a portal link only (never report bytes); delivery also requires the Resend email service configured."
   type        = string
