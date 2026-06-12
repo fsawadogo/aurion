@@ -20,6 +20,14 @@ api_domain = "api-dev.aurionclinical.com"
 # prod via prod.tfvars. CTO decision 2026-06-03.
 web_portal_subdomain = "portal.aurionclinical.com"
 
+# Email delivery recipients (#76 / #77) — ACTIVATE the CRITICAL operational-
+# alert email sink + the scheduled compliance-report delivery on the live
+# Resend sender. Same ops mailbox already used for CloudWatch alarms
+# (var.alerts_email). Comma-separate to add more, or split alerts vs
+# compliance later. Empty (the variable default) keeps them dormant.
+alert_email_recipients       = "faical.sawadogo@aurionclinical.com"
+compliance_report_recipients = "faical.sawadogo@aurionclinical.com"
+
 # api_image_tag is INTENTIONALLY not set here (matches prod.tfvars). It used to
 # be "latest", which is the footgun behind the 2026-06-07 incident: a bare
 # `terraform apply -var-file=dev.tfvars` (no -var override) shipped a STALE
