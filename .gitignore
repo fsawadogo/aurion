@@ -108,3 +108,7 @@ credentials.json
 * [0-9].mov
 * [0-9].docx
 * [0-9].json
+
+# Local secret hand-off — never commit (Resend API key)
+ResendAPIKey.txt
+*.apikey

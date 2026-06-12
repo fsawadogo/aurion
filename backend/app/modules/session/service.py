@@ -19,6 +19,7 @@ from app.core.clock import utcnow
 from app.core.models import (
     EvalAssignmentModel,
     EvalScoreModel,
+    MeasurementCitationModel,
     NoteVersionModel,
     PhysicianProfileModel,
     PilotMetricsModel,
@@ -397,6 +398,7 @@ _SESSION_CHILD_MODELS = (
     Stage2JobModel,
     EvalScoreModel,
     EvalAssignmentModel,
+    MeasurementCitationModel,  # #63 — derived PHI, erased with the session
 )
 
 
