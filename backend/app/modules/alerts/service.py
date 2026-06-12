@@ -21,6 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.clock import utcnow
 from app.core.database import async_session_factory
 from app.core.models import AlertModel
+from app.modules.alerts.email_sink import schedule_critical_email_notification
 from app.modules.alerts.slack_sink import schedule_critical_notification
 
 logger = logging.getLogger("aurion.alerts")
@@ -77,10 +78,17 @@ class AlertService:
             severity.value,
             source,
         )
-        # #76 Slack sink — fire-and-forget for CRITICAL only; no-op until
-        # the webhook secret is provisioned. Plain strings cross into the
-        # detached task, never the session.
+        # #76 delivery sinks — fire-and-forget for CRITICAL only; each is a
+        # no-op until its own config is provisioned (Slack webhook /
+        # ALERT_EMAIL_RECIPIENTS). Plain strings cross into the detached
+        # tasks, never the session.
         schedule_critical_notification(
+            alert_type=alert_type,
+            severity=severity.value,
+            source=source,
+            message=message,
+        )
+        schedule_critical_email_notification(
             alert_type=alert_type,
             severity=severity.value,
             source=source,

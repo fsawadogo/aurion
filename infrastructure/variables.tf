@@ -120,6 +120,12 @@ variable "web_portal_subdomain" {
   default     = "portal-dev.aurionclinical.com"
 }
 
+variable "alert_email_recipients" {
+  description = "Comma-separated recipient list for the #76 CRITICAL operational-alert email sink (e.g. 'ops@aurionclinical.com,compliance@aurionclinical.com'). Empty = the email sink is a no-op (alerts stay portal-only + Slack). Not a secret — plain addresses; injected as the ALERT_EMAIL_RECIPIENTS task env. Delivery also requires the Resend email service configured (RESEND_API_KEY + verified sender)."
+  type        = string
+  default     = ""
+}
+
 variable "amplify_github_access_token" {
   description = "Reserved for a future flip back to the Amplify GitHub source connector (platform = WEB_COMPUTE). Currently unused — the portal ships via the manual-deploy path (platform = WEB) driven by .github/workflows/web.yml + web/scripts/deploy.sh, which uploads a static bundle to Amplify via aws amplify create-deployment. Kept in the schema so the flip-back is a single PR (set the variable, change platform, restore build_spec) — no variable-rename churn."
   type        = string
