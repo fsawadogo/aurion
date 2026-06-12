@@ -27,6 +27,8 @@ from app.core.types import MeasurementCitation
 from app.modules.auth.service import CurrentUser
 from app.modules.config.appconfig_client import get_config
 from app.modules.measurement import repository as measurement_repo
+from app.modules.measurement.note_injection import inject_into_note
+from app.modules.note_gen.service import create_note_version, get_latest_note
 
 router = APIRouter(prefix="/me", tags=["me.measurements"])
 
@@ -105,6 +107,16 @@ async def ingest_measurement(
                 kind=row.kind,
                 physician_confirmed=True,
             )
+            # A confirmed measurement enters the note as a traceable claim
+            # (design §4). No-op if Stage 1 hasn't delivered a note yet or
+            # the active template has no section to carry this metric — the
+            # measurement stays persisted + listable either way.
+            note = await get_latest_note(str(session_id), db)
+            if note is not None and inject_into_note(note, citation):
+                await create_note_version(
+                    str(session_id), note, db,
+                    stats_trigger="measurement_injection",
+                )
         await db.commit()
     return _to_citation(row)
 
