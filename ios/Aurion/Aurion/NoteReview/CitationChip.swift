@@ -60,6 +60,7 @@ struct CitationChip: View {
         case "visual":         return "V"
         case "screen":         return "S"
         case "physician_edit": return "E"
+        case "measurement":    return "M"
         default:               return "?"
         }
     }
@@ -156,6 +157,7 @@ struct CitationChip: View {
         case "visual":         baseLabel = L("citation.sourceType.visual")
         case "screen":         baseLabel = L("citation.sourceType.screen")
         case "physician_edit": baseLabel = L("citation.sourceType.physicianEdit")
+        case "measurement":    baseLabel = L("citation.sourceType.measurement")
         default:               baseLabel = L("citation.sourceType.unknown")
         }
         if isClipKind {

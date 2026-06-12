@@ -775,6 +775,30 @@ final class APIClient: Sendable {
         return try await post(path: "/clips/\(sessionId)/telemetry", body: body)
     }
 
+    // MARK: - Visual measurement (#63)
+
+    /// Submit a physician-confirmed on-device measurement (wound L/W or ROM).
+    /// The backend persists it (idempotent on `measurement_id`), audits PHI-free
+    /// provenance, and — because it's confirmed — injects it into the note as a
+    /// traceable claim. Numbers + provenance only: no frame bytes ever cross the
+    /// wire, which is why `masking_status` is `not_applicable`. Gated server-side
+    /// by `feature_flags.measurement_enabled` (403 when off).
+    @discardableResult
+    func submitMeasurement(
+        sessionId: String,
+        _ citation: MeasurementCitationPayload
+    ) async throws -> MeasurementResponse {
+        return try await post(
+            path: "/me/sessions/\(sessionId)/measurements",
+            body: citation.jsonBody
+        )
+    }
+
+    /// All confirmed measurements captured for a session, oldest first.
+    func listMeasurements(sessionId: String) async throws -> [MeasurementResponse] {
+        return try await get(path: "/me/sessions/\(sessionId)/measurements")
+    }
+
     // MARK: - Generic HTTP
 
     private func get<T: Decodable>(path: String) async throws -> T {
@@ -1342,6 +1366,60 @@ struct ExportAuditResponse: Codable, Sendable {
         case sessionId = "session_id"
         case sessionState = "session_state"
         case auditWritten = "audit_written"
+    }
+}
+
+/// Server echo of a persisted ``MeasurementCitation`` (#63). Mirrors the
+/// backend Pydantic shape exactly. `certifiedMeasurement` is always false —
+/// the "approximate, not certified" disclaimer is structural; the server
+/// forces it regardless of what the client sends.
+struct MeasurementResponse: Codable, Sendable, Equatable, Identifiable {
+    let measurementId: String
+    let sessionId: String
+    let frameId: String?
+    let kind: String
+    let value: Double
+    let unit: String
+    let method: String
+    let confidence: String
+    let confidenceReason: String
+    let scaleSource: String?
+    let maskingStatus: String
+    let physicianConfirmed: Bool
+    let providerUsed: String
+    let modelVersion: String
+
+    var id: String { measurementId }
+
+    enum CodingKeys: String, CodingKey {
+        case measurementId = "measurement_id"
+        case sessionId = "session_id"
+        case frameId = "frame_id"
+        case kind, value, unit, method, confidence
+        case confidenceReason = "confidence_reason"
+        case scaleSource = "scale_source"
+        case maskingStatus = "masking_status"
+        case physicianConfirmed = "physician_confirmed"
+        case providerUsed = "provider_used"
+        case modelVersion = "model_version"
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        measurementId = try c.decode(String.self, forKey: .measurementId)
+        sessionId = try c.decode(String.self, forKey: .sessionId)
+        frameId = try c.decodeIfPresent(String.self, forKey: .frameId)
+        kind = try c.decode(String.self, forKey: .kind)
+        value = try c.decode(Double.self, forKey: .value)
+        unit = try c.decode(String.self, forKey: .unit)
+        method = try c.decode(String.self, forKey: .method)
+        confidence = try c.decode(String.self, forKey: .confidence)
+        confidenceReason = try c.decodeIfPresent(String.self, forKey: .confidenceReason) ?? ""
+        scaleSource = try c.decodeIfPresent(String.self, forKey: .scaleSource)
+        maskingStatus = try c.decodeIfPresent(String.self, forKey: .maskingStatus) ?? "not_applicable"
+        physicianConfirmed = try c.decodeIfPresent(Bool.self, forKey: .physicianConfirmed) ?? false
+        providerUsed = try c.decodeIfPresent(String.self, forKey: .providerUsed) ?? "on_device"
+        modelVersion = try c.decodeIfPresent(String.self, forKey: .modelVersion) ?? "meas-1.0"
     }
 }
 
@@ -2388,6 +2466,11 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
     let codingCardEnabled: Bool
     let patientSummaryCardEnabled: Bool
     let emrWritebackCardEnabled: Bool
+    // ── In-encounter visual measurement (#63) ────────────────────────────
+    // Master gate for the AR measurement instrument (wound L/W + ROM).
+    // Hidden by default; ADMIN flips it via AppConfig. `decodeIfPresent`
+    // below keeps older backends (that don't emit the key) safely off.
+    let measurementEnabled: Bool
 
     enum CodingKeys: String, CodingKey {
         case screenCaptureEnabled = "screen_capture_enabled"
@@ -2399,6 +2482,7 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         case codingCardEnabled = "coding_card_enabled"
         case patientSummaryCardEnabled = "patient_summary_card_enabled"
         case emrWritebackCardEnabled = "emr_writeback_card_enabled"
+        case measurementEnabled = "measurement_enabled"
     }
 
     // Memberwise init so RemoteConfig's `@Published` default can build
@@ -2412,7 +2496,8 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         ordersCardEnabled: Bool,
         codingCardEnabled: Bool,
         patientSummaryCardEnabled: Bool,
-        emrWritebackCardEnabled: Bool
+        emrWritebackCardEnabled: Bool,
+        measurementEnabled: Bool = false
     ) {
         self.screenCaptureEnabled = screenCaptureEnabled
         self.noteVersioningEnabled = noteVersioningEnabled
@@ -2423,6 +2508,7 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         self.codingCardEnabled = codingCardEnabled
         self.patientSummaryCardEnabled = patientSummaryCardEnabled
         self.emrWritebackCardEnabled = emrWritebackCardEnabled
+        self.measurementEnabled = measurementEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -2439,6 +2525,7 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         codingCardEnabled = try c.decodeIfPresent(Bool.self, forKey: .codingCardEnabled) ?? false
         patientSummaryCardEnabled = try c.decodeIfPresent(Bool.self, forKey: .patientSummaryCardEnabled) ?? false
         emrWritebackCardEnabled = try c.decodeIfPresent(Bool.self, forKey: .emrWritebackCardEnabled) ?? false
+        measurementEnabled = try c.decodeIfPresent(Bool.self, forKey: .measurementEnabled) ?? false
     }
 }
 
