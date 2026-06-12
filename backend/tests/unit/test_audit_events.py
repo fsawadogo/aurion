@@ -145,6 +145,11 @@ EXPECTED_VALUES: dict[str, str] = {
     # Longitudinal patient context (#61, full slice). Fires once per
     # Stage 1 note-gen call where prior encounters were consumed.
     "LONGITUDINAL_CONTEXT_LOADED": "longitudinal_context_loaded",
+    # #63 on-device visual measurement lifecycle.
+    "MEASUREMENT_GENERATED": "measurement_generated",
+    "MEASUREMENT_REVIEWED": "measurement_reviewed",
+    "MEASUREMENT_EDITED": "measurement_edited",
+    "MEASUREMENT_SUPPRESSED": "measurement_suppressed",
     # Auth pivot (AUTH-PIVOT-BACKEND) — every auth state change.
     "LOGIN_SUCCESS": "login_success",
     "LOGIN_FAILURE": "login_failure",

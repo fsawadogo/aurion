@@ -8,7 +8,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 # ── Transcript Types ───────────────────────────────────────────────────────
 
@@ -37,6 +37,12 @@ class TemplateSection(BaseModel):
     required: bool = True
     visual_trigger_keywords: list[str] = Field(default_factory=list)
     description: str = ""
+    # #63: True when this section can carry on-device visual measurements
+    # (wound dimensions / ROM angles) as claims — e.g. wound_assessment
+    # (plastic), physical_exam / functional_assessment (orthopedic / MSK).
+    # The pipeline reads this to know a section may receive metric claims.
+    # Defaults False so existing templates are unchanged.
+    measurement_output_expected: bool = False
 
 
 class Template(BaseModel):
@@ -66,7 +72,9 @@ class NoteClaim(BaseModel):
 
     id: str
     text: str
-    source_type: Literal["transcript", "visual", "screen", "physician_edit"]
+    source_type: Literal[
+        "transcript", "visual", "screen", "physician_edit", "measurement"
+    ]
     source_id: str = Field(..., min_length=1, description="Non-empty source anchor id")
     source_quote: str = ""
     physician_edited: bool = False
@@ -78,6 +86,65 @@ class NoteSection(BaseModel):
     title: str = ""
     status: Literal["populated", "pending_video", "not_captured", "processing_failed"] = "not_captured"
     claims: list[NoteClaim] = Field(default_factory=list)
+
+
+class MeasurementCitation(BaseModel):
+    """An on-device visual measurement (wound dimension or ROM angle) that a
+    physician confirmed before it entered the note (#63).
+
+    Computed 100% on the iPhone (ARKit world-tracking + LiDAR depth, or an
+    AR goniometer overlay); the backend only ever receives this structured
+    record + a masked thumbnail — never raw frames. Carried into the note as
+    a NoteClaim with ``source_type="measurement"`` / ``source_id=measurement_id``.
+
+    Descriptive-mode + SaMD posture (CLAUDE.md §descriptive; design §6):
+    every value is reported as "approximately" with its ``method`` +
+    ``confidence``, and ``certified_measurement`` is ALWAYS False — the
+    "approximate, not a certified measurement" disclaimer is structural, not
+    cosmetic. No trends, no interpretation, no diagnosis.
+    """
+
+    measurement_id: str = Field(..., min_length=1)
+    session_id: str
+    frame_id: Optional[str] = None
+    kind: Literal["wound_length", "wound_width", "wound_area", "rom_angle"]
+    value: float = Field(..., ge=0)
+    unit: Literal["mm", "cm2", "deg"]
+    method: Literal[
+        "arkit_lidar",
+        "arkit_world",
+        "fiducial_homography",
+        "vision_pose_3d",
+        "ar_goniometer",
+    ]
+    confidence: Literal["high", "medium", "low"]
+    confidence_reason: str = ""
+    # How metric scale was recovered, e.g. "lidar_depth" / "world_tracking" /
+    # "fiducial". Drives the confidence story; never PHI.
+    scale_source: Optional[str] = None
+    masking_status: Literal["confirmed", "failed", "not_applicable"] = "confirmed"
+    physician_confirmed: bool = False
+    provider_used: str = "on_device"
+    model_version: str = "meas-1.0"
+    # ALWAYS False — Aurion is a documentation aid, not a certified measuring
+    # device (design §6). Typed as Literal[False] so it is structurally
+    # impossible to ship a "certified" measurement.
+    certified_measurement: Literal[False] = False
+
+    @model_validator(mode="after")
+    def _kind_unit_consistent(self) -> "MeasurementCitation":
+        expected = {
+            "wound_length": "mm",
+            "wound_width": "mm",
+            "wound_area": "cm2",
+            "rom_angle": "deg",
+        }[self.kind]
+        if self.unit != expected:
+            raise ValueError(
+                f"unit '{self.unit}' invalid for kind '{self.kind}' "
+                f"(expected '{expected}')"
+            )
+        return self
 
 
 class PriorContextUsedSummary(BaseModel):
