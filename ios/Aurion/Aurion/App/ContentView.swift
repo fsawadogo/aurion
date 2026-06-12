@@ -16,6 +16,9 @@ struct ContentView: View {
     @State private var showRecoveryAlert = false
     @State private var recoveredSession: CaptureSession?
     @State private var showSplash = true
+    /// #65 — guards the one-time watch-bridge activation against a repeat
+    /// `.onAppear` (which would re-subscribe the session stream).
+    @State private var watchBridgeConnected = false
 
     var body: some View {
         ZStack {
@@ -129,6 +132,16 @@ struct ContentView: View {
         .onAppear {
             appState.checkVoiceEnrollment()
             checkForCrashRecovery()
+            // #65 — activate the Apple Watch bridge once so wrist commands
+            // (consent/start/stop/pause) route through SessionManager and the
+            // phone mirrors session state + haptics to the wrist. Safe no-op
+            // when no watch is paired (connect → activate guards on
+            // WCSession.isSupported()). Without this the bridge was declared
+            // but never connected, so the link never came up.
+            if !watchBridgeConnected {
+                watchBridgeConnected = true
+                watchBridge.connect(to: sessionManager)
+            }
             // Persist "seen" only when dismissed with "Don't show again".
             tour.configure { dontShowAgain in
                 if dontShowAgain { appState.hasSeenTour = true }
