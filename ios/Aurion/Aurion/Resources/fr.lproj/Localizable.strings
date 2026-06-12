@@ -850,6 +850,7 @@
 "citation.sourceType.visual" = "Citation visuelle";
 "citation.sourceType.screen" = "Citation de l\U2019\U00E9cran";
 "citation.sourceType.physicianEdit" = "Modification du m\U00E9decin";
+"citation.sourceType.measurement" = "Citation de mesure";
 "citation.sourceType.unknown" = "Citation";
 "clip.indicator.accessibility" = "Clip vid\U00E9o";
 "clip.viewer.title" = "Clip";
@@ -1037,3 +1038,38 @@
 "capture.zoom.a11yStandard" = "Standard";
 "capture.zoom.a11yHint" = "Bascule la cam\U00E9ra entre l\U2019objectif standard et le grand angle (0,5\U00D7).";
 "version.label" = "Version %1$@ (build %2$@)";
+
+/* ── Mesure visuelle pendant la consultation (#63) ───────────────────── */
+"measurement.title" = "Mesurer";
+"measurement.pick.title" = "Que souhaitez-vous mesurer ?";
+"measurement.kind.woundLength" = "Longueur de la plaie";
+"measurement.kind.woundWidth" = "Largeur de la plaie";
+"measurement.kind.woundArea" = "Surface de la plaie";
+"measurement.kind.romAngle" = "Amplitude de mouvement";
+"measurement.disclaimer" = "Approximatif \U2014 mesure non certifi\U00E9e. \U00C0 des fins de documentation uniquement.";
+"measurement.instruction.tapFirst" = "Touchez le premier point de la mesure.";
+"measurement.instruction.tapSecond" = "Touchez le second point.";
+"measurement.instruction.tapVertex" = "Touchez le centre de l\U2019articulation (sommet).";
+"measurement.instruction.tapRay" = "Touchez le long de chaque branche de l\U2019angle.";
+"measurement.instruction.ready" = "Capturez la mesure ou r\U00E9initialisez pour recommencer.";
+"measurement.hint.noSurface" = "Aucune surface d\U00E9tect\U00E9e \U2014 visez la zone et touchez \U00E0 nouveau.";
+"measurement.hint.moveSlowly" = "D\U00E9placez l\U2019appareil lentement pour am\U00E9liorer le suivi.";
+"measurement.hint.initializing" = "Initialisation \U2014 maintenez stable.";
+"measurement.reset" = "R\U00E9initialiser";
+"measurement.capture" = "Capturer";
+"measurement.confirm" = "Confirmer";
+"measurement.discard" = "Annuler";
+"measurement.submitting" = "Enregistrement de la mesure\U2026";
+"measurement.decrease" = "Diminuer la valeur";
+"measurement.increase" = "Augmenter la valeur";
+"measurement.confidence.high" = "Confiance \U00E9lev\U00E9e";
+"measurement.confidence.medium" = "Confiance moyenne";
+"measurement.confidence.low" = "Confiance faible";
+"measurement.provenance" = "Captur\U00E9 sur l\U2019appareil (%@), confirm\U00E9 par le m\U00E9decin.";
+"measurement.method.lidar" = "RA iPhone, LiDAR";
+"measurement.method.world" = "RA iPhone, suivi spatial";
+"measurement.method.goniometer" = "Goniom\U00E8tre RA";
+"measurement.savedCount" = "%d mesure(s) enregistr\U00E9e(s) dans la note.";
+"measurement.error.title" = "Impossible d\U2019enregistrer la mesure";
+"measurement.error.disabled" = "La mesure n\U2019est pas activ\U00E9e pour ce compte.";
+"measurement.error.offline" = "Vous semblez hors ligne. R\U00E9essayez une fois connect\U00E9.";

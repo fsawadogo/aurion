@@ -862,6 +862,7 @@
 "citation.sourceType.visual" = "Visual citation";
 "citation.sourceType.screen" = "Screen citation";
 "citation.sourceType.physicianEdit" = "Physician edit";
+"citation.sourceType.measurement" = "Measurement citation";
 "citation.sourceType.unknown" = "Citation";
 "clip.indicator.accessibility" = "Video clip";
 "clip.viewer.title" = "Clip";
@@ -1049,3 +1050,38 @@
 "capture.zoom.a11yStandard" = "Standard";
 "capture.zoom.a11yHint" = "Switches the camera between the standard and wide-angle (0.5\U00D7) lens.";
 "version.label" = "Version %1$@ (build %2$@)";
+
+/* ── In-encounter visual measurement (#63) ───────────────────────────── */
+"measurement.title" = "Measure";
+"measurement.pick.title" = "What would you like to measure?";
+"measurement.kind.woundLength" = "Wound length";
+"measurement.kind.woundWidth" = "Wound width";
+"measurement.kind.woundArea" = "Wound area";
+"measurement.kind.romAngle" = "Range of motion";
+"measurement.disclaimer" = "Approximate \U2014 not a certified measurement. For documentation only.";
+"measurement.instruction.tapFirst" = "Tap the first point of the measurement.";
+"measurement.instruction.tapSecond" = "Tap the second point.";
+"measurement.instruction.tapVertex" = "Tap the joint center (vertex).";
+"measurement.instruction.tapRay" = "Tap along each limb of the angle.";
+"measurement.instruction.ready" = "Capture the measurement, or reset to retry.";
+"measurement.hint.noSurface" = "No surface detected there \U2014 aim at the area and tap again.";
+"measurement.hint.moveSlowly" = "Move the device slowly to improve tracking.";
+"measurement.hint.initializing" = "Initializing \U2014 hold steady.";
+"measurement.reset" = "Reset";
+"measurement.capture" = "Capture";
+"measurement.confirm" = "Confirm";
+"measurement.discard" = "Discard";
+"measurement.submitting" = "Saving measurement\U2026";
+"measurement.decrease" = "Decrease value";
+"measurement.increase" = "Increase value";
+"measurement.confidence.high" = "High confidence";
+"measurement.confidence.medium" = "Medium confidence";
+"measurement.confidence.low" = "Low confidence";
+"measurement.provenance" = "Captured on-device (%@), physician-confirmed.";
+"measurement.method.lidar" = "iPhone AR, LiDAR";
+"measurement.method.world" = "iPhone AR, world tracking";
+"measurement.method.goniometer" = "AR goniometer";
+"measurement.savedCount" = "%d measurement(s) saved to the note.";
+"measurement.error.title" = "Couldn\U2019t save measurement";
+"measurement.error.disabled" = "Measurement isn\U2019t enabled for this account.";
+"measurement.error.offline" = "You appear to be offline. Try again when connected.";
