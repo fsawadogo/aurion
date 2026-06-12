@@ -19,17 +19,27 @@ from __future__ import annotations
 
 from app.core.types import MeasurementCitation, Note, NoteClaim
 
-# Kind → ordered preference of target section ids. The measurement routes into
-# the FIRST of these that the active note actually defines, so the same map
-# works across specialties (plastic has wound_assessment; ortho/MSK/ER/general
-# have physical_exam; MSK additionally has functional_assessment, the natural
-# home for range-of-motion). A kind with no matching section is left
-# un-injected (still persisted + listable) rather than forced somewhere wrong.
-_SECTION_ROUTES: dict[str, tuple[str, ...]] = {
-    "wound_length": ("wound_assessment", "physical_exam"),
-    "wound_width": ("wound_assessment", "physical_exam"),
-    "wound_area": ("wound_assessment", "physical_exam"),
-    "rom_angle": ("functional_assessment", "physical_exam"),
+# One row per measurement kind — the single source of truth for how it reads
+# in the note and where it routes. ``sections`` is the ordered preference of
+# target section ids; the measurement routes into the FIRST the active note
+# actually defines, so the same table works across specialties (plastic has
+# wound_assessment; ortho/MSK/ER/general have physical_exam; MSK additionally
+# has functional_assessment, the natural home for range-of-motion). A kind
+# with no matching section is left un-injected (still persisted + listable)
+# rather than forced somewhere wrong. A new kind is one row here.
+_MEASUREMENTS: dict[str, dict] = {
+    "wound_length": {"label": "Wound length", "unit": "mm",
+                     "provenance": "physician-confirmed",
+                     "sections": ("wound_assessment", "physical_exam")},
+    "wound_width": {"label": "Wound width", "unit": "mm",
+                    "provenance": "physician-confirmed",
+                    "sections": ("wound_assessment", "physical_exam")},
+    "wound_area": {"label": "Wound area", "unit": "cm²",
+                   "provenance": "physician-confirmed",
+                   "sections": ("wound_assessment", "physical_exam")},
+    "rom_angle": {"label": "Range of motion", "unit": "degrees",
+                  "provenance": "physician-aligned",
+                  "sections": ("functional_assessment", "physical_exam")},
 }
 
 # How a metric scale / capture method reads in the note. Factual, not certified.
@@ -61,28 +71,21 @@ def format_measurement_text(citation: MeasurementCitation) -> str:
       "Range of motion measured at approximately 35 degrees (AR goniometer,
        physician-aligned)."
     """
+    spec = _MEASUREMENTS[citation.kind]
     method = _METHOD_LABELS.get(citation.method, citation.method)
-    val = _format_value(citation.value)
-    if citation.kind == "rom_angle":
-        return (
-            f"Range of motion measured at approximately {val} degrees "
-            f"({method}, physician-aligned)."
-        )
-    label = {
-        "wound_length": "Wound length",
-        "wound_width": "Wound width",
-        "wound_area": "Wound area",
-    }[citation.kind]
-    unit = "cm²" if citation.unit == "cm2" else citation.unit
     return (
-        f"{label} measured at approximately {val} {unit} "
-        f"({method}, physician-confirmed)."
+        f"{spec['label']} measured at approximately "
+        f"{_format_value(citation.value)} {spec['unit']} "
+        f"({method}, {spec['provenance']})."
     )
 
 
 def select_target_section(note: Note, kind: str):
     """The first routed section the note actually has, or None."""
-    for section_id in _SECTION_ROUTES.get(kind, ()):
+    spec = _MEASUREMENTS.get(kind)
+    if spec is None:
+        return None
+    for section_id in spec["sections"]:
         section = note.get_section(section_id)
         if section is not None:
             return section

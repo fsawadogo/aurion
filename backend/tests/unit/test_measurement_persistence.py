@@ -22,9 +22,17 @@ from fastapi import HTTPException
 
 from app.api.v1 import me_measurements as route
 from app.core.audit_events import AuditEventType
-from app.core.types import MeasurementCitation
+from app.core.types import MeasurementCitation, Note, NoteSection
 
 # ── helpers ──────────────────────────────────────────────────────────────────
+
+
+def _note(session_id: uuid.UUID, specialty: str, *section_ids: str) -> Note:
+    return Note(
+        session_id=str(session_id), stage=1, provider_used="anthropic",
+        specialty=specialty,
+        sections=[NoteSection(id=sid, title=sid) for sid in section_ids],
+    )
 
 
 def _cfg(*, enabled: bool = True, methods=None, min_confidence: str = "medium"):
@@ -186,12 +194,8 @@ class TestIngestPersist:
 
     @pytest.mark.asyncio
     async def test_confirmed_with_note_injects_claim_and_writes_version(self):
-        from app.core.types import Note, NoteSection
-
         sid = uuid.uuid4()
-        note = Note(session_id=str(sid), stage=1, provider_used="anthropic",
-                    specialty="plastic_surgery",
-                    sections=[NoteSection(id="wound_assessment", title="Wound")])
+        note = _note(sid, "plastic_surgery", "wound_assessment")
         with patch.object(route, "get_owned_session_or_404", AsyncMock()), \
              patch.object(route, "get_config", return_value=_cfg()), \
              patch.object(route.measurement_repo, "persist",
@@ -213,12 +217,8 @@ class TestIngestPersist:
 
     @pytest.mark.asyncio
     async def test_confirmed_with_note_but_no_target_section_skips_version(self):
-        from app.core.types import Note, NoteSection
-
         sid = uuid.uuid4()
-        note = Note(session_id=str(sid), stage=1, provider_used="anthropic",
-                    specialty="general",
-                    sections=[NoteSection(id="chief_complaint", title="CC")])
+        note = _note(sid, "general", "chief_complaint")
         with patch.object(route, "get_owned_session_or_404", AsyncMock()), \
              patch.object(route, "get_config", return_value=_cfg()), \
              patch.object(route.measurement_repo, "persist",
