@@ -81,24 +81,21 @@ async def test_forgot_password_for_existing_user_issues_token_and_logs_link(
 async def test_forgot_password_returns_204_when_email_send_raises(
     app_client, db_session, mock_audit_log, monkeypatch, caplog
 ) -> None:
-    """SES delivery failure (e.g. sandbox blocking an unverified
-    recipient) must NOT surface as a 500 — that would both break the
-    "always 204" contract and leak account existence (a real-but-
-    undeliverable address would 500 while an unknown one 204s). The
-    token is already persisted, so the endpoint stays 204 and still
-    writes the audit row. See issue #349."""
-    from botocore.exceptions import ClientError
-
+    """An email-provider delivery failure (bad/placeholder key, provider
+    4xx/5xx, transport error) must NOT surface as a 500 — that would both
+    break the "always 204" contract and leak account existence (a real-but-
+    undeliverable address would 500 while an unknown one 204s). The token is
+    already persisted, so the endpoint stays 204 and still writes the audit
+    row. See issue #349. The sender raises EmailSendError (post-SES→Resend
+    swap), so this asserts the real production failure path."""
     import app.api.v1.auth as auth_module
+    from app.core.email_sender import EmailSendError
 
     caplog.set_level(logging.ERROR, logger="aurion.auth")
     user_id, email = await seed_user(db_session)
 
     async def _boom(*, user, raw_token):  # noqa: ANN001, ANN202
-        raise ClientError(
-            {"Error": {"Code": "MessageRejected", "Message": "redacted"}},
-            "SendEmail",
-        )
+        raise EmailSendError("Resend send failed: HTTP 401")
 
     monkeypatch.setattr(auth_module, "send_password_reset_email", _boom)
 
@@ -118,7 +115,7 @@ async def test_forgot_password_returns_204_when_email_send_raises(
     for msg in failure_logs:
         assert email not in msg
         assert "token=" not in msg
-        assert "ClientError" in msg
+        assert "EmailSendError" in msg
 
     # The reset token is still issued despite the email failure.
     from sqlalchemy import select

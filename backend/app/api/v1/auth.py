@@ -40,7 +40,6 @@ import string
 import uuid
 from dataclasses import dataclass
 
-from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -51,6 +50,7 @@ from app.api.v1._helpers import write_audit
 from app.core.audit_events import AuditEventType
 from app.core.clock import utcnow
 from app.core.database import async_session_factory, get_db
+from app.core.email_sender import EmailSendError
 from app.core.kms_encryption import decrypt_str, encrypt_str
 from app.core.models import RefreshTokenModel, UserModel
 from app.core.types import UserRole
@@ -548,13 +548,13 @@ async def forgot_password(
     raw_token, _row = await password_reset.issue_reset_token(db, user)
     try:
         await send_password_reset_email(user=user, raw_token=raw_token)
-    except (BotoCoreError, ClientError) as e:
-        # SES rejected the recipient (e.g. sandbox blocks unverified
-        # addresses) or another delivery error. The reset token is
-        # already persisted, so failing to email it is harmless — the
-        # endpoint MUST still return 204 so a real-but-undeliverable
-        # account can't be told apart from an unknown one. Log the
-        # exception CLASS only — NEVER the email, link, or token.
+    except EmailSendError as e:
+        # The email provider couldn't deliver (bad/placeholder key, provider
+        # 4xx/5xx, transport error). The reset token is already persisted, so
+        # failing to email it is harmless — the endpoint MUST still return 204
+        # so a real-but-undeliverable account can't be told apart from an
+        # unknown one. Log the exception CLASS only — NEVER the email, link,
+        # or token. (The sender already logged a redacted provider+status.)
         logger.error(
             "password reset email send failed: %s", type(e).__name__
         )
