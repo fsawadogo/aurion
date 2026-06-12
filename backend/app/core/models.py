@@ -342,6 +342,64 @@ class NoteVersionModel(Base):
     )
 
 
+class MeasurementCitationModel(Base):
+    """Persisted on-device visual measurement (#63) — wound L/W + ROM.
+
+    The backend only ever stores the structured, physician-confirmed
+    citation (numbers + provenance) + (later) a masked thumbnail — never
+    raw frames. Derived PHI (design §6.2): same KMS/retention/erasure rules
+    as notes, so it's a session child row hard-deleted with the session
+    (``_SESSION_CHILD_MODELS``). ``certified_measurement`` is always False
+    (the disclaimer is structural). Mirrors ``MeasurementCitation`` in
+    core/types.py.
+    """
+
+    __tablename__ = "measurement_citations"
+    # iOS mints measurement_id per session (meas_001…); unique per session so
+    # a re-POST is idempotent rather than a duplicate row.
+    __table_args__ = (
+        UniqueConstraint(
+            "session_id", "measurement_id", name="uq_measurement_session_mid"
+        ),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    measurement_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    frame_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    unit: Mapped[str] = mapped_column(String(8), nullable=False)
+    method: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[str] = mapped_column(String(8), nullable=False)
+    confidence_reason: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    scale_source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    masking_status: Mapped[str] = mapped_column(
+        String(16), nullable=False, default="confirmed"
+    )
+    physician_confirmed: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    provider_used: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="on_device"
+    )
+    model_version: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="meas-1.0"
+    )
+    certified_measurement: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
 class CustomTemplateModel(Base):
     """User-owned specialty templates.
 
