@@ -594,6 +594,11 @@ resource "aws_ecs_task_definition" "api" {
         { name = "EMAIL_PROVIDER", value = "resend" },
         { name = "AUTH_EMAIL_FROM", value = "noreply@aurionclinical.com" },
         { name = "AUTH_PASSWORD_RESET_URL_BASE", value = "https://${var.web_portal_subdomain}/reset-password" },
+        # #76 CRITICAL operational-alert email sink. Empty by default →
+        # no-op (alerts stay portal-only + Slack). Set var.alert_email_recipients
+        # (per-env tfvars) to activate; uses the same Resend sender. Not a
+        # secret — plain addresses, so a plain env var (not a taskdef secret).
+        { name = "ALERT_EMAIL_RECIPIENTS", value = var.alert_email_recipients },
         # Semantic trigger classifier (Tier 2) — embeddings fallback that
         # catches paraphrased exam/imaging cues the keyword list misses
         # (e.g. "can you bend your knee" → active_physical_examination), so
