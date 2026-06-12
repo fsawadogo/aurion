@@ -37,6 +37,7 @@ from typing import Optional
 from app.core.clock import utcnow
 from app.core.database import async_session_factory
 from app.modules.audit_log.service import get_audit_log_service
+from app.modules.compliance import delivery
 from app.modules.compliance.reports_service import (
     ReportType,
     get_compliance_reports_service,
@@ -97,6 +98,10 @@ async def run_scheduler_pass(scan_events=None) -> int:
             else:
                 events = await scan_events()
 
+            # Plain-value metadata for the post-commit delivery notice —
+            # captured while the session is open so the detached email
+            # never touches a closed-session ORM object.
+            delivered: list[tuple[str, object, str, int, object, object]] = []
             for rtype, last_at in stale:
                 since = last_at if last_at is not None else now - cadence
                 record = await service.generate(
@@ -114,7 +119,27 @@ async def run_scheduler_pass(scan_events=None) -> int:
                     record.id,
                     record.byte_size,
                 )
+                delivered.append(
+                    (rtype.value, record.generated_at, record.sha256,
+                     record.byte_size, since, now)
+                )
             await db.commit()
+
+        # #77 delivery — email a PHI-free 'report ready' notice per
+        # generated report, AFTER commit (the report is persisted) and
+        # OUTSIDE the session. Best-effort: notify_report_generated never
+        # raises. No-op (logged once) until recipients are configured.
+        if delivered and not delivery.is_configured():
+            delivery.log_disabled_once()
+        for rtype_v, gen_at, sha, size, since_v, until_v in delivered:
+            await delivery.notify_report_generated(
+                report_type=rtype_v,
+                generated_at=gen_at,
+                sha256=sha,
+                byte_size=size,
+                since=since_v,
+                until=until_v,
+            )
     except Exception:  # noqa: BLE001 — the loop must survive any pass error
         logger.exception("compliance report scheduler pass failed")
     return generated

@@ -599,6 +599,12 @@ resource "aws_ecs_task_definition" "api" {
         # (per-env tfvars) to activate; uses the same Resend sender. Not a
         # secret — plain addresses, so a plain env var (not a taskdef secret).
         { name = "ALERT_EMAIL_RECIPIENTS", value = var.alert_email_recipients },
+        # #77 scheduled compliance-report delivery. Recipients empty by
+        # default → no-op (reports stay portal-only). The notice links to the
+        # portal Compliance page (auth-gated download) and carries metadata
+        # only. Set var.compliance_report_recipients to activate.
+        { name = "COMPLIANCE_REPORT_RECIPIENTS", value = var.compliance_report_recipients },
+        { name = "COMPLIANCE_REPORTS_URL", value = "https://${var.web_portal_subdomain}/portal/admin/compliance" },
         # Semantic trigger classifier (Tier 2) — embeddings fallback that
         # catches paraphrased exam/imaging cues the keyword list misses
         # (e.g. "can you bend your knee" → active_physical_examination), so

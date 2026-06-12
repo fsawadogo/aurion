@@ -126,6 +126,12 @@ variable "alert_email_recipients" {
   default     = ""
 }
 
+variable "compliance_report_recipients" {
+  description = "Comma-separated recipient list for the #77 scheduled compliance-report delivery notice (e.g. 'compliance@aurionclinical.com'). Empty = no-op (reports stay portal-only). Not a secret — plain addresses; injected as the COMPLIANCE_REPORT_RECIPIENTS task env. The notice carries metadata + a portal link only (never report bytes); delivery also requires the Resend email service configured."
+  type        = string
+  default     = ""
+}
+
 variable "amplify_github_access_token" {
   description = "Reserved for a future flip back to the Amplify GitHub source connector (platform = WEB_COMPUTE). Currently unused — the portal ships via the manual-deploy path (platform = WEB) driven by .github/workflows/web.yml + web/scripts/deploy.sh, which uploads a static bundle to Amplify via aws amplify create-deployment. Kept in the schema so the flip-back is a single PR (set the variable, change platform, restore build_spec) — no variable-rename churn."
   type        = string
