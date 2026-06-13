@@ -7,7 +7,7 @@ import CoreMedia
 /// Always available — this is the safe fallback when no other source is selected
 /// or when an active source disconnects mid-session.
 @MainActor
-final class BuiltInCaptureSource: CaptureSource {
+final class BuiltInCaptureSource: CaptureSource, VideoClipSource {
     override var id: String { "builtin" }
     override var displayName: String { "iPhone Camera + Mic" }
     override var iconSystemName: String { "iphone" }
