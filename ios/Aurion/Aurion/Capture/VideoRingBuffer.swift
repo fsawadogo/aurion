@@ -219,6 +219,46 @@ final class VideoRingBuffer: @unchecked Sendable {
         appendedTotalState.withLock { $0 += 1 }
     }
 
+    /// Pushes a decoded `CVPixelBuffer` onto the ring by wrapping it in a
+    /// `CMSampleBuffer`, so it flows through the EXACT same retention + extract
+    /// path as `AVCaptureSession` frames. Used by external video sources
+    /// (e.g. Meta glasses, #443) that deliver decoded frames rather than
+    /// sample buffers. A malformed frame is dropped (no-op) — it must never
+    /// crash capture. The iPhone sample-buffer `append` above is untouched.
+    ///
+    /// `nonisolated` for the same reason as the sample-buffer `append`: an SDK
+    /// frame callback may fire on any queue, and the lock provides safety.
+    nonisolated func append(_ pixelBuffer: CVPixelBuffer, at timestamp: TimeInterval) {
+        var formatDescription: CMVideoFormatDescription?
+        guard CMVideoFormatDescriptionCreateForImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: pixelBuffer,
+            formatDescriptionOut: &formatDescription
+        ) == noErr, let formatDescription else { return }
+
+        // Synthetic timing — `extract` rewrites presentation times to a
+        // constant cadence, so a zero PTS here is harmless; the ring keys off
+        // the wall-clock `timestamp` we pass through, not the buffer's own PTS.
+        var timing = CMSampleTimingInfo(
+            duration: .invalid,
+            presentationTimeStamp: .zero,
+            decodeTimeStamp: .invalid
+        )
+        var sampleBuffer: CMSampleBuffer?
+        guard CMSampleBufferCreateForImageBuffer(
+            allocator: kCFAllocatorDefault,
+            imageBuffer: pixelBuffer,
+            dataReady: true,
+            makeDataReadyCallback: nil,
+            refcon: nil,
+            formatDescription: formatDescription,
+            sampleTiming: &timing,
+            sampleBufferOut: &sampleBuffer
+        ) == noErr, let sampleBuffer else { return }
+
+        append(sampleBuffer, at: timestamp)
+    }
+
     /// Drops every retained sample buffer. Called on session stop / reset
     /// so the pool can reclaim the underlying CVPixelBuffers immediately
     /// rather than at the next gc cycle.
