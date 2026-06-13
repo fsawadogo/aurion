@@ -8,6 +8,10 @@
             "/": "/reset-password",
             "?": { "token": "?*" },
             "comment": "Universal Links — open reset-password in the Aurion iOS app when the URL carries a reset token query param."
+          },
+          {
+            "/": "/wearables/auth",
+            "comment": "Universal Links — return into the Aurion iOS app after Meta Wearables (MWDAT) device authorization (#442)."
           }
         ]
       }
