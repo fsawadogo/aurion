@@ -257,6 +257,19 @@ resource "aws_amplify_app" "web_portal" {
   # Amplify's customHeaders are additive — every matching rule's
   # headers merge, with later rules overriding earlier same-keyed
   # entries; placing it last guarantees the Content-Type win.
+  # Cache-Control strategy (SPA-correct, fixes stale-build-on-load):
+  #   - HTML / route documents (the `**/*` default) → `no-store,
+  #     must-revalidate`. The entry documents must NEVER be cached at the
+  #     browser OR the CloudFront edge, so every load fetches the current
+  #     HTML, which in turn references the current content-hashed JS chunk
+  #     names. Without this, Amplify's default long edge `s-maxage` left
+  #     browsers pinned to an old build between deploys (2026-06-14).
+  #   - `/_next/static/**/*` → `public, max-age=31536000, immutable`. These
+  #     filenames are content-hashed by `next build`, so they're safe to
+  #     cache forever; a new build emits new names, never a stale hit.
+  #     This rule is listed AFTER `**/*` so its Cache-Control overrides the
+  #     no-store default for hashed assets (Amplify merges matching rules,
+  #     last-keyed-value wins).
   custom_headers = <<-HEADERS
     customHeaders:
       - pattern: '**/*'
@@ -271,6 +284,12 @@ resource "aws_amplify_app" "web_portal" {
             value: 'DENY'
           - key: 'Referrer-Policy'
             value: 'strict-origin-when-cross-origin'
+          - key: 'Cache-Control'
+            value: 'no-store, must-revalidate'
+      - pattern: '/_next/static/**/*'
+        headers:
+          - key: 'Cache-Control'
+            value: 'public, max-age=31536000, immutable'
       - pattern: '/.well-known/apple-app-site-association'
         headers:
           - key: 'Content-Type'
@@ -286,10 +305,18 @@ resource "aws_amplify_app" "web_portal" {
   # Amplify stores customHeaders as a server-normalized YAML document, which
   # never round-trips byte-identically to this heredoc — so every plan showed a
   # spurious `custom_headers` diff (the 2026-06-07 drift on this resource). The
-  # security headers above ARE the deployed set; ignore post-create changes so
-  # Terraform stops fighting AWS's normalization and drift-detect stays clean.
-  # To intentionally CHANGE the headers, remove this temporarily, apply, re-add.
-  # (#326)
+  # headers above ARE the intended set; ignore post-create changes so Terraform
+  # stops fighting AWS's normalization and drift-detect stays clean. (#326)
+  #
+  # Because of this ignore, the heredoc is DOCUMENTATION/source-of-truth only —
+  # Terraform will not push edits to it. Header changes are applied out-of-band
+  # via the AWS CLI (same CLI-managed pattern as the AppConfig hosted content),
+  # then a deploy re-runs to make them take effect at the edge:
+  #   aws amplify update-app --app-id <id> --region ca-central-1 \
+  #     --custom-headers file://headers.yaml
+  #   gh run rerun <latest main web.yml run>   # apply at edge + flush
+  # Keep this heredoc in sync with what the CLI applied (the 2026-06-14
+  # Cache-Control SPA policy is the current live set).
   lifecycle {
     ignore_changes = [custom_headers]
   }
