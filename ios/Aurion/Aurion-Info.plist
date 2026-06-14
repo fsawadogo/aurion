@@ -17,6 +17,24 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Meta Wearables Device Access Toolkit (MWDAT, #442). MetaAppID +
+	     ClientToken are injected from build settings ($(MWDAT_*)) sourced
+	     from a gitignored xcconfig / CI secret — NEVER hardcoded here
+	     (Info.plist is tracked; client identifiers still follow the
+	     secrets-never-in-git rule per the MWDAT plan). Empty values leave
+	     the SDK inert (Wearables.configure() throws and is ignored), which
+	     is the intended dark state until the glasses feature is enabled. -->
+	<key>MWDAT</key>
+	<dict>
+		<key>AppLinkURLScheme</key>
+		<string></string>
+		<key>ClientToken</key>
+		<string>$(MWDAT_CLIENT_TOKEN)</string>
+		<key>MetaAppID</key>
+		<string>$(MWDAT_META_APP_ID)</string>
+		<key>TeamID</key>
+		<string>$(DEVELOPMENT_TEAM)</string>
+	</dict>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>

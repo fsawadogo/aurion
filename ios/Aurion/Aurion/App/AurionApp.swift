@@ -1,5 +1,20 @@
 import SwiftUI
 import UIKit
+import MWDATCore  // #442 — Meta Wearables runtime + device-auth Universal Link callback
+
+/// #442 — routes the Meta Wearables (MWDAT) device-auth Universal Link
+/// (`https://portal.aurionclinical.com/wearables/...`) into the SDK. Shared by
+/// the cold-launch delegate and the warm-path `.onContinueUserActivity` so both
+/// entry points stay in lockstep. Returns `true` when it handled a wearables
+/// callback, so callers fall through to the reset-password extractor otherwise.
+enum MWDATLinkRouter {
+    static func handle(_ url: URL) -> Bool {
+        guard url.host == "portal.aurionclinical.com",
+              url.path.hasPrefix("/wearables") else { return false }
+        Task { try? await Wearables.shared.handleUrl(url) }
+        return true
+    }
+}
 
 /// AUTH-UNIVERSAL-LINKS — UIKit bridge for cold-launch Universal Links.
 ///
@@ -25,6 +40,18 @@ import UIKit
 final class AurionAppDelegate: NSObject, UIApplicationDelegate {
     func application(
         _ application: UIApplication,
+        didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil
+    ) -> Bool {
+        // #442 — initialize the Meta Wearables runtime once at launch so the
+        // device-auth callback and (later, #443) MetaWearablesSource can use it.
+        // Safe before the MWDAT Info.plist keys are populated — configure()
+        // throws and we ignore it; the SDK simply stays inert until configured.
+        try? Wearables.configure()
+        return true
+    }
+
+    func application(
+        _ application: UIApplication,
         continue userActivity: NSUserActivity,
         restorationHandler: @escaping ([UIUserActivityRestoring]?) -> Void
     ) -> Bool {
@@ -32,6 +59,8 @@ final class AurionAppDelegate: NSObject, UIApplicationDelegate {
             userActivity.activityType == NSUserActivityTypeBrowsingWeb,
             let url = userActivity.webpageURL
         else { return false }
+        // #442 — Meta Wearables (MWDAT) device-auth callback (cold launch).
+        if MWDATLinkRouter.handle(url) { return true }
         // Same extractor the warm path uses — single source of truth.
         guard let token = MainActor.assumeIsolated({ ResetLinkExtractor.token(from: url) }) else {
             return false
@@ -153,12 +182,12 @@ struct AurionApp: App {
                 .onContinueUserActivity(NSUserActivityTypeBrowsingWeb) { activity in
                     // Warm-path Universal Link tap (Aurion already alive).
                     // Cold-launch path goes through AurionAppDelegate.
-                    // Both call ResetLinkExtractor so validation rules
-                    // stay in lockstep across the two entry points.
-                    guard
-                        let url = activity.webpageURL,
-                        let token = ResetLinkExtractor.token(from: url)
-                    else { return }
+                    guard let url = activity.webpageURL else { return }
+                    // #442 — Meta Wearables (MWDAT) device-auth callback.
+                    if MWDATLinkRouter.handle(url) { return }
+                    // Reset-password path — same extractor as the cold path,
+                    // so validation rules stay in lockstep across entry points.
+                    guard let token = ResetLinkExtractor.token(from: url) else { return }
                     // Set on the shared payload bus — never logged.
                     resetLinkPayload.token = token
                 }
