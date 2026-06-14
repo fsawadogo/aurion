@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronRight } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouteSegment } from "@/lib/use-route-segment";
@@ -37,13 +37,15 @@ function eventBadgeVariant(eventType: string): EventVariant {
 }
 
 // Timeline node ring color, keyed to the same semantic variant as the
-// event badge so the rail is scannable at a glance.
+// event badge so the rail is scannable at a glance. Shades match the
+// Badge dot palette exactly (Badge.tsx dotColors) — the fixed compliance
+// semantic colors, never themed.
 const dotRingForVariant: Record<EventVariant, string> = {
-  success: "ring-emerald-400",
-  warning: "ring-amber-400",
-  error: "ring-red-400",
-  info: "ring-blue-400",
-  neutral: "ring-navy-300",
+  success: "ring-emerald-500",
+  warning: "ring-amber-500",
+  error: "ring-accent-red",
+  info: "ring-blue-500",
+  neutral: "ring-navy-400",
 };
 
 // Sentence-case an event type for display while keeping the raw value
@@ -237,21 +239,28 @@ export default function AuditDetailClient(
                       {new Date(evt.event_timestamp).toLocaleDateString()}
                     </p>
                     {detailEntries.length > 0 && (
-                      <dl className="mt-2 max-h-44 space-y-1 overflow-auto rounded-lg bg-gray-50 px-3 py-2 text-[11px]">
-                        {detailEntries.map(([key, value]) => (
-                          <div key={key} className="flex gap-2">
-                            <dt
-                              className="shrink-0 font-medium text-gray-500"
-                              title={key}
-                            >
-                              {humanizeLabel(key)}
-                            </dt>
-                            <dd className="min-w-0 break-words font-mono text-gray-700">
-                              {formatDetailValue(value)}
-                            </dd>
-                          </div>
-                        ))}
-                      </dl>
+                      <details className="group/details mt-2">
+                        <summary className="inline-flex cursor-pointer list-none items-center gap-1 text-[11px] font-medium text-gray-400 transition-colors hover:text-gray-600 [&::-webkit-details-marker]:hidden">
+                          <ChevronRight className="h-3 w-3 transition-transform duration-short group-open/details:rotate-90" />
+                          {detailEntries.length} detail
+                          {detailEntries.length === 1 ? "" : "s"}
+                        </summary>
+                        <dl className="mt-1.5 max-h-44 space-y-1 overflow-auto rounded-lg bg-gray-50 px-3 py-2 text-[11px]">
+                          {detailEntries.map(([key, value]) => (
+                            <div key={key} className="flex gap-2">
+                              <dt
+                                className="shrink-0 font-medium text-gray-500"
+                                title={key}
+                              >
+                                {humanizeLabel(key)}
+                              </dt>
+                              <dd className="min-w-0 break-words font-mono text-gray-700">
+                                {formatDetailValue(value)}
+                              </dd>
+                            </div>
+                          ))}
+                        </dl>
+                      </details>
                     )}
                   </li>
                 );
