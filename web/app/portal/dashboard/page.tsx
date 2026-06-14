@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, ArrowRight, BadgeCheck, ClipboardList, Clock, FileText, History, Inbox, LayoutGrid, RefreshCw, Sparkles } from "lucide-react";
-import { humanizeError } from "@/lib/api";
+import { getMe, humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
@@ -21,7 +21,7 @@ import {
   humanSpecialty,
   shortSessionId,
 } from "@/lib/session-format";
-import type { CustomTemplate, Session, SessionState } from "@/types";
+import type { CurrentUser, CustomTemplate, Session, SessionState } from "@/types";
 
 /**
  * /portal/dashboard — overview tile for the clinician portal.
@@ -54,8 +54,31 @@ export default function PortalDashboardPage() {
   const t = useTranslations("Dashboard");
   const [sessions, setSessions] = useState<Session[]>([]);
   const [templates, setTemplates] = useState<CustomTemplate[]>([]);
+  const [user, setUser] = useState<CurrentUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Resolve the signed-in clinician once for the personalized header
+  // greeting. Silent on failure — the header falls back to the generic
+  // subtitle, and a 401 already routes to /login via fetchWithAuth.
+  useEffect(() => {
+    let cancelled = false;
+    getMe()
+      .then((u) => { if (!cancelled) setUser(u); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // Time-of-day greeting ("Good morning, Dr. X."). Computed client-side
+  // from the browser clock; falls back to the generic subtitle until the
+  // user resolves so the header never flashes an empty name.
+  const greeting = useMemo(() => {
+    const name = user?.full_name?.trim();
+    if (!name) return t("subtitle");
+    const hour = new Date().getHours();
+    const period = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+    return t("greeting", { period, name });
+  }, [user, t]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -104,7 +127,7 @@ export default function PortalDashboardPage() {
       <PageHeader
         eyebrow={t("eyebrow")}
         title={t("title")}
-        description={t("subtitle")}
+        description={greeting}
         actions={
           <Button variant="secondary" size="sm" onClick={() => void load()}>
             {t("refresh")}

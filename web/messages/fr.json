@@ -59,6 +59,7 @@
     "eyebrow": "Portail du clinicien",
     "title": "Tableau de bord",
     "subtitle": "Votre aperçu en un coup d’œil.",
+    "greeting": "{period, select, morning {Bonjour} afternoon {Bon après-midi} other {Bonsoir}}, {name}.",
     "refresh": "Actualiser",
     "stats": {
       "awaitingReview": "En attente de révision",

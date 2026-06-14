@@ -1,6 +1,6 @@
 "use client";
 
-import { Download, IdCard, Search, Sparkles, X } from "lucide-react";
+import { Download, IdCard, Plus, Search, X } from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
@@ -37,102 +37,41 @@ export default function QuickActions() {
   return (
     <section className="mb-6">
       <h2 className="sr-only">{t("title")}</h2>
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-        <FindByIdentifierCard
-          title={t("findByIdentifier.title")}
-          subtitle={t("findByIdentifier.subtitle")}
-          onOpen={() => setShowFindDialog(true)}
-        />
-        <ActionCard
-          icon={<Download className="h-5 w-5" />}
-          title={t("bulkExport.title")}
-          subtitle={t("bulkExport.subtitle")}
+      {/* Compact action row (Stitch redesign): a search-style trigger
+          that opens the patient-identifier modal, plus the two ride-along
+          actions as buttons. Denser than the old 3-card grid and reads
+          as a toolbar above the KPI tiles. */}
+      <div className="flex flex-col gap-2.5 sm:flex-row sm:items-center">
+        <button
+          type="button"
+          onClick={() => setShowFindDialog(true)}
+          className="group flex flex-1 items-center gap-2.5 rounded-aurion-md border border-hairline bg-surface px-4 py-2.5 text-left shadow-card transition-all duration-short ease-aurion hover:border-gold-300 hover:shadow-card-hover"
+        >
+          <Search className="h-4 w-4 shrink-0 text-navy-400 transition-colors group-hover:text-gold-600" />
+          <span className="truncate text-sm text-navy-400 group-hover:text-navy-600">
+            {t("findByIdentifier.title")}
+          </span>
+        </button>
+        <Link
           href="/portal/notes"
-        />
-        <ActionCard
-          icon={<Sparkles className="h-5 w-5" />}
-          title={t("newTemplate.title")}
-          subtitle={t("newTemplate.subtitle")}
+          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-aurion-md border border-hairline bg-surface px-4 py-2.5 text-sm font-semibold text-navy-700 shadow-card transition-all duration-short ease-aurion hover:border-navy-200 hover:shadow-card-hover"
+        >
+          <Download className="h-4 w-4" />
+          {t("bulkExport.title")}
+        </Link>
+        <Link
           href="/portal/templates/new"
-        />
+          className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-aurion-md bg-gold-500 px-4 py-2.5 text-sm font-semibold text-navy-800 shadow-gold transition-all duration-short ease-aurion hover:-translate-y-px hover:bg-gold-400 hover:shadow-gold-strong"
+        >
+          <Plus className="h-4 w-4" />
+          {t("newTemplate.title")}
+        </Link>
       </div>
 
       {showFindDialog && (
         <FindByIdentifierDialog onClose={() => setShowFindDialog(false)} />
       )}
     </section>
-  );
-}
-
-/* ── Identifier search card ─────────────────────────────────────────────── */
-
-/**
- * Same card shape as ActionCard but with a button affordance for
- * opening the modal — kept distinct so the search input can later
- * move inline if the modal pattern feels heavy.
- */
-function FindByIdentifierCard({
-  title,
-  subtitle,
-  onOpen,
-}: {
-  title: string;
-  subtitle: string;
-  onOpen: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onOpen}
-      className="text-left group rounded-aurion-md border border-aurion-hairline bg-aurion-card p-4 transition-all duration-aurion ease-aurion hover:shadow-card hover:-translate-y-px hover:border-gold-300"
-    >
-      <div className="flex items-start gap-3">
-        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold-50 text-gold-600 transition-colors group-hover:bg-gold-100">
-          <IdCard className="h-5 w-5" />
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-aurion-primary truncate">
-            {title}
-          </p>
-          <p className="mt-0.5 text-xs text-aurion-secondary leading-relaxed line-clamp-2">
-            {subtitle}
-          </p>
-        </div>
-      </div>
-    </button>
-  );
-}
-
-function ActionCard({
-  icon,
-  title,
-  subtitle,
-  href,
-}: {
-  icon: React.ReactNode;
-  title: string;
-  subtitle: string;
-  href: string;
-}) {
-  return (
-    <Link
-      href={href}
-      className="group rounded-aurion-md border border-aurion-hairline bg-aurion-card p-4 transition-all duration-aurion ease-aurion hover:shadow-card hover:-translate-y-px hover:border-gold-300"
-    >
-      <div className="flex items-start gap-3">
-        <span className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gold-50 text-gold-600 transition-colors group-hover:bg-gold-100">
-          {icon}
-        </span>
-        <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold text-aurion-primary truncate">
-            {title}
-          </p>
-          <p className="mt-0.5 text-xs text-aurion-secondary leading-relaxed line-clamp-2">
-            {subtitle}
-          </p>
-        </div>
-      </div>
-    </Link>
   );
 }
 
