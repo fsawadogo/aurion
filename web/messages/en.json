@@ -59,6 +59,7 @@
     "eyebrow": "Clinician portal",
     "title": "Dashboard",
     "subtitle": "Your overview at a glance.",
+    "greeting": "{period, select, morning {Good morning} afternoon {Good afternoon} other {Good evening}}, {name}.",
     "refresh": "Refresh",
     "stats": {
       "awaitingReview": "Awaiting review",
