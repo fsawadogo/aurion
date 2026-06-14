@@ -1,6 +1,6 @@
 "use client";
 
-import { Code2, Download, LayoutGrid, SlidersHorizontal } from "lucide-react";
+import { Code2, Download, LayoutGrid, SlidersHorizontal, Trash2 } from "lucide-react";
 import { getMe, humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -242,12 +242,14 @@ export default function TemplateDetailPage() {
               </Button>
               {owned && (
                 <Button
-                  variant="secondary"
+                  variant="ghost"
                   size="sm"
                   onClick={() => setConfirmingDelete(true)}
                   loading={deleting}
                   disabled={deleting}
+                  className="text-accent-red hover:bg-red-50 hover:text-red-600"
                 >
+                  <Trash2 className="h-4 w-4 mr-1" />
                   {t("deleteButton")}
                 </Button>
               )}
