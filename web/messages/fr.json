@@ -286,6 +286,8 @@
   },
   "Common": {
     "loading": "Chargement…",
+    "loadingWorkspace": "Chargement de votre espace…",
+    "portalEyebrow": "Portail",
     "retry": "Réessayer",
     "cancel": "Annuler",
     "save": "Enregistrer",

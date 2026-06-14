@@ -286,6 +286,8 @@
   },
   "Common": {
     "loading": "Loading…",
+    "loadingWorkspace": "Loading your workspace…",
+    "portalEyebrow": "Portal",
     "retry": "Retry",
     "cancel": "Cancel",
     "save": "Save",
