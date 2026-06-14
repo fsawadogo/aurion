@@ -922,12 +922,13 @@ final class SessionManager: ObservableObject {
             emitClipDrop(sessionId: session.id, reason: .modeNotClipsOrHybrid)
             return
         }
-        // The ring buffer lives on the BuiltInCaptureSource's manager. No
-        // built-in video source ⇒ nothing to extract from ⇒ no driver. Two
-        // distinct reasons: an audio-only capture mode (no video at all) vs a
-        // video source that isn't the built-in camera (e.g. Meta glasses,
-        // whose frames don't feed the ring).
-        guard registry.activeVideoSource is BuiltInCaptureSource else {
+        // Clip extraction requires a clip-capable video source (one that owns
+        // a VideoRingBuffer). No such source ⇒ nothing to extract from ⇒ no
+        // driver. Two distinct reasons: an audio-only capture mode (no video at
+        // all) vs a video source that can't feed the clip ring. The built-in
+        // camera and the Meta-glasses source (#443) both conform to
+        // VideoClipSource; a source that doesn't trips the drop below.
+        guard registry.activeVideoSource is VideoClipSource else {
             let reason: ClipDropReason = session.captureMode.includesVideo
                 ? .videoSourceNotBuiltin
                 : .captureModeNotMultimodal
@@ -995,7 +996,7 @@ final class SessionManager: ObservableObject {
     /// the ring's frames-appended total SYNCHRONOUSLY (before sources stop +
     /// clear the ring), then posts the aggregated counters.
     private func flushClipPipelineSummary(sessionId: String) {
-        let ringFrames = (registry.activeVideoSource as? BuiltInCaptureSource)?
+        let ringFrames = (registry.activeVideoSource as? VideoClipSource)?
             .clipRingBuffer.framesAppendedTotal
         let counters = clipCounters
         Task { @MainActor [weak self] in
@@ -1028,7 +1029,7 @@ final class SessionManager: ObservableObject {
     /// single masked clip at a time).
     private func emitCadenceClip(windowMs: Int) async -> Bool {
         guard let session else { return false }
-        guard let source = registry.activeVideoSource as? BuiltInCaptureSource else { return false }
+        guard let source = registry.activeVideoSource as? VideoClipSource else { return false }
 
         // Extract the trailing window ending at the current ring clock. nil
         // ⇒ the ring can't satisfy the window yet (warm-up before the first
@@ -1137,9 +1138,9 @@ final class SessionManager: ObservableObject {
         // backend declares its trigger taxonomy.
         let defaultTriggerKind = "clinic"
 
-        // Ring buffer lives on the BuiltInCaptureSource's underlying
-        // manager. Look it up once outside the per-frame loop.
-        let ringBuffer = (videoSource as? BuiltInCaptureSource)?.clipRingBuffer
+        // Ring buffer lives on the active clip-capable video source. Look it
+        // up once outside the per-frame loop (built-in camera or glasses).
+        let ringBuffer = (videoSource as? VideoClipSource)?.clipRingBuffer
 
         var framesUploaded = 0
         var clipsUploaded = 0

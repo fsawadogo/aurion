@@ -128,6 +128,32 @@ class CaptureSource: ObservableObject, Identifiable {
     }
 }
 
+/// A capture source whose video frames can drive the clip pipeline.
+///
+/// `SessionManager`'s cadence-clip driver and post-stop visual-evidence path
+/// operate on `any VideoClipSource` rather than a concrete source, so the
+/// built-in iPhone camera and external sources (e.g. Meta Ray-Ban glasses,
+/// #443) plug into the SAME masking → upload pipeline. A conformer owns a
+/// `VideoRingBuffer` of recent frames and can extract a clip window from it.
+///
+/// Privacy: `extractCadenceClip` returns RAW (unmasked) bytes by contract —
+/// the caller MUST run the MP4 through `MaskingPipeline.maskClip` before any
+/// network / persistence boundary (the same rule `VideoRingBuffer` documents).
+@MainActor
+protocol VideoClipSource: CaptureSource {
+    /// In-memory ring of recent frames (raw, never uploaded; cleared on stop).
+    var clipRingBuffer: VideoRingBuffer { get }
+
+    /// Extract a clip window ending at the current ring clock as a temp MP4.
+    /// Returns RAW (unmasked) bytes; `nil` when the ring can't satisfy the
+    /// window yet (warm-up before the first frame, or just-cleared on stop).
+    func extractCadenceClip(windowMs: Int) async -> (url: URL, timestampMs: Int)?
+
+    /// Resize the ring + set the capture FPS for the live cadence path.
+    /// MUST be called before `start()` (the ring is rebuilt empty).
+    func applyPipelineConfig(videoCaptureFPS: Double, clipWindowMs: Int)
+}
+
 enum CaptureSourceError: LocalizedError {
     case notImplemented
     case permissionDenied(String)

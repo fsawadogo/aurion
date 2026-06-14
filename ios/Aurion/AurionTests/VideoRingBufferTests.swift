@@ -77,6 +77,25 @@ private func makeSyntheticSampleBuffer(width: Int = 32, height: Int = 32) -> CMS
     return sampleBuffer
 }
 
+/// Build a bare 32x32 BGRA `CVPixelBuffer` — the input an external video
+/// source (Meta glasses, #443) hands to `append(_ pixelBuffer:at:)`.
+private func makeSyntheticPixelBuffer(width: Int = 32, height: Int = 32) -> CVPixelBuffer? {
+    var pixelBuffer: CVPixelBuffer?
+    let attrs: [String: Any] = [
+        kCVPixelBufferIOSurfacePropertiesKey as String: [:]
+    ]
+    let status = CVPixelBufferCreate(
+        kCFAllocatorDefault,
+        width,
+        height,
+        kCVPixelFormatType_32BGRA,
+        attrs as CFDictionary,
+        &pixelBuffer
+    )
+    guard status == kCVReturnSuccess else { return nil }
+    return pixelBuffer
+}
+
 // MARK: - Tests
 
 struct VideoRingBufferTests {
@@ -333,6 +352,45 @@ struct VideoRingBufferTests {
         let ring = VideoRingBuffer(maxItems: 15, captureFPS: 1.0)
         #expect(ring.maxItems == 15)
         #expect(ring.captureFPS == 1.0)
+    }
+
+    // MARK: #440 — external-source CVPixelBuffer ingest (Meta glasses feed)
+    //
+    // External sources deliver decoded frames (CVPixelBuffer / UIImage), not
+    // CMSampleBuffers. `append(_ pixelBuffer:at:)` wraps them so they flow
+    // through the SAME ring + extract + (downstream) masking path. These lock
+    // that the pixel-buffer path buffers + extracts identically to the
+    // AVCaptureSession path the iPhone camera uses.
+
+    @Test func appendPixelBuffer_addsToRingAndCountsTotal() {
+        let ring = VideoRingBuffer(maxItems: 5, captureFPS: 1.0)
+        #expect(ring.count == 0)
+        for i in 0..<3 {
+            let pb = makeSyntheticPixelBuffer()
+            #expect(pb != nil)
+            ring.append(pb!, at: TimeInterval(i))
+        }
+        #expect(ring.count == 3)
+        #expect(ring.framesAppendedTotal == 3)
+    }
+
+    @Test func appendPixelBuffer_extractsAudioFreeMP4() async throws {
+        // Proves the synthesized sample buffers extract to a valid, audio-free
+        // MP4 — the exact seam the glasses source (#443) relies on.
+        let ring = VideoRingBuffer(maxItems: 30, captureFPS: 10.0)
+        for i in 0..<10 {
+            let pb = makeSyntheticPixelBuffer()
+            #expect(pb != nil)
+            ring.append(pb!, at: 0.1 * Double(i))
+        }
+        let url = try await ring.extract(around: 0.5, duration: 1.0)
+        defer { try? FileManager.default.removeItem(at: url) }
+
+        let asset = AVURLAsset(url: url)
+        let videoTracks = try await asset.loadTracks(withMediaType: .video)
+        #expect(videoTracks.isEmpty == false)
+        let audioTracks = try await asset.loadTracks(withMediaType: .audio)
+        #expect(audioTracks.isEmpty == true)
     }
 }
 
