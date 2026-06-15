@@ -774,6 +774,17 @@ export async function getMediaDownloadUrls(
   return res.json();
 }
 
+/** Permanently delete ANY clinician's session + its media. ADMIN only
+ * (backend require_role(ADMIN); 403 for other roles). Append-only audit
+ * (`admin_session_deleted`) is preserved. Used by the Captured Media admin
+ * delete action. 204 No Content on success. */
+export async function adminDeleteSession(sessionId: string): Promise<void> {
+  await fetchWithAuth(
+    `/api/v1/admin/sessions/${encodeURIComponent(sessionId)}`,
+    { method: "DELETE" },
+  );
+}
+
 /* ─── Pilot Metrics ──────────────────────────────────────────────────────── */
 
 export async function getMetrics(

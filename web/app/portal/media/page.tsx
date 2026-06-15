@@ -30,6 +30,7 @@ import {
   Film,
   Lock,
   RefreshCw,
+  Trash2,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
@@ -37,9 +38,10 @@ import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import Modal from "@/components/ui/Modal";
 import EmptyPanelState from "@/components/portal/EmptyPanelState";
 import PageHeader from "@/components/portal/PageHeader";
-import { getCapturedMedia, getMe, getMediaDownloadUrls, humanizeError} from "@/lib/api";
+import { adminDeleteSession, getCapturedMedia, getMe, getMediaDownloadUrls, humanizeError} from "@/lib/api";
 import { nameInitials } from "@/lib/session-format";
 import type { CapturedMediaItem, UserRole } from "@/types";
 
@@ -85,8 +87,12 @@ export default function CapturedMediaPage() {
     null,
   );
   const [rowError, setRowError] = useState<Record<string, string>>({});
+  // Admin-only hard-delete: the session pending confirmation + in-flight flag.
+  const [pendingDelete, setPendingDelete] = useState<CapturedMediaItem | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const canDownload = role === "ADMIN" || role === "EVAL_TEAM";
+  const isAdmin = role === "ADMIN";
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -154,6 +160,30 @@ export default function CapturedMediaPage() {
       setRowError((p) => ({ ...p, [item.session_id]: t("download.error") }));
     } finally {
       setBusy(null);
+    }
+  }
+
+  // Admin hard-delete (ADMIN only — backend also require_role-gates it).
+  // On success the row disappears (the list is session-row-driven) after a
+  // reload; on failure we keep the row + surface a per-row error.
+  async function handleDelete() {
+    if (!pendingDelete) return;
+    const id = pendingDelete.session_id;
+    setDeleting(true);
+    try {
+      await adminDeleteSession(id);
+      setPendingDelete(null);
+      setRowError((prev) => {
+        const next = { ...prev };
+        delete next[id];
+        return next;
+      });
+      await load();
+    } catch (e) {
+      setPendingDelete(null);
+      setRowError((p) => ({ ...p, [id]: humanizeError(e, t("delete.error")) }));
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -376,6 +406,21 @@ export default function CapturedMediaPage() {
                                   {t("download.clips")}
                                 </span>
                               </Button>
+                              {isAdmin && (
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-accent-red hover:bg-red-50 hover:text-red-600"
+                                  disabled={deleting}
+                                  onClick={() => setPendingDelete(item)}
+                                  aria-label={t("delete.button")}
+                                >
+                                  <span className="inline-flex items-center gap-1.5">
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                    {t("delete.button")}
+                                  </span>
+                                </Button>
+                              )}
                             </div>
                             {rowError[item.session_id] && (
                               <span className="text-aurion-caption text-red-600">
@@ -393,6 +438,45 @@ export default function CapturedMediaPage() {
           </div>
         </div>
       )}
+
+      {/* Admin hard-delete confirmation (destructive, irreversible). */}
+      <Modal
+        isOpen={pendingDelete !== null}
+        onClose={() => {
+          if (!deleting) setPendingDelete(null);
+        }}
+        title={t("delete.title")}
+        footer={
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              disabled={deleting}
+              onClick={() => setPendingDelete(null)}
+            >
+              {t("delete.cancel")}
+            </Button>
+            <Button
+              variant="destructive"
+              size="sm"
+              loading={deleting}
+              disabled={deleting}
+              onClick={() => void handleDelete()}
+            >
+              {t("delete.confirmCta")}
+            </Button>
+          </>
+        }
+      >
+        <p className="text-aurion-callout text-aurion-secondary">
+          {pendingDelete
+            ? t("delete.confirm", {
+                physician: pendingDelete.physician_name,
+                date: formatDate(pendingDelete.started_at),
+              })
+            : ""}
+        </p>
+      </Modal>
     </div>
   );
 }

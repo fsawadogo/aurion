@@ -528,6 +528,14 @@
       "noClips": "No clips available.",
       "error": "Download failed. Try again."
     },
+    "delete": {
+      "button": "Delete",
+      "title": "Delete this session?",
+      "confirm": "Permanently delete {physician}'s session from {date}, including its audio and clips. This cannot be undone — the audit trail is preserved.",
+      "confirmCta": "Delete session",
+      "cancel": "Cancel",
+      "error": "Couldn't delete the session. Try again."
+    },
     "stateBadge": {
       "AWAITING_REVIEW": "Review",
       "PROCESSING_STAGE2": "Stage 2",

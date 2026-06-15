@@ -58,6 +58,7 @@ EXPECTED_VALUES: dict[str, str] = {
     "LIVE_PREVIEW_GENERATED": "live_preview_generated",
     "SESSION_PURGED": "session_purged",
     "SESSION_DISCARDED": "session_discarded",
+    "ADMIN_SESSION_DELETED": "admin_session_deleted",
     # Clip evidence (dual-mode visual evidence, P1-1)
     "CLIP_UPLOADED": "clip_uploaded",
     "CLIP_MASKED": "clip_masked",

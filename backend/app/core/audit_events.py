@@ -72,6 +72,10 @@ class AuditEventType(StrEnum):
     LIVE_PREVIEW_GENERATED = "live_preview_generated"
     SESSION_PURGED = "session_purged"
     SESSION_DISCARDED = "session_discarded"
+    # Admin hard-delete of ANY clinician's session (compliance/admin action,
+    # distinct from a clinician self-discarding their own). Append-only: the
+    # deletion is recorded here while the session rows + media are erased.
+    ADMIN_SESSION_DELETED = "admin_session_deleted"
     # ── Clip evidence (dual-mode visual evidence, P1-1) ───────────────────
     # Parallel to FRAME_UPLOADED / MASKING_CONFIRMED / VISION_FRAME_FAILED:
     # CLIP_UPLOADED  fires after a masked clip lands in S3 (server-emitted)
@@ -503,6 +507,7 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.SESSION_PURGED: frozenset(),
     AuditEventType.SESSION_DISCARDED: frozenset({"prior_state"}),
+    AuditEventType.ADMIN_SESSION_DELETED: frozenset({"prior_state", "target_clinician_id"}),
     # Notes / review
     AuditEventType.STAGE1_APPROVED: frozenset(
         {"version", "provider_used", "completeness_score"}
