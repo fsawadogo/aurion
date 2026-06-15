@@ -314,8 +314,18 @@ jobs:
       # recently uploaded build, creates the external group on the fly
       # if missing, submits for Beta App Review, and notifies testers.
       # The group name is overridable via TESTFLIGHT_GROUP_NAME below.
-      - name: Distribute build to testers
-        if: steps.gate.outputs.skip == 'false'
+      # INTERNAL-ONLY gate (MWDAT / glasses builds). Since #442 every build
+      # links the Meta Wearables SDK (ExternalAccessory surface), which Apple
+      # may reject for EXTERNAL Beta App Review and which Meta doesn't support
+      # for App Store publish until their stated 2026 broad-publish. So while
+      # vars.TESTFLIGHT_INTERNAL_ONLY == 'true' we SKIP external distribution
+      # entirely — internal App Store Connect team members still auto-receive
+      # every processed build (that delivery is driven by the upload step, not
+      # this lane). Flip the repo variable to 'false' / unset to resume
+      # external "Pilot Physicians" distribution once external review is
+      # confirmed to accept the SDK-linked build. (#441)
+      - name: Distribute build to external testers
+        if: ${{ steps.gate.outputs.skip == 'false' && vars.TESTFLIGHT_INTERNAL_ONLY != 'true' }}
         working-directory: ${{ env.IOS_PROJECT_DIR }}
         env:
           # External tester group (pilot physicians, etc.). Auto-created
@@ -335,3 +345,12 @@ jobs:
           # and confirms internal team members auto-received the build.
           # 25min processing ceiling.
           fastlane distribute_latest
+
+      # Transparency: when the internal-only gate skips external
+      # distribution, say so explicitly in the run log so a skipped
+      # external step never reads as a silent failure. Internal team
+      # members already received the build via the upload step above.
+      - name: Note internal-only distribution
+        if: ${{ steps.gate.outputs.skip == 'false' && vars.TESTFLIGHT_INTERNAL_ONLY == 'true' }}
+        run: |
+          echo "::notice title=Internal-only TestFlight::vars.TESTFLIGHT_INTERNAL_ONLY=true — external 'Pilot Physicians' distribution skipped (MWDAT/ExternalAccessory build, #441). Internal App Store Connect team testers auto-received this build. Unset the variable to resume external distribution."
