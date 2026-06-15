@@ -246,7 +246,7 @@ export default function SessionDetailClient(
             {/* Sections table */}
             <Card>
               <div className="mb-4 flex items-baseline justify-between">
-                <h2 className="text-base font-semibold text-navy-700">Sections</h2>
+                <h2 className="text-base font-semibold text-navy-700">Section Coverage</h2>
                 <p className="text-xs text-gray-400">
                   Per-section coverage against the {humanSpecialty(data.specialty)} template.
                   Required sections that are empty are highlighted.
