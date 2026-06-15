@@ -528,6 +528,14 @@
       "noClips": "Aucun clip disponible.",
       "error": "Échec du téléchargement. Réessayez."
     },
+    "delete": {
+      "button": "Supprimer",
+      "title": "Supprimer cette session ?",
+      "confirm": "Supprimer définitivement la session de {physician} du {date}, y compris son audio et ses clips. Cette action est irréversible — la piste d’audit est conservée.",
+      "confirmCta": "Supprimer la session",
+      "cancel": "Annuler",
+      "error": "Impossible de supprimer la session. Réessayez."
+    },
     "stateBadge": {
       "AWAITING_REVIEW": "À réviser",
       "PROCESSING_STAGE2": "Étape 2",

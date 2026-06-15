@@ -11,11 +11,11 @@ import uuid
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1._helpers import get_session_or_404
+from app.api.v1._helpers import get_session_or_404, write_audit
 from app.api.v1.admin._shared import (
     PaginatedSessionsResponse,
     SectionDetail,
@@ -23,12 +23,15 @@ from app.api.v1.admin._shared import (
     SessionDetailResponse,
     resolve_clinician_names,
 )
+from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import SessionModel
-from app.core.types import Note, UserRole
+from app.core.types import Note, SessionState, UserRole
 from app.modules.auth.service import CurrentUser, require_role
+from app.modules.cleanup.service import purge_session_media
 from app.modules.note_gen import repository as note_repo
 from app.modules.note_gen.service import compute_session_stats, get_template
+from app.modules.session.service import delete_session
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -273,4 +276,48 @@ async def get_admin_session_detail(
         note_stage=note_stage,
         is_approved=is_approved,
         sections=section_details,
+    )
+
+
+@router.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def admin_delete_session(
+    session_id: uuid.UUID,
+    actor: CurrentUser = Depends(require_role(UserRole.ADMIN)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Permanently delete ANY clinician's session and its data. ADMIN only.
+
+    The compliance/admin counterpart to the clinician self-service
+    `DELETE /sessions/{id}` (which is owner-scoped). Used from the
+    Captured Media admin view to purge a session a clinician can't reach.
+
+    Removes the session plus its child rows (transcript / note-version /
+    pilot-metric / stage-2) AND purges the raw S3 media (audio / frames /
+    clips) so nothing lingers until the retention TTL. The DynamoDB audit
+    trail is append-only and is NOT erased: an `admin_session_deleted`
+    event (carrying the prior state + the target clinician) is written
+    after the delete commits, so the record of who deleted what survives.
+    """
+    session = await get_session_or_404(db, session_id)
+    prior_state = (
+        session.state.value
+        if isinstance(session.state, SessionState)
+        else str(session.state)
+    )
+    target_clinician_id = str(session.clinician_id)
+
+    await delete_session(db, session)
+    await db.commit()
+
+    # Purge the raw media bytes. Best-effort + fail-soft (purge_session_media
+    # already swallows per-step errors): the DB delete is the source of truth
+    # for the session disappearing from the Captured Media list; orphaned
+    # media would otherwise age out via the S3 retention TTL anyway.
+    await purge_session_media(str(session_id))
+
+    await write_audit(
+        session_id,
+        AuditEventType.ADMIN_SESSION_DELETED,
+        prior_state=prior_state,
+        target_clinician_id=target_clinician_id,
     )
