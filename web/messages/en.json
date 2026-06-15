@@ -475,6 +475,7 @@
   },
   "Providers": {
     "eyebrow": "Admin",
+    "stageRouting": "Pipeline stage routing",
     "title": "AI providers",
     "subtitle": "Switch which model provider serves each pipeline stage. Changes take effect at runtime (within ~10 seconds) — no redeploy. Every change is audited.",
     "loadError": "Couldn't load the provider configuration.",

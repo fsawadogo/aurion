@@ -56,7 +56,14 @@ function cost(usd: number): string {
   return usd === 0 ? "—" : `$${usd.toFixed(usd < 1 ? 4 : 2)}`;
 }
 
-export default function ProviderUsagePanel() {
+export default function ProviderUsagePanel({
+  // When the page already shows the headline totals elsewhere (the bento
+  // "Usage Metrics" snapshot), suppress this panel's 4-stat grid so the
+  // numbers aren't duplicated — the per-provider breakdown table stays.
+  hideTotals = false,
+}: {
+  hideTotals?: boolean;
+} = {}) {
   const t = useTranslations("Providers.usage");
   // Locale-aware number formatting — bare .toLocaleString() follows the
   // BROWSER locale, not the page locale (FR page on an en-US browser would
@@ -156,6 +163,7 @@ export default function ProviderUsagePanel() {
         </div>
       ) : totals && data ? (
         <>
+          {!hideTotals && (
           <dl className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {(
               [
@@ -181,6 +189,7 @@ export default function ProviderUsagePanel() {
               </div>
             ))}
           </dl>
+          )}
 
           <div className="mt-4 overflow-x-auto rounded-aurion-md border border-hairline bg-white">
             <table className="min-w-full">
