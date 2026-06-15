@@ -55,6 +55,8 @@ export default function PortalMacrosPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [editing, setEditing] = useState<PhysicianMacro | "new" | null>(null);
+  // Specialty scope filter (Stitch tabs). "all" = no filter.
+  const [scope, setScope] = useState<string>("all");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -83,6 +85,13 @@ export default function PortalMacrosPage() {
       setError(humanizeError(e, t("deleteError")));
     }
   }
+
+  // Distinct specialty scopes present, for the filter tabs. Macros with no
+  // scope only ever show under "all".
+  const scopes = Array.from(
+    new Set(list.map((m) => m.specialty).filter((s): s is string => !!s)),
+  ).sort();
+  const visible = scope === "all" ? list : list.filter((m) => m.specialty === scope);
 
   return (
     <div className="aurion-page-padded aurion-container-narrow">
@@ -131,8 +140,39 @@ export default function PortalMacrosPage() {
             </Button>
           </div>
         ) : (
+          <>
+            {scopes.length > 0 && (
+              <div
+                className="mb-4 flex flex-wrap gap-1.5"
+                role="group"
+                aria-label={t("title")}
+              >
+                {["all", ...scopes].map((s) => {
+                  const active = scope === s;
+                  return (
+                    <button
+                      key={s}
+                      type="button"
+                      onClick={() => setScope(s)}
+                      aria-pressed={active}
+                      data-testid={`macro-scope-${s}`}
+                      className={
+                        "rounded-aurion-md border px-3 py-1.5 text-sm font-medium transition-colors duration-short " +
+                        (active
+                          ? "border-navy-700 bg-navy-700 text-white"
+                          : "border-navy-200 text-navy-600 hover:bg-navy-50")
+                      }
+                    >
+                      {s === "all"
+                        ? tSpecialties("all")
+                        : tSpecialties(s as Parameters<typeof tSpecialties>[0])}
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           <ul className="divide-y divide-hairline">
-            {list.map((m) => (
+            {visible.map((m) => (
               <li
                 key={m.id}
                 className="py-3 flex items-start gap-4 hover:bg-canvas/40 -mx-2 px-2 rounded-md transition-colors duration-short"
@@ -171,6 +211,7 @@ export default function PortalMacrosPage() {
               </li>
             ))}
           </ul>
+          </>
         )}
       </Card>
 
