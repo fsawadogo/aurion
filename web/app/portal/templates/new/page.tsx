@@ -144,31 +144,42 @@ function ManualBuilder({
   }
 
   return (
-    <div className="space-y-4">
-      <Card>
-        <p className="mb-4 text-aurion-callout text-navy-500">{t("manualHint")}</p>
-        <TemplateSectionEditor value={draft} onChange={setDraft} disabled={saving} />
-      </Card>
+    <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+      <div className="space-y-4 lg:col-span-2">
+        <Card>
+          <p className="mb-4 text-aurion-callout text-navy-500">{t("manualHint")}</p>
+          <TemplateSectionEditor value={draft} onChange={setDraft} disabled={saving} />
+        </Card>
 
-      {error && (
-        <div
-          role="alert"
-          className="rounded-aurion-md border border-red-200 bg-red-50 px-4 py-3 text-aurion-callout text-red-700"
-        >
-          {error}
+        {error && (
+          <div
+            role="alert"
+            className="rounded-aurion-md border border-red-200 bg-red-50 px-4 py-3 text-aurion-callout text-red-700"
+          >
+            {error}
+          </div>
+        )}
+
+        <div className="flex justify-end">
+          <Button
+            variant="primary"
+            onClick={() => void onSave()}
+            loading={saving}
+            disabled={saving}
+          >
+            <Check className="mr-1 h-4 w-4" />
+            {t("createButton")}
+          </Button>
         </div>
-      )}
+      </div>
 
-      <div className="flex justify-end">
-        <Button
-          variant="primary"
-          onClick={() => void onSave()}
-          loading={saving}
-          disabled={saving}
-        >
-          <Check className="mr-1 h-4 w-4" />
-          {t("createButton")}
-        </Button>
+      {/* Live Preview (Stitch) — reflects the manual draft as sections are
+          added. Reuses the AI builder's preview card; it shows its own
+          empty state until sections exist. */}
+      <div className="lg:col-span-1">
+        <div className="lg:sticky lg:top-4">
+          <TemplateDraftPreview template={draft} />
+        </div>
       </div>
     </div>
   );
