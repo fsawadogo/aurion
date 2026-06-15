@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTranslations } from "next-intl";
 import Header from "@/components/Header";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
@@ -59,6 +60,8 @@ const summaryIcons = [
 
 export default function DashboardPage() {
   const router = useRouter();
+  const t = useTranslations("AdminDashboard");
+  const tSpec = useTranslations("Specialties");
   const [metricsData, setMetricsData] = useState<PilotMetric[]>([]);
   const [sessionsData, setSessionsData] = useState<Session[]>([]);
   const [timeseries, setTimeseries] = useState<MetricTimeseriesResponse | null>(null);
@@ -104,13 +107,13 @@ export default function DashboardPage() {
         setSessionsData(sessionsRes.items);
         setTimeseries(timeseriesRes);
       } catch (err) {
-        setError(humanizeError(err, "Failed to load dashboard data"));
+        setError(humanizeError(err, t("loadError")));
       } finally {
         setLoading(false);
       }
     }
     fetchData();
-  }, [authChecked]);
+  }, [authChecked, t]);
 
   const totalSessions = sessionsData.length;
   const uniqueClinicians = new Set(sessionsData.map((s) => s.clinician_id)).size;
@@ -142,24 +145,26 @@ export default function DashboardPage() {
       : EMPTY;
 
   const summaryCards = [
-    { label: "Total Sessions", value: totalSessions.toString(), caption: "captured in the pilot" },
-    { label: "Active Clinicians", value: uniqueClinicians.toString(), caption: "recording sessions" },
-    { label: "Avg Completeness", value: avgCompleteness, caption: "target ≥ 90%" },
-    { label: "Avg Citation Rate", value: avgCitation, caption: "target ≥ 95%" },
+    { label: t("summary.totalSessions"), value: totalSessions.toString(), caption: t("summary.totalSessionsCaption") },
+    { label: t("summary.activeClinicians"), value: uniqueClinicians.toString(), caption: t("summary.activeCliniciansCaption") },
+    { label: t("summary.avgCompleteness"), value: avgCompleteness, caption: t("summary.avgCompletenessCaption") },
+    { label: t("summary.avgCitation"), value: avgCitation, caption: t("summary.avgCitationCaption") },
   ];
 
   // The 8 pilot behaviour metrics — each shows its headline value, target,
   // and (where the timeseries carries it) an inline 14-day trend. Merges
   // what used to be two separate sections (value cards + sparklines).
+  // `target` is the LOGIC token consumed by metricTone() (do not localize);
+  // `targetLabel` is the display string — only the word "Low" is localized.
   const metrics: MetricRow[] = [
-    { name: "Template Completeness", value: avgCompleteness, target: "90%", description: "Required sections populated per session", field: "template_section_completeness", fmt: pctFmt },
-    { name: "Citation Traceability", value: avgCitation, target: "95%", description: "Claims with a valid source ID", field: "citation_traceability_rate", fmt: pctFmt },
-    { name: "Physician Edit Rate", value: avgEditRate, target: "N/A", description: "Diff between v1 draft and final note", field: null },
-    { name: "Conflict Rate", value: avgConflict, target: "Low", description: "Frame citations flagged CONFLICTS", field: "conflict_rate", fmt: pctFmt, lowerIsBetter: true },
-    { name: "Low Confidence Frames", value: avgLowConf, target: "Low", description: "Frames discarded for low confidence", field: "low_confidence_frame_rate", fmt: pctFmt, lowerIsBetter: true },
-    { name: "Stage 1 Latency", value: avgStage1, target: "< 30s", description: "Record stop → Stage 1 delivery", field: "stage1_latency_ms", fmt: msFmt, lowerIsBetter: true },
-    { name: "Stage 2 Latency", value: avgStage2, target: "< 5 min", description: "Stage 1 approval → full note", field: "stage2_latency_ms", fmt: msFmt, lowerIsBetter: true },
-    { name: "Session Completeness", value: sessionCompletenessRate, target: "100%", description: "Sessions with all 8 metrics logged", field: "session_completeness", fmt: (v) => `${Math.round(v)}%` },
+    { name: t("metrics.templateCompleteness"), value: avgCompleteness, target: "90%", description: t("metrics.templateCompletenessDesc"), field: "template_section_completeness", fmt: pctFmt },
+    { name: t("metrics.citationTraceability"), value: avgCitation, target: "95%", description: t("metrics.citationTraceabilityDesc"), field: "citation_traceability_rate", fmt: pctFmt },
+    { name: t("metrics.physicianEditRate"), value: avgEditRate, target: "N/A", description: t("metrics.physicianEditRateDesc"), field: null },
+    { name: t("metrics.conflictRate"), value: avgConflict, target: "Low", targetLabel: t("targetLow"), description: t("metrics.conflictRateDesc"), field: "conflict_rate", fmt: pctFmt, lowerIsBetter: true },
+    { name: t("metrics.lowConfidenceFrames"), value: avgLowConf, target: "Low", targetLabel: t("targetLow"), description: t("metrics.lowConfidenceFramesDesc"), field: "low_confidence_frame_rate", fmt: pctFmt, lowerIsBetter: true },
+    { name: t("metrics.stage1Latency"), value: avgStage1, target: "< 30s", description: t("metrics.stage1LatencyDesc"), field: "stage1_latency_ms", fmt: msFmt, lowerIsBetter: true },
+    { name: t("metrics.stage2Latency"), value: avgStage2, target: "< 5 min", description: t("metrics.stage2LatencyDesc"), field: "stage2_latency_ms", fmt: msFmt, lowerIsBetter: true },
+    { name: t("metrics.sessionCompleteness"), value: sessionCompletenessRate, target: "100%", description: t("metrics.sessionCompletenessDesc"), field: "session_completeness", fmt: (v) => `${Math.round(v)}%` },
   ];
 
   // Specialty breakdown.
@@ -172,14 +177,16 @@ export default function DashboardPage() {
     .slice(0, 5);
   const maxSpecialty = Math.max(...specialties.map(([, v]) => v), 1);
 
-  const windowLabel = timeseries ? `${timeseries.from} → ${timeseries.to}` : "last 14 days";
+  const windowLabel = timeseries
+    ? `${timeseries.from} → ${timeseries.to}`
+    : t("windowDefault");
   const buckets = timeseries?.buckets ?? [];
 
   return (
     <>
       <Header
-        title="Dashboard"
-        subtitle="Pilot performance overview"
+        title={t("title")}
+        subtitle={t("subtitle")}
         actions={
           <span className="hidden items-center gap-1.5 rounded-full bg-gray-50 px-2.5 py-1 text-[11px] font-medium text-gray-500 ring-1 ring-inset ring-gray-200 sm:inline-flex">
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-400" />
@@ -239,9 +246,11 @@ export default function DashboardPage() {
         {/* Behaviour metrics — value + target + inline 14-day trend */}
         <div className="mb-4 flex items-baseline justify-between">
           <h2 className="text-sm font-semibold uppercase tracking-wider text-gray-400">
-            Behaviour Metrics
+            {t("behaviourMetrics")}
           </h2>
-          <span className="text-[11px] text-gray-400">14-day trend · {windowLabel}</span>
+          <span className="text-[11px] text-gray-400">
+            {t("trendLabel", { window: windowLabel })}
+          </span>
         </div>
         <div className="mb-8 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4 stagger-children">
           {metrics.map((m) => (
@@ -251,9 +260,9 @@ export default function DashboardPage() {
 
         {/* Volume + specialty */}
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <Card title={`Daily Volume (${buckets.length} ${buckets.length === 1 ? "day" : "days"})`}>
+          <Card title={`${t("dailyVolume")} (${t("dailyVolumeDays", { count: buckets.length })})`}>
             {loading || buckets.length === 0 ? (
-              <EmptyPanel loading={loading} label="No session volume yet." />
+              <EmptyPanel loading={loading} label={t("noVolume")} />
             ) : (
               <div className="flex h-48 items-end justify-around gap-1 pt-4">
                 {buckets.map((b, i) => {
@@ -290,9 +299,9 @@ export default function DashboardPage() {
             )}
           </Card>
 
-          <Card title="By Specialty">
+          <Card title={t("bySpecialty")}>
             {loading || specialties.length === 0 ? (
-              <EmptyPanel loading={loading} label="No specialty data yet." />
+              <EmptyPanel loading={loading} label={t("noSpecialty")} />
             ) : (
               <div className="space-y-3 py-2">
                 {specialties.map(([key, count]) => {
@@ -301,7 +310,7 @@ export default function DashboardPage() {
                     <div key={key} className="group">
                       <div className="mb-1 flex items-center justify-between">
                         <span className="text-xs font-medium text-gray-600">
-                          {humanSpecialty(key)}
+                          {tSpec.has(key) ? tSpec(key) : humanSpecialty(key)}
                         </span>
                         <span className="text-xs font-semibold tabular-nums text-navy-600">
                           {count}
@@ -341,7 +350,12 @@ type SparklineField = keyof Pick<
 type MetricRow = {
   name: string;
   value: string;
+  // Logic token consumed by metricTone() — never localized.
   target: string;
+  // Optional localized display override (e.g. "Low" → "Faible"); falls back
+  // to `target` when absent. Numeric/symbolic targets render the same in
+  // both languages, so only word-targets carry a label.
+  targetLabel?: string;
   description: string;
   field: SparklineField | null;
   fmt?: (v: number) => string;
@@ -357,7 +371,8 @@ function MetricCard({
   buckets: MetricTimeseriesBucket[];
   loading: boolean;
 }) {
-  const { name, value, target, description, field, fmt, lowerIsBetter } = metric;
+  const t = useTranslations("AdminDashboard");
+  const { name, value, target, targetLabel, description, field, fmt, lowerIsBetter } = metric;
   const empty = value === EMPTY;
   const tone = metricTone(value, target);
 
@@ -385,7 +400,7 @@ function MetricCard({
             </p>
             {target !== "N/A" && (
               <span className="text-[11px] font-medium text-gray-400">
-                / {target}
+                / {targetLabel ?? target}
               </span>
             )}
           </div>
@@ -402,7 +417,7 @@ function MetricCard({
             ) : (
               <div className="flex h-full items-center">
                 <span className="text-[10px] text-gray-300">
-                  No trend available
+                  {t("noTrend")}
                 </span>
               </div>
             )}
@@ -425,6 +440,7 @@ function MiniSparkline({
   field: SparklineField;
   lowerIsBetter?: boolean;
 }) {
+  const t = useTranslations("AdminDashboard");
   const values = buckets.map((b) => {
     const v = b[field];
     return v === null || v === undefined ? null : Number(v);
@@ -434,7 +450,7 @@ function MiniSparkline({
   if (nonNull.length === 0) {
     return (
       <div className="flex h-full items-center">
-        <span className="text-[10px] text-gray-300">Awaiting data</span>
+        <span className="text-[10px] text-gray-300">{t("awaitingData")}</span>
       </div>
     );
   }
@@ -454,7 +470,7 @@ function MiniSparkline({
             <div
               key={i}
               className="flex-1 self-stretch rounded-sm bg-gray-100"
-              title={`${buckets[i].date}: no data`}
+              title={`${buckets[i].date}: ${t("noData")}`}
             />
           );
         }
@@ -474,10 +490,11 @@ function MiniSparkline({
 }
 
 function EmptyPanel({ loading, label }: { loading: boolean; label: string }) {
+  const t = useTranslations("AdminDashboard");
   return (
     <div className="flex h-48 flex-col items-center justify-center gap-2 text-gray-300">
       {loading ? (
-        <p className="text-sm text-gray-400">Loading…</p>
+        <p className="text-sm text-gray-400">{t("loading")}</p>
       ) : (
         <>
           <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
