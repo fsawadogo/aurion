@@ -25,6 +25,7 @@ import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
 import ProviderComparePanel from "@/components/portal/ProviderComparePanel";
 import ProviderUsagePanel from "@/components/portal/ProviderUsagePanel";
+import ProviderUsageSnapshot from "@/components/portal/ProviderUsageSnapshot";
 import {
   clearProviderOverride,
   getProviders,
@@ -145,6 +146,14 @@ export default function ProvidersPage() {
         </div>
       )}
 
+      {/* Bento (Stitch): Pipeline Stage Routing (left) + Usage Metrics
+          snapshot (right). The full range-selectable usage table + A-B
+          compare stay full-width below. */}
+      <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <h2 className="mb-3 text-aurion-body font-semibold text-navy-800">
+            {t("stageRouting")}
+          </h2>
       {loading || !providers ? (
         <Card>
           <LoadingSkeleton lines={6} />
@@ -220,10 +229,16 @@ export default function ProvidersPage() {
           })}
         </div>
       )}
+        </div>
+        <div className="lg:col-span-1">
+          <ProviderUsageSnapshot />
+        </div>
+      </div>
 
       {/* Usage & cost rollup (#73) — same role gate as the switch above;
-          fetches independently so a usage hiccup never blocks switching. */}
-      <ProviderUsagePanel />
+          fetches independently so a usage hiccup never blocks switching.
+          `hideTotals` defers the headline KPIs to the bento snapshot above. */}
+      <ProviderUsagePanel hideTotals />
 
       {/* A-B compare (#73/#74) — operational + eval-quality side-by-side. */}
       <ProviderComparePanel />

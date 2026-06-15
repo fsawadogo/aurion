@@ -475,6 +475,7 @@
   },
   "Providers": {
     "eyebrow": "Admin",
+    "stageRouting": "Routage par étape du pipeline",
     "title": "Fournisseurs IA",
     "subtitle": "Choisissez quel fournisseur de modèle dessert chaque étape du pipeline. Les changements prennent effet à l’exécution (en ~10 secondes), sans redéploiement. Chaque changement est journalisé.",
     "loadError": "Impossible de charger la configuration des fournisseurs.",
