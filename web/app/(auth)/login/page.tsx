@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff, ShieldCheck } from "lucide-react";
 // Single-path login against the backend bcrypt-JWT API (`/api/v1/auth/login`)
 // — the same auth system the iOS app and backend use. Cognito was removed
 // from the portal (re-added post-MVP); see docs/plans/auth-pivot-web.md.
@@ -147,10 +147,17 @@ function LoginContent() {
 
   return (
     <AuthScreenShell slot={resetToast}>
-      <h2 className="aurion-title-3 mb-1.5">
+      {mfaChallenge && (
+        <div className="mb-4 flex justify-center">
+          <span className="inline-flex h-12 w-12 items-center justify-center rounded-aurion-lg bg-gold-50 text-gold-600 ring-1 ring-inset ring-gold-200">
+            <ShieldCheck className="h-6 w-6" />
+          </span>
+        </div>
+      )}
+      <h2 className={"aurion-title-3 mb-1.5" + (mfaChallenge ? " text-center" : "")}>
         {mfaChallenge ? "Two-factor authentication" : "Sign in"}
       </h2>
-      <p className="aurion-caption mb-6">
+      <p className={"aurion-caption mb-6" + (mfaChallenge ? " text-center" : "")}>
         {mfaChallenge
           ? "Enter the 6-digit code from your authenticator app."
           : "Enter your credentials to access the clinical suite."}
@@ -173,23 +180,45 @@ function LoginContent() {
           data-testid="login-mfa-form"
         >
           <label className="block">
-            <span className="aurion-micro mb-1.5 block">
-              Authentication code
-            </span>
-            <input
-              type="text"
-              inputMode="numeric"
-              autoComplete="one-time-code"
-              pattern="[0-9]*"
-              maxLength={6}
-              value={mfaCode}
-              onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
-              autoFocus
-              required
-              disabled={loading}
-              placeholder="123456"
-              className="form-input text-center tracking-[0.4em]"
-            />
+            <span className="sr-only">Authentication code</span>
+            {/* Segmented OTP display (Stitch): one transparent input drives
+                all entry (paste, autofill one-time-code, backspace) while six
+                boxes below show the digits; the box at the cursor index
+                carries the gold focus ring. */}
+            <div className="relative mx-auto w-fit">
+              <input
+                type="text"
+                inputMode="numeric"
+                autoComplete="one-time-code"
+                pattern="[0-9]*"
+                maxLength={6}
+                value={mfaCode}
+                onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ""))}
+                autoFocus
+                required
+                disabled={loading}
+                aria-label="Authentication code"
+                className="absolute inset-0 z-10 h-full w-full cursor-text text-transparent caret-transparent opacity-0"
+              />
+              <div className="flex justify-center gap-2" aria-hidden="true">
+                {Array.from({ length: 6 }).map((_, i) => {
+                  const active = mfaCode.length === i;
+                  return (
+                    <div
+                      key={i}
+                      className={
+                        "flex h-12 w-10 items-center justify-center rounded-aurion-md border bg-surface text-xl font-semibold tabular-nums text-navy-800 transition-colors duration-short " +
+                        (active
+                          ? "border-gold-500 ring-2 ring-gold-300/40"
+                          : "border-navy-200")
+                      }
+                    >
+                      {mfaCode[i] ?? ""}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
           </label>
           <Button
             type="submit"
@@ -200,6 +229,7 @@ function LoginContent() {
             className="mt-2"
           >
             Verify
+            <ArrowRight className="h-4 w-4" />
           </Button>
           <button
             type="button"
