@@ -1066,8 +1066,10 @@
   },
   "AdminAnalytics": {
     "eyebrow": "Admin",
-    "title": "Adoption & ROI",
+    "title": "Analytics",
     "description": "Measured adoption and quality across clinicians. Time saved is an opt-in estimate — set a baseline to compute it.",
+    "adoptionRoi": "Adoption & ROI",
+    "qualityPerformance": "Quality & Performance",
     "loadError": "Unable to load adoption analytics.",
     "exportError": "CSV export failed.",
     "exportCsv": "Export CSV",

@@ -198,6 +198,9 @@ export default function AdminAnalyticsPage() {
         </Card>
       ) : (
         <>
+          <h2 className="mb-3 text-aurion-body font-semibold text-navy-800">
+            {t("adoptionRoi")}
+          </h2>
           <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {(
               [
@@ -239,7 +242,10 @@ export default function AdminAnalyticsPage() {
             ))}
           </dl>
 
-          <dl className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <h2 className="mb-3 mt-6 text-aurion-body font-semibold text-navy-800">
+            {t("qualityPerformance")}
+          </h2>
+          <dl className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {(
               [
                 ["completeness", pct(totals.avg_completeness)],
