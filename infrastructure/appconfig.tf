@@ -92,8 +92,10 @@ resource "aws_appconfig_configuration_profile" "main" {
               required             = ["temperature", "max_tokens", "confidence_threshold"]
               additionalProperties = false
               properties = {
-                temperature          = { type = "number", minimum = 0.0, maximum = 2.0 }
-                max_tokens           = { type = "integer", minimum = 100, maximum = 4000 }
+                temperature = { type = "number", minimum = 0.0, maximum = 2.0 }
+                # #437 — raised 4000→8000 to match the Pydantic `le` (richer
+                # clip descriptions on frontier vision models).
+                max_tokens           = { type = "integer", minimum = 100, maximum = 8000 }
                 confidence_threshold = { type = "string", enum = ["low", "medium", "high"] }
               }
             }
@@ -236,6 +238,22 @@ resource "aws_appconfig_configuration_profile" "main" {
             sla_stage1_ms   = { type = "integer", minimum = 1000, maximum = 3600000 }
             sla_stage2_ms   = { type = "integer", minimum = 1000, maximum = 86400000 }
             purge_gap_hours = { type = "integer", minimum = 1, maximum = 336 }
+          }
+        }
+        # Per-provider AI model-ID overrides (#437). NOT in the root `required`
+        # list — older hosted documents predate it (same precedent as alerting),
+        # so they still validate under additionalProperties = false; the backend
+        # Pydantic ModelVersionsConfig supplies the None defaults. This block
+        # MUST be declared so the Gemini 3.1 Pro flip (#438), which pushes a
+        # hosted doc WITH model_versions.gemini set, validates. Keys mirror
+        # backend/app/modules/config/schema.py ModelVersionsConfig.
+        model_versions = {
+          type                 = "object"
+          additionalProperties = false
+          properties = {
+            gemini    = { type = "string" }
+            openai    = { type = "string" }
+            anthropic = { type = "string" }
           }
         }
       }

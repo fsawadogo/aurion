@@ -6,10 +6,12 @@ from pydantic import ValidationError
 from app.modules.config.schema import (
     AppConfigSchema,
     FeatureFlagsConfig,
+    ModelVersionsConfig,
     NoteGenerationProviderKey,
     PipelineConfig,
     ProvidersConfig,
     TranscriptionProviderKey,
+    VisionModelParams,
     VisionProviderKey,
 )
 
@@ -200,3 +202,72 @@ def test_alerting_block_overrides_and_bounds():
                 "alerting": {"sla_stage1_ms": 1},  # below ge=1000
             }
         )
+
+
+class TestModelVersionsConfig:
+    """#437 — per-provider model-ID overrides (ships dark, all-None default)."""
+
+    def test_defaults_all_none(self):
+        mv = ModelVersionsConfig()
+        assert mv.gemini is None
+        assert mv.openai is None
+        assert mv.anthropic is None
+
+    def test_appconfig_default_block_is_all_none(self):
+        # An AppConfig built without model_versions still gets the block,
+        # all-None → providers fall back to their compiled-in _MODEL.
+        config = AppConfigSchema()
+        assert config.model_versions.gemini is None
+
+    def test_doc_without_model_versions_validates(self):
+        # Older hosted documents predate the key — must still validate.
+        raw = {
+            "providers": {"transcription": "whisper", "note_generation": "anthropic", "vision": "openai"},
+            "model_params": {
+                "note_generation": {"temperature": 0.1, "max_tokens": 2000},
+                "vision": {"temperature": 0.1, "max_tokens": 500, "confidence_threshold": "medium"},
+            },
+            "pipeline": {"stage1_skip_window_seconds": 60, "frame_window_clinic_ms": 3000,
+                         "frame_window_procedural_ms": 7000, "screen_capture_fps": 2, "video_capture_fps": 1},
+            "feature_flags": {"screen_capture_enabled": True, "note_versioning_enabled": True,
+                              "session_pause_resume_enabled": True, "per_session_provider_override": True},
+        }
+        config = AppConfigSchema.model_validate(raw)
+        assert config.model_versions.gemini is None
+
+    def test_override_round_trips(self):
+        config = AppConfigSchema.model_validate({
+            "providers": {"transcription": "whisper", "note_generation": "anthropic", "vision": "openai"},
+            "model_params": {
+                "note_generation": {"temperature": 0.1, "max_tokens": 2000},
+                "vision": {"temperature": 0.1, "max_tokens": 1500, "confidence_threshold": "medium"},
+            },
+            "pipeline": {"stage1_skip_window_seconds": 60, "frame_window_clinic_ms": 3000,
+                         "frame_window_procedural_ms": 7000, "screen_capture_fps": 2, "video_capture_fps": 1},
+            "feature_flags": {"screen_capture_enabled": True, "note_versioning_enabled": True,
+                              "session_pause_resume_enabled": True, "per_session_provider_override": True},
+            "model_versions": {"gemini": "gemini-3.1-pro-preview"},
+        })
+        assert config.model_versions.gemini == "gemini-3.1-pro-preview"
+        assert config.model_versions.openai is None
+
+
+class TestVisionMaxTokensBounds:
+    """#437 — vision max_tokens ceiling raised 4000 → 8000."""
+
+    def test_default_is_1500(self):
+        assert VisionModelParams().max_tokens == 1500
+
+    def test_old_4000_still_allowed(self):
+        assert VisionModelParams(max_tokens=4000).max_tokens == 4000
+
+    def test_new_ceiling_8000_allowed(self):
+        assert VisionModelParams(max_tokens=8000).max_tokens == 8000
+
+    def test_above_ceiling_rejected(self):
+        with pytest.raises(ValidationError):
+            VisionModelParams(max_tokens=8001)
+
+    def test_below_floor_rejected(self):
+        with pytest.raises(ValidationError):
+            VisionModelParams(max_tokens=50)

@@ -328,6 +328,13 @@ async def probe_vision_clip(
         ) from exc
 
     model_id = _PROVIDER_MODEL_ID.get(resolved_key, "")
+    # #437 — report the RESOLVED model: an AppConfig model_versions override
+    # wins over the compiled-in default, so the probe shows the id the
+    # provider will actually call (this is the canary check for the #438
+    # Gemini 3.1 Pro flip).
+    _override = getattr(get_config().model_versions, resolved_key.value, None)
+    if _override:
+        model_id = _override
     clip_metadata = {
         "size_bytes": len(body),
         "duration_ms": 0,  # probe doesn't decode the clip; operator-supplied.
