@@ -60,11 +60,13 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
         # Read model params from AppConfig at call time (CLAUDE.md
         # §"Runtime Configuration").
         params = get_config().model_params.note_generation
+        # #437 — config-driven model id (override → compiled-in default).
+        model = get_config().model_versions.gemini or _MODEL
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{_MODEL}:generateContent",
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                     params={"key": _GOOGLE_AI_API_KEY},
                     headers={"Content-Type": "application/json"},
                     json={
@@ -91,7 +93,7 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
                 set_call_usage(
                     input_tokens=int(usage.get("promptTokenCount", 0)),
                     output_tokens=int(usage.get("candidatesTokenCount", 0)),
-                    model=_MODEL,
+                    model=model,
                 )
                 content = data["candidates"][0]["content"]["parts"][0]["text"]
                 return parse_note_response(content, transcript, template, stage, "gemini")
@@ -119,10 +121,12 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
             raise ProviderError("gemini", "generate_text requires at least one message")
 
         params = get_config().model_params.note_generation
+        # #437 — config-driven model id (override → compiled-in default).
+        model = get_config().model_versions.gemini or _MODEL
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{_MODEL}:generateContent",
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                     params={"key": _GOOGLE_AI_API_KEY},
                     json={
                         "systemInstruction": {"parts": [{"text": system}]},

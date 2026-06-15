@@ -61,11 +61,14 @@ class GeminiVisionProvider(VisionProvider):
         image_data = load_frame_image_base64(frame.s3_key)
         # AI-PROMPTS-B — assembled prompt or base constant.
         effective_system = system_prompt or VISION_SYSTEM_PROMPT
+        # #437 — model id is config-driven (AppConfig override → compiled-in
+        # default). Resolved per call so a config flip lands without redeploy.
+        model = get_config().model_versions.gemini or _MODEL
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{_MODEL}:generateContent",
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                     params={"key": _GOOGLE_AI_API_KEY},
                     headers={"Content-Type": "application/json"},
                     json={
@@ -156,11 +159,13 @@ class GeminiVisionProvider(VisionProvider):
         # latency scale ~linearly with fps, so this is bounded by the same
         # AppConfig knob that bounds capture (pipeline.video_capture_fps, 1-10).
         sampling_fps = get_config().pipeline.video_capture_fps
+        # #437 — config-driven model id (override → compiled-in default).
+        model = get_config().model_versions.gemini or _MODEL
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
                 response = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{_MODEL}:generateContent",
+                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                     params={"key": _GOOGLE_AI_API_KEY},
                     headers={"Content-Type": "application/json"},
                     json={

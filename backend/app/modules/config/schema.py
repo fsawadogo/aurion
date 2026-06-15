@@ -61,7 +61,10 @@ class NoteGenerationModelParams(BaseModel):
 
 class VisionModelParams(BaseModel):
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=500, ge=100, le=4000)
+    # Raised from 500/4000 (#437): the tight 500-token cap truncated richer
+    # clip descriptions on frontier vision models. 1500 default gives room for
+    # detailed visual evidence; 8000 ceiling matches the Terraform validator.
+    max_tokens: int = Field(default=1500, ge=100, le=8000)
     confidence_threshold: Literal["low", "medium", "high"] = "medium"
 
 
@@ -259,6 +262,26 @@ class MeasurementConfig(BaseModel):
     allow_non_lidar: bool = True
 
 
+class ModelVersionsConfig(BaseModel):
+    """Per-provider AI model-ID overrides (#437). Keyed by PROVIDER, not
+    pipeline role, because a single role (e.g. ``vision``) is served by all
+    three providers with different native model ids — a role-keyed field would
+    be provider-ambiguous.
+
+    Each value is ``None`` by default, meaning the provider falls back to its
+    compiled-in ``_MODEL`` constant — so an absent / all-None block is a
+    byte-for-byte no-op. Setting a value (via AppConfig) makes that provider's
+    ``generateContent`` (or equivalent) calls target the given model id within
+    one config-poll window — no redeploy. This is the enabler for the Gemini
+    3.1 Pro upgrade (#438): a model bump becomes a config change, honoring
+    CLAUDE.md's "switch via AppConfig in <30s" contract.
+    """
+
+    gemini: str | None = None
+    openai: str | None = None
+    anthropic: str | None = None
+
+
 class AppConfigSchema(BaseModel):
     """Full AppConfig document schema.
 
@@ -276,6 +299,9 @@ class AppConfigSchema(BaseModel):
     # #63 — optional; absent in older hosted content. Feature is off via
     # feature_flags.measurement_enabled regardless of this block.
     measurement: MeasurementConfig = Field(default_factory=MeasurementConfig)
+    # #437 — optional; absent in older hosted content. All-None → every
+    # provider uses its compiled-in `_MODEL` (no behavior change).
+    model_versions: ModelVersionsConfig = Field(default_factory=ModelVersionsConfig)
 
     @model_validator(mode="after")
     def validate_frame_windows(self) -> "AppConfigSchema":

@@ -71,12 +71,18 @@ _PROVIDER_DEFAULT_MODELS: dict[str, str] = {
 
 
 def _provider_model_id(provider_used: str) -> str:
-    """Return the default model id for a ``provider_used`` short name.
+    """Return the model id for a ``provider_used`` short name.
 
-    Returns the provider name unchanged if it's not in the map — the
-    cost lookup will return 0 and log an INFO line, which is the
-    correct fail-soft for an unknown model.
+    #437 — an AppConfig ``model_versions`` override wins so the cost key
+    tracks the model the provider actually called (else a bumped model
+    would be costed against the stale default rate row). Falls back to the
+    compiled-in default map, then to the provider name unchanged — the
+    cost lookup returns 0 + an INFO log for an unknown model, the correct
+    fail-soft.
     """
+    override = getattr(get_config().model_versions, provider_used, None)
+    if override:
+        return override
     return _PROVIDER_DEFAULT_MODELS.get(provider_used, provider_used)
 
 
