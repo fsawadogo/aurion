@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertCircle, CheckCircle2, Eye, EyeOff } from "lucide-react";
+import { AlertCircle, ArrowRight, CheckCircle2, Eye, EyeOff } from "lucide-react";
 // Single-path login against the backend bcrypt-JWT API (`/api/v1/auth/login`)
 // — the same auth system the iOS app and backend use. Cognito was removed
 // from the portal (re-added post-MVP); see docs/plans/auth-pivot-web.md.
@@ -153,7 +153,7 @@ function LoginContent() {
       <p className="aurion-caption mb-6">
         {mfaChallenge
           ? "Enter the 6-digit code from your authenticator app."
-          : "Use your Aurion email and password."}
+          : "Enter your credentials to access the clinical suite."}
       </p>
 
       {error && (
@@ -213,7 +213,7 @@ function LoginContent() {
       ) : (
       <form onSubmit={handleSubmit} className="space-y-4">
         <label className="block">
-          <span className="aurion-micro mb-1.5 block">Email</span>
+          <span className="aurion-micro mb-1.5 block">Clinical email</span>
           <input
             type="email"
             value={email}
@@ -274,6 +274,7 @@ function LoginContent() {
           className="mt-2"
         >
           Sign in
+          <ArrowRight className="h-4 w-4" />
         </Button>
       </form>
       )}
