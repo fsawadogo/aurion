@@ -153,10 +153,11 @@ describe("AdminAnalyticsPage", () => {
   it("renders the FR catalog at parity", async () => {
     render(withIntl(<AdminAnalyticsPage />, "fr"));
     await waitFor(() =>
-      expect(
-        screen.getByText("Adoption et retour sur investissement"),
-      ).toBeInTheDocument(),
+      // Page title is now "Statistiques"; "Adoption et ROI" is a section heading.
+      expect(screen.getByText("Statistiques")).toBeInTheDocument(),
     );
+    expect(screen.getByText("Adoption et ROI")).toBeInTheDocument();
+    expect(screen.getByText("Qualité et performance")).toBeInTheDocument();
     expect(screen.getByTestId("analytics-range-all")).toHaveTextContent("Tout l’historique");
     expect(screen.getByText("Cliniciens actifs")).toBeInTheDocument();
   });

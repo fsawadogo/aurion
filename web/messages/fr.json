@@ -1067,8 +1067,10 @@
   },
   "AdminAnalytics": {
     "eyebrow": "Admin",
-    "title": "Adoption et retour sur investissement",
+    "title": "Statistiques",
     "description": "Adoption et qualité mesurées par clinicien. Le temps épargné est une estimation facultative — définissez une référence pour le calculer.",
+    "adoptionRoi": "Adoption et ROI",
+    "qualityPerformance": "Qualité et performance",
     "loadError": "Impossible de charger l’analytique d’adoption.",
     "exportError": "Échec de l’exportation CSV.",
     "exportCsv": "Exporter en CSV",
