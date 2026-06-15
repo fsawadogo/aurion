@@ -104,7 +104,15 @@ describe("ProviderUsagePanel", () => {
 
   it("defaults to 7d with a since bound, and 'all' refetches without one", async () => {
     render(withIntl(<ProviderUsagePanel />));
-    await waitFor(() => expect(getProviderUsage).toHaveBeenCalledTimes(1));
+    // Wait for the initial load to SETTLE, not merely fire. The range
+    // buttons are `disabled={active || loading}`, so clicking before the
+    // first fetch resolves (loading still true) is a no-op and the refetch
+    // never happens — the source of the intermittent "called 1 time, not 2"
+    // failure. The stat only renders once loading flips false.
+    await waitFor(() =>
+      expect(screen.getByTestId("usage-stat-calls")).toBeInTheDocument(),
+    );
+    expect(getProviderUsage).toHaveBeenCalledTimes(1);
 
     const first = vi.mocked(getProviderUsage).mock.calls[0][0];
     expect(first?.since).toBeTruthy();
