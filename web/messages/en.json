@@ -1115,6 +1115,8 @@
     "eyebrow": "Admin",
     "title": "System templates",
     "description": "Edit the built-in specialty templates and their per-section visual-trigger keywords. Edits are live in the note pipeline — no redeploy.",
+    "searchPlaceholder": "Search templates…",
+    "noMatches": "No templates match your search.",
     "loadError": "Unable to load templates.",
     "saveError": "Save failed.",
     "saveSuccess": "Template saved — live within ~10 seconds fleet-wide.",

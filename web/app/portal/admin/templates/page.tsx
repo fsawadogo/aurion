@@ -16,7 +16,7 @@
  * bundled template (the editor's key field is forced back on change).
  */
 
-import { LayoutGrid, RotateCcw, Save } from "lucide-react";
+import { LayoutGrid, RotateCcw, Save, Search } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import Badge from "@/components/ui/Badge";
@@ -53,6 +53,7 @@ export default function AdminTemplatesPage() {
   const [confirmRevert, setConfirmRevert] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const [query, setQuery] = useState("");
 
   const loadList = useCallback(async () => {
     setLoading(true);
@@ -137,6 +138,15 @@ export default function AdminTemplatesPage() {
 
   const busy = saving || reverting || detailLoading;
 
+  // Client-side filter by display name or template key (Stitch search).
+  const q = query.trim().toLowerCase();
+  const filtered = (list ?? []).filter(
+    (i) =>
+      !q ||
+      i.display_name.toLowerCase().includes(q) ||
+      i.template_key.toLowerCase().includes(q),
+  );
+
   return (
     <div className="aurion-page-padded aurion-container-narrow" data-testid="admin-templates-page">
       <PageHeader eyebrow={t("eyebrow")} title={t("title")} description={t("description")} />
@@ -158,12 +168,35 @@ export default function AdminTemplatesPage() {
         </div>
       )}
 
+      {/* Search (Stitch) — filters the bundled-template list by name or key. */}
+      {!loading && list && (
+        <div className="relative mb-4">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-navy-300"
+            aria-hidden="true"
+          />
+          <input
+            type="search"
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder={t("searchPlaceholder")}
+            aria-label={t("searchPlaceholder")}
+            data-testid="template-search"
+            className="w-full rounded-aurion-md border border-navy-200 bg-surface py-2 pl-9 pr-3 text-aurion-callout text-navy-800 placeholder:text-navy-300 focus:outline-none focus:ring-2 focus:ring-gold-300/40"
+          />
+        </div>
+      )}
+
       <Card>
         {loading || !list ? (
           <LoadingSkeleton lines={6} />
+        ) : filtered.length === 0 ? (
+          <p className="py-8 text-center text-aurion-callout text-navy-500">
+            {t("noMatches")}
+          </p>
         ) : (
           <ul className="divide-y divide-hairline">
-            {list.map((item) => {
+            {filtered.map((item) => {
               const active = item.template_key === selectedKey;
               return (
                 <li key={item.template_key}>
