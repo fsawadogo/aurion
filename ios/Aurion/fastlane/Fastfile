@@ -560,7 +560,7 @@ platform :ios do
     # Cancel any pending invitation that matches a target email. Apple
     # refuses UserInvitation.create while one is already pending, so this
     # delete-first step is what makes the re-send actually send.
-    pending = Spaceship::ConnectAPI::UserInvitation.all(limit: 200)
+    pending = Spaceship::ConnectAPI::UserInvitation.all
     pending.each do |inv|
       next unless wanted.include?(inv.email.to_s.downcase)
       begin
