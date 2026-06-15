@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronRight, Lock } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouteSegment } from "@/lib/use-route-segment";
@@ -180,9 +180,15 @@ export default function AuditDetailClient(
         </Card>
 
         <Card>
-          <div className="mb-4 flex items-baseline justify-between">
+          <div className="mb-4 flex items-center justify-between gap-3">
             <h2 className="text-base font-semibold text-navy-700">Chronological events</h2>
-            <p className="text-xs text-gray-400">Earliest at top</p>
+            <span
+              className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-navy-50 px-2.5 py-1 text-[11px] font-medium text-navy-600 ring-1 ring-inset ring-navy-100"
+              title="Append-only — audit events are never modified or deleted"
+            >
+              <Lock className="h-3 w-3" />
+              Immutable record
+            </span>
           </div>
 
           {loading ? (
@@ -266,6 +272,12 @@ export default function AuditDetailClient(
                 );
               })}
             </ol>
+          )}
+
+          {!loading && events.length > 0 && (
+            <p className="mt-6 text-center text-[11px] font-medium uppercase tracking-wider text-gray-300">
+              End of audit trail
+            </p>
           )}
         </Card>
       </div>
