@@ -199,8 +199,7 @@ export default function UsersPage() {
             <table className="min-w-full">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/80">
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Name</th>
-                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Email</th>
+                  <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">User</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Role</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Status</th>
                   <th className="px-4 py-3 text-left text-[11px] font-semibold uppercase tracking-wider text-gray-400">Voice</th>
@@ -211,13 +210,13 @@ export default function UsersPage() {
               <tbody className="divide-y divide-gray-50">
                 {loading ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-6">
+                    <td colSpan={6} className="px-4 py-6">
                       <LoadingSkeleton lines={4} />
                     </td>
                   </tr>
                 ) : users.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="px-4 py-12 text-center">
+                    <td colSpan={6} className="px-4 py-12 text-center">
                       <p className="text-sm text-gray-400">No users found.</p>
                     </td>
                   </tr>
@@ -226,14 +225,14 @@ export default function UsersPage() {
                     <tr key={user.id} className="transition-colors hover:bg-gray-50/80">
                       <td className="whitespace-nowrap px-4 py-3">
                         <div className="flex items-center gap-2.5">
-                          <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-navy-50 text-[11px] font-semibold text-navy-700 ring-1 ring-inset ring-navy-100">
+                          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-50 text-[11px] font-semibold text-navy-700 ring-1 ring-inset ring-navy-100">
                             {nameInitials(displayName(user))}
                           </span>
-                          <span className="text-sm font-medium text-navy-800">{displayName(user)}</span>
+                          <div className="min-w-0">
+                            <div className="text-sm font-medium text-navy-800">{displayName(user)}</div>
+                            <div className="text-xs text-gray-500">{user.email}</div>
+                          </div>
                         </div>
-                      </td>
-                      <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                        {user.email}
                       </td>
                       <td className="whitespace-nowrap px-4 py-3 text-sm">
                         <Badge variant={roleBadgeVariant[user.role as UserRole] ?? "neutral"}>
