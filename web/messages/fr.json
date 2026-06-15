@@ -1112,6 +1112,8 @@
     "eyebrow": "Admin",
     "title": "Modèles système",
     "description": "Modifiez les modèles de spécialité intégrés et leurs mots-clés de déclenchement visuel par section. Les modifications sont actives dans le pipeline de notes — sans redéploiement.",
+    "searchPlaceholder": "Rechercher des modèles…",
+    "noMatches": "Aucun modèle ne correspond à votre recherche.",
     "loadError": "Impossible de charger les modèles.",
     "saveError": "Échec de l’enregistrement.",
     "saveSuccess": "Modèle enregistré — actif dans ~10 secondes sur toute la flotte.",
