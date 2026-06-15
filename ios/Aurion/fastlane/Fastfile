@@ -535,6 +535,72 @@ platform :ios do
   end
 
   # -------------------------------------------------------------------------
+  # reinvite_internal_testers — force a FRESH team invite. invite_internal_testers
+  # skips any email with a pending invite, so a stale/expired/lost invitation
+  # can never be re-sent through it. This lane CANCELS the pending
+  # UserInvitation for each email first, then re-creates it, so the invitee
+  # gets a new, current "Join on App Store Connect" email to accept. Use when
+  # testers report they never got (or can't find) the original invite.
+  # No-op-safe: emails already accepted onto the team are left alone.
+  # -------------------------------------------------------------------------
+  desc "Cancel pending invites + re-send fresh team invitations"
+  lane :reinvite_internal_testers do
+    emails = (ENV["INVITE_EMAILS"] || "").split(",").map(&:strip).reject(&:empty?)
+    UI.user_error!("Set INVITE_EMAILS=a@x.com,b@y.com (comma-separated)") if emails.empty?
+
+    asc_api_key
+    Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
+      key_id:    ENV["APP_STORE_CONNECT_KEY_ID"],
+      issuer_id: ENV["APP_STORE_CONNECT_ISSUER_ID"],
+      key:       Base64.decode64(ENV["APP_STORE_CONNECT_KEY_P8"]),
+      duration:  1200,
+    )
+
+    wanted  = emails.map(&:downcase)
+    # Cancel any pending invitation that matches a target email. Apple
+    # refuses UserInvitation.create while one is already pending, so this
+    # delete-first step is what makes the re-send actually send.
+    pending = Spaceship::ConnectAPI::UserInvitation.all(limit: 200)
+    pending.each do |inv|
+      next unless wanted.include?(inv.email.to_s.downcase)
+      begin
+        inv.delete!
+        UI.message "  · cancelled stale pending invite for #{inv.email}"
+      rescue => e
+        UI.error "  ✗ could not cancel pending invite for #{inv.email}: #{e.message.lines.first&.strip}"
+      end
+    end
+
+    UI.success "Re-sending #{emails.size} fresh invite(s) as Customer Support team members"
+    emails.each do |email|
+      local = email.split("@").first || email
+      parts = local.split(/[._]/, 2)
+      first = (parts[0] || "Pilot").capitalize
+      last  = (parts[1] || "Physician").capitalize
+      begin
+        Spaceship::ConnectAPI::UserInvitation.create(
+          email:                 email,
+          first_name:            first,
+          last_name:             last,
+          roles:                 ["CUSTOMER_SUPPORT"],
+          provisioning_allowed:  false,
+          all_apps_visible:      true,
+        )
+        UI.success "  ✓ fresh invite sent to #{email} (#{first} #{last})"
+      rescue => e
+        msg = e.message.to_s
+        if msg.match?(/already an active user|USER_ALREADY_EXISTS|already exists/i)
+          UI.message "  · #{email} is already an ACCEPTED team member — no invite needed"
+        else
+          UI.error "  ✗ #{email} failed: #{msg.lines.first&.strip}"
+        end
+      end
+    end
+
+    UI.success "Done. Fresh invites sent; invitees must accept the NEW email to join the team."
+  end
+
+  # -------------------------------------------------------------------------
   # add_to_pilot_internal — add already-team-member emails to the
   # "Pilot" internal beta group. Run after `invite_internal_testers`
   # once invitees have accepted the email.

@@ -27,6 +27,11 @@ on:
         required: false
         type: boolean
         default: false
+      force_resend:
+        description: "Cancel any pending invite + re-send a fresh one (use when testers never got / can't find the original)"
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -55,9 +60,17 @@ jobs:
           fi
 
       - name: Send App Store Connect team invites
-        if: steps.gate.outputs.skip == 'false'
+        if: ${{ steps.gate.outputs.skip == 'false' && inputs.force_resend != true }}
         working-directory: ios/Aurion
         run: fastlane invite_internal_testers
+
+      # force_resend: cancel any pending invitation first, then re-send a
+      # fresh one (the normal lane skips emails that already have a pending
+      # invite, so it can never re-issue a stale/lost invitation).
+      - name: Re-send fresh team invites (cancel pending)
+        if: ${{ steps.gate.outputs.skip == 'false' && inputs.force_resend == true }}
+        working-directory: ios/Aurion
+        run: fastlane reinvite_internal_testers
 
       - name: Add accepted users to Pilot internal group
         if: steps.gate.outputs.skip == 'false' && inputs.also_add_to_pilot == true
