@@ -41,14 +41,76 @@
 }
 
 html.dark {
-  --surface-canvas:   #11151B;
-  --surface-card:     #1A1F28;
-  --surface-muted:    #232834;
-  --surface-hairline: rgba(255, 255, 255, 0.08);
-  --text-primary:     #E8ECF2;
-  --text-secondary:   #9AA3B4;
-  --text-tertiary:    #6B7280;
+  /* Retuned dark palette — navy-tinted (brand-aligned, not flat gray),
+   * with a clear canvas → card → muted elevation gap so cards read as
+   * raised, and higher text contrast (the old tertiary #6B7280 was
+   * near-invisible). All pass WCAG AA on the card surface. */
+  --surface-canvas:   #0A0F1A;
+  --surface-card:     #151C2B;
+  --surface-muted:    #1F2838;
+  --surface-hairline: rgba(255, 255, 255, 0.10);
+  --text-primary:     #EAEEF6;
+  --text-secondary:   #AEB8CC;
+  --text-tertiary:    #828FA6;
 }
+
+/* ──────────────────────────────────────────────────────────────────
+ * Dark-mode utility remap. Most of the portal was built with brand-fixed
+ * LIGHT utilities (bg-white cards, text-navy-700 copy, bg-gray-50 fills,
+ * gray borders/divides) rather than the adaptive `aurion-*` tokens — so
+ * dark mode left white cards + near-invisible dark-navy text. These
+ * html.dark overrides flip those common utilities to the adaptive
+ * surface/text variables. Light mode is byte-identical (every selector
+ * is dark-only); components already on `aurion-*` tokens are unaffected.
+ * `text-white`, `bg-white/<alpha>` overlays, and `aurion-chrome-navy`
+ * (brand chrome) are intentionally NOT matched and stay as-is.
+ * ────────────────────────────────────────────────────────────────── */
+html.dark .bg-white   { background-color: var(--surface-card); }
+html.dark .bg-surface { background-color: var(--surface-card); }
+/* Frosted sticky surfaces (admin Header, NoteReview action bar, profile)
+ * use bg-white/95 — darken them. The low-alpha bg-white/[0.04–0.10] are
+ * intentional hover/overlay tints on the navy chrome and stay as-is. */
+html.dark .bg-white\/95 { background-color: rgb(21 28 43 / 0.92); }
+html.dark .bg-canvas  { background-color: var(--surface-canvas); }
+html.dark .bg-muted,
+html.dark .bg-gray-50,
+html.dark .bg-gray-100 { background-color: var(--surface-muted); }
+
+html.dark .text-navy-700,
+html.dark .text-navy-800,
+html.dark .text-navy-900 { color: var(--text-primary); }
+html.dark .text-navy-600,
+html.dark .text-navy-500,
+html.dark .text-gray-600,
+html.dark .text-gray-500 { color: var(--text-secondary); }
+html.dark .text-navy-400,
+html.dark .text-gray-400,
+html.dark .text-gray-300 { color: var(--text-tertiary); }
+
+html.dark .border-hairline,
+html.dark .border-gray-100,
+html.dark .border-gray-200,
+html.dark .border-navy-100,
+html.dark .border-navy-200 { border-color: var(--surface-hairline); }
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]),
+html.dark .divide-hairline > :not([hidden]) ~ :not([hidden]) { border-color: var(--surface-hairline); }
+
+/* Semantic status pills / banners — light `-50` fills + `-700/-800` text
+ * read poorly on dark. Translucent tints + lighter text keep the FIXED
+ * semantic hue (green=done · amber=review · red=conflict · blue=in-
+ * progress) while adapting its light/dark rendering. */
+html.dark .bg-emerald-50 { background-color: rgb(16 185 129 / 0.14); }
+html.dark .bg-amber-50   { background-color: rgb(217 148 31 / 0.16); }
+html.dark .bg-red-50     { background-color: rgb(217 53 43 / 0.15); }
+html.dark .bg-blue-50    { background-color: rgb(45 108 223 / 0.15); }
+html.dark .text-emerald-700, html.dark .text-emerald-800 { color: #6ee7b7; }
+html.dark .text-amber-800,   html.dark .text-amber-900   { color: #fcd34d; }
+html.dark .text-red-700,     html.dark .text-red-800     { color: #fca5a5; }
+html.dark .text-blue-700,    html.dark .text-blue-800    { color: #93c5fd; }
+html.dark .border-red-200,
+html.dark .border-amber-200,
+html.dark .border-amber-400 { border-color: rgb(255 255 255 / 0.12); }
 
 @layer base {
   html {
