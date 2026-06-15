@@ -238,6 +238,9 @@ function SessionRow({ session }: { session: PatientSessionMatch }) {
         className="flex items-center gap-3 hover:bg-gray-50 -mx-2 px-2 py-1 rounded-md transition-colors"
         data-testid={`patient-detail-row-${session.session_id}`}
       >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-navy-50 text-navy-400 ring-1 ring-inset ring-navy-100">
+          <Stethoscope className="h-4 w-4" />
+        </span>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-medium text-navy-800 truncate">
             {humanSpecialty(session.specialty)}
