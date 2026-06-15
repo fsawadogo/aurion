@@ -1,7 +1,7 @@
 "use client";
 
-import { CheckCircle2, Plus, XCircle } from "lucide-react";
-import { useEffect, useState } from "react";
+import { CheckCircle2, Plus, ShieldCheck, Stethoscope, Users as UsersIcon, XCircle } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
 import Header from "@/components/Header";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -83,6 +83,15 @@ export default function UsersPage() {
     fetchUsers();
   }, []);
 
+  // Summary stats for the header cards (Stitch redesign) — derived client-side
+  // from the loaded list; the pilot scale (<200 users) makes a rollup endpoint
+  // overkill. "MFA active" counts enrolled (not merely required) accounts.
+  const stats = useMemo(() => ({
+    total: users.length,
+    clinicians: users.filter((u) => u.role === "CLINICIAN").length,
+    mfaActive: users.filter((u) => u.mfa_enrolled).length,
+  }), [users]);
+
   async function handleCreate() {
     setCreating(true);
     try {
@@ -157,6 +166,28 @@ export default function UsersPage() {
             </button>
           </div>
         )}
+
+        {/* Summary stat cards (Stitch redesign) */}
+        <div className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <StatCard
+            icon={<UsersIcon className="h-5 w-5 text-navy-500" />}
+            label="Total users"
+            value={stats.total}
+            loading={loading}
+          />
+          <StatCard
+            icon={<Stethoscope className="h-5 w-5 text-blue-500" />}
+            label="Clinicians"
+            value={stats.clinicians}
+            loading={loading}
+          />
+          <StatCard
+            icon={<ShieldCheck className="h-5 w-5 text-emerald-600" />}
+            label="MFA active"
+            value={stats.mfaActive}
+            loading={loading}
+          />
+        </div>
 
         <p className="mb-4 text-xs text-gray-400">
           {loading ? "Loading..." : `${users.length} user${users.length === 1 ? "" : "s"}`}
@@ -348,5 +379,36 @@ export default function UsersPage() {
         </Modal>
       </div>
     </>
+  );
+}
+
+/** Summary stat card for the User Management header (Stitch redesign).
+ * bg-white / text-navy / border-gray adapt to dark mode via the html.dark
+ * utility remap in globals.css. */
+function StatCard({
+  icon,
+  label,
+  value,
+  loading,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: number;
+  loading: boolean;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-200/60 bg-white p-4 shadow-card">
+      <div className="flex items-center justify-between">
+        <span className="inline-flex h-9 w-9 items-center justify-center rounded-full bg-gray-50">
+          {icon}
+        </span>
+        <span className="text-2xl font-semibold tabular-nums text-navy-800">
+          {loading ? "—" : value}
+        </span>
+      </div>
+      <p className="mt-2 text-[11px] font-semibold uppercase tracking-wider text-gray-400">
+        {label}
+      </p>
+    </div>
   );
 }
