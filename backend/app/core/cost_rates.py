@@ -6,7 +6,8 @@ output_tokens) tuple to an integer USD-micros value (1 USD = 1_000_000
 micros) — integers all the way through so Phase 2 aggregations don't
 drift on float arithmetic.
 
-Last updated: 2026-06-03. Source: provider public pricing pages.
+Last updated: 2026-06-15 (added gemini-3.1-pro-preview, #438).
+Source: provider public pricing pages.
 - Gemini:    https://ai.google.dev/pricing
 - OpenAI:    https://openai.com/api/pricing/
 - Anthropic: https://www.anthropic.com/pricing
@@ -35,6 +36,11 @@ VISION_RATES_USD_PER_MT: dict[str, dict[str, dict[str, float]]] = {
     "gemini": {
         "gemini-2.5-pro": {"input": 1.25, "output": 5.00},
         "gemini-2.5-flash": {"input": 0.10, "output": 0.40},
+        # gemini-3.1-pro-preview (#438). Standard tier, prompts <=200k tokens
+        # (Aurion transcripts + clips sit well under 200k, so the lower tier
+        # applies; the >200k tier is 4.00/18.00). USD/MT. Keep the 2.5-pro row
+        # for in-flight sessions + the <30s config rollback.
+        "gemini-3.1-pro-preview": {"input": 2.00, "output": 12.00},
     },
     "openai": {
         "gpt-4o": {"input": 2.50, "output": 10.00},
