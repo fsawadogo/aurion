@@ -166,6 +166,13 @@ jobs:
       APP_STORE_CONNECT_KEY_P8:    ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
       APPLE_DIST_CERT_P12:         ${{ secrets.APPLE_DIST_CERT_P12 }}
       APPLE_DIST_CERT_PASSWORD:    ${{ secrets.APPLE_DIST_CERT_PASSWORD }}
+      # MWDAT client identifiers (Meta Wearables, #442). Baked into the
+      # archived build's MWDAT Info.plist dict via $(MWDAT_*) build settings.
+      # Unset ⇒ empty ⇒ the SDK stays dark (Wearables.configure() ignored) —
+      # and Developer Mode needs no creds anyway. Set these only for an
+      # attestation build, alongside flipping meta_wearables_enabled.
+      MWDAT_META_APP_ID:           ${{ secrets.MWDAT_META_APP_ID }}
+      MWDAT_CLIENT_TOKEN:          ${{ secrets.MWDAT_CLIENT_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -262,6 +269,8 @@ jobs:
                      -authenticationKeyID "$APP_STORE_CONNECT_KEY_ID" \
                      -authenticationKeyIssuerID "$APP_STORE_CONNECT_ISSUER_ID" \
                      CURRENT_PROJECT_VERSION="${GITHUB_RUN_NUMBER}" \
+                     MWDAT_META_APP_ID="${MWDAT_META_APP_ID}" \
+                     MWDAT_CLIENT_TOKEN="${MWDAT_CLIENT_TOKEN}" \
                      archive
 
       - name: Export IPA

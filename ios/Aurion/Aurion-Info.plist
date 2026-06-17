@@ -26,15 +26,38 @@
 	     is the intended dark state until the glasses feature is enabled. -->
 	<key>MWDAT</key>
 	<dict>
+		<!-- Universal Link Faïçal registered in the Wearables Developer Center
+		     (2026-06-16). Meta AI calls back here after device authorization;
+		     matches the shipped AASA path (/wearables/auth) + the
+		     applinks:portal.aurionclinical.com entitlement (#442). -->
 		<key>AppLinkURLScheme</key>
-		<string></string>
+		<string>https://portal.aurionclinical.com/wearables/auth</string>
 		<key>ClientToken</key>
 		<string>$(MWDAT_CLIENT_TOKEN)</string>
 		<key>MetaAppID</key>
 		<string>$(MWDAT_META_APP_ID)</string>
 		<key>TeamID</key>
 		<string>$(DEVELOPMENT_TEAM)</string>
+		<!-- Device Access Toolkit App Model. Inert while MetaAppID/ClientToken
+		     are empty (Wearables.configure() throws and is ignored). -->
+		<key>DAMEnabled</key>
+		<true/>
 	</dict>
+	<!-- MWDAT talks to Ray-Ban Meta over the MFi/ExternalAccessory transport.
+	     Declaring this protocol + the external-accessory/bluetooth-peripheral
+	     background modes is what lets the toolkit reach the glasses — and is
+	     also why this build distributes to INTERNAL TestFlight only (the
+	     ExternalAccessory/MFi declaration is rejected by external Beta App
+	     Review). See docs/plans/zazzy-dreaming-galaxy.md + the Phase 0 runbook. -->
+	<key>UISupportedExternalAccessoryProtocols</key>
+	<array>
+		<string>com.meta.ar.wearable</string>
+	</array>
+	<key>UIBackgroundModes</key>
+	<array>
+		<string>bluetooth-peripheral</string>
+		<string>external-accessory</string>
+	</array>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
