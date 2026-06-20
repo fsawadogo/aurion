@@ -79,6 +79,163 @@ async def _record_stage1_latency(
         )
 
 
+async def run_stage1(db: AsyncSession, session, audio_bytes: bytes):
+    """Run the Stage 1 pipeline for a session and return the transcript.
+
+    Extracted verbatim from the transcription route so BOTH the HTTP path
+    (``submit_transcription``) and the web-portal video-import orchestrator
+    (``api/v1/video_import``) drive identical Stage 1 behaviour (DRY §6c) —
+    transcribe → trigger-classify → persist → PHI scan → note gen →
+    AWAITING_REVIEW → latency metric → WebSocket push.
+
+    Precondition: ``session`` is in ``PROCESSING_STAGE1`` (the caller owns
+    that transition — the route via iOS /stop, the orchestrator explicitly).
+    Raises the same ``HTTPException``s as before (422 empty-transcript, 500
+    note-gen failure, 409 bad transition); the orchestrator catches them and
+    fails the job, the route re-raises them to the client.
+
+    Returns the (trigger-classified) ``Transcript`` so the route can build
+    its ``TranscriptResponse``.
+    """
+    session_id = session.id
+
+    # M-06: end-to-end Stage 1 latency. Measured from pipeline-entry so we
+    # capture the full backend processing window.
+    stage1_start = time.monotonic()
+
+    transcript = await transcribe_audio(audio_bytes, str(session_id))
+
+    await write_audit(
+        session_id,
+        AuditEventType.TRANSCRIPTION_COMPLETE,
+        provider_used=transcript.provider_used,
+        segment_count=len(transcript.segments),
+    )
+
+    transcript = await classify_triggers(transcript)
+
+    # Persist the transcript so the Stage 2 vision pipeline can find
+    # trigger-flagged segments after /approve-stage1 fires. Upsert.
+    existing = await db.execute(
+        select(TranscriptModel).where(TranscriptModel.session_id == session_id)
+    )
+    row = existing.scalar_one_or_none()
+    if row is None:
+        db.add(
+            TranscriptModel(
+                session_id=session_id,
+                provider_used=transcript.provider_used,
+                transcript_json=transcript.model_dump_json(),
+            )
+        )
+    else:
+        row.provider_used = transcript.provider_used
+        row.transcript_json = transcript.model_dump_json()
+    await db.flush()
+
+    phi_result = await scan_transcript_for_phi(transcript)
+    await write_audit(
+        session_id,
+        AuditEventType.PHI_AUDIT_COMPLETE,
+        phi_detected=phi_result.phi_detected,
+    )
+
+    # #275 — deserialize the encounter participant snapshot off the row so
+    # Stage 1 can attribute statements by role/name. Defensive parse.
+    participants: list[dict] = []
+    raw_participants = getattr(session, "participants_json", None)
+    if raw_participants:
+        try:
+            decoded = json.loads(raw_participants)
+            if isinstance(decoded, list):
+                participants = decoded
+        except (TypeError, ValueError):
+            logger.warning(
+                "Failed to decode participants_json for session=%s — "
+                "Stage 1 proceeds without participant attribution",
+                session_id,
+            )
+
+    try:
+        stage1_note = await generate_stage1_note(
+            transcript=transcript,
+            specialty=session.specialty,
+            session_id=str(session_id),
+            db=db,
+            output_language=session.output_language,
+            template_key=getattr(session, "template_key", None),
+            custom_template_id=getattr(session, "custom_template_id", None),
+            participants=participants,
+        )
+    except EmptyTranscriptError as exc:
+        try:
+            await transition_session(
+                db, session, SessionState.STAGE1_FAILED_NO_AUDIO
+            )
+        except InvalidTransitionError:
+            logger.warning(
+                "Stage 1 guard fired but session=%s could not transition "
+                "to STAGE1_FAILED_NO_AUDIO from state=%s",
+                session_id,
+                session.state.value,
+            )
+        await write_audit(
+            session_id, AuditEventType.STAGE1_FAILED, reason=exc.reason
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "reason": exc.reason,
+                "message": exc.human_message,
+            },
+        )
+    except Exception as exc:
+        reason = str(exc)[:200]
+        await write_audit(session_id, AuditEventType.STAGE1_FAILED, reason=reason)
+        await try_publish_alert(
+            alert_type=AuditEventType.STAGE1_FAILED.value,
+            severity=AlertSeverity.CRITICAL,
+            source="transcription_service",
+            message="Stage 1 note generation failed",
+            metadata={"session_id": str(session_id), "reason": reason},
+        )
+        raise HTTPException(
+            status_code=500,
+            detail=f"Stage 1 note generation failed: {exc}",
+        )
+
+    # Empty-note guardrail (#280): structurally-valid but zero populated
+    # required sections — delivered, not failed, but must be visible.
+    if stage1_note.completeness_score <= 0.0:
+        await write_audit(
+            session_id,
+            AuditEventType.STAGE1_EMPTY_NOTE,
+            segment_count=len(transcript.segments),
+            transcript_char_count=sum(len(s.text) for s in transcript.segments),
+            completeness=stage1_note.completeness_score,
+        )
+
+    try:
+        await transition_session(db, session, SessionState.AWAITING_REVIEW)
+    except InvalidTransitionError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+
+    stage1_latency_ms = int((time.monotonic() - stage1_start) * 1000)
+    await _record_stage1_latency(db, session, stage1_latency_ms)
+
+    await write_audit(
+        session_id,
+        AuditEventType.STAGE1_DELIVERED,
+        stage1_latency_ms=stage1_latency_ms,
+    )
+
+    # Push the note to any connected WebSocket client. Self-swallows so a
+    # WS hiccup can never turn a delivered note into a failed request.
+    await notify_stage1_delivered(str(session_id), stage1_note)
+
+    return transcript
+
+
 class TranscriptSegmentResponse(BaseModel):
     id: str
     start_ms: int
@@ -110,178 +267,12 @@ async def submit_transcription(
     session = await get_owned_session_or_404(db, session_id, user)
     require_state(session, SessionState.PROCESSING_STAGE1)
 
-    # M-06: end-to-end Stage 1 latency. Measured from request-entry rather
-    # than the recording_stopped audit event so we capture the full backend
-    # processing window; iOS still measures the user-facing record-stop →
-    # note-delivered window separately when reporting metrics.
-    stage1_start = time.monotonic()
-
+    # The Stage 1 pipeline is shared with the web-portal video-import
+    # orchestrator (DRY §6c). Behaviour is unchanged: this route owns the
+    # HTTP boundary (ownership + state precondition + multipart read), the
+    # shared ``run_stage1`` owns the pipeline + state transition + delivery.
     audio_bytes = await audio_file.read()
-    transcript = await transcribe_audio(audio_bytes, str(session_id))
-
-    await write_audit(
-        session_id,
-        AuditEventType.TRANSCRIPTION_COMPLETE,
-        provider_used=transcript.provider_used,
-        segment_count=len(transcript.segments),
-    )
-
-    transcript = await classify_triggers(transcript)
-
-    # Persist the transcript so the Stage 2 vision pipeline can find
-    # trigger-flagged segments after /approve-stage1 fires (which happens in
-    # a separate request). Upsert: re-uploads overwrite the prior transcript.
-    existing = await db.execute(
-        select(TranscriptModel).where(TranscriptModel.session_id == session_id)
-    )
-    row = existing.scalar_one_or_none()
-    if row is None:
-        db.add(
-            TranscriptModel(
-                session_id=session_id,
-                provider_used=transcript.provider_used,
-                transcript_json=transcript.model_dump_json(),
-            )
-        )
-    else:
-        row.provider_used = transcript.provider_used
-        row.transcript_json = transcript.model_dump_json()
-    await db.flush()
-
-    phi_result = await scan_transcript_for_phi(transcript)
-    await write_audit(
-        session_id,
-        AuditEventType.PHI_AUDIT_COMPLETE,
-        phi_detected=phi_result.phi_detected,
-    )
-
-    # On failure we leave the session in PROCESSING_STAGE1 so a retry of
-    # /transcription/{id} can pick up where it left off — EXCEPT for the
-    # empty-transcript guard branch, which is a terminal failure (no audio
-    # ever reached the backend; re-uploading wouldn't help).
-    # #275 — deserialize the encounter participant snapshot off the row so
-    # Stage 1 can attribute statements by role/name. Defensive parse: a
-    # NULL or malformed column degrades to an empty list (no participants
-    # block, byte-identical pre-#275 prompt) rather than crashing the
-    # route. We always pass a concrete list so generate_stage1_note's
-    # own DB fallback (for callers that omit the arg) stays a no-op here.
-    participants: list[dict] = []
-    raw_participants = getattr(session, "participants_json", None)
-    if raw_participants:
-        try:
-            decoded = json.loads(raw_participants)
-            if isinstance(decoded, list):
-                participants = decoded
-        except (TypeError, ValueError):
-            logger.warning(
-                "Failed to decode participants_json for session=%s — "
-                "Stage 1 proceeds without participant attribution",
-                session_id,
-            )
-
-    try:
-        stage1_note = await generate_stage1_note(
-            transcript=transcript,
-            specialty=session.specialty,
-            session_id=str(session_id),
-            db=db,
-            output_language=session.output_language,
-            # #314 / B2 — the snapshotted context template wins; None
-            # (old rows / no context) falls back to the specialty default.
-            template_key=getattr(session, "template_key", None),
-            # #318 / B3 — when the context bound a custom template, its id
-            # is snapshotted here; Stage 1 loads + validates that content.
-            # None (built-in / no context) keeps the pre-#318 path.
-            custom_template_id=getattr(session, "custom_template_id", None),
-            # #275 — encounter participants for role/name attribution.
-            participants=participants,
-        )
-    except EmptyTranscriptError as exc:
-        # lane-backend/empty-transcript-guard: the service already wrote
-        # a STAGE1_SKIPPED_* audit row with a bounded reason string.
-        # Roll the state-machine to STAGE1_FAILED_NO_AUDIO so subsequent
-        # calls (and the iOS retry path) see the terminal state, then
-        # write the STAGE1_FAILED summary row with the same reason for
-        # parity with other Stage 1 failure modes. No 5xx — this is a
-        # 422 because the request was well-formed but the captured
-        # material was insufficient. The provider was NEVER called; no
-        # note version exists; completeness is undefined and the iOS
-        # client knows to surface "re-record".
-        try:
-            await transition_session(
-                db, session, SessionState.STAGE1_FAILED_NO_AUDIO
-            )
-        except InvalidTransitionError:
-            # Already past PROCESSING_STAGE1 somehow — log and move on.
-            # The audit trail still carries the SKIPPED row; the state
-            # machine just diverged from what we expected.
-            logger.warning(
-                "Stage 1 guard fired but session=%s could not transition "
-                "to STAGE1_FAILED_NO_AUDIO from state=%s",
-                session_id,
-                session.state.value,
-            )
-        await write_audit(
-            session_id, AuditEventType.STAGE1_FAILED, reason=exc.reason
-        )
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "reason": exc.reason,
-                "message": exc.human_message,
-            },
-        )
-    except Exception as exc:
-        reason = str(exc)[:200]
-        await write_audit(session_id, AuditEventType.STAGE1_FAILED, reason=reason)
-        # Best-effort alert publish — try_publish_alert swallows errors
-        # so an alerts-DB hiccup never alters the 5xx path. Issue #76.
-        await try_publish_alert(
-            alert_type=AuditEventType.STAGE1_FAILED.value,
-            severity=AlertSeverity.CRITICAL,
-            source="transcription_service",
-            message="Stage 1 note generation failed",
-            metadata={"session_id": str(session_id), "reason": reason},
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Stage 1 note generation failed: {exc}",
-        )
-
-    # Empty-note guardrail (#280): the note generated but has zero populated
-    # required sections (completeness 0). This is NOT a failure — the request
-    # was well-formed and the note is real — but it must be VISIBLE rather than
-    # a silent "success", so the empty-note rate is auditable + CloudWatch-
-    # alarmable (7/16 recent notes were completeness=0.00 with no signal).
-    # PHI-free payload: counts + score only, never transcript text.
-    if stage1_note.completeness_score <= 0.0:
-        await write_audit(
-            session_id,
-            AuditEventType.STAGE1_EMPTY_NOTE,
-            segment_count=len(transcript.segments),
-            transcript_char_count=sum(len(s.text) for s in transcript.segments),
-            completeness=stage1_note.completeness_score,
-        )
-
-    try:
-        await transition_session(db, session, SessionState.AWAITING_REVIEW)
-    except InvalidTransitionError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
-
-    stage1_latency_ms = int((time.monotonic() - stage1_start) * 1000)
-    await _record_stage1_latency(db, session, stage1_latency_ms)
-
-    await write_audit(
-        session_id,
-        AuditEventType.STAGE1_DELIVERED,
-        stage1_latency_ms=stage1_latency_ms,
-    )
-
-    # Push the note to any connected WebSocket client so the iOS processing
-    # screen advances past 95% (#277). The pipeline is synchronous, so this
-    # fires right before the 200; notify_stage1_delivered self-swallows so a
-    # WS hiccup can never turn a delivered note into a failed request.
-    await notify_stage1_delivered(str(session_id), stage1_note)
+    transcript = await run_stage1(db, session, audio_bytes)
 
     return TranscriptResponse(
         session_id=transcript.session_id,
