@@ -26,6 +26,19 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # discovering it via a 500 in production.
 RUN ffmpeg -version
 
+# Download the res10 SSD face-detector weights for server-side masking
+# (VID-07). BEST-EFFORT: if the download fails (network/URL drift) the build
+# still succeeds and runtime falls back to the bundled Haar cascade — a
+# masking-quality improvement must never break the deploy. FACE_DETECTOR_MODEL_DIR
+# defaults to /app/models (see app/modules/video_import/masking.py).
+RUN mkdir -p /app/models && \
+    curl -fsSL -o /app/models/res10_deploy.prototxt \
+      https://raw.githubusercontent.com/opencv/opencv/4.x/samples/dnn/face_detector/deploy.prototxt \
+      || echo "WARN: res10 prototxt download failed — runtime falls back to Haar" && \
+    curl -fsSL -o /app/models/res10.caffemodel \
+      https://raw.githubusercontent.com/opencv/opencv_3rdparty/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel \
+      || echo "WARN: res10 caffemodel download failed — runtime falls back to Haar"
+
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
