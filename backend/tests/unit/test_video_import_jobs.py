@@ -18,9 +18,12 @@ from app.modules.video_import import jobs
 
 
 def _db() -> MagicMock:
-    # SQLAlchemy's session.add is synchronous; flush is awaited.
+    # SQLAlchemy's session.add is synchronous; commit is awaited. The
+    # video-import job helpers commit (the orchestrator owns a manual session
+    # that async_session_factory does NOT auto-commit) — match vision/jobs.py.
     db = MagicMock()
     db.add = MagicMock()
+    db.commit = AsyncMock()
     db.flush = AsyncMock()
     return db
 

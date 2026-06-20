@@ -32,7 +32,7 @@ async def create_job(
         auto_advance_stage2=auto_advance_stage2,
     )
     db.add(job)
-    await db.flush()
+    await db.commit()
     return job
 
 
@@ -64,7 +64,7 @@ async def mark_running(
     """Transition a job to running, stamping ``started_at``."""
     job.status = "running"
     job.started_at = utcnow()
-    await db.flush()
+    await db.commit()
     return job
 
 
@@ -84,7 +84,7 @@ async def mark_completed(
     job.frames_masked = frames_masked
     job.frames_dropped = frames_dropped
     job.new_note_version = new_note_version
-    await db.flush()
+    await db.commit()
     return job
 
 
@@ -97,7 +97,7 @@ async def mark_failed(
     job.status = "failed"
     job.completed_at = utcnow()
     job.error_message = reason[:500]
-    await db.flush()
+    await db.commit()
     return job
 
 
@@ -106,5 +106,5 @@ async def mark_raw_video_purged(
 ) -> VideoImportJobModel:
     """Stamp ``raw_video_purged_at`` once the uploaded video is deleted."""
     job.raw_video_purged_at = utcnow()
-    await db.flush()
+    await db.commit()
     return job
