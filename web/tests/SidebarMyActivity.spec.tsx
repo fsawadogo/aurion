@@ -26,6 +26,11 @@ vi.mock("@/lib/api", () => ({
 
 vi.mock("@/lib/portal-api", () => ({
   getMyProfile: vi.fn(),
+  // VID-10 — the sidebar fetches portal feature flags to gate the
+  // video-import upload entries. Default to disabled in tests.
+  getPortalFeatureFlags: vi.fn(() =>
+    Promise.resolve({ video_import_enabled: false }),
+  ),
 }));
 
 // Sidebar pulls in `next-themes`; default the hook to a no-op
