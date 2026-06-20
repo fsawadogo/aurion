@@ -185,6 +185,11 @@ class FeatureFlagsConfig(BaseModel):
     # with real PHI turns this on. Same opt-in posture as
     # `measurement_enabled`.
     video_import_enabled: bool = False
+    # VID-04 — when a server-masked frame has ZERO detected faces, drop it
+    # (default, conservative: a missed face must never be stored unblurred)
+    # vs keep it re-encoded. Compliance may flip this to False once the
+    # detector's recall is validated, to retain face-free clinical frames.
+    video_import_drop_zero_face_frames: bool = True
     # Eval-team can flip `visual_evidence_mode` per-session for evaluation
     # runs even when the pilot-wide default is `FRAMES_ONLY`. Mirrors the
     # `per_session_provider_override` pattern.

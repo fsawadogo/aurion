@@ -34,11 +34,12 @@ from app.core.audit_events import AuditEventType
 from app.core.database import async_session_factory, get_db
 from app.core.models import TranscriptModel
 from app.core.s3 import (
+    FRAMES_BUCKET,
     VIDEO_IMPORTS_BUCKET,
     generate_presigned_evidence_url,
     get_s3_client,
 )
-from app.core.types import SessionState, Transcript
+from app.core.types import MaskingProof, SessionState, Transcript
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.cleanup.service import purge_raw_video
@@ -297,15 +298,44 @@ async def _extract_and_mask_frames(
     fps = get_config().pipeline.video_import_fps
     frames = await extract_frames_at_windows(video_path, windows, fps)
 
+    drop_zero = get_config().feature_flags.video_import_drop_zero_face_frames
+    s3 = get_s3_client()
     masked = 0
     dropped = 0
-    for _ts_ms, jpg_bytes in frames:
-        result = mask_frame(jpg_bytes)
+    for ts_ms, jpg_bytes in frames:
+        result = mask_frame(jpg_bytes, drop_zero_face=drop_zero)
         if result.status == "success" and result.image_bytes is not None:
-            # VID-04 stores the masked JPEG to frames/{sid}/{ts}.jpg with a
-            # server-issued MaskingProof + SERVER_MASKING_APPLIED audit here.
+            # Server-issued masking proof — same contract the iOS frame path
+            # validates (P0-02). Constructing it asserts the success invariant
+            # before the masked frame is stored.
+            MaskingProof(
+                frame_type="video",
+                masking_status="success",
+                faces_detected=result.faces_detected,
+                phi_regions_redacted=0,
+            )
+            # Store under the SAME key shape the vision pipeline already reads.
+            s3.put_object(
+                Bucket=FRAMES_BUCKET,
+                Key=f"frames/{session_id}/{ts_ms}.jpg",
+                Body=result.image_bytes,
+                ContentType="image/jpeg",
+            )
+            await write_audit(
+                session_id,
+                AuditEventType.SERVER_MASKING_APPLIED,
+                timestamp_ms=ts_ms,
+                faces_detected=result.faces_detected,
+                faces_blurred=result.faces_blurred,
+            )
             masked += 1
         else:
+            await write_audit(
+                session_id,
+                AuditEventType.SERVER_MASKING_FAILED,
+                timestamp_ms=ts_ms,
+                reason=result.reason or "unknown",
+            )
             dropped += 1
     return (len(frames), masked, dropped)
 

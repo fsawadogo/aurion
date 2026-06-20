@@ -130,33 +130,76 @@ async def test_stage1_failure_still_purged_once_and_marked_failed() -> None:
         _stop(started)
 
 
-@pytest.mark.asyncio
-async def test_extract_and_mask_frames_counts_stub_drops_all() -> None:
-    """VID-03: with the masking stub, every extracted frame is DROPPED and
-    nothing is stored — frames_extracted=N, masked=0, dropped=N."""
+def _db_with_transcript(sid, *, trigger=True):
     from app.core.types import Transcript, TranscriptSegment
 
-    sid = uuid.uuid4()
     seg = TranscriptSegment(
-        id="seg_001", start_ms=1000, end_ms=2000, text="rom", is_visual_trigger=True
+        id="seg_001", start_ms=1000, end_ms=2000, text="rom", is_visual_trigger=trigger
     )
     transcript = Transcript(session_id=str(sid), provider_used="whisper", segments=[seg])
     row = SimpleNamespace(transcript_json=transcript.model_dump_json())
-
     result_obj = MagicMock()
     result_obj.scalar_one_or_none = MagicMock(return_value=row)
     db = AsyncMock()
     db.execute = AsyncMock(return_value=result_obj)
+    return db
 
-    fake_frames = [(1000, b"\xff\xd8a"), (1500, b"\xff\xd8b"), (2000, b"\xff\xd8c")]
+
+@pytest.mark.asyncio
+async def test_extract_and_mask_frames_drops_audit_failures() -> None:
+    """A masking failure stores NOTHING and audits SERVER_MASKING_FAILED."""
+    sid = uuid.uuid4()
+    db = _db_with_transcript(sid)
+    s3 = MagicMock()
+    fake_frames = [(1000, b"x"), (1500, b"y"), (2000, b"z")]
     with patch.object(
         vi, "extract_frames_at_windows", AsyncMock(return_value=fake_frames)
-    ), patch.object(vi, "get_frame_window_ms", MagicMock(return_value=3000)):
+    ), patch.object(vi, "get_frame_window_ms", MagicMock(return_value=3000)), \
+        patch.object(vi, "get_s3_client", MagicMock(return_value=s3)), \
+        patch.object(vi, "write_audit", AsyncMock()) as audit, \
+        patch.object(
+            vi, "mask_frame",
+            MagicMock(return_value=SimpleNamespace(
+                status="failed", image_bytes=None, faces_detected=0,
+                faces_blurred=0, reason="no_face_detected")),
+        ):
         extracted, masked, dropped = await vi._extract_and_mask_frames(
             db, sid, "/tmp/v.mp4"
         )
 
-    assert (extracted, masked, dropped) == (3, 0, 3)  # stub drops all → none stored
+    assert (extracted, masked, dropped) == (3, 0, 3)
+    s3.put_object.assert_not_called()  # nothing stored
+    events = [c.args[1] for c in audit.await_args_list]
+    assert all(e == AuditEventType.SERVER_MASKING_FAILED for e in events)
+    assert len(events) == 3
+
+
+@pytest.mark.asyncio
+async def test_extract_and_mask_frames_stores_successes() -> None:
+    """A masked frame is put to frames/{sid}/{ts}.jpg + SERVER_MASKING_APPLIED."""
+    sid = uuid.uuid4()
+    db = _db_with_transcript(sid)
+    s3 = MagicMock()
+    with patch.object(
+        vi, "extract_frames_at_windows", AsyncMock(return_value=[(1500, b"raw")])
+    ), patch.object(vi, "get_frame_window_ms", MagicMock(return_value=3000)), \
+        patch.object(vi, "get_s3_client", MagicMock(return_value=s3)), \
+        patch.object(vi, "write_audit", AsyncMock()) as audit, \
+        patch.object(
+            vi, "mask_frame",
+            MagicMock(return_value=SimpleNamespace(
+                status="success", image_bytes=b"masked-jpeg", faces_detected=1,
+                faces_blurred=1, reason=None)),
+        ):
+        extracted, masked, dropped = await vi._extract_and_mask_frames(
+            db, sid, "/tmp/v.mp4"
+        )
+
+    assert (extracted, masked, dropped) == (1, 1, 0)
+    _, kwargs = s3.put_object.call_args
+    assert kwargs["Key"] == f"frames/{sid}/1500.jpg"
+    assert kwargs["Body"] == b"masked-jpeg"
+    assert audit.await_args.args[1] == AuditEventType.SERVER_MASKING_APPLIED
 
 
 @pytest.mark.asyncio

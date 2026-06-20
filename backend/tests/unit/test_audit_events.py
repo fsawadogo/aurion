@@ -175,6 +175,8 @@ EXPECTED_VALUES: dict[str, str] = {
     "VIDEO_IMPORT_FAILED": "video_import_failed",
     "CONSENT_ATTESTED": "consent_attested",
     "RAW_VIDEO_PURGED": "raw_video_purged",
+    "SERVER_MASKING_APPLIED": "server_masking_applied",
+    "SERVER_MASKING_FAILED": "server_masking_failed",
 }
 
 

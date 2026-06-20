@@ -345,6 +345,14 @@ class AuditEventType(StrEnum):
     VIDEO_IMPORT_FAILED = "video_import_failed"
     CONSENT_ATTESTED = "consent_attested"
     RAW_VIDEO_PURGED = "raw_video_purged"
+    # Server-side masking provenance (VID-04 — the trust-boundary change).
+    # The server (not iOS) masked an extracted frame. SERVER_MASKING_APPLIED
+    # fires per stored frame (faces detected/blurred + timestamp); _FAILED
+    # fires per dropped frame (bounded reason). PHI-free: counts + timestamp +
+    # reason only, never an image or S3 key. These let compliance prove 100%
+    # server-side masking before any frame reached a vision provider.
+    SERVER_MASKING_APPLIED = "server_masking_applied"
+    SERVER_MASKING_FAILED = "server_masking_failed"
 
 
 # ── Q-03 — kwarg whitelist ────────────────────────────────────────────────
@@ -899,6 +907,13 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     # only (the key is `video-imports/{session_id}/{uuid}.mp4` — session
     # UUID, not PHI), never a body. Failure reuses CLEANUP_PARTIAL_FAILURE.
     AuditEventType.RAW_VIDEO_PURGED: frozenset({"bucket", "s3_key"}),
+    # Server-side masking (VID-04). Counts + timestamp only — NEVER an image,
+    # an S3 key, or a body. `reason` on _FAILED is a bounded enum string
+    # (e.g. "no_face_detected", "decode_error").
+    AuditEventType.SERVER_MASKING_APPLIED: frozenset(
+        {"timestamp_ms", "faces_detected", "faces_blurred"}
+    ),
+    AuditEventType.SERVER_MASKING_FAILED: frozenset({"timestamp_ms", "reason"}),
 }
 
 
