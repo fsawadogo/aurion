@@ -614,6 +614,12 @@ async def _run_video_import_in_background(
                 await write_audit(session_id, AuditEventType.STAGE1_STARTED)
 
                 await run_stage1(db, session, audio_bytes)  # → AWAITING_REVIEW
+                # Persist the transcript + Stage 1 note + state transition now.
+                # The orchestrator owns a manual session (async_session_factory
+                # does NOT auto-commit — unlike the request-scoped get_db), so
+                # without this the whole RDS transaction rolls back when the
+                # task ends and the note is silently lost.
+                await db.commit()
 
                 # 2. Extract + mask frames at the transcript's trigger windows.
                 #    VID-03: the masking stub drops every frame, so nothing is
