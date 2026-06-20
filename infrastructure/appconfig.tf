@@ -172,6 +172,10 @@ resource "aws_appconfig_configuration_profile" "main" {
             # default supplies the value until the CLI hosted-version push
             # ships the key live.
             media_review_retention_days = { type = "integer", minimum = 1, maximum = 30 }
+            # Video-import per-window frame sample rate (VID-03). Bounds 1..10
+            # MUST match PipelineConfig.video_import_fps. NOT in `required` so
+            # an older document validates — the Pydantic default (1) supplies it.
+            video_import_fps = { type = "integer", minimum = 1, maximum = 10 }
           }
         }
         feature_flags = {
@@ -223,6 +227,13 @@ resource "aws_appconfig_configuration_profile" "main" {
             # additionalProperties = false — the backend Pydantic schema
             # supplies the default.
             media_review_retention_enabled = { type = "boolean" }
+            # Web-portal encounter-video import (VID-01..11). Master gate +
+            # the zero-face-frame drop policy. NOT in `required` so older
+            # documents without the keys still validate under
+            # additionalProperties = false — the backend Pydantic schema
+            # defaults both (video_import_enabled false, drop True).
+            video_import_enabled               = { type = "boolean" }
+            video_import_drop_zero_face_frames = { type = "boolean" }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in
