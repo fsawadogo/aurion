@@ -879,3 +879,11 @@ export async function getVideoImportStatus(
   );
   return r.json();
 }
+
+/** Read-only portal feature flags for the current user (VID-10 nav gating). */
+export async function getPortalFeatureFlags(): Promise<{
+  video_import_enabled: boolean;
+}> {
+  const r = await fetchWithAuth("/api/v1/me/feature-flags");
+  return r.json();
+}

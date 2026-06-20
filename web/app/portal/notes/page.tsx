@@ -261,6 +261,11 @@ export default function PortalSessionsInboxPage() {
                   <div className="flex-1 min-w-0">
                     <p className="font-medium text-navy-800 truncate flex items-center gap-2">
                       {humanSpecialty(s.specialty)}
+                      {s.import_source === "video_upload" && (
+                        <span className="inline-flex items-center rounded-full bg-navy-50 px-2 py-0.5 text-[10px] font-semibold text-navy-600 ring-1 ring-inset ring-navy-600/20">
+                          {t("uploaded")}
+                        </span>
+                      )}
                       {s.external_reference_id && (
                         <span className="inline-flex items-center rounded-full bg-gold-50 px-2 py-0.5 text-[10px] font-mono font-semibold text-navy-700 ring-1 ring-inset ring-gold-600/20">
                           {s.external_reference_id}

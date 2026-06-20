@@ -24,7 +24,8 @@
       "systemTemplates": "Modèles système",
       "alerts": "Alertes",
       "complianceReports": "Rapports de conformité",
-      "uploadEncounter": "Téléverser une vidéo"
+      "uploadEncounter": "Téléverser une vidéo",
+      "evalUpload": "Téléversement éval"
     },
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
@@ -674,7 +675,8 @@
       "failed": "Échec",
       "recording": "Enregistrement",
       "paused": "Pause"
-    }
+    },
+    "uploaded": "Téléversé"
   },
   "Profile": {
     "eyebrow": "Portail du clinicien",
