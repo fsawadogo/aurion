@@ -189,7 +189,9 @@ resource "aws_iam_role_policy" "api_task_policy" {
           aws_s3_bucket.frames.arn,
           "${aws_s3_bucket.frames.arn}/*",
           aws_s3_bucket.eval.arn,
-          "${aws_s3_bucket.eval.arn}/*"
+          "${aws_s3_bucket.eval.arn}/*",
+          aws_s3_bucket.video_imports.arn,
+          "${aws_s3_bucket.video_imports.arn}/*"
         ]
       },
       # DynamoDB — read/write audit log (append-only at application layer)
@@ -547,6 +549,7 @@ resource "aws_ecs_task_definition" "api" {
         { name = "S3_AUDIO_BUCKET", value = aws_s3_bucket.audio.id },
         { name = "S3_FRAMES_BUCKET", value = aws_s3_bucket.frames.id },
         { name = "S3_EVAL_BUCKET", value = aws_s3_bucket.eval.id },
+        { name = "S3_VIDEO_IMPORTS_BUCKET", value = aws_s3_bucket.video_imports.id },
         { name = "APPCONFIG_APP_ID", value = aws_appconfig_application.main.id },
         { name = "APPCONFIG_ENV_ID", value = aws_appconfig_environment.main.environment_id },
         { name = "APPCONFIG_PROFILE_ID", value = aws_appconfig_configuration_profile.main.configuration_profile_id },

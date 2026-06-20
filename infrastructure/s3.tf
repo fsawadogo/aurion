@@ -312,3 +312,120 @@ resource "aws_s3_bucket_logging" "eval" {
   target_bucket = aws_s3_bucket.audit_logs.id
   target_prefix = "s3-access/eval/"
 }
+
+# =============================================================================
+# Video Imports Bucket (VID-08) — raw uploaded encounter videos, transient.
+#
+# A clinician/eval uploads a recorded encounter via a presigned PUT straight
+# to this bucket; the backend extracts audio + masks frames, then PURGES the
+# raw video (app/modules/cleanup/service.py::purge_raw_video). This is the
+# only place a raw, pre-masking patient video ever lands, so it is isolated in
+# its own bucket with a SHORT lifecycle TTL as the backstop if the in-band
+# purge ever fails, and CORS scoped to the portal origin for the browser PUT.
+# =============================================================================
+
+resource "aws_s3_bucket" "video_imports" {
+  bucket        = "aurion-video-imports-${var.environment}-${data.aws_caller_identity.current.account_id}"
+  force_destroy = var.environment == "dev"
+
+  tags = {
+    Name = "aurion-video-imports-${var.environment}"
+  }
+}
+
+resource "aws_s3_bucket_versioning" "video_imports" {
+  bucket = aws_s3_bucket.video_imports.id
+  versioning_configuration {
+    status = "Disabled"
+  }
+}
+
+resource "aws_s3_bucket_server_side_encryption_configuration" "video_imports" {
+  bucket = aws_s3_bucket.video_imports.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm     = "aws:kms"
+      kms_master_key_id = aws_kms_key.main.arn
+    }
+    bucket_key_enabled = true
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "video_imports" {
+  bucket = aws_s3_bucket.video_imports.id
+
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+# Short backstop TTL — raw video is the most sensitive artifact and is meant to
+# be purged in-band immediately after extraction. The lifecycle floor catches
+# anything a failed/abandoned job leaves behind. Whole-day granular.
+resource "aws_s3_bucket_lifecycle_configuration" "video_imports" {
+  bucket = aws_s3_bucket.video_imports.id
+
+  rule {
+    id     = "expire-raw-video"
+    status = "Enabled"
+
+    filter {}
+
+    expiration {
+      days = var.video_import_retention_days
+    }
+
+    # Abandoned presigned-PUT multipart uploads (VID-10) must not accumulate.
+    abort_incomplete_multipart_upload {
+      days_after_initiation = 1
+    }
+  }
+}
+
+# CORS for the browser presigned PUT from the portal origin. Exposes ETag so
+# the multipart-complete path (VID-10) can read it. Scoped to the portal
+# subdomain — not a public bucket.
+resource "aws_s3_bucket_cors_configuration" "video_imports" {
+  bucket = aws_s3_bucket.video_imports.id
+
+  cors_rule {
+    allowed_methods = ["PUT", "GET"]
+    allowed_origins = ["https://${var.web_portal_subdomain}"]
+    allowed_headers = ["*"]
+    expose_headers  = ["ETag"]
+    max_age_seconds = 3000
+  }
+}
+
+resource "aws_s3_bucket_policy" "video_imports_ssl" {
+  bucket = aws_s3_bucket.video_imports.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid       = "EnforceSSL"
+        Effect    = "Deny"
+        Principal = "*"
+        Action    = "s3:*"
+        Resource = [
+          aws_s3_bucket.video_imports.arn,
+          "${aws_s3_bucket.video_imports.arn}/*"
+        ]
+        Condition = {
+          Bool = {
+            "aws:SecureTransport" = "false"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_s3_bucket_logging" "video_imports" {
+  bucket        = aws_s3_bucket.video_imports.id
+  target_bucket = aws_s3_bucket.audit_logs.id
+  target_prefix = "s3-access/video-imports/"
+}

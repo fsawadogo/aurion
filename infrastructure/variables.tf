@@ -39,6 +39,12 @@ variable "media_retention_days" {
   default     = 1
 }
 
+variable "video_import_retention_days" {
+  description = "Backstop TTL (whole days) for the video-imports S3 bucket (VID-08). Raw uploaded encounter videos are the most sensitive artifact and are purged in-band immediately after audio/frame extraction; this lifecycle floor only catches what a failed/abandoned import leaves behind. Kept tight (1) in every env — there is no review use case for the raw video."
+  type        = number
+  default     = 1
+}
+
 # -----------------------------------------------------------------------------
 # RDS
 # -----------------------------------------------------------------------------
