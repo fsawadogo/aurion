@@ -79,6 +79,12 @@ class PipelineConfig(BaseModel):
     frame_window_procedural_ms: int = Field(default=7000, ge=1000, le=60000)
     screen_capture_fps: int = Field(default=2, ge=1, le=10)
     video_capture_fps: int = Field(default=1, ge=1, le=10)
+    # Per-window sample rate for server-side frame extraction from an
+    # UPLOADED encounter video (VID-03). Distinct from `video_capture_fps`
+    # (the iOS live-capture rate): this is how densely the import job samples
+    # frames inside each trigger window before masking. 1 fps keeps the
+    # vision cost + the number of masked frames bounded.
+    video_import_fps: int = Field(default=1, ge=1, le=10)
     # ── Dual-mode visual evidence ──────────────────────────────────────
     # Default `FRAMES_ONLY` so every existing call site is byte-identical
     # to today's pilot build. The eval team flips per-session via the

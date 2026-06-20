@@ -25,18 +25,20 @@ from typing import Optional
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import get_owned_session_or_404, write_audit
 from app.api.v1.transcription import run_stage1
 from app.core.audit_events import AuditEventType
 from app.core.database import async_session_factory, get_db
+from app.core.models import TranscriptModel
 from app.core.s3 import (
     VIDEO_IMPORTS_BUCKET,
     generate_presigned_evidence_url,
     get_s3_client,
 )
-from app.core.types import SessionState
+from app.core.types import SessionState, Transcript
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.cleanup.service import purge_raw_video
@@ -49,7 +51,9 @@ from app.modules.session.service import (
     transition_session,
 )
 from app.modules.video_import import jobs
-from app.modules.video_import.extraction import extract_audio
+from app.modules.video_import.extraction import extract_audio, extract_frames_at_windows
+from app.modules.video_import.masking import mask_frame
+from app.modules.vision.service import get_frame_window_ms
 
 logger = logging.getLogger("aurion.api.video_import")
 
@@ -253,6 +257,59 @@ def _status_response(session, job) -> VideoImportStatusResponse:
 # ── Background orchestrator ───────────────────────────────────────────────
 
 
+async def _extract_and_mask_frames(
+    db: AsyncSession, session_id: uuid.UUID, video_path: str
+) -> tuple[int, int, int]:
+    """Extract frames at the transcript's trigger windows + mask each.
+
+    Returns ``(frames_extracted, frames_masked, frames_dropped)``.
+
+    VID-03: ``mask_frame`` is the stub that drops every frame, so nothing is
+    written to S3 — the import degrades to frames-absent. VID-04 swaps in real
+    OpenCV masking + the S3 store + ``SERVER_MASKING_APPLIED`` audit behind the
+    same call site (the success branch below). With the pilot's empty trigger
+    lists this is a no-op (zero trigger segments → zero frames).
+    """
+    row = (
+        await db.execute(
+            select(TranscriptModel).where(TranscriptModel.session_id == session_id)
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return (0, 0, 0)
+    try:
+        transcript = Transcript.model_validate_json(row.transcript_json)
+    except Exception:  # noqa: BLE001 — a corrupt transcript just skips frames
+        logger.warning("Unparseable transcript for session=%s — no frames", session_id)
+        return (0, 0, 0)
+
+    triggers = [s for s in transcript.segments if s.is_visual_trigger]
+    if not triggers:
+        return (0, 0, 0)
+
+    windows = [
+        (
+            s.start_ms - get_frame_window_ms(s.trigger_type),
+            s.end_ms + get_frame_window_ms(s.trigger_type),
+        )
+        for s in triggers
+    ]
+    fps = get_config().pipeline.video_import_fps
+    frames = await extract_frames_at_windows(video_path, windows, fps)
+
+    masked = 0
+    dropped = 0
+    for _ts_ms, jpg_bytes in frames:
+        result = mask_frame(jpg_bytes)
+        if result.status == "success" and result.image_bytes is not None:
+            # VID-04 stores the masked JPEG to frames/{sid}/{ts}.jpg with a
+            # server-issued MaskingProof + SERVER_MASKING_APPLIED audit here.
+            masked += 1
+        else:
+            dropped += 1
+    return (len(frames), masked, dropped)
+
+
 async def _run_video_import_in_background(
     session_id: uuid.UUID, job_id: uuid.UUID
 ) -> None:
@@ -280,40 +337,58 @@ async def _run_video_import_in_background(
         try:
             await jobs.mark_running(db, job)
 
-            # 1. Download raw video to task-local scratch + extract audio.
+            # The raw video stays on task-local disk through frame extraction
+            # (which needs the transcript's trigger windows from run_stage1),
+            # then the S3 copy is purged. The tmp dir is removed on block exit
+            # regardless of outcome.
             with tempfile.TemporaryDirectory() as tmp:
                 video_path = os.path.join(tmp, "in.mp4")
                 wav_path = os.path.join(tmp, "audio.wav")
                 client = get_s3_client()
                 client.download_file(VIDEO_IMPORTS_BUCKET, raw_key, video_path)
+
+                # 1. Extract audio → shared Stage 1 pipeline.
                 await extract_audio(video_path, wav_path)
                 with open(wav_path, "rb") as fh:
                     audio_bytes = fh.read()
 
-            # 2. Purge the raw video immediately (fail-closed: a purge failure
-            #    aborts the job rather than leaving unmasked video in S3).
+                # Drive the state machine through the normal consent hard-gate:
+                # CONSENT_PENDING(consent_confirmed) → RECORDING → PROCESSING_STAGE1.
+                await transition_session(db, session, SessionState.RECORDING)
+                await write_audit(
+                    session_id, get_audit_event_for_state(SessionState.RECORDING)
+                )
+                await transition_session(db, session, SessionState.PROCESSING_STAGE1)
+                await write_audit(session_id, AuditEventType.STAGE1_STARTED)
+
+                await run_stage1(db, session, audio_bytes)  # → AWAITING_REVIEW
+
+                # 2. Extract + mask frames at the transcript's trigger windows.
+                #    VID-03: the masking stub drops every frame, so nothing is
+                #    written to S3 (frames-absent). VID-04 swaps in real masking
+                #    + S3 storage behind the same call.
+                extracted, masked, dropped = await _extract_and_mask_frames(
+                    db, session_id, video_path
+                )
+
+            # 3. Purge the raw video (fail-closed: a purge failure aborts the
+            #    job rather than leaving unmasked video in S3).
             await purge_raw_video(str(session_id), raw_key)
             await jobs.mark_raw_video_purged(db, job)
 
-            # 3. Drive the state machine through the normal consent hard-gate:
-            #    CONSENT_PENDING(consent_confirmed) → RECORDING → PROCESSING_STAGE1.
-            await transition_session(db, session, SessionState.RECORDING)
-            await write_audit(
-                session_id, get_audit_event_for_state(SessionState.RECORDING)
+            await jobs.mark_completed(
+                db,
+                job,
+                frames_extracted=extracted,
+                frames_masked=masked,
+                frames_dropped=dropped,
             )
-            await transition_session(db, session, SessionState.PROCESSING_STAGE1)
-            await write_audit(session_id, AuditEventType.STAGE1_STARTED)
-
-            # 4. Shared Stage 1 pipeline → AWAITING_REVIEW + note delivered.
-            await run_stage1(db, session, audio_bytes)
-
-            await jobs.mark_completed(db, job)
             await write_audit(
                 session_id,
                 AuditEventType.VIDEO_IMPORT_COMPLETE,
-                frames_extracted=0,
-                frames_masked=0,
-                frames_dropped=0,
+                frames_extracted=extracted,
+                frames_masked=masked,
+                frames_dropped=dropped,
             )
         except Exception as exc:  # noqa: BLE001 — deliberately catch all
             logger.exception(
