@@ -711,22 +711,6 @@ struct DashboardView: View {
                             if selectedEncounterType == "doctor_team_patient" {
                                 teamMemberEntry
                             }
-
-                            // 3 — Team member(s) + Patient (attending NOT
-                            // present — a resident / nurse / fellow sees the
-                            // patient on their own).
-                            AurionSelectableCard(
-                                icon: "stethoscope",
-                                title: L("encounter.teamOnly.title"),
-                                subtitle: L("encounter.teamOnly.sub"),
-                                selected: selectedEncounterType == "team_patient"
-                            ) {
-                                selectedEncounterType = "team_patient"
-                            }
-
-                            if selectedEncounterType == "team_patient" {
-                                teamMemberEntry
-                            }
                         }
                     }
                     .aurionScreenEdge()
