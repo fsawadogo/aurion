@@ -17,6 +17,11 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import PageHeader from "@/components/portal/PageHeader";
 import {
+  createAdminVideoImport,
+  getAdminVideoImportStatus,
+  processAdminVideoImport,
+} from "@/lib/api";
+import {
   createVideoImport,
   getVideoImportStatus,
   processVideoImport,
@@ -75,9 +80,31 @@ function putWithProgress(
   });
 }
 
-export default function VideoImportClient() {
+interface VideoImportClientProps {
+  /** "clinician" (default) → /me/video-imports + redirect to My Notes.
+   *  "admin" → /admin/video-imports (eval/admin) + redirect to /sessions. */
+  surface?: "clinician" | "admin";
+}
+
+export default function VideoImportClient({
+  surface = "clinician",
+}: VideoImportClientProps) {
   const t = useTranslations("VideoImport");
   const tSpec = useTranslations("Specialties");
+
+  const api =
+    surface === "admin"
+      ? {
+          create: createAdminVideoImport,
+          process: processAdminVideoImport,
+          status: getAdminVideoImportStatus,
+        }
+      : {
+          create: createVideoImport,
+          process: processVideoImport,
+          status: getVideoImportStatus,
+        };
+  const reviewBase = surface === "admin" ? "/sessions" : "/portal/notes";
 
   const [file, setFile] = useState<File | null>(null);
   const [specialty, setSpecialty] = useState("general");
@@ -124,7 +151,7 @@ export default function VideoImportClient() {
 
   async function poll(sessionId: string): Promise<void> {
     try {
-      const s = await getVideoImportStatus(sessionId);
+      const s = await api.status(sessionId);
       if (s.status === "failed") {
         setError(s.error_message || t("errors.processingFailed"));
         setPhase("error");
@@ -133,7 +160,7 @@ export default function VideoImportClient() {
       setStageIndex(mapStage(s));
       if (s.status === "completed" || s.session_state === "AWAITING_REVIEW") {
         // Static-export: hard-navigate to the dynamic note-review route.
-        window.location.href = `/portal/notes/${sessionId}`;
+        window.location.href = `${reviewBase}/${sessionId}`;
         return;
       }
       window.setTimeout(() => void poll(sessionId), POLL_MS);
@@ -148,7 +175,7 @@ export default function VideoImportClient() {
     setError(null);
     setUploadPct(0);
     try {
-      const created = await createVideoImport({
+      const created = await api.create({
         specialty,
         encounter_type: encounterType,
         output_language: language,
@@ -158,7 +185,7 @@ export default function VideoImportClient() {
       await putWithProgress(created.upload_url, file, setUploadPct);
       setPhase("processing");
       setStageIndex(0);
-      await processVideoImport(created.session_id);
+      await api.process(created.session_id);
       void poll(created.session_id);
     } catch (e) {
       setError(e instanceof Error ? e.message : t("errors.uploadFailed"));

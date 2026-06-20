@@ -87,6 +87,9 @@ export interface Session {
   provider_used: string;
   /** Who/what was being recorded — "doctor_patient" by default. */
   encounter_type?: string;
+  /** Provenance: "video_upload" for web-portal encounter-video imports,
+   *  absent/null for live iOS captures. Drives the "Uploaded" badge. */
+  import_source?: string | null;
   /** Participants present at the encounter (#275). Owner-gated, same as
    * external_reference_id. Anonymous role chips carry `name: null` and
    * no PHI. Absent when none were set or the caller isn't the owner. */

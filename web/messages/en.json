@@ -24,7 +24,8 @@
       "systemTemplates": "System Templates",
       "alerts": "Alerts",
       "complianceReports": "Compliance Reports",
-      "uploadEncounter": "Upload Video"
+      "uploadEncounter": "Upload Video",
+      "evalUpload": "Eval Upload"
     },
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
@@ -674,7 +675,8 @@
       "failed": "Failed",
       "recording": "Recording",
       "paused": "Paused"
-    }
+    },
+    "uploaded": "Uploaded"
   },
   "Profile": {
     "eyebrow": "Clinician portal",

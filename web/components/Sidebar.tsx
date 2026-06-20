@@ -33,6 +33,7 @@ import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import { getMe, logout } from "@/lib/api";
+import { getPortalFeatureFlags } from "@/lib/portal-api";
 import { getMyProfile } from "@/lib/portal-api";
 import { applyAccent } from "@/lib/accent";
 import type { CurrentUser, UserRole } from "@/types";
@@ -87,6 +88,9 @@ const navigation: {
   // flag-gated (media_review_retention_enabled) and shows a "not enabled"
   // state when the backend 403s.
   { tKey: "capturedMedia", href: "/portal/media", icon: Film, roles: ["COMPLIANCE_OFFICER", "EVAL_TEAM", "ADMIN"] },
+  // Admin/eval encounter-video upload (VID-10). Hidden unless the backend
+  // video_import_enabled flag is on (see the feature-flag gate below).
+  { tKey: "evalUpload", href: "/portal/admin/upload", icon: UploadCloud, roles: ["EVAL_TEAM", "ADMIN"] },
   { tKey: "eval",       href: "/eval",      icon: FlaskConical,  roles: ["EVAL_TEAM", "ADMIN"] },
   // ── Clinician portal surface (PR-C onward) ──
   // CLINICIAN-only personal workspace. Admin/eval/compliance roles do NOT
@@ -117,6 +121,10 @@ export default function Sidebar() {
   const tCommon = useTranslations("Common");
   const [mobileOpen, setMobileOpen] = useState(false);
   const [user, setUser] = useState<CurrentUser | null>(null);
+  // null = unknown (loading); gates the upload nav entries (VID-10).
+  const [videoImportEnabled, setVideoImportEnabled] = useState<boolean | null>(
+    null,
+  );
 
   // Desktop collapsed state — persists to localStorage so the choice
   // survives reloads. Initialized to false on the server to avoid
@@ -140,6 +148,21 @@ export default function Sidebar() {
         // 401 already routes to /login via fetchWithAuth; any other failure
         // means the sidebar stays empty rather than showing items the user
         // can't actually open (the backend will 403 those anyway).
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // Portal feature flags — gates the video-import upload nav entries.
+  useEffect(() => {
+    let cancelled = false;
+    getPortalFeatureFlags()
+      .then((f) => {
+        if (!cancelled) setVideoImportEnabled(f.video_import_enabled);
+      })
+      .catch(() => {
+        if (!cancelled) setVideoImportEnabled(false);
       });
     return () => {
       cancelled = true;
@@ -222,7 +245,18 @@ export default function Sidebar() {
     });
   };
 
-  const visibleNav = user ? navigation.filter((item) => item.roles.includes(user.role)) : [];
+  // Hide the video-import upload entries until the backend feature flag is on
+  // (VID-10). Default-hidden while the flag is loading so a dead link never
+  // flashes; revealed once /me/feature-flags confirms it's enabled.
+  const UPLOAD_KEYS = ["uploadEncounter", "evalUpload"];
+  const visibleNav = user
+    ? navigation
+        .filter((item) => item.roles.includes(user.role))
+        .filter(
+          (item) =>
+            !UPLOAD_KEYS.includes(item.tKey) || videoImportEnabled === true,
+        )
+    : [];
   const initial = user?.full_name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "?";
 
   /** Content layout — shared between the mobile overlay and the

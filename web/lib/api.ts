@@ -874,3 +874,42 @@ export async function getEvalAssignees(): Promise<EvalAssignee[]> {
   const res = await fetchWithAuth("/api/v1/admin/eval/assignees");
   return res.json();
 }
+
+// ── Admin / eval video import (VID-10) ────────────────────────────────────
+// ADMIN + EVAL_TEAM surface mirroring the clinician /me/video-imports calls,
+// against /api/v1/admin/video-imports. Same request/response shapes; the
+// backend attributes the session (on_behalf_of) + auto-advances Stage 2.
+import type {
+  VideoImportCreateBody,
+  VideoImportCreated,
+  VideoImportStatus,
+} from "@/lib/portal-api";
+
+export async function createAdminVideoImport(
+  body: VideoImportCreateBody,
+): Promise<VideoImportCreated> {
+  const res = await fetchWithAuth("/api/v1/admin/video-imports", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+export async function processAdminVideoImport(
+  sessionId: string,
+): Promise<VideoImportStatus> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/video-imports/${sessionId}/process`,
+    { method: "POST" },
+  );
+  return res.json();
+}
+
+export async function getAdminVideoImportStatus(
+  sessionId: string,
+): Promise<VideoImportStatus> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/video-imports/${sessionId}/status`,
+  );
+  return res.json();
+}
