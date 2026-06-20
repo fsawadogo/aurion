@@ -77,6 +77,7 @@ def _patches(job, session, *, extract=None, stage1=None, purge=None):
         patch.object(vi, "write_audit", AsyncMock()),
         patch.object(vi, "run_stage1", AsyncMock(side_effect=stage1)),
         patch.object(vi, "purge_raw_video", AsyncMock(side_effect=purge)),
+        patch.object(vi, "_extract_and_mask_frames", AsyncMock(return_value=(0, 0, 0))),
         patch.object(vi, "try_publish_alert", AsyncMock()),
     ]
     for p in started:
@@ -127,6 +128,57 @@ async def test_stage1_failure_still_purged_once_and_marked_failed() -> None:
         vi.try_publish_alert.assert_awaited_once()
     finally:
         _stop(started)
+
+
+@pytest.mark.asyncio
+async def test_extract_and_mask_frames_counts_stub_drops_all() -> None:
+    """VID-03: with the masking stub, every extracted frame is DROPPED and
+    nothing is stored — frames_extracted=N, masked=0, dropped=N."""
+    from app.core.types import Transcript, TranscriptSegment
+
+    sid = uuid.uuid4()
+    seg = TranscriptSegment(
+        id="seg_001", start_ms=1000, end_ms=2000, text="rom", is_visual_trigger=True
+    )
+    transcript = Transcript(session_id=str(sid), provider_used="whisper", segments=[seg])
+    row = SimpleNamespace(transcript_json=transcript.model_dump_json())
+
+    result_obj = MagicMock()
+    result_obj.scalar_one_or_none = MagicMock(return_value=row)
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=result_obj)
+
+    fake_frames = [(1000, b"\xff\xd8a"), (1500, b"\xff\xd8b"), (2000, b"\xff\xd8c")]
+    with patch.object(
+        vi, "extract_frames_at_windows", AsyncMock(return_value=fake_frames)
+    ), patch.object(vi, "get_frame_window_ms", MagicMock(return_value=3000)):
+        extracted, masked, dropped = await vi._extract_and_mask_frames(
+            db, sid, "/tmp/v.mp4"
+        )
+
+    assert (extracted, masked, dropped) == (3, 0, 3)  # stub drops all → none stored
+
+
+@pytest.mark.asyncio
+async def test_extract_and_mask_frames_no_triggers_is_noop() -> None:
+    """Pilot reality: empty trigger lists → zero frames extracted."""
+    from app.core.types import Transcript, TranscriptSegment
+
+    sid = uuid.uuid4()
+    seg = TranscriptSegment(
+        id="seg_001", start_ms=0, end_ms=500, text="hi", is_visual_trigger=False
+    )
+    transcript = Transcript(session_id=str(sid), provider_used="whisper", segments=[seg])
+    row = SimpleNamespace(transcript_json=transcript.model_dump_json())
+    result_obj = MagicMock()
+    result_obj.scalar_one_or_none = MagicMock(return_value=row)
+    db = AsyncMock()
+    db.execute = AsyncMock(return_value=result_obj)
+
+    extract = AsyncMock()
+    with patch.object(vi, "extract_frames_at_windows", extract):
+        assert await vi._extract_and_mask_frames(db, sid, "/tmp/v.mp4") == (0, 0, 0)
+    extract.assert_not_awaited()  # no triggers → ffmpeg never invoked
 
 
 @pytest.mark.asyncio
