@@ -10,6 +10,12 @@ asyncpg>=0.29.0,<1.0.0
 alembic>=1.13.0,<2.0.0
 psycopg2-binary>=2.9.9,<3.0.0  # sync driver used by alembic migrations
 
+# Server-side frame masking (VID-04). Headless build — no GUI/libGL deps.
+# Detection uses the bundled Haar cascade (cv2.data.haarcascades), so no
+# model binary is vendored. Used only by the dark video-import pipeline.
+opencv-python-headless>=4.9.0,<5.0.0
+numpy>=1.26.0,<3.0.0
+
 # AWS
 boto3>=1.34.0,<2.0.0
 botocore>=1.34.0,<2.0.0

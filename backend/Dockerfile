@@ -13,9 +13,12 @@ WORKDIR /app
 #
 # Image-size cost: ~70 MB. Acceptable for an API container that
 # already carries Python + torch transitive deps.
+# `ffmpeg` — clip-to-still fallback + video-import audio/frame extraction.
+# `libglib2.0-0` — runtime dep of opencv-python-headless (VID-04 masking).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl \
     ffmpeg \
+    libglib2.0-0 \
     && rm -rf /var/lib/apt/lists/*
 
 # Verify ffmpeg is reachable on PATH. Fails the build early if a
