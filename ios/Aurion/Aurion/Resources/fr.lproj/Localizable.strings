@@ -721,8 +721,6 @@
 "encounter.doctorPatient.sub" = "Visite individuelle standard";
 "encounter.doctorTeam.title" = "M\U00E9decin + membre(s) de l\U2019\U00E9quipe + patient";
 "encounter.doctorTeam.sub" = "M\U00E9decin pr\U00E9sent avec l\U2019\U00E9quipe soignante";
-"encounter.teamOnly.title" = "Membre(s) de l\U2019\U00E9quipe + patient";
-"encounter.teamOnly.sub" = "M\U00E9decin absent \U2014 un r\U00E9sident, une infirmi\U00E8re ou un fellow voit le patient";
 /* Cl\U00E9s h\U00E9rit\U00E9es (#321) : les anciennes options \U00AB \U00E9quipe \U00BB et \U00AB stagiaire \U00BB sont regroup\U00E9es dans les deux combinaisons ci-dessus. Conserv\U00E9es par s\U00E9curit\U00E9; plus r\U00E9f\U00E9renc\U00E9es. */
 "encounter.allied.title" = "Avec un membre de l\U2019\U00E9quipe";
 "encounter.allied.sub" = "Infirmi\U00E8re ou adjoint aussi pr\U00E9sent";
