@@ -75,6 +75,37 @@ async def test_create_sets_import_source_and_audits_attestation() -> None:
     assert resp.s3_key.startswith(f"video-imports/{session.id}/")
 
 
+@pytest.mark.asyncio
+async def test_admin_create_rejects_missing_consent() -> None:
+    from app.api.v1.admin import video_import as avi
+
+    body = avi.AdminCreateVideoImportRequest(specialty="general", consent_attested=False)
+    actor = SimpleNamespace(user_id=uuid.uuid4())
+    with pytest.raises(HTTPException) as exc:
+        await avi.admin_create_video_import(body, None, actor, AsyncMock())
+    assert exc.value.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_admin_create_uses_on_behalf_and_auto_advance() -> None:
+    from app.api.v1.admin import video_import as avi
+
+    on_behalf = uuid.uuid4()
+    actor = SimpleNamespace(user_id=uuid.uuid4())
+    body = avi.AdminCreateVideoImportRequest(
+        specialty="general", consent_attested=True,
+        on_behalf_of_clinician_id=on_behalf,
+    )
+    db = AsyncMock()
+    with patch.object(avi, "create_import_session", AsyncMock()) as create:
+        await avi.admin_create_video_import(body, None, actor, db)
+
+    _, kwargs = create.call_args
+    assert kwargs["clinician_id"] == on_behalf
+    assert kwargs["actor_id"] == actor.user_id
+    assert kwargs["auto_advance_stage2"] is True
+
+
 def test_status_response_maps_job_fields() -> None:
     session = SimpleNamespace(id=uuid.uuid4(), state=SessionState.AWAITING_REVIEW)
     job = SimpleNamespace(

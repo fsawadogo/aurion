@@ -114,31 +114,27 @@ class VideoImportStatusResponse(BaseModel):
 # ── Routes ────────────────────────────────────────────────────────────────
 
 
-@router.post("", response_model=CreateVideoImportResponse)
-async def create_video_import(
+async def create_import_session(
+    db: AsyncSession,
+    *,
+    clinician_id: uuid.UUID,
+    actor_id: uuid.UUID,
     body: CreateVideoImportRequest,
-    _: None = Depends(_require_enabled),
-    user: CurrentUser = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    """Create an import session + return a presigned PUT URL for the video.
+    auto_advance_stage2: bool = False,
+) -> CreateVideoImportResponse:
+    """Shared create logic for the clinician + admin video-import surfaces.
 
-    The session is created in CONSENT_PENDING with ``import_source`` set; the
-    consent attestation immediately confirms consent (CONSENT_ATTESTED), so
-    the orchestrator may later drive RECORDING → PROCESSING_STAGE1 through the
-    normal consent hard-gate. The raw video is uploaded by the client
-    straight to S3 via the returned presigned PUT (the backend never streams
-    the bytes).
+    Creates the import session (owned by ``clinician_id``), records the
+    consent attestation (audited under ``actor_id``), opens the job, and
+    presigns the upload PUT. ``auto_advance_stage2`` is stamped on the job so
+    the orchestrator runs Stage 2 automatically (admin/eval bulk runs).
+
+    The caller validates the consent attestation before calling this (the
+    hard gate) so the rejection message stays at the HTTP boundary.
     """
-    if not body.consent_attested:
-        raise HTTPException(
-            status_code=400,
-            detail="consent_attested must be true — consent is a hard gate.",
-        )
-
     session = await create_session(
         db,
-        clinician_id=user.user_id,
+        clinician_id=clinician_id,
         specialty=body.specialty,
         consultation_type=body.consultation_type,
         encounter_context=body.encounter_context,
@@ -153,12 +149,15 @@ async def create_video_import(
     await write_audit(
         session.id,
         AuditEventType.CONSENT_ATTESTED,
-        actor_id=str(user.user_id),
+        actor_id=str(actor_id),
         method=body.consent_method,
     )
 
     s3_key = f"video-imports/{session.id}/{uuid.uuid4()}.mp4"
-    job = await jobs.create_job(db, session.id, raw_video_s3_key=s3_key)
+    job = await jobs.create_job(
+        db, session.id, raw_video_s3_key=s3_key,
+        auto_advance_stage2=auto_advance_stage2,
+    )
 
     upload_url = generate_presigned_evidence_url(
         s3_key,
@@ -175,6 +174,35 @@ async def create_video_import(
     )
 
 
+@router.post("", response_model=CreateVideoImportResponse)
+async def create_video_import(
+    body: CreateVideoImportRequest,
+    _: None = Depends(_require_enabled),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a clinician import session + return a presigned PUT URL.
+
+    The session is created in CONSENT_PENDING with ``import_source`` set; the
+    consent attestation immediately confirms consent (CONSENT_ATTESTED), so
+    the orchestrator may later drive RECORDING → PROCESSING_STAGE1 through the
+    normal consent hard-gate. Clinician imports stop at AWAITING_REVIEW for
+    human review (no auto-advance).
+    """
+    if not body.consent_attested:
+        raise HTTPException(
+            status_code=400,
+            detail="consent_attested must be true — consent is a hard gate.",
+        )
+    return await create_import_session(
+        db,
+        clinician_id=user.user_id,
+        actor_id=user.user_id,
+        body=body,
+        auto_advance_stage2=False,
+    )
+
+
 @router.post("/{session_id}/process", response_model=VideoImportStatusResponse)
 async def process_video_import(
     session_id: uuid.UUID,
@@ -188,6 +216,18 @@ async def process_video_import(
     session must still be in CONSENT_PENDING with consent confirmed.
     """
     session = await get_owned_session_or_404(db, session_id, user)
+    return await start_processing(db, session, actor_id=user.user_id)
+
+
+async def start_processing(
+    db: AsyncSession, session, *, actor_id: uuid.UUID
+) -> VideoImportStatusResponse:
+    """Shared processing kickoff (clinician + admin surfaces).
+
+    Fail-closed: the session must be CONSENT_PENDING with consent confirmed,
+    a pending/failed job must exist, and the raw video object must already be
+    in S3 (HEAD it). Dispatches the background orchestrator.
+    """
     if session.state != SessionState.CONSENT_PENDING or not session.consent_confirmed:
         raise HTTPException(
             status_code=409,
@@ -197,13 +237,11 @@ async def process_video_import(
             ),
         )
 
-    job = await jobs.get_job_for_session(db, session_id)
+    job = await jobs.get_job_for_session(db, session.id)
     if job is None or not job.raw_video_s3_key:
         raise HTTPException(status_code=404, detail="No import job for session.")
     if job.status not in ("pending", "failed"):
-        raise HTTPException(
-            status_code=409, detail=f"Job already {job.status}."
-        )
+        raise HTTPException(status_code=409, detail=f"Job already {job.status}.")
 
     # Fail-closed: do not start processing for a video that was never uploaded.
     client = get_s3_client()
@@ -216,12 +254,11 @@ async def process_video_import(
         )
 
     await write_audit(
-        session_id,
+        session.id,
         AuditEventType.VIDEO_IMPORT_STARTED,
-        actor_id=str(user.user_id),
+        actor_id=str(actor_id),
     )
-    asyncio.create_task(_run_video_import_in_background(session_id, job.id))
-
+    asyncio.create_task(_run_video_import_in_background(session.id, job.id))
     return _status_response(session, job)
 
 
@@ -340,6 +377,34 @@ async def _extract_and_mask_frames(
     return (len(frames), masked, dropped)
 
 
+async def _auto_advance_stage2(
+    db: AsyncSession, session, session_id: uuid.UUID
+) -> Optional[int]:
+    """Approve Stage 1 + run Stage 2 vision inline (admin/eval bulk imports).
+
+    Mirrors the approve-stage1 route's dispatch, but runs Stage 2 inline
+    (this is already a background task) and leaves the session in
+    PROCESSING_STAGE2 — final approval + CONFLICTS resolution stay human.
+    Returns the resulting note version (or None).
+    """
+    # Lazy imports — avoid a circular import with the notes/vision routers.
+    from app.api.v1.vision import run_stage2_vision
+    from app.modules.note_gen.service import approve_note, get_latest_note
+
+    approved = await approve_note(str(session_id), db)
+    await transition_session(db, session, SessionState.PROCESSING_STAGE2)
+    await write_audit(
+        session_id,
+        AuditEventType.STAGE1_APPROVED,
+        version=approved.version,
+        provider_used=approved.provider_used,
+        completeness_score=approved.completeness_score,
+    )
+    await run_stage2_vision(session_id, db)
+    latest = await get_latest_note(str(session_id), db)
+    return latest.version if latest is not None else None
+
+
 async def _run_video_import_in_background(
     session_id: uuid.UUID, job_id: uuid.UUID
 ) -> None:
@@ -406,12 +471,23 @@ async def _run_video_import_in_background(
             await purge_raw_video(str(session_id), raw_key)
             await jobs.mark_raw_video_purged(db, job)
 
+            # 4. Admin/eval bulk runs auto-advance Stage 2 so the full
+            #    multimodal note is produced without a manual Stage 1 approval.
+            #    Clinician imports (auto_advance_stage2=False) stop at
+            #    AWAITING_REVIEW for human review. Final approval +
+            #    conflict resolution always stay human (the session is left in
+            #    PROCESSING_STAGE2, never auto-approved to REVIEW_COMPLETE).
+            new_version = None
+            if job.auto_advance_stage2:
+                new_version = await _auto_advance_stage2(db, session, session_id)
+
             await jobs.mark_completed(
                 db,
                 job,
                 frames_extracted=extracted,
                 frames_masked=masked,
                 frames_dropped=dropped,
+                new_note_version=new_version,
             )
             await write_audit(
                 session_id,

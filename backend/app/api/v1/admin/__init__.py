@@ -26,6 +26,7 @@ from app.api.v1.admin import (
     sessions,
     templates,
     users,
+    video_import,
 )
 
 router = APIRouter()
@@ -44,3 +45,4 @@ router.include_router(probe.router)
 router.include_router(feature_flags.router)
 router.include_router(media.router)
 router.include_router(analytics.router)
+router.include_router(video_import.router)
