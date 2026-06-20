@@ -24,7 +24,7 @@ from typing import Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -109,6 +109,47 @@ class VideoImportStatusResponse(BaseModel):
     raw_video_purged: bool
     new_note_version: Optional[int] = None
     error_message: Optional[str] = None
+
+
+# ── Multipart upload (VID-11) ─────────────────────────────────────────────
+# For large videos (>~ a few hundred MB) a single presigned PUT is fragile —
+# no resume, dies on a flaky connection near the end. These endpoints back a
+# browser-driven S3 multipart upload (one presigned URL per part) against the
+# SAME job s3_key the single-PUT path uses; the small-file path stays the
+# default. Part size is server-chosen so the client just slices to it.
+
+_MULTIPART_PART_SIZE = 32 * 1024 * 1024  # 32 MB
+_S3_MAX_PARTS = 10000  # S3 hard limit
+
+
+class StartMultipartRequest(BaseModel):
+    size_bytes: int = Field(..., gt=0)
+
+
+class MultipartPart(BaseModel):
+    part_number: int
+    url: str
+
+
+class StartMultipartResponse(BaseModel):
+    upload_id: str
+    key: str
+    part_size: int
+    parts: list[MultipartPart]
+
+
+class CompletedPart(BaseModel):
+    part_number: int
+    etag: str
+
+
+class CompleteMultipartRequest(BaseModel):
+    upload_id: str
+    parts: list[CompletedPart]
+
+
+class AbortMultipartRequest(BaseModel):
+    upload_id: str
 
 
 # ── Routes ────────────────────────────────────────────────────────────────
@@ -275,6 +316,122 @@ async def get_video_import_status(
     if job is None:
         raise HTTPException(status_code=404, detail="No import job for session.")
     return _status_response(session, job)
+
+
+async def _job_key_or_404(db: AsyncSession, session_id: uuid.UUID) -> tuple:
+    """Return ``(job, raw_video_s3_key)`` for an owned session or raise 404."""
+    job = await jobs.get_job_for_session(db, session_id)
+    if job is None or not job.raw_video_s3_key:
+        raise HTTPException(status_code=404, detail="No import job for session.")
+    return job, job.raw_video_s3_key
+
+
+def _presign_part(s3_key: str, upload_id: str, part_number: int) -> str:
+    return get_s3_client().generate_presigned_url(
+        ClientMethod="upload_part",
+        Params={
+            "Bucket": VIDEO_IMPORTS_BUCKET,
+            "Key": s3_key,
+            "UploadId": upload_id,
+            "PartNumber": part_number,
+        },
+        ExpiresIn=_UPLOAD_URL_TTL_SECONDS,
+    )
+
+
+def start_multipart(s3_key: str, size_bytes: int) -> StartMultipartResponse:
+    """Open an S3 multipart upload for ``s3_key`` and presign every part."""
+    num_parts = max(1, -(-size_bytes // _MULTIPART_PART_SIZE))  # ceil-div
+    if num_parts > _S3_MAX_PARTS:
+        raise HTTPException(status_code=400, detail="File too large for upload.")
+    client = get_s3_client()
+    created = client.create_multipart_upload(
+        Bucket=VIDEO_IMPORTS_BUCKET, Key=s3_key, ContentType="video/mp4"
+    )
+    upload_id = created["UploadId"]
+    parts = [
+        MultipartPart(part_number=n, url=_presign_part(s3_key, upload_id, n))
+        for n in range(1, num_parts + 1)
+    ]
+    return StartMultipartResponse(
+        upload_id=upload_id, key=s3_key, part_size=_MULTIPART_PART_SIZE, parts=parts
+    )
+
+
+@router.post("/{session_id}/multipart/start", response_model=StartMultipartResponse)
+async def start_multipart_upload(
+    session_id: uuid.UUID,
+    body: StartMultipartRequest,
+    _: None = Depends(_require_enabled),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Open a multipart upload for a large video + return presigned part URLs."""
+    await get_owned_session_or_404(db, session_id, user)
+    _, s3_key = await _job_key_or_404(db, session_id)
+    return start_multipart(s3_key, body.size_bytes)
+
+
+@router.post(
+    "/{session_id}/multipart/{part_number}/presign", response_model=MultipartPart
+)
+async def presign_multipart_part(
+    session_id: uuid.UUID,
+    part_number: int,
+    body: AbortMultipartRequest,  # carries upload_id
+    _: None = Depends(_require_enabled),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Re-mint a presigned URL for one part (e.g. after the original expired)."""
+    await get_owned_session_or_404(db, session_id, user)
+    _, s3_key = await _job_key_or_404(db, session_id)
+    return MultipartPart(
+        part_number=part_number,
+        url=_presign_part(s3_key, body.upload_id, part_number),
+    )
+
+
+@router.post("/{session_id}/multipart/complete")
+async def complete_multipart_upload(
+    session_id: uuid.UUID,
+    body: CompleteMultipartRequest,
+    _: None = Depends(_require_enabled),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Finalize the S3 multipart upload. The client then calls /process."""
+    await get_owned_session_or_404(db, session_id, user)
+    _, s3_key = await _job_key_or_404(db, session_id)
+    get_s3_client().complete_multipart_upload(
+        Bucket=VIDEO_IMPORTS_BUCKET,
+        Key=s3_key,
+        UploadId=body.upload_id,
+        MultipartUpload={
+            "Parts": [
+                {"ETag": p.etag, "PartNumber": p.part_number}
+                for p in sorted(body.parts, key=lambda p: p.part_number)
+            ]
+        },
+    )
+    return {"status": "uploaded"}
+
+
+@router.post("/{session_id}/multipart/abort")
+async def abort_multipart_upload(
+    session_id: uuid.UUID,
+    body: AbortMultipartRequest,
+    _: None = Depends(_require_enabled),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Abort an in-progress multipart upload (cancel/cleanup)."""
+    await get_owned_session_or_404(db, session_id, user)
+    _, s3_key = await _job_key_or_404(db, session_id)
+    get_s3_client().abort_multipart_upload(
+        Bucket=VIDEO_IMPORTS_BUCKET, Key=s3_key, UploadId=body.upload_id
+    )
+    return {"status": "aborted"}
 
 
 def _status_response(session, job) -> VideoImportStatusResponse:

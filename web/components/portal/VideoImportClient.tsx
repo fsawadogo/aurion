@@ -22,13 +22,19 @@ import {
   processAdminVideoImport,
 } from "@/lib/api";
 import {
+  abortVideoImportMultipart,
+  completeVideoImportMultipart,
   createVideoImport,
   getVideoImportStatus,
   processVideoImport,
+  startVideoImportMultipart,
   type VideoImportStatus,
 } from "@/lib/portal-api";
 
 const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+// Above this, use S3 multipart (resumable per-part) instead of a single PUT.
+// Multipart is wired on the clinician (/me) surface only.
+const MULTIPART_THRESHOLD = 100 * 1024 * 1024; // 100 MB
 const ACCEPTED = ["video/mp4", "video/quicktime", "video/webm"];
 const SPECIALTIES = [
   "orthopedic_surgery",
@@ -78,6 +84,58 @@ function putWithProgress(
     xhr.onerror = () => reject(new Error("upload_network_error"));
     xhr.send(file);
   });
+}
+
+/** PUT one multipart part; resolves the part's S3 ETag (CORS exposes it). */
+function putPart(
+  url: string,
+  blob: Blob,
+  onLoaded: (loaded: number) => void,
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onLoaded(e.loaded);
+    };
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        const etag = xhr.getResponseHeader("ETag");
+        etag ? resolve(etag) : reject(new Error("missing_etag"));
+      } else {
+        reject(new Error(`part_failed_${xhr.status}`));
+      }
+    };
+    xhr.onerror = () => reject(new Error("part_network_error"));
+    xhr.send(blob);
+  });
+}
+
+/** S3 multipart upload (clinician surface): slice → PUT each part → complete.
+ *  Sequential for robustness; aborts the S3 upload if a part fails. */
+async function uploadMultipart(
+  sessionId: string,
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<void> {
+  const mp = await startVideoImportMultipart(sessionId, file.size);
+  const results: { part_number: number; etag: string }[] = [];
+  let baseLoaded = 0;
+  try {
+    for (const part of mp.parts) {
+      const start = (part.part_number - 1) * mp.part_size;
+      const blob = file.slice(start, Math.min(start + mp.part_size, file.size));
+      const etag = await putPart(part.url, blob, (loaded) =>
+        onProgress(Math.round(((baseLoaded + loaded) / file.size) * 100)),
+      );
+      baseLoaded += blob.size;
+      results.push({ part_number: part.part_number, etag });
+    }
+  } catch (e) {
+    await abortVideoImportMultipart(sessionId, mp.upload_id).catch(() => {});
+    throw e;
+  }
+  await completeVideoImportMultipart(sessionId, mp.upload_id, results);
 }
 
 interface VideoImportClientProps {
@@ -182,7 +240,14 @@ export default function VideoImportClient({
         consent_attested: true,
         consent_method: "attested",
       });
-      await putWithProgress(created.upload_url, file, setUploadPct);
+      // Large clinician uploads use resumable S3 multipart; everything else
+      // (and the admin surface, which has no /me multipart route) uses the
+      // single presigned PUT.
+      if (surface === "clinician" && file.size > MULTIPART_THRESHOLD) {
+        await uploadMultipart(created.session_id, file, setUploadPct);
+      } else {
+        await putWithProgress(created.upload_url, file, setUploadPct);
+      }
       setPhase("processing");
       setStageIndex(0);
       await api.process(created.session_id);

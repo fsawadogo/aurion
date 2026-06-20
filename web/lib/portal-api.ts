@@ -887,3 +887,47 @@ export async function getPortalFeatureFlags(): Promise<{
   const r = await fetchWithAuth("/api/v1/me/feature-flags");
   return r.json();
 }
+
+// ── Video import: multipart upload (VID-11) ───────────────────────────────
+// For large videos a single PUT is fragile; these back a browser-driven S3
+// multipart upload against the same job s3_key.
+
+export interface VideoImportMultipartStart {
+  upload_id: string;
+  key: string;
+  part_size: number;
+  parts: { part_number: number; url: string }[];
+}
+
+export async function startVideoImportMultipart(
+  sessionId: string,
+  sizeBytes: number,
+): Promise<VideoImportMultipartStart> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/video-imports/${sessionId}/multipart/start`,
+    { method: "POST", body: JSON.stringify({ size_bytes: sizeBytes }) },
+  );
+  return r.json();
+}
+
+export async function completeVideoImportMultipart(
+  sessionId: string,
+  uploadId: string,
+  parts: { part_number: number; etag: string }[],
+): Promise<{ status: string }> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/video-imports/${sessionId}/multipart/complete`,
+    { method: "POST", body: JSON.stringify({ upload_id: uploadId, parts }) },
+  );
+  return r.json();
+}
+
+export async function abortVideoImportMultipart(
+  sessionId: string,
+  uploadId: string,
+): Promise<void> {
+  await fetchWithAuth(
+    `/api/v1/me/video-imports/${sessionId}/multipart/abort`,
+    { method: "POST", body: JSON.stringify({ upload_id: uploadId }) },
+  );
+}
