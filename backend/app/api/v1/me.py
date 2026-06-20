@@ -50,6 +50,7 @@ from app.core.types import ProviderError, SessionState, Template, UserRole
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.coding import service as coding_service
+from app.modules.config.appconfig_client import get_config
 from app.modules.custom_templates import service as custom_templates_service
 from app.modules.emr import service as emr_service
 from app.modules.emr.registry import list_connector_keys as list_emr_connectors
@@ -94,6 +95,27 @@ async def me_health(
     end-to-end (CLINICIAN sees `{ok: true}`; everyone else sees 403).
     Excluded from the public OpenAPI schema."""
     return {"ok": "true"}
+
+
+class PortalFeatureFlagsResponse(BaseModel):
+    """The small, non-sensitive subset of feature flags the portal UI needs
+    to gate surfaces for the signed-in user. Distinct from the ADMIN-only
+    ``/admin/feature-flags`` writer surface — this is read-only and available
+    to any authenticated role so e.g. the sidebar can hide the video-import
+    upload entry while the feature is dark."""
+
+    video_import_enabled: bool
+
+
+@router.get("/feature-flags", response_model=PortalFeatureFlagsResponse)
+async def get_portal_feature_flags(
+    _user: CurrentUser = Depends(get_current_user),
+) -> PortalFeatureFlagsResponse:
+    """Read-only, portal-relevant feature flags for the current user."""
+    flags = get_config().feature_flags
+    return PortalFeatureFlagsResponse(
+        video_import_enabled=flags.video_import_enabled,
+    )
 
 
 # ── /me/audit ──────────────────────────────────────────────────────────────

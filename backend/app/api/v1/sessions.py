@@ -161,6 +161,10 @@ class SessionResponse(BaseModel):
     state: str
     encounter_type: str = "doctor_patient"
     capture_mode: str = "multimodal"
+    # Session provenance (VID-01/09): "video_upload" for web-portal video
+    # imports, None/absent for live iOS captures. Drives the "Uploaded" badge
+    # in the portal session lists. Not PHI.
+    import_source: Optional[str] = None
     # Optional PHI identifier set by the clinician to link this session
     # back to their own patient roster (MRN hash, EMR encounter id, free
     # text — whatever the clinic uses). Decrypted server-side and only
@@ -646,6 +650,7 @@ def _to_response(session) -> SessionResponse:
         state=session.state.value if isinstance(session.state, SessionState) else session.state,
         encounter_type=session.encounter_type or "doctor_patient",
         capture_mode=getattr(session, "capture_mode", None) or "multimodal",
+        import_source=getattr(session, "import_source", None),
         external_reference_id=external_id,
         provider_overrides=overrides,
         participants=participants,
