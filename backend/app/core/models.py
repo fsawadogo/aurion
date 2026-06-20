@@ -176,6 +176,14 @@ class SessionModel(Base):
     capture_mode: Mapped[str] = mapped_column(
         String(20), nullable=False, default="multimodal"
     )
+    # Session provenance (VID-01). NULL = live iOS capture (the only path
+    # before this feature). "video_upload" = created by the web-portal
+    # encounter-video import flow, which extracts audio/frames server-side
+    # rather than receiving them from a live device. Drives the "Uploaded"
+    # badge in the portal session lists and lets compliance segment
+    # imported sessions. Additive + nullable so every existing row stays
+    # valid as a live session.
+    import_source: Mapped[str | None] = mapped_column(String(20), nullable=True)
     consent_confirmed: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
     provider_overrides: Mapped[str | None] = mapped_column(Text, nullable=True)
     # PHI — KMS-envelope-encrypted patient identifier (MRN hash, EMR
@@ -550,6 +558,66 @@ class Stage2JobModel(Base):
     # Resulting note version after vision merge — null until completion.
     new_note_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     frames_processed: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class VideoImportJobModel(Base):
+    """Tracks async web-portal encounter-video import jobs (VID-01…).
+
+    Created when an uploaded video is submitted for processing; transitions
+    pending → running → completed/failed as the background job extracts
+    audio (→ Stage 1), extracts + masks frames (→ Stage 2), and purges the
+    raw video. Mirrors ``Stage2JobModel`` (which the web/iOS clients already
+    poll) so the portal can poll/recover after navigation without trusting
+    an in-memory queue. Ships inert — nothing writes rows until the
+    video-import endpoints land behind ``feature_flags.video_import_enabled``.
+    """
+
+    __tablename__ = "video_import_jobs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    # pending → running → completed|failed
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    started_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # S3 key of the uploaded raw video (video-imports/{sid}/{uuid}.mp4).
+    raw_video_s3_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set once the raw video has been purged post-extraction — the audit
+    # proof that no unmasked video lingers past processing.
+    raw_video_purged_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Frame pipeline counters (populated by the masking slice, VID-04).
+    frames_extracted: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    frames_masked: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    frames_dropped: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Whether the job auto-approves Stage 1 and runs Stage 2 (admin/eval
+    # bulk runs) vs stops at AWAITING_REVIEW for human review (clinicians).
+    auto_advance_stage2: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    # Resulting note version after Stage 2 merge — null until completion.
+    new_note_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

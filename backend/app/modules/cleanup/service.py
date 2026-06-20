@@ -23,7 +23,13 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.audit_events import AuditEventType
 from app.core.retry import with_retry
-from app.core.s3 import AUDIO_BUCKET, EVAL_BUCKET, FRAMES_BUCKET, get_s3_client
+from app.core.s3 import (
+    AUDIO_BUCKET,
+    EVAL_BUCKET,
+    FRAMES_BUCKET,
+    VIDEO_IMPORTS_BUCKET,
+    get_s3_client,
+)
 from app.modules.audit_log.service import get_audit_log_service
 
 logger = logging.getLogger("aurion.cleanup")
@@ -54,44 +60,56 @@ def _evidence_prefix(kind: EvidenceKind, session_id: str) -> str:
     return _EVIDENCE_PREFIX_TEMPLATE[kind].format(session_id=session_id)
 
 
-async def purge_audio(session_id: str, s3_key: str) -> None:
-    """Delete a raw audio object from S3 after transcription and log the purge.
+async def _purge_single_key(
+    session_id: str,
+    *,
+    bucket: str,
+    s3_key: str,
+    success_event: AuditEventType,
+    operation_label: str,
+) -> None:
+    """Delete a single known S3 object with retry + audit (DRY §6c).
 
-    Args:
-        session_id: The session this audio belongs to.
-        s3_key: The S3 object key to delete from the audio bucket.
+    Single source of truth for every "delete one object we know the exact
+    key of" purge — the single-key analogue of `_purge_evidence_under_prefix`
+    (which owns the list-and-batch prefix path). On success emits
+    ``success_event`` with ``bucket`` + ``s3_key``; on failure emits the
+    shared ``CLEANUP_PARTIAL_FAILURE`` (so a lingering object is flagged in
+    the audit trail) and re-raises so the caller can fail loudly rather than
+    proceed. PHI-safe: the audit row carries only the bucket + key (session
+    UUID, never a body); log lines truncate the key to 12 chars.
     """
     client = get_s3_client()
     audit = get_audit_log_service()
 
     logger.info(
-        "Purging audio: session=%s bucket=%s key=%s",
-        session_id,
-        AUDIO_BUCKET,
-        s3_key,
+        "Purging object: session=%s bucket=%s key_prefix=%s",
+        str(session_id)[:8],
+        bucket,
+        s3_key[:12],
     )
 
     try:
         await with_retry(
             client.delete_object,
-            Bucket=AUDIO_BUCKET,
+            Bucket=bucket,
             Key=s3_key,
             max_retries=3,
             base_delay=1.0,
-            operation="s3_delete_audio",
+            operation=operation_label,
             session_id=session_id,
         )
     except (BotoCoreError, ClientError) as exc:
         logger.error(
-            "Failed to purge audio: session=%s key=%s error=%s",
-            session_id,
-            s3_key,
+            "Failed to purge object: session=%s bucket=%s error=%s",
+            str(session_id)[:8],
+            bucket,
             str(exc),
         )
         await audit.write_event(
             session_id=session_id,
             event_type=AuditEventType.CLEANUP_PARTIAL_FAILURE,
-            bucket=AUDIO_BUCKET,
+            bucket=bucket,
             s3_key=s3_key,
             error_message=str(exc),
         )
@@ -99,12 +117,57 @@ async def purge_audio(session_id: str, s3_key: str) -> None:
 
     await audit.write_event(
         session_id=session_id,
-        event_type=AuditEventType.AUDIO_PURGED,
-        bucket=AUDIO_BUCKET,
+        event_type=success_event,
+        bucket=bucket,
         s3_key=s3_key,
     )
+    logger.info(
+        "Object purged: session=%s bucket=%s", str(session_id)[:8], bucket
+    )
 
-    logger.info("Audio purged successfully: session=%s key=%s", session_id, s3_key)
+
+async def purge_audio(session_id: str, s3_key: str) -> None:
+    """Delete a raw audio object from S3 after transcription and log the purge.
+
+    Thin wrapper over `_purge_single_key` (the shared single-object delete).
+
+    Args:
+        session_id: The session this audio belongs to.
+        s3_key: The S3 object key to delete from the audio bucket.
+    """
+    await _purge_single_key(
+        session_id,
+        bucket=AUDIO_BUCKET,
+        s3_key=s3_key,
+        success_event=AuditEventType.AUDIO_PURGED,
+        operation_label="s3_delete_audio",
+    )
+
+
+async def purge_raw_video(session_id: str, s3_key: str) -> None:
+    """Delete a raw uploaded encounter video from S3 after extraction (VID-01).
+
+    Sibling of `purge_audio` over the same `_purge_single_key` core, against
+    ``VIDEO_IMPORTS_BUCKET``. The raw video is the only unmasked-PHI artifact
+    in the import flow, so it is purged immediately after audio/frame
+    extraction completes; success emits ``RAW_VIDEO_PURGED`` and failure emits
+    ``CLEANUP_PARTIAL_FAILURE`` + re-raises so the orchestrator fails the job
+    rather than proceeding while an unmasked video lingers.
+
+    The key is shaped ``video-imports/{session_id}/{uuid}.mp4`` (session
+    UUID, not PHI).
+
+    Args:
+        session_id: The session this video belongs to.
+        s3_key: The S3 object key to delete from the video-imports bucket.
+    """
+    await _purge_single_key(
+        session_id,
+        bucket=VIDEO_IMPORTS_BUCKET,
+        s3_key=s3_key,
+        success_event=AuditEventType.RAW_VIDEO_PURGED,
+        operation_label="s3_delete_raw_video",
+    )
 
 
 async def _purge_evidence_under_prefix(

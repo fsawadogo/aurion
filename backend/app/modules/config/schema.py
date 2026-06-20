@@ -171,6 +171,14 @@ class FeatureFlagsConfig(BaseModel):
     # Meta partner approval lands; flipping this on requires the iOS bundle
     # to be signed by an approved partner team.
     meta_wearables_enabled: bool = False
+    # Master kill-switch for the web-portal encounter-video import pipeline
+    # (VID-01…). Ships DARK — every video-import endpoint returns 404 while
+    # this is False. Flipping it on enables server-side processing of an
+    # uploaded encounter video; the server-side masking step (VID-04) is
+    # additionally gated and requires compliance sign-off before any env
+    # with real PHI turns this on. Same opt-in posture as
+    # `measurement_enabled`.
+    video_import_enabled: bool = False
     # Eval-team can flip `visual_evidence_mode` per-session for evaluation
     # runs even when the pilot-wide default is `FRAMES_ONLY`. Mirrors the
     # `per_session_provider_override` pattern.
