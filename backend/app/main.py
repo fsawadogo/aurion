@@ -28,6 +28,7 @@ from app.api.v1.profile import router as profile_router
 from app.api.v1.screen import router as screen_router
 from app.api.v1.sessions import router as sessions_router
 from app.api.v1.transcription import router as transcription_router
+from app.api.v1.video_import import router as video_import_router
 from app.api.v1.vision import router as vision_router
 from app.api.v1.websocket import router as ws_router
 from app.core.database import close_db
@@ -142,6 +143,7 @@ app.include_router(admin_router, prefix="/api/v1")
 app.include_router(privacy_router, prefix="/api/v1")
 app.include_router(sessions_router, prefix="/api/v1")
 app.include_router(transcription_router, prefix="/api/v1")
+app.include_router(video_import_router, prefix="/api/v1")
 app.include_router(frames_router, prefix="/api/v1")
 app.include_router(clips_router, prefix="/api/v1")
 app.include_router(screen_router, prefix="/api/v1")
