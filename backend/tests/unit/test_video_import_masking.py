@@ -107,3 +107,43 @@ def test_detected_face_is_blurred(monkeypatch) -> None:
     before = float(img[y : y + h, x : x + w].var())
     after = float(out[y : y + h, x : x + w].var())
     assert after < before
+
+
+# ── DNN detector (VID-07) with Haar fallback ────────────────────────────────
+
+
+def test_detect_faces_uses_dnn_when_available(monkeypatch) -> None:
+    """When a DNN net is loaded, `_detect_faces` parses its SSD output."""
+
+    class _FakeNet:
+        def setInput(self, _blob):
+            pass
+
+        def forward(self):
+            # SSD output (1,1,N,7): [_, _, conf, x1, y1, x2, y2] normalized.
+            a = np.zeros((1, 1, 1, 7), dtype=np.float32)
+            a[0, 0, 0, 2] = 0.9
+            a[0, 0, 0, 3:7] = [0.2, 0.2, 0.6, 0.6]
+            return a
+
+    monkeypatch.setattr(masking, "_dnn_net", lambda: _FakeNet())
+    img = np.zeros((100, 100, 3), dtype=np.uint8)
+    boxes = masking._detect_faces(img)
+    assert boxes == [(20, 20, 40, 40)]
+
+
+def test_detect_faces_falls_back_to_haar(monkeypatch) -> None:
+    """No DNN model → Haar cascade path is used."""
+    monkeypatch.setattr(masking, "_dnn_net", lambda: None)
+    rect = (10, 10, 30, 30)
+
+    class _OneFace:
+        def empty(self):
+            return False
+
+        def detectMultiScale(self, *_a, **_k):
+            return np.array([rect])
+
+    monkeypatch.setattr(masking, "_cascade", lambda: _OneFace())
+    boxes = masking._detect_faces(np.zeros((80, 80, 3), dtype=np.uint8))
+    assert boxes == [(10, 10, 30, 30)]
