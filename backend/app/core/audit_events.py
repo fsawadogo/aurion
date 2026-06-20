@@ -327,6 +327,25 @@ class AuditEventType(StrEnum):
     MEASUREMENT_EDITED = "measurement_edited"
     MEASUREMENT_SUPPRESSED = "measurement_suppressed"
 
+    # ── Web-portal video import (VID-01…) ─────────────────────────────────
+    # Provenance for an uploaded-encounter-video import job. PHI-free:
+    #   VIDEO_IMPORT_STARTED  brackets the job (actor UUID only).
+    #   VIDEO_IMPORT_COMPLETE  carries frame counts (server-side masking
+    #                          slice) — never an S3 key or body.
+    #   VIDEO_IMPORT_FAILED    a bounded reason string.
+    #   CONSENT_ATTESTED       the clinician attested consent was obtained at
+    #                          the original recording (the import substitute
+    #                          for the bypassed live consent gate). Distinct
+    #                          from CONSENT_CONFIRMED so compliance can tell
+    #                          attested consent from live consent.
+    #   RAW_VIDEO_PURGED       the uploaded raw video was deleted from S3
+    #                          after extraction (bucket + key only).
+    VIDEO_IMPORT_STARTED = "video_import_started"
+    VIDEO_IMPORT_COMPLETE = "video_import_complete"
+    VIDEO_IMPORT_FAILED = "video_import_failed"
+    CONSENT_ATTESTED = "consent_attested"
+    RAW_VIDEO_PURGED = "raw_video_purged"
+
 
 # ── Q-03 — kwarg whitelist ────────────────────────────────────────────────
 #
@@ -869,6 +888,17 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.REFRESH_TOKEN_REVOKED: frozenset(
         {"actor_id", "token_id", "reason"}
     ),
+    # ── Web-portal video import (VID-01…) — all PHI-free ──────────────────
+    AuditEventType.VIDEO_IMPORT_STARTED: frozenset({"actor_id"}),
+    AuditEventType.VIDEO_IMPORT_COMPLETE: frozenset(
+        {"frames_extracted", "frames_masked", "frames_dropped"}
+    ),
+    AuditEventType.VIDEO_IMPORT_FAILED: frozenset({"reason"}),
+    AuditEventType.CONSENT_ATTESTED: frozenset({"actor_id", "method"}),
+    # Raw uploaded video purged after audio/frame extraction. Bucket + key
+    # only (the key is `video-imports/{session_id}/{uuid}.mp4` — session
+    # UUID, not PHI), never a body. Failure reuses CLEANUP_PARTIAL_FAILURE.
+    AuditEventType.RAW_VIDEO_PURGED: frozenset({"bucket", "s3_key"}),
 }
 
 

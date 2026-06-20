@@ -169,6 +169,12 @@ EXPECTED_VALUES: dict[str, str] = {
     "REFRESH_TOKEN_ISSUED": "refresh_token_issued",
     "REFRESH_TOKEN_ROTATED": "refresh_token_rotated",
     "REFRESH_TOKEN_REVOKED": "refresh_token_revoked",
+    # Web-portal video import (VID-01).
+    "VIDEO_IMPORT_STARTED": "video_import_started",
+    "VIDEO_IMPORT_COMPLETE": "video_import_complete",
+    "VIDEO_IMPORT_FAILED": "video_import_failed",
+    "CONSENT_ATTESTED": "consent_attested",
+    "RAW_VIDEO_PURGED": "raw_video_purged",
 }
 
 

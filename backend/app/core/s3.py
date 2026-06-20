@@ -39,6 +39,17 @@ FRAMES_BUCKET: str = (
 EVAL_BUCKET: str = (
     os.getenv("S3_EVAL_BUCKET") or os.getenv("EVAL_S3_BUCKET") or "aurion-eval-local"
 )
+# Raw uploaded encounter videos (VID-01) land here transiently while the
+# import job extracts audio/frames, then are purged (`purge_raw_video`).
+# Dedicated bucket so a short-TTL lifecycle rule + KMS policy can apply to
+# raw, pre-masking video without affecting masked-evidence buckets. The
+# Terraform bucket + lifecycle + CORS land in a later slice; the env name
+# mirrors the S3_*_BUCKET convention the ECS task definition ships.
+VIDEO_IMPORTS_BUCKET: str = (
+    os.getenv("S3_VIDEO_IMPORTS_BUCKET")
+    or os.getenv("VIDEO_IMPORTS_S3_BUCKET")
+    or "aurion-video-imports-local"
+)
 
 
 _s3_client: Any | None = None
