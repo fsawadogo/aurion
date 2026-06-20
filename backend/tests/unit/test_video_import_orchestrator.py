@@ -33,12 +33,13 @@ class _FakeSessionCtx:
         return False
 
 
-def _job() -> SimpleNamespace:
+def _job(auto_advance_stage2: bool = False) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(),
         raw_video_s3_key=f"video-imports/{uuid.uuid4()}/v.mp4",
         raw_video_purged_at=None,
         status="running",
+        auto_advance_stage2=auto_advance_stage2,
     )
 
 
@@ -78,6 +79,7 @@ def _patches(job, session, *, extract=None, stage1=None, purge=None):
         patch.object(vi, "run_stage1", AsyncMock(side_effect=stage1)),
         patch.object(vi, "purge_raw_video", AsyncMock(side_effect=purge)),
         patch.object(vi, "_extract_and_mask_frames", AsyncMock(return_value=(0, 0, 0))),
+        patch.object(vi, "_auto_advance_stage2", AsyncMock(return_value=2)),
         patch.object(vi, "try_publish_alert", AsyncMock()),
     ]
     for p in started:
@@ -105,6 +107,28 @@ async def test_happy_path_purges_and_completes() -> None:
         assert states == [SessionState.RECORDING, SessionState.PROCESSING_STAGE1]
         events = [c.args[1] for c in vi.write_audit.await_args_list]
         assert AuditEventType.VIDEO_IMPORT_COMPLETE in events
+    finally:
+        _stop(started)
+
+
+@pytest.mark.asyncio
+async def test_auto_advance_runs_stage2_when_flagged() -> None:
+    job, session = _job(auto_advance_stage2=True), _session()
+    started = _patches(job, session)
+    try:
+        await vi._run_video_import_in_background(session.id, job.id)
+        vi._auto_advance_stage2.assert_awaited_once()
+    finally:
+        _stop(started)
+
+
+@pytest.mark.asyncio
+async def test_no_auto_advance_when_flag_off() -> None:
+    job, session = _job(auto_advance_stage2=False), _session()
+    started = _patches(job, session)
+    try:
+        await vi._run_video_import_in_background(session.id, job.id)
+        vi._auto_advance_stage2.assert_not_awaited()
     finally:
         _stop(started)
 
