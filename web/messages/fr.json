@@ -23,7 +23,8 @@
       "analytics": "Analytique",
       "systemTemplates": "Modèles système",
       "alerts": "Alertes",
-      "complianceReports": "Rapports de conformité"
+      "complianceReports": "Rapports de conformité",
+      "uploadEncounter": "Téléverser une vidéo"
     },
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
@@ -1219,6 +1220,55 @@
       "hallucinations": "Hallucinations moy.",
       "empty": "Aucun score d’évaluation attribué pour l’instant — les scores enregistrés dorénavant portent leur fournisseur.",
       "caption": "Les moyennes de qualité proviennent de l’évaluation par l’équipe. Aux tailles d’échantillon du pilote, elles sont indicatives et non statistiquement significatives — le nombre de séances évaluées fait partie des données."
+    }
+  },
+  "VideoImport": {
+    "eyebrow": "Portail clinicien",
+    "title": "Téléverser une vidéo de consultation",
+    "description": "Téléversez une consultation enregistrée et Aurion la traitera dans le même pipeline d’IA qu’une séance en direct, puis produira une note à réviser.",
+    "dropzone": {
+      "prompt": "Déposez votre vidéo ici ou cliquez pour la sélectionner",
+      "accepted": "MP4, MOV ou WebM · jusqu’à 2 Go"
+    },
+    "form": {
+      "title": "Détails de la consultation",
+      "specialty": "Spécialité",
+      "encounterType": "Type de consultation",
+      "encounter": {
+        "doctor_patient": "Médecin + patient",
+        "doctor_team_patient": "Médecin + membre(s) de l’équipe + patient"
+      },
+      "language": "Langue de la note",
+      "langEn": "Anglais",
+      "langFr": "Français",
+      "submit": "Téléverser et traiter"
+    },
+    "consent": {
+      "attestationLabel": "Je confirme que le consentement du patient a été obtenu au moment de l’enregistrement de cette consultation."
+    },
+    "upload": {
+      "title": "Téléversement de la vidéo…",
+      "progress": "{percent} % téléversé"
+    },
+    "processing": {
+      "title": "Traitement",
+      "leaveSafe": "Vous pouvez quitter cette page en toute sécurité — le traitement se poursuit et la note apparaîtra dans Mes notes."
+    },
+    "stages": {
+      "uploading": "Téléversé",
+      "extractingAudio": "Extraction de l’audio",
+      "transcribing": "Transcription et génération de la note",
+      "maskingFrames": "Masquage des images vidéo",
+      "ready": "Prêt à réviser"
+    },
+    "errors": {
+      "title": "Échec du téléversement",
+      "badFormat": "Format non pris en charge. Utilisez MP4, MOV ou WebM.",
+      "empty": "Ce fichier est vide.",
+      "tooLarge": "Fichier trop volumineux (max 2 Go).",
+      "uploadFailed": "Le téléversement a échoué. Veuillez réessayer.",
+      "processingFailed": "Le traitement a échoué. Veuillez réessayer.",
+      "retry": "Réessayer"
     }
   }
 }

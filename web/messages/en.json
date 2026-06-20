@@ -23,7 +23,8 @@
       "analytics": "Analytics",
       "systemTemplates": "System Templates",
       "alerts": "Alerts",
-      "complianceReports": "Compliance Reports"
+      "complianceReports": "Compliance Reports",
+      "uploadEncounter": "Upload Video"
     },
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
@@ -1219,6 +1220,55 @@
       "hallucinations": "Avg hallucinations",
       "empty": "No attributed eval scores yet — scores recorded from now on carry their provider.",
       "caption": "Quality averages come from eval-team scoring. At pilot sample sizes these are directional, not statistically significant — the scored-session counts are part of the data."
+    }
+  },
+  "VideoImport": {
+    "eyebrow": "Clinician portal",
+    "title": "Upload encounter video",
+    "description": "Upload a recorded encounter and Aurion will process it through the same AI pipeline as a live session, then produce a note for you to review.",
+    "dropzone": {
+      "prompt": "Drop your video here or click to select",
+      "accepted": "MP4, MOV or WebM · up to 2 GB"
+    },
+    "form": {
+      "title": "Encounter details",
+      "specialty": "Specialty",
+      "encounterType": "Encounter type",
+      "encounter": {
+        "doctor_patient": "Doctor + Patient",
+        "doctor_team_patient": "Doctor + team member(s) + Patient"
+      },
+      "language": "Note language",
+      "langEn": "English",
+      "langFr": "French",
+      "submit": "Upload & process"
+    },
+    "consent": {
+      "attestationLabel": "I confirm patient consent was obtained at the time this encounter was recorded."
+    },
+    "upload": {
+      "title": "Uploading video…",
+      "progress": "{percent}% uploaded"
+    },
+    "processing": {
+      "title": "Processing",
+      "leaveSafe": "You can safely leave this page — processing continues and the note will appear in My Notes."
+    },
+    "stages": {
+      "uploading": "Uploaded",
+      "extractingAudio": "Extracting audio",
+      "transcribing": "Transcribing & generating note",
+      "maskingFrames": "Masking video frames",
+      "ready": "Ready for review"
+    },
+    "errors": {
+      "title": "Upload failed",
+      "badFormat": "Unsupported format. Use MP4, MOV or WebM.",
+      "empty": "That file is empty.",
+      "tooLarge": "File is too large (max 2 GB).",
+      "uploadFailed": "Upload failed. Please try again.",
+      "processingFailed": "Processing failed. Please try again.",
+      "retry": "Try again"
     }
   }
 }
