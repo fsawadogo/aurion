@@ -26,6 +26,7 @@ import {
   TrendingUp,
   Bell,
   FileCheck2,
+  UploadCloud,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -95,6 +96,7 @@ const navigation: {
   // (locale, theme, sign out) from the sidebar footer instead.
   { tKey: "dashboard",  href: "/portal/dashboard",  icon: BarChart3, roles: ["CLINICIAN"] },
   { tKey: "myNotes",    href: "/portal/notes",      icon: FileText,  roles: ["CLINICIAN"] },
+  { tKey: "uploadEncounter", href: "/portal/upload", icon: UploadCloud, roles: ["CLINICIAN"] },
   { tKey: "templates",  href: "/portal/templates",  icon: LayoutGrid, roles: ["CLINICIAN"] },
   { tKey: "macros",     href: "/portal/macros",     icon: Zap,       roles: ["CLINICIAN"] },
   { tKey: "myProfile",  href: "/portal/profile",    icon: CircleUser, roles: ["CLINICIAN"] },

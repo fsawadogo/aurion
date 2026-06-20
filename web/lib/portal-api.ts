@@ -813,3 +813,69 @@ export async function revokeAllSessions(): Promise<void> {
     method: "POST",
   });
 }
+
+// ── Video import (VID-05) ─────────────────────────────────────────────────
+// Clinician uploads a recorded encounter video; the backend runs it through
+// the same AI pipeline as a live session and produces a note reviewable in
+// the existing note-review screen. The whole surface is gated behind the
+// backend `video_import_enabled` flag (every call 404s while it is off).
+
+export interface VideoImportCreateBody {
+  specialty: string;
+  encounter_type: string;
+  output_language: string;
+  /** Required-true: the clinician attests consent was obtained at the
+   *  original recording (the import substitute for the live consent gate). */
+  consent_attested: true;
+  consent_method?: string;
+}
+
+export interface VideoImportCreated {
+  session_id: string;
+  job_id: string;
+  /** Presigned S3 PUT URL — upload the raw video straight to S3 (no bearer). */
+  upload_url: string;
+  s3_key: string;
+}
+
+export interface VideoImportStatus {
+  session_id: string;
+  job_id: string;
+  status: "pending" | "running" | "completed" | "failed";
+  session_state: string;
+  frames_extracted: number;
+  frames_masked: number;
+  frames_dropped: number;
+  raw_video_purged: boolean;
+  new_note_version: number | null;
+  error_message: string | null;
+}
+
+export async function createVideoImport(
+  body: VideoImportCreateBody,
+): Promise<VideoImportCreated> {
+  const r = await fetchWithAuth("/api/v1/me/video-imports", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+export async function processVideoImport(
+  sessionId: string,
+): Promise<VideoImportStatus> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/video-imports/${sessionId}/process`,
+    { method: "POST" },
+  );
+  return r.json();
+}
+
+export async function getVideoImportStatus(
+  sessionId: string,
+): Promise<VideoImportStatus> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/video-imports/${sessionId}/status`,
+  );
+  return r.json();
+}
