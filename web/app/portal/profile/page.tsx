@@ -13,6 +13,7 @@ import VisitTypeContextsEditor, {
   type ContextCustomTemplate,
 } from "@/components/portal/VisitTypeContextsEditor";
 import AccentPicker from "@/components/portal/AccentPicker";
+import ThemeToggle from "@/components/portal/ThemeToggle";
 import PageHeader from "@/components/portal/PageHeader";
 import type { AccentKey } from "@/lib/accent";
 import {
@@ -311,6 +312,16 @@ export default function PortalProfilePage() {
           </Card>
 
           <Card title={tAppearance("title")}>
+            <Field label={tAppearance("themeLabel")}>
+              <p className="text-xs text-gray-500 mb-3">
+                {tAppearance("themeHint")}
+              </p>
+              {/* Persists immediately via next-themes + PUT /profile,
+                  same model as AccentPicker — not part of the draft Save
+                  flow. Also reachable from the sidebar; mirrored here so
+                  it's available when the sidebar is collapsed. */}
+              <ThemeToggle variant="inline" />
+            </Field>
             <Field label={tAppearance("accentLabel")}>
               <p className="text-xs text-gray-500 mb-3">
                 {tAppearance("accentHint")}

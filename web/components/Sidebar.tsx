@@ -377,19 +377,32 @@ export default function Sidebar() {
             </div>
           )}
         </div>
-        {/* Theme toggle — appears above sign-out in expanded mode so
-            the user-related controls cluster together. Hidden in
-            collapsed mode (too cramped; theme is accessible from the
-            profile page when collapsed). Only renders for CLINICIAN
-            since the backend persists via /profile which admin/eval
-            don't have. Admin/eval roles see localStorage-only via
-            next-themes if they manually toggle from the profile page. */}
-        {!forCollapsed && user?.role === "CLINICIAN" && (
-          <div className="mt-3 flex flex-col gap-1.5">
-            <ThemeToggle variant="compact" />
-            <LocaleSwitcher variant="compact" />
-          </div>
-        )}
+        {/* Theme toggle — available to EVERY role and in BOTH collapse
+            states so dark/light is always reachable. Expanded: the
+            three-button segmented control. Collapsed: a single
+            cycling icon button (three buttons don't fit the rail).
+            persistToBackend only for CLINICIAN (admin/eval have no
+            /profile row); other roles fall back to localStorage via
+            next-themes. LocaleSwitcher stays clinician + expanded. */}
+        {user &&
+          (forCollapsed ? (
+            <div className="mt-3 flex justify-center">
+              <ThemeToggle
+                variant="icon"
+                persistToBackend={user.role === "CLINICIAN"}
+              />
+            </div>
+          ) : (
+            <div className="mt-3 flex flex-col gap-1.5">
+              <ThemeToggle
+                variant="compact"
+                persistToBackend={user.role === "CLINICIAN"}
+              />
+              {user.role === "CLINICIAN" && (
+                <LocaleSwitcher variant="compact" />
+              )}
+            </div>
+          ))}
         <button
           onClick={logout}
           title={forCollapsed ? t("signOut") : undefined}

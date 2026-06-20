@@ -707,6 +707,8 @@
     },
     "appearance": {
       "title": "Apparence",
+      "themeLabel": "Thème",
+      "themeHint": "Choisissez clair, sombre ou suivez le réglage de votre système.",
       "accentLabel": "Couleur d’accent",
       "accentHint": "Personnalisez l’interface du portail. Les couleurs de sécurité clinique (indicateurs de conflit, de masquage et d’audit) sont fixes et ne changent jamais."
     },

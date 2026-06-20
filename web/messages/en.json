@@ -707,6 +707,8 @@
     },
     "appearance": {
       "title": "Appearance",
+      "themeLabel": "Theme",
+      "themeHint": "Choose light, dark, or follow your system setting.",
       "accentLabel": "Accent color",
       "accentHint": "Personalize the portal chrome. Clinical safety colors (conflict, masking, and audit indicators) are fixed and never change."
     },
