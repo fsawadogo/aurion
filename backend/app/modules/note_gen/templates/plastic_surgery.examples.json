@@ -72,6 +72,114 @@
           {"id": "plan", "status": "not_captured", "claims": []}
         ]
       }
+    },
+    {
+      "description": "sacral wound — dimensions L×W×D, tissue percentages, exudate, undermining + periwound, stated assessment + plan",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 5000,
+         "text": "Let's take a look at the wound on your sacrum."},
+        {"id": "seg_002", "start_ms": 5000, "end_ms": 12000,
+         "text": "It's been draining a bit more this week."},
+        {"id": "seg_003", "start_ms": 12000, "end_ms": 30000,
+         "text": "The wound measures 4 by 2 centimetres, depth 0.5 centimetres. Wound bed is about 80 percent granulation tissue with 20 percent slough. Scant serous drainage, no odour."},
+        {"id": "seg_004", "start_ms": 30000, "end_ms": 42000,
+         "text": "Edges show 1 centimetre of undermining at the 12 o'clock position. Periwound skin is intact with mild erythema."},
+        {"id": "seg_005", "start_ms": 42000, "end_ms": 50000,
+         "text": "My assessment is a stage 3 sacral pressure injury, improving."},
+        {"id": "seg_006", "start_ms": 50000, "end_ms": 60000,
+         "text": "Continue the current dressing, off-loading, and we'll reassess in one week."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_001",
+                "text": "Wound check of a sacral wound.",
+                "source_type": "transcript",
+                "source_id": "seg_001",
+                "source_quote": "the wound on your sacrum"
+              }
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_002",
+                "text": "Patient reports increased drainage over the past week.",
+                "source_type": "transcript",
+                "source_id": "seg_002",
+                "source_quote": "It's been draining a bit more this week."
+              }
+            ]
+          },
+          {
+            "id": "wound_assessment",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_003",
+                "text": "Physician noted sacral wound dimensions 4 × 2 × 0.5 cm.",
+                "source_type": "transcript",
+                "source_id": "seg_003",
+                "source_quote": "The wound measures 4 by 2 centimetres, depth 0.5 centimetres."
+              },
+              {
+                "id": "claim_004",
+                "text": "Physician noted the wound bed as approximately 80% granulation tissue and 20% slough.",
+                "source_type": "transcript",
+                "source_id": "seg_003",
+                "source_quote": "about 80 percent granulation tissue with 20 percent slough"
+              },
+              {
+                "id": "claim_005",
+                "text": "Physician noted scant serous drainage with no odour.",
+                "source_type": "transcript",
+                "source_id": "seg_003",
+                "source_quote": "Scant serous drainage, no odour."
+              },
+              {
+                "id": "claim_006",
+                "text": "Physician noted 1 cm of undermining at the 12 o'clock position and intact periwound skin with mild erythema.",
+                "source_type": "transcript",
+                "source_id": "seg_004",
+                "source_quote": "1 centimetre of undermining at the 12 o'clock position. Periwound skin is intact with mild erythema."
+              }
+            ]
+          },
+          {"id": "imaging_review", "status": "not_captured", "claims": []},
+          {
+            "id": "assessment",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_007",
+                "text": "Physician stated an assessment of stage 3 sacral pressure injury, improving.",
+                "source_type": "transcript",
+                "source_id": "seg_005",
+                "source_quote": "My assessment is a stage 3 sacral pressure injury, improving."
+              }
+            ]
+          },
+          {
+            "id": "plan",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_008",
+                "text": "Physician stated a plan to continue the current dressing and off-loading, with reassessment in one week.",
+                "source_type": "transcript",
+                "source_id": "seg_006",
+                "source_quote": "Continue the current dressing, off-loading, and we'll reassess in one week."
+              }
+            ]
+          }
+        ]
+      }
     }
   ]
 }

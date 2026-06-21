@@ -26,9 +26,11 @@
         "palpation", "tenderness", "guarding", "swelling", "effusion",
         "strength", "sensation", "reflexes", "special test",
         "Lachman", "McMurray", "Hawkins", "Neer", "empty can",
+        "drawer", "anterior drawer", "apprehension", "Thessaly",
+        "valgus stress", "varus stress", "goniometer", "instability",
         "looking here", "you can see"
       ],
-      "description": "Inspection, palpation, range of motion measurements, strength testing, special orthopedic tests, neurovascular status"
+      "description": "Inspection, palpation, range of motion (active and passive, in degrees), strength on the 0-5 MRC scale, named special tests with result and side (Lachman, McMurray, Hawkins, Neer, drawer), neurovascular status — described only as the physician states them"
     },
     {
       "id": "imaging_review",
@@ -46,7 +48,7 @@
       "title": "Assessment",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Clinical assessment as stated by the physician — diagnosis or working diagnosis explicitly stated"
+      "description": "Working diagnosis as explicitly stated by the physician, verbatim. Do not add differentials the physician did not voice"
     },
     {
       "id": "plan",
