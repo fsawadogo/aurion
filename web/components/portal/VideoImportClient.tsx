@@ -162,7 +162,9 @@ export default function VideoImportClient({
           process: processVideoImport,
           status: getVideoImportStatus,
         };
-  const reviewBase = surface === "admin" ? "/sessions" : "/portal/notes";
+  // Admin/eval land on the full note review (the Eval interface shows the
+  // masked transcript + per-claim text); clinicians use their own review.
+  const reviewBase = surface === "admin" ? "/eval" : "/portal/notes";
 
   const [file, setFile] = useState<File | null>(null);
   const [specialty, setSpecialty] = useState("general");
