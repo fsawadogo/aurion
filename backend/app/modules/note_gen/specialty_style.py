@@ -14,8 +14,13 @@ content the transcript didn't already contain. If a transcript doesn't
 mention laterality, the orthopedic snippet doesn't make the model
 hallucinate one — descriptive mode still wins.
 
-Keep each snippet to ~3 sentences. Longer prompts dilute attention;
-the model benefits more from a tight pointer than a textbook.
+Keep snippets tight — a focused pointer beats a textbook, and longer
+prompts dilute attention. The pilot specialties (orthopedic_surgery,
+plastic_surgery) carry richer, section-targeted guidance grounded in
+clinical-documentation standards (AAOS ROM/strength conventions, wound
+assessment fields); the rest stay terse until validated against pilot
+sessions. All guidance is still style-only + descriptive (capture X *when
+stated* — never instruct the model to diagnose, interpret, or add content).
 """
 
 from __future__ import annotations
@@ -23,18 +28,33 @@ from __future__ import annotations
 _STYLE: dict[str, str] = {
     # ── MVP templates (CLAUDE.md §"Specialty Templates") ─────────────
     "orthopedic_surgery": (
-        "Style: use precise anatomical terminology (e.g. 'medial joint "
-        "line', 'lateral malleolus') and quantify when the transcript "
-        "does — degrees of range of motion, centimetres of effusion, "
-        "side (right/left). Imaging review should always note modality + "
-        "laterality + view (e.g. 'AP and lateral right knee X-ray')."
+        "Style: document the exam in the order the physician follows — "
+        "inspection, palpation, range of motion, strength, special tests, "
+        "neurovascular status — using precise anatomical terms (e.g. "
+        "'medial joint line', 'lateral malleolus'). Capture, only as "
+        "stated: range of motion as degrees (active vs passive when the "
+        "physician distinguishes them); strength on the 0-5 scale when "
+        "graded (e.g. '4/5'); named special tests with their result and "
+        "side (e.g. 'Lachman negative on the left', 'McMurray positive on "
+        "the right'); and laterality (right/left) wherever mentioned. "
+        "Imaging review must note modality + laterality + view (e.g. 'AP "
+        "and lateral right knee X-ray'). Record the physician's stated "
+        "working diagnosis verbatim in the assessment — never add "
+        "differentials and never interpret findings."
     ),
     "plastic_surgery": (
-        "Style: when wounds are discussed, capture dimensions (length × "
-        "width × depth) and tissue qualifiers (color, drainage character, "
-        "edges) exactly as stated. Note flap viability descriptors "
-        "(perfusion, capillary refill, color match) when applicable. Do "
-        "not infer healing trajectory."
+        "Style: document wounds with the standard assessment fields the "
+        "physician states — anatomical location; dimensions as length × "
+        "width × depth in centimetres; wound-bed tissue types and their "
+        "proportions (granulation, slough, eschar, necrosis); exudate "
+        "amount and character (serous, serosanguineous, purulent; colour; "
+        "odour); wound edges (well-approximated, undermining, tunnelling); "
+        "and periwound skin (erythema, induration, maceration). For flaps "
+        "and grafts, capture viability descriptors as stated — colour "
+        "match, capillary refill time, perfusion, temperature. Record "
+        "signs of infection and healing observations exactly as the "
+        "physician describes them; never infer a healing trajectory or "
+        "wound aetiology."
     ),
     "musculoskeletal": (
         "Style: include functional context the physician mentions — gait "

@@ -26,8 +26,14 @@ class TestStyleLookup:
     def test_every_specialty_has_a_snippet(self, key: str) -> None:
         snippet = get_specialty_style(key)
         assert snippet, f"{key} missing a style snippet"
-        # Snippets stay concise — pointer, not textbook.
-        assert len(snippet) < 600, f"{key} snippet too long ({len(snippet)} chars)"
+        # Snippets stay concise — pointer, not textbook. The pilot
+        # specialties (orthopedic_surgery, plastic_surgery) carry richer,
+        # section-targeted guidance grounded in documentation standards, so
+        # they get a higher cap; the rest stay terse until validated.
+        cap = 1000 if key in ("orthopedic_surgery", "plastic_surgery") else 600
+        assert len(snippet) < cap, (
+            f"{key} snippet too long ({len(snippet)} chars, cap {cap})"
+        )
 
     def test_unknown_specialty_returns_empty(self) -> None:
         assert get_specialty_style("does_not_exist") == ""
