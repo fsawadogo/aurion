@@ -1,6 +1,6 @@
 "use client";
 
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, FileText } from "lucide-react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouteSegment } from "@/lib/use-route-segment";
@@ -117,12 +117,24 @@ export default function SessionDetailClient(
             : undefined
         }
         actions={
-          <Link href="/sessions">
-            <Button variant="secondary" size="sm">
-              <ArrowLeft className="mr-1 h-4 w-4" />
-              Back to sessions
-            </Button>
-          </Link>
+          <div className="flex items-center gap-2">
+            {data && data.note_version > 0 && (
+              // Plain <a> (not <Link>) — dynamic route under `output: export`,
+              // matching the eval list's nav convention.
+              <a href={`/eval/${encodeURIComponent(sessionId)}`}>
+                <Button variant="primary" size="sm">
+                  <FileText className="mr-1 h-4 w-4" />
+                  Review full note
+                </Button>
+              </a>
+            )}
+            <Link href="/sessions">
+              <Button variant="secondary" size="sm">
+                <ArrowLeft className="mr-1 h-4 w-4" />
+                Back to sessions
+              </Button>
+            </Link>
+          </div>
         }
       />
 
@@ -317,8 +329,14 @@ export default function SessionDetailClient(
               )}
 
               <p className="mt-4 text-[11px] text-gray-400">
-                Claim text is not surfaced here — for masked transcript / frame / note
-                review, use the <Link href="/eval" className="underline">Eval interface</Link>.
+                Claim text is not surfaced here — open the{" "}
+                <a
+                  href={`/eval/${encodeURIComponent(sessionId)}`}
+                  className="underline"
+                >
+                  full note review
+                </a>{" "}
+                for the masked transcript, frame citations, and per-claim text.
               </p>
             </Card>
           </>
