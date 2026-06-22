@@ -7,6 +7,7 @@ import enMessages from "@/messages/en.json";
 import frMessages from "@/messages/fr.json";
 import type { AIPrompt } from "@/types";
 import { withIntl } from "./helpers/intl";
+import { ApiError } from "@/lib/api";
 
 /**
  * AI-PROMPTS-A — Transparency page.
@@ -23,9 +24,16 @@ import { withIntl } from "./helpers/intl";
 vi.mock("@/lib/portal-api", () => ({
   listMyPrompts: vi.fn(),
   getSpecialtyPrompts: vi.fn(),
+  saveSpecialtyGuidance: vi.fn(),
+  clearSpecialtyGuidance: vi.fn(),
 }));
 
-import { getSpecialtyPrompts, listMyPrompts } from "@/lib/portal-api";
+import {
+  clearSpecialtyGuidance,
+  getSpecialtyPrompts,
+  listMyPrompts,
+  saveSpecialtyGuidance,
+} from "@/lib/portal-api";
 import type { SpecialtyPrompt } from "@/types";
 
 // Helper — every default-only fixture has active_prompt == system_prompt
@@ -97,11 +105,20 @@ const LIVE_PREVIEW: AIPrompt = basePrompt({
 
 const MOCK_PROMPTS = [NOTE_GEN, VISION_FRAME, PATIENT_SUMMARY, LIVE_PREVIEW];
 
-const MOCK_SPECIALTIES: SpecialtyPrompt[] = [
-  {
+const DEFAULT_GUIDANCE =
+  "Style: document the exam in the order the physician follows.";
+
+function specialtyFixture(
+  over: Partial<SpecialtyPrompt> = {},
+): SpecialtyPrompt {
+  return {
     key: "orthopedic_surgery",
     display_name: "Orthopedic Surgery",
-    guidance: "Style: document the exam in the order the physician follows.",
+    guidance: DEFAULT_GUIDANCE,
+    user_guidance: null,
+    is_overridden: false,
+    active_guidance: DEFAULT_GUIDANCE,
+    enabled: true,
     sections: [
       {
         id: "physical_exam",
@@ -115,12 +132,17 @@ const MOCK_SPECIALTIES: SpecialtyPrompt[] = [
       { description: "right knee pain", populated_sections: ["physical_exam"] },
     ],
     examples_count: 1,
-  },
-];
+    ...over,
+  };
+}
+
+const MOCK_SPECIALTIES: SpecialtyPrompt[] = [specialtyFixture()];
 
 beforeEach(() => {
   vi.mocked(listMyPrompts).mockResolvedValue(MOCK_PROMPTS);
   vi.mocked(getSpecialtyPrompts).mockResolvedValue(MOCK_SPECIALTIES);
+  vi.mocked(saveSpecialtyGuidance).mockReset();
+  vi.mocked(clearSpecialtyGuidance).mockReset();
 });
 
 describe("AIPromptsPage — page shell + load (AC-7)", () => {
@@ -291,6 +313,140 @@ describe("AIPromptsPage — by-specialty view (AC-7)", () => {
     expect(
       screen.queryByTestId("specialty-card-orthopedic_surgery"),
     ).not.toBeInTheDocument();
+  });
+});
+
+describe("AIPromptsPage — by-specialty guidance editing", () => {
+  async function gotoSpecialtyView() {
+    const user = userEvent.setup();
+    render(withIntl(<AIPromptsPage />));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("prompt-card-note_generation-name"),
+      ).toBeInTheDocument(),
+    );
+    await user.click(screen.getByTestId("prompts-view-specialty"));
+    return user;
+  }
+
+  it("opens an editor pre-filled with the active guidance", async () => {
+    const user = await gotoSpecialtyView();
+    await user.click(
+      screen.getByTestId("specialty-card-orthopedic_surgery-edit"),
+    );
+    const box = screen.getByTestId(
+      "specialty-guidance-input-orthopedic_surgery",
+    ) as HTMLTextAreaElement;
+    expect(box.value).toBe(DEFAULT_GUIDANCE);
+  });
+
+  it("saves an edited guidance and reflects the override", async () => {
+    vi.mocked(saveSpecialtyGuidance).mockResolvedValue(
+      specialtyFixture({
+        user_guidance: "Lead with the chief complaint as stated.",
+        is_overridden: true,
+        active_guidance: "Lead with the chief complaint as stated.",
+      }),
+    );
+    const user = await gotoSpecialtyView();
+    await user.click(
+      screen.getByTestId("specialty-card-orthopedic_surgery-edit"),
+    );
+    const box = screen.getByTestId(
+      "specialty-guidance-input-orthopedic_surgery",
+    );
+    await user.clear(box);
+    await user.type(box, "Lead with the chief complaint as stated.");
+    await user.click(
+      screen.getByTestId("specialty-guidance-save-orthopedic_surgery"),
+    );
+
+    await waitFor(() =>
+      expect(saveSpecialtyGuidance).toHaveBeenCalledWith(
+        "orthopedic_surgery",
+        "Lead with the chief complaint as stated.",
+      ),
+    );
+    expect(
+      screen.getByTestId("specialty-card-orthopedic_surgery-override-badge"),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText("Lead with the chief complaint as stated."),
+    ).toBeInTheDocument();
+  });
+
+  it("surfaces a banlist 400 inline without losing the draft", async () => {
+    vi.mocked(saveSpecialtyGuidance).mockRejectedValue(
+      new ApiError(
+        400,
+        JSON.stringify({
+          detail: {
+            message: "Your guidance contains a banned phrase.",
+            code: "banned_phrase",
+            matched_phrase: "interpret the findings",
+          },
+        }),
+      ),
+    );
+    const user = await gotoSpecialtyView();
+    await user.click(
+      screen.getByTestId("specialty-card-orthopedic_surgery-edit"),
+    );
+    const box = screen.getByTestId(
+      "specialty-guidance-input-orthopedic_surgery",
+    );
+    await user.clear(box);
+    await user.type(box, "Interpret the findings.");
+    await user.click(
+      screen.getByTestId("specialty-guidance-save-orthopedic_surgery"),
+    );
+
+    const err = await screen.findByTestId(
+      "specialty-guidance-error-orthopedic_surgery",
+    );
+    expect(err.textContent).toContain("interpret the findings");
+    // Editor stays open with the draft preserved.
+    expect(
+      (screen.getByTestId(
+        "specialty-guidance-input-orthopedic_surgery",
+      ) as HTMLTextAreaElement).value,
+    ).toBe("Interpret the findings.");
+  });
+
+  it("clears an override back to the default", async () => {
+    vi.mocked(getSpecialtyPrompts).mockResolvedValue([
+      specialtyFixture({
+        user_guidance: "My custom text.",
+        is_overridden: true,
+        active_guidance: "My custom text.",
+      }),
+    ]);
+    vi.mocked(clearSpecialtyGuidance).mockResolvedValue(specialtyFixture());
+    const user = await gotoSpecialtyView();
+    await user.click(
+      screen.getByTestId("specialty-card-orthopedic_surgery-edit"),
+    );
+    await user.click(
+      screen.getByTestId("specialty-guidance-clear-orthopedic_surgery"),
+    );
+    await waitFor(() =>
+      expect(clearSpecialtyGuidance).toHaveBeenCalledWith("orthopedic_surgery"),
+    );
+    expect(
+      screen.queryByTestId(
+        "specialty-card-orthopedic_surgery-override-badge",
+      ),
+    ).not.toBeInTheDocument();
+  });
+
+  it("warns when the specialty layer is not wired into live notes", async () => {
+    vi.mocked(getSpecialtyPrompts).mockResolvedValue([
+      specialtyFixture({ enabled: false }),
+    ]);
+    await gotoSpecialtyView();
+    expect(
+      screen.getByTestId("specialty-card-orthopedic_surgery-inactive"),
+    ).toBeInTheDocument();
   });
 });
 

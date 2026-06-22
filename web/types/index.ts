@@ -1172,7 +1172,19 @@ export interface SpecialtyPromptExample {
 export interface SpecialtyPrompt {
   key: string;
   display_name: string;
+  /** The shipped DEFAULT style guidance (the "default" preview pane). */
   guidance: string;
+  /** The calling physician's saved override, or null. */
+  user_guidance: string | null;
+  is_overridden: boolean;
+  /** What the live prompt would use: user_guidance when set, else guidance. */
+  active_guidance: string;
+  /**
+   * Whether the specialty-style layer is currently wired into live note
+   * generation (feature_flags.specialty_style_in_prompt_enabled). When false,
+   * saved guidance is dormant — the UI warns the edit won't affect notes yet.
+   */
+  enabled: boolean;
   sections: SpecialtyPromptSection[];
   examples: SpecialtyPromptExample[];
   examples_count: number;
