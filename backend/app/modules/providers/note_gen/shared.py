@@ -133,6 +133,7 @@ def build_user_prompt(
     output_language: str = "en",
     prior_context_text: str | None = None,
     participants: list[dict] | None = None,
+    specialty_prefix: str | None = None,
 ) -> str:
     """Build the user prompt with transcript and template context.
 
@@ -153,6 +154,15 @@ def build_user_prompt(
     PARTICIPANTS block is injected (see :func:`render_participants_block`)
     so the model can attribute statements by role/name. Empty / ``None``
     skips it entirely (byte-identical to the pre-#275 build).
+
+    ``specialty_prefix`` — the per-specialty STYLE GUIDANCE block plus the
+    specialty's few-shot examples, pre-rendered by
+    :func:`app.modules.note_gen.service.render_specialty_prefix` and resolved
+    against the calling physician's saved override. Injected just below the
+    opening line. Gated upstream by
+    ``feature_flags.specialty_style_in_prompt_enabled`` — ``None`` (the
+    default, and the only value passed while the flag is OFF) yields a
+    byte-identical prompt to the pre-feature build.
     """
     sections_spec = json.dumps(
         [{"id": s.id, "title": s.title, "required": s.required} for s in template.sections],
@@ -174,9 +184,13 @@ def build_user_prompt(
     if prior_context_text:
         prior_block = f"{prior_context_text}\n\n"
     participants_block = render_participants_block(participants)
+    # Specialty STYLE GUIDANCE + few-shot block (resolved against the
+    # physician's override upstream). Ends with its own blank line so the
+    # following sections read cleanly; empty/None contributes nothing.
+    specialty_block = f"{specialty_prefix.rstrip()}\n\n" if specialty_prefix else ""
     return f"""Generate a Stage {stage} clinical note for specialty: {template.key}
 {language_instruction}
-Template sections (generate each):
+{specialty_block}Template sections (generate each):
 {sections_spec}
 
 {participants_block}{prior_block}Transcript segments:

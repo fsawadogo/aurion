@@ -56,6 +56,7 @@ class NoteGenerationProvider(ABC):
         system_prompt: str | None = None,
         prior_context_text: str | None = None,
         participants: list[dict] | None = None,
+        specialty_prefix: str | None = None,
     ) -> Note:
         """Generate a structured SOAP note from a transcript and template.
 
@@ -86,6 +87,14 @@ class NoteGenerationProvider(ABC):
         the model can attribute statements by role/name. ``None`` / empty
         renders unchanged. Additive optional kwarg; every concrete
         provider forwards it into ``build_user_prompt``.
+
+        ``specialty_prefix`` — the per-specialty STYLE GUIDANCE + few-shot
+        block, pre-rendered and resolved against the calling physician's
+        saved guidance override by the service layer (gated by
+        ``feature_flags.specialty_style_in_prompt_enabled``). ``None`` (the
+        default, and the only value while the flag is OFF) renders unchanged.
+        Additive optional kwarg; every concrete provider forwards it into
+        ``build_user_prompt``.
         """
         ...
 

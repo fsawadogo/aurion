@@ -234,6 +234,12 @@ resource "aws_appconfig_configuration_profile" "main" {
             # defaults both (video_import_enabled false, drop True).
             video_import_enabled               = { type = "boolean" }
             video_import_drop_zero_face_frames = { type = "boolean" }
+            # Specialty STYLE GUIDANCE layer in the live Stage 1 note prompt
+            # (incl. per-physician guidance overrides). NOT in `required` so an
+            # older document without the key still validates under
+            # additionalProperties = false — the backend Pydantic schema
+            # defaults it false (specialty layer stays dark until enabled).
+            specialty_style_in_prompt_enabled = { type = "boolean" }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in

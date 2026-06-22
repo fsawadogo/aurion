@@ -32,9 +32,11 @@ from app.modules.prompts.registry import PROMPTS, PromptDefinition
 from app.modules.prompts.safety import (
     BANNED_PHRASES,
     DESCRIPTIVE_ANCHORS_REQUIRED,
+    SPECIALTY_GUIDANCE_MAX_LENGTH,
     USER_PROMPT_MAX_LENGTH,
     ValidationCode,
     ValidationResult,
+    validate_specialty_guidance,
     validate_user_prompt,
 )
 
@@ -43,11 +45,13 @@ __all__ = [
     "PromptDefinition",
     "BANNED_PHRASES",
     "DESCRIPTIVE_ANCHORS_REQUIRED",
+    "SPECIALTY_GUIDANCE_MAX_LENGTH",
     "USER_PROMPT_MAX_LENGTH",
     "ValidationCode",
     "ValidationResult",
     "assemble_prompt",
     "assemble_prompt_for_session",
     "select_active_prompt",
+    "validate_specialty_guidance",
     "validate_user_prompt",
 ]

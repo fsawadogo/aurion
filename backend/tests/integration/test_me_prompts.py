@@ -389,6 +389,25 @@ async def test_specialty_entry_shape(app_client: AsyncClient) -> None:
 
 
 @pytest.mark.asyncio
+async def test_specialty_entry_override_fields_default(
+    app_client: AsyncClient,
+) -> None:
+    """With no saved override (the mock-db fixture serves zero rows), every
+    entry reports default semantics: not overridden, active == default, and an
+    ``enabled`` flag reflecting the feature gate (default OFF)."""
+    response = await app_client.get(
+        _SPECIALTIES_URL, headers=_headers("CLINICIAN")
+    )
+    payload = response.json()
+    for s in payload:
+        assert s["is_overridden"] is False
+        assert s["user_guidance"] is None
+        assert s["active_guidance"] == s["guidance"]
+        # The feature ships dark — the wiring flag defaults False.
+        assert s["enabled"] is False
+
+
+@pytest.mark.asyncio
 async def test_specialty_guidance_has_no_phi(app_client: AsyncClient) -> None:
     response = await app_client.get(
         _SPECIALTIES_URL, headers=_headers("CLINICIAN")

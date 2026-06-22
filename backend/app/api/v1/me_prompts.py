@@ -56,14 +56,20 @@ from app.core.database import get_db
 from app.core.models import PromptOverrideModel
 from app.core.types import UserRole
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.config.appconfig_client import get_config
 from app.modules.note_gen.few_shot import get_few_shot_examples
-from app.modules.note_gen.service import get_template, list_available_templates
+from app.modules.note_gen.service import (
+    get_template,
+    list_available_templates,
+    specialty_style_prompt_id,
+)
 from app.modules.note_gen.specialty_style import get_specialty_style
 from app.modules.prompts import (
     PROMPTS,
     PromptDefinition,
     ValidationCode,
     select_active_prompt,
+    validate_specialty_guidance,
     validate_user_prompt,
 )
 
@@ -297,18 +303,116 @@ class SpecialtyExampleResponse(BaseModel):
 
 
 class SpecialtyPromptResponse(BaseModel):
-    """The specialty-specific layer that is injected into the Stage 1 note
-    prompt on top of the (global) note-generation system prompt: the style
-    guidance, the template sections + their visual-trigger keywords, and a
-    summary of the worked few-shot examples. Read-only transparency surface —
-    distinct from the per-physician overridable registry prompts."""
+    """The specialty-specific layer injected into the Stage 1 note prompt on
+    top of the (global) note-generation system prompt: the style guidance, the
+    template sections + their visual-trigger keywords, and a summary of the
+    worked few-shot examples.
+
+    The STYLE guidance is per-physician overridable (replacement semantics for
+    the guidance text only — the immutable base system prompt below it always
+    carries the descriptive-mode boundary). Override fields mirror the global
+    registry-prompt shape:
+
+      * ``guidance`` — the shipped DEFAULT style snippet (kept under this name
+        for backward-compat; treat it as the "default" preview).
+      * ``user_guidance`` — the calling physician's saved override, or None.
+      * ``is_overridden`` — convenience flag (``user_guidance is not None``).
+      * ``active_guidance`` — what the live prompt would actually use:
+        ``user_guidance`` when set, else ``guidance``.
+      * ``enabled`` — whether the specialty-style layer is currently wired
+        into live note generation
+        (``feature_flags.specialty_style_in_prompt_enabled``). When False the
+        guidance (default or override) is NOT sent to the model — the UI uses
+        this to warn that edits are saved but dormant.
+    """
 
     key: str
     display_name: str
     guidance: str
+    user_guidance: str | None = None
+    is_overridden: bool = False
+    active_guidance: str
+    enabled: bool
     sections: list[SpecialtySectionResponse]
     examples: list[SpecialtyExampleResponse]
     examples_count: int
+
+
+def _serialize_specialty(
+    key: str, user_guidance: Optional[str], enabled: bool
+) -> SpecialtyPromptResponse:
+    """Project a specialty's template + style + examples + the caller's saved
+    guidance override onto the wire schema. Single point of projection so GET
+    and PATCH/DELETE return byte-identical shapes."""
+    template = get_template(key)
+    examples = get_few_shot_examples(key)
+    default_guidance = get_specialty_style(key)
+    return SpecialtyPromptResponse(
+        key=template.key,
+        display_name=template.display_name,
+        guidance=default_guidance,
+        user_guidance=user_guidance,
+        is_overridden=user_guidance is not None,
+        active_guidance=user_guidance if user_guidance is not None else default_guidance,
+        enabled=enabled,
+        sections=[
+            SpecialtySectionResponse(
+                id=s.id,
+                title=s.title,
+                required=s.required,
+                description=getattr(s, "description", "") or "",
+                visual_trigger_keywords=getattr(
+                    s, "visual_trigger_keywords", []
+                )
+                or [],
+            )
+            for s in template.sections
+        ],
+        examples=[
+            SpecialtyExampleResponse(
+                description=ex.get("description", ""),
+                populated_sections=[
+                    s.get("id", "")
+                    for s in ex.get("note", {}).get("sections", [])
+                    if s.get("status") == "populated"
+                ],
+            )
+            for ex in examples
+        ],
+        examples_count=len(examples),
+    )
+
+
+async def _get_owner_specialty_guidance(
+    db: AsyncSession, owner_id: uuid.UUID
+) -> dict[str, str]:
+    """Fetch every specialty STYLE override this physician has saved, keyed by
+    specialty key (the ``specialty_style:`` prefix stripped). One round-trip,
+    projected against the template list in memory — same shape as
+    ``_get_owner_user_prompts`` for the registry prompts."""
+    stmt = select(PromptOverrideModel).where(
+        PromptOverrideModel.owner_id == owner_id,
+        PromptOverrideModel.prompt_id.like(f"{_SPECIALTY_PREFIX}%"),
+    )
+    result = await db.execute(stmt)
+    return {
+        row.prompt_id[len(_SPECIALTY_PREFIX):]: row.user_prompt_text
+        for row in result.scalars().all()
+    }
+
+
+#: Mirror of ``note_gen.service.SPECIALTY_STYLE_PROMPT_PREFIX`` for the
+#: ``prompt_id`` namespace, via the public ``specialty_style_prompt_id``.
+_SPECIALTY_PREFIX: str = specialty_style_prompt_id("")
+
+
+def _specialty_or_404(key: str) -> None:
+    """Validate the specialty key against the in-code template list or 404."""
+    if key not in set(list_available_templates()):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Unknown specialty: {key}",
+        )
 
 
 @router.get(
@@ -318,47 +422,24 @@ class SpecialtyPromptResponse(BaseModel):
 )
 async def list_specialty_prompts(
     user: CurrentUser = Depends(require_prompts_reader),
+    db: AsyncSession = Depends(get_db),
 ) -> list[SpecialtyPromptResponse]:
-    """Read-only view of the specialty layer. No DB access — all from the
-    in-memory template / style / few-shot caches. Same reader role gate as
-    the registry-prompt list."""
-    out: list[SpecialtyPromptResponse] = []
-    for key in sorted(list_available_templates()):
-        template = get_template(key)
-        examples = get_few_shot_examples(key)
-        out.append(
-            SpecialtyPromptResponse(
-                key=template.key,
-                display_name=template.display_name,
-                guidance=get_specialty_style(key),
-                sections=[
-                    SpecialtySectionResponse(
-                        id=s.id,
-                        title=s.title,
-                        required=s.required,
-                        description=getattr(s, "description", "") or "",
-                        visual_trigger_keywords=getattr(
-                            s, "visual_trigger_keywords", []
-                        )
-                        or [],
-                    )
-                    for s in template.sections
-                ],
-                examples=[
-                    SpecialtyExampleResponse(
-                        description=ex.get("description", ""),
-                        populated_sections=[
-                            s.get("id", "")
-                            for s in ex.get("note", {}).get("sections", [])
-                            if s.get("status") == "populated"
-                        ],
-                    )
-                    for ex in examples
-                ],
-                examples_count=len(examples),
-            )
-        )
-    return out
+    """List the specialty layer + the caller's saved guidance overrides.
+
+    For CLINICIAN callers the response carries their saved guidance
+    (``user_guidance`` / ``is_overridden`` / ``active_guidance``). Support
+    roles (ADMIN / EVAL_TEAM / COMPLIANCE_OFFICER) never inspect another
+    physician's overrides through this endpoint — they always see
+    ``user_guidance=None``. ``enabled`` reflects the live feature flag for
+    everyone."""
+    enabled = get_config().feature_flags.specialty_style_in_prompt_enabled
+    guidance_by_key: dict[str, str] = {}
+    if user.role is UserRole.CLINICIAN:
+        guidance_by_key = await _get_owner_specialty_guidance(db, user.user_id)
+    return [
+        _serialize_specialty(key, guidance_by_key.get(key), enabled)
+        for key in sorted(list_available_templates())
+    ]
 
 
 # ── PATCH — save / update user prompt ───────────────────────────────────────
@@ -500,3 +581,133 @@ async def delete_my_user_prompt(
         user.user_id, prompt_id,
     )
     return _serialize(prompt, None)
+
+
+# ── PATCH / DELETE — per-physician specialty STYLE guidance override ─────────
+
+
+class SpecialtyGuidanceUpdate(BaseModel):
+    """PATCH body — the physician's replacement STYLE guidance for a specialty.
+
+    Validated by ``validate_specialty_guidance`` (length + injection/role-flip
+    banlist). The descriptive-mode anchor requirement does NOT apply here: this
+    text is ADDITIVE to the always-present base note system prompt, which keeps
+    the descriptive-mode boundary — unlike the registry-prompt override, which
+    replaces the system prompt and so must self-contain it."""
+
+    guidance: str = Field(
+        description=(
+            "The physician's specialty STYLE guidance that replaces the "
+            "shipped default for their own sessions. Additive on top of the "
+            "base note system prompt; validated structurally at save time."
+        ),
+    )
+
+
+@router.patch(
+    "/prompts/specialties/{key}",
+    response_model=SpecialtyPromptResponse,
+    summary="Save or update the calling physician's specialty STYLE guidance",
+)
+async def patch_my_specialty_guidance(
+    key: str,
+    body: SpecialtyGuidanceUpdate,
+    user: CurrentUser = Depends(require_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> SpecialtyPromptResponse:
+    """Validate + upsert the calling physician's STYLE guidance override for
+    ``key``. 404 for an unknown specialty; 400 (with ``matched_phrase``) on a
+    banlist hit. Stored in the shared ``prompt_overrides`` table under the
+    ``specialty_style:`` namespace so it reuses the registry-override machinery
+    without a new table."""
+    _specialty_or_404(key)
+
+    guidance = body.guidance.strip() if body.guidance else ""
+    validation = validate_specialty_guidance(guidance)
+    if validation.code is not ValidationCode.OK:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "message": validation.message,
+                "code": validation.code.value,
+                "matched_phrase": validation.matched_phrase,
+                "missing_anchor_group": validation.missing_anchor_group,
+            },
+        )
+
+    prompt_id = specialty_style_prompt_id(key)
+    existing = await db.execute(
+        select(PromptOverrideModel).where(
+            PromptOverrideModel.owner_id == user.user_id,
+            PromptOverrideModel.prompt_id == prompt_id,
+        )
+    )
+    row = existing.scalar_one_or_none()
+    if row is None:
+        row = PromptOverrideModel(
+            id=uuid.uuid4(),
+            owner_id=user.user_id,
+            prompt_id=prompt_id,
+            user_prompt_text=guidance,
+        )
+        db.add(row)
+    else:
+        row.user_prompt_text = guidance
+    await db.flush()
+
+    # Audit — length only, never the text. The namespaced prompt_id
+    # distinguishes a specialty-guidance change from a registry-prompt change
+    # in the trail.
+    await write_audit(
+        _PROMPT_AUDIT_SESSION_ID,
+        AuditEventType.PROMPT_USER_PROMPT_SET,
+        actor_id=str(user.user_id),
+        prompt_id=prompt_id,
+        user_prompt_length=len(guidance),
+    )
+    await db.commit()
+
+    logger.info(
+        "Specialty guidance saved: clinician=%s specialty=%s length=%d",
+        user.user_id, key, len(guidance),
+    )
+    enabled = get_config().feature_flags.specialty_style_in_prompt_enabled
+    return _serialize_specialty(key, guidance, enabled)
+
+
+@router.delete(
+    "/prompts/specialties/{key}",
+    response_model=SpecialtyPromptResponse,
+    summary="Clear the calling physician's specialty STYLE guidance (use default)",
+)
+async def delete_my_specialty_guidance(
+    key: str,
+    user: CurrentUser = Depends(require_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> SpecialtyPromptResponse:
+    """Remove the saved guidance override so the shipped default takes over.
+    Idempotent — clearing a non-existent override returns 200 with the default
+    projection."""
+    _specialty_or_404(key)
+
+    prompt_id = specialty_style_prompt_id(key)
+    await db.execute(
+        delete(PromptOverrideModel).where(
+            PromptOverrideModel.owner_id == user.user_id,
+            PromptOverrideModel.prompt_id == prompt_id,
+        )
+    )
+    await write_audit(
+        _PROMPT_AUDIT_SESSION_ID,
+        AuditEventType.PROMPT_USER_PROMPT_CLEARED,
+        actor_id=str(user.user_id),
+        prompt_id=prompt_id,
+    )
+    await db.commit()
+
+    logger.info(
+        "Specialty guidance cleared: clinician=%s specialty=%s",
+        user.user_id, key,
+    )
+    enabled = get_config().feature_flags.specialty_style_in_prompt_enabled
+    return _serialize_specialty(key, None, enabled)

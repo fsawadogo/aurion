@@ -22,7 +22,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_events import AuditEventType
 from app.core.cost_rates import USD_MICROS_PER_DOLLAR, estimate_cost_usd_micros
-from app.core.models import NoteVersionModel, SessionModel
+from app.core.models import NoteVersionModel, PromptOverrideModel, SessionModel
 from app.core.types import (
     Note,
     NoteClaim,
@@ -446,6 +446,101 @@ def build_stage1_user_prompt(
     return prompt
 
 
+# ── Per-physician specialty STYLE guidance (live-prompt wiring) ──────────────
+#
+# The specialty STYLE GUIDANCE + few-shot layer historically lived only in
+# ``build_stage1_user_prompt`` above, which is exercised by tests but never
+# by the live provider path (the providers call
+# ``providers.note_gen.shared.build_user_prompt``). These helpers resolve the
+# EFFECTIVE guidance for a given physician — their saved override when present,
+# the shipped default otherwise — and render the prefix the providers inject.
+# Wiring is gated by ``feature_flags.specialty_style_in_prompt_enabled``; see
+# ``generate_stage1_note``.
+
+#: Namespace prefix for per-physician specialty-style overrides stored in the
+#: shared ``prompt_overrides`` table (reuses the registry-override store with a
+#: namespaced ``prompt_id`` so no new table/migration is needed). The global
+#: registry-prompt PATCH validates ``prompt_id`` against the in-code PROMPTS
+#: registry, so a ``specialty_style:*`` id can only be written via the
+#: specialty endpoints — the two override surfaces never collide.
+SPECIALTY_STYLE_PROMPT_PREFIX = "specialty_style:"
+
+
+def specialty_style_prompt_id(specialty_key: str) -> str:
+    """The ``prompt_overrides.prompt_id`` for a specialty's style override."""
+    return f"{SPECIALTY_STYLE_PROMPT_PREFIX}{specialty_key}"
+
+
+async def resolve_specialty_guidance(
+    specialty_key: str,
+    owner_id: Optional[uuid.UUID],
+    db: AsyncSession,
+) -> str:
+    """Return the effective specialty STYLE guidance for this physician.
+
+    The physician's saved override (``prompt_overrides`` row keyed by
+    :func:`specialty_style_prompt_id`) when present and non-empty, else the
+    shipped default from ``get_specialty_style``. ``owner_id`` is ``None`` for
+    sessions without a resolvable clinician (defensive) — those always get the
+    default, never another physician's override.
+    """
+    if owner_id is not None:
+        result = await db.execute(
+            select(PromptOverrideModel.user_prompt_text).where(
+                PromptOverrideModel.owner_id == owner_id,
+                PromptOverrideModel.prompt_id
+                == specialty_style_prompt_id(specialty_key),
+            )
+        )
+        override = result.scalar_one_or_none()
+        if override and override.strip():
+            return override
+    return get_specialty_style(specialty_key)
+
+
+async def render_specialty_prefix(
+    template: Template,
+    owner_id: Optional[uuid.UUID],
+    db: AsyncSession,
+) -> Optional[str]:
+    """Render the STYLE GUIDANCE + few-shot prefix injected into the live
+    Stage 1 user prompt, resolving the physician's guidance override.
+
+    Returns ``None`` when neither a style snippet nor any few-shot example
+    exists for the specialty, so the provider prompt is unchanged for
+    specialties with no authored guidance. The header mirrors the (test-only)
+    ``build_stage1_user_prompt`` rendering so the two stay legible.
+    """
+    guidance = await resolve_specialty_guidance(template.key, owner_id, db)
+    style_block = (
+        f"STYLE GUIDANCE FOR {template.display_name}:\n{guidance}\n\n"
+        if guidance
+        else ""
+    )
+    few_shot_block = render_examples_block(get_few_shot_examples(template.key))
+    prefix = f"{style_block}{few_shot_block}".strip()
+    return prefix or None
+
+
+async def _resolve_session_clinician_id(
+    session_id: str, db: AsyncSession
+) -> Optional[uuid.UUID]:
+    """Best-effort lookup of a session's clinician id for override scoping.
+
+    Returns ``None`` when the session row is missing or the id is unparseable
+    — the caller degrades to the default (shared) guidance rather than failing
+    note generation over a config lookup.
+    """
+    try:
+        sid = uuid.UUID(session_id)
+    except (ValueError, AttributeError):
+        return None
+    result = await db.execute(
+        select(SessionModel.clinician_id).where(SessionModel.id == sid)
+    )
+    return result.scalar_one_or_none()
+
+
 # ── Provider telemetry helper ────────────────────────────────────────────
 
 async def _record_provider_usage(
@@ -814,6 +909,18 @@ async def generate_stage1_note(
     if prior_context_text:
         system_prompt = system_prompt + _PRIOR_CONTEXT_SYSTEM_SUFFIX
 
+    # Specialty STYLE GUIDANCE + few-shot layer (flag-gated). When the flag
+    # is OFF the prefix is None and the provider prompt is byte-identical to
+    # the pre-feature build. When ON, the prefix resolves the calling
+    # physician's saved guidance override (or the shipped default) so the
+    # specialty layer finally reaches the live note — see render_specialty_prefix.
+    specialty_prefix: Optional[str] = None
+    if get_config().feature_flags.specialty_style_in_prompt_enabled:
+        clinician_id = await _resolve_session_clinician_id(session_id, db)
+        specialty_prefix = await render_specialty_prefix(
+            template, clinician_id, db
+        )
+
     # Wrap the registry call to capture per-call telemetry (issue #73).
     # Both the success and failure paths record so dashboards can show
     # failure / fallback rates accurately. Telemetry is best-effort —
@@ -828,6 +935,7 @@ async def generate_stage1_note(
             system_prompt=system_prompt,
             prior_context_text=prior_context_text or None,
             participants=participants or None,
+            specialty_prefix=specialty_prefix,
         )
         await _record_provider_usage(
             db=db,
