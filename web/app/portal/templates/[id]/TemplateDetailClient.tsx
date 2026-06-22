@@ -48,6 +48,10 @@ export default function TemplateDetailPage() {
   const [row, setRow] = useState<CustomTemplate | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // True when the list loaded but this id wasn't in it — a genuine
+  // "absent" state (deleted, or owned by another account), distinct from
+  // a transient load failure. Retry won't help; offer a way back instead.
+  const [notFound, setNotFound] = useState(false);
   const [mode, setMode] = useState<"preview" | "edit" | "json">("preview");
   const [draftJson, setDraftJson] = useState<string>("");
   // Structured-editor draft, initialized from the loaded template.
@@ -71,6 +75,7 @@ export default function TemplateDetailPage() {
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setNotFound(false);
     try {
       // No GET-by-id endpoint exists — list and find. Acceptable at
       // pilot scale; a follow-up PR could add a dedicated endpoint
@@ -78,6 +83,7 @@ export default function TemplateDetailPage() {
       const xs = await listMyCustomTemplates();
       const found = xs.find((x) => x.id === templateId);
       if (!found) {
+        setNotFound(true);
         setError(t("notFound"));
         return;
       }
@@ -199,6 +205,28 @@ export default function TemplateDetailPage() {
       {loading || !meResolved ? (
         <Card>
           <LoadingSkeleton lines={8} />
+        </Card>
+      ) : notFound && !row ? (
+        <Card>
+          <p className="text-aurion-callout font-medium text-navy-700">
+            {t("notFound")}
+          </p>
+          <p className="mt-1 text-aurion-caption text-navy-500">
+            {t("notFoundHint")}
+          </p>
+          <div className="mt-4 flex items-center gap-2">
+            {/* Plain anchor — dynamic-route sibling, but this targets the
+                static list page; Link is fine here. Kept as a button-styled
+                anchor for visual parity with the rest of the portal. */}
+            <a href="/portal/templates">
+              <Button variant="primary" size="sm">
+                {t("backToTemplates")}
+              </Button>
+            </a>
+            <Button variant="secondary" size="sm" onClick={() => void load()}>
+              {t("retry")}
+            </Button>
+          </div>
         </Card>
       ) : error && !row ? (
         <Card>

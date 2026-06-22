@@ -947,6 +947,8 @@
     "fallbackTitle": "Modèle",
     "loadError": "Impossible de charger le modèle.",
     "notFound": "Modèle introuvable.",
+    "notFoundHint": "Il a peut-être été supprimé, ou il appartient à un autre compte. Assurez-vous d’être connecté avec le compte qui l’a créé.",
+    "backToTemplates": "Retour aux modèles",
     "saveError": "Échec de l’enregistrement.",
     "deleteError": "Suppression échouée.",
     "deleteConfirm": "Supprimer le modèle personnalisé « {name} »?",
