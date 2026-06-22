@@ -947,6 +947,8 @@
     "fallbackTitle": "Template",
     "loadError": "Failed to load template.",
     "notFound": "Template not found.",
+    "notFoundHint": "It may have been deleted, or it belongs to a different account. Make sure you're signed in with the account that created it.",
+    "backToTemplates": "Back to templates",
     "saveError": "Save failed.",
     "deleteError": "Delete failed.",
     "deleteConfirm": "Delete custom template \"{name}\"?",
