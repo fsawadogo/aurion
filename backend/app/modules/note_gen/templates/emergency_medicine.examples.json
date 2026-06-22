@@ -1,0 +1,90 @@
+{
+  "examples": [
+    {
+      "description": "chest pain — vitals with values, exam, ECG + troponin, stated dx, mandatory disposition",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 4000,
+         "text": "What brings you to the emergency department today?"},
+        {"id": "seg_002", "start_ms": 4000, "end_ms": 12000,
+         "text": "Chest tightness for two hours, came on while I was walking."},
+        {"id": "seg_003", "start_ms": 12000, "end_ms": 26000,
+         "text": "Vitals: blood pressure 148 over 92, heart rate 104, respiratory rate 20, temperature 37 degrees, oxygen saturation 96 percent on room air."},
+        {"id": "seg_004", "start_ms": 26000, "end_ms": 34000,
+         "text": "Chest is clear on auscultation. No peripheral oedema."},
+        {"id": "seg_005", "start_ms": 34000, "end_ms": 44000,
+         "text": "ECG shows sinus tachycardia, no ST changes. First troponin is negative."},
+        {"id": "seg_006", "start_ms": 44000, "end_ms": 51000,
+         "text": "My working diagnosis is non-cardiac chest pain."},
+        {"id": "seg_007", "start_ms": 51000, "end_ms": 62000,
+         "text": "Plan to discharge home with cardiology follow-up in one week and return precautions."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_001", "text": "Patient reports chest tightness.",
+               "source_type": "transcript", "source_id": "seg_002",
+               "source_quote": "Chest tightness for two hours"}
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_002", "text": "Patient reports onset two hours ago, while walking.",
+               "source_type": "transcript", "source_id": "seg_002",
+               "source_quote": "for two hours, came on while I was walking"}
+            ]
+          },
+          {
+            "id": "vital_signs",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_003", "text": "Physician stated vitals: BP 148/92, HR 104, RR 20, temperature 37 C, SpO2 96% on room air.",
+               "source_type": "transcript", "source_id": "seg_003",
+               "source_quote": "blood pressure 148 over 92, heart rate 104, respiratory rate 20, temperature 37 degrees, oxygen saturation 96 percent on room air"}
+            ]
+          },
+          {
+            "id": "physical_exam",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_004", "text": "Physician noted chest clear on auscultation and no peripheral oedema.",
+               "source_type": "transcript", "source_id": "seg_004",
+               "source_quote": "Chest is clear on auscultation. No peripheral oedema."}
+            ]
+          },
+          {
+            "id": "investigations",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_005", "text": "Physician noted ECG showing sinus tachycardia with no ST changes, and a negative first troponin.",
+               "source_type": "transcript", "source_id": "seg_005",
+               "source_quote": "ECG shows sinus tachycardia, no ST changes. First troponin is negative."}
+            ]
+          },
+          {
+            "id": "assessment",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_006", "text": "Physician stated a working diagnosis of non-cardiac chest pain.",
+               "source_type": "transcript", "source_id": "seg_006",
+               "source_quote": "My working diagnosis is non-cardiac chest pain."}
+            ]
+          },
+          {
+            "id": "disposition",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_007", "text": "Physician stated a disposition of discharge home with cardiology follow-up in one week and return precautions.",
+               "source_type": "transcript", "source_id": "seg_007",
+               "source_quote": "discharge home with cardiology follow-up in one week and return precautions"}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -25,14 +25,14 @@
         "looking at", "you can see", "examination",
         "palpation", "inspection", "right here"
       ],
-      "description": "Inspection, palpation, and relevant physical examination findings as observed"
+      "description": "Objective, measurable physical findings as observed — vitals with units and exam findings; terse/telegraphic phrasing is appropriate"
     },
     {
       "id": "assessment",
       "title": "Assessment",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Clinical assessment as stated by the physician — diagnosis or working diagnosis explicitly stated"
+      "description": "Working diagnosis as explicitly stated by the physician, verbatim. Do not add interpretation the physician did not voice"
     },
     {
       "id": "plan",

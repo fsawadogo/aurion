@@ -27,17 +27,19 @@
         "balance", "proprioception", "functional test",
         "watching you walk", "watching here"
       ],
-      "description": "Functional movement assessment — gait analysis, sport-specific movements, activities of daily living"
+      "description": "Functional movement as described — gait (antalgic, normal, side of limp), weight-bearing and loading tolerance, sport- or activity-specific movements, pain at rest vs with loading, activities of daily living"
     },
     {
       "id": "physical_exam",
       "title": "Physical Examination",
       "required": true,
       "visual_trigger_keywords": [
-        "range of motion", "palpation", "tenderness", "strength",
-        "special test", "looking here", "you can see"
+        "range of motion", "ROM", "flexion", "extension",
+        "palpation", "tenderness", "strength", "special test",
+        "Lachman", "McMurray", "drawer", "apprehension",
+        "looking here", "you can see"
       ],
-      "description": "Inspection, palpation, range of motion measurements, strength testing, special tests, neurovascular status"
+      "description": "Inspection, palpation, range of motion (in degrees), strength on the 0-5 MRC scale, named special tests with result and side (e.g. 'McMurray positive on the right'), neurovascular status — described only as stated"
     },
     {
       "id": "imaging_review",
@@ -53,7 +55,7 @@
       "title": "Assessment",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Clinical assessment as stated by the physician — diagnosis or working diagnosis explicitly stated"
+      "description": "Working diagnosis as explicitly stated by the physician, verbatim. Do not add differentials the physician did not voice"
     },
     {
       "id": "plan",
