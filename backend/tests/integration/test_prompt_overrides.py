@@ -715,3 +715,178 @@ async def test_patch_persists_row_to_table(
     result = await db_session.execute(stmt)
     row = result.scalar_one()
     assert row.user_prompt_text == _WELL_FORMED_USER_PROMPT
+
+
+# ── Specialty STYLE guidance overrides (PATCH/DELETE /me/prompts/specialties) ─
+#
+# Same per-physician override machinery (prompt_overrides table) reused under
+# the ``specialty_style:`` namespace. Additive layer — validated by the
+# banlist + length but NOT the descriptive-anchor gate (the base system prompt
+# keeps the descriptive-mode boundary).
+
+_SPECIALTY = "orthopedic_surgery"
+_SPECIALTY_URL = f"/api/v1/me/prompts/specialties/{_SPECIALTY}"
+_WELL_FORMED_GUIDANCE = (
+    "Lead with the chief complaint. Capture range of motion in degrees and "
+    "strength on the 0-5 scale exactly as the physician states them."
+)
+
+
+@pytest.mark.asyncio
+async def test_patch_specialty_guidance_happy_path(
+    app_client: AsyncClient,
+    marie: tuple[uuid.UUID, dict[str, str]],
+    mock_audit_log: MagicMock,
+) -> None:
+    _, headers = marie
+    r = await app_client.patch(
+        _SPECIALTY_URL, headers=headers, json={"guidance": _WELL_FORMED_GUIDANCE}
+    )
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["key"] == _SPECIALTY
+    assert payload["user_guidance"] == _WELL_FORMED_GUIDANCE
+    assert payload["is_overridden"] is True
+    assert payload["active_guidance"] == _WELL_FORMED_GUIDANCE
+    # The shipped default is still surfaced for the "default" preview pane.
+    assert payload["guidance"] and payload["guidance"] != _WELL_FORMED_GUIDANCE
+
+    # Audit emitted with the NAMESPACED prompt_id + length only (no text).
+    call = mock_audit_log.write_event.call_args
+    assert call.kwargs["event_type"] is AuditEventType.PROMPT_USER_PROMPT_SET
+    assert call.kwargs["prompt_id"] == f"specialty_style:{_SPECIALTY}"
+    assert call.kwargs["user_prompt_length"] == len(_WELL_FORMED_GUIDANCE)
+
+
+@pytest.mark.asyncio
+async def test_patch_specialty_guidance_additive_no_anchor_required(
+    app_client: AsyncClient,
+    marie: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    """A pure style pointer with NO descriptive-mode anchor language is
+    accepted — the additive layer doesn't need it (unlike the replacement
+    registry override)."""
+    _, headers = marie
+    r = await app_client.patch(
+        _SPECIALTY_URL,
+        headers=headers,
+        json={"guidance": "Lead with vital signs; capture each value as stated."},
+    )
+    assert r.status_code == 200, r.text
+
+
+@pytest.mark.asyncio
+async def test_patch_specialty_guidance_banlist_rejected(
+    app_client: AsyncClient,
+    marie: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    _, headers = marie
+    r = await app_client.patch(
+        _SPECIALTY_URL,
+        headers=headers,
+        json={"guidance": "Interpret the findings and recommend treatment."},
+    )
+    assert r.status_code == 400, r.text
+    detail = r.json()["detail"]
+    assert detail["code"] == "banned_phrase"
+    assert detail["matched_phrase"]
+
+
+@pytest.mark.asyncio
+async def test_patch_specialty_unknown_key_404(
+    app_client: AsyncClient,
+    marie: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    _, headers = marie
+    r = await app_client.patch(
+        "/api/v1/me/prompts/specialties/not_a_real_specialty",
+        headers=headers,
+        json={"guidance": _WELL_FORMED_GUIDANCE},
+    )
+    assert r.status_code == 404, r.text
+
+
+@pytest.mark.asyncio
+async def test_patch_specialty_guidance_non_clinician_forbidden(
+    app_client: AsyncClient,
+) -> None:
+    """Support roles can READ specialties but not edit a physician's guidance."""
+    r = await app_client.patch(
+        _SPECIALTY_URL,
+        headers={"Authorization": f"Bearer ADMIN:{uuid.uuid4()}"},
+        json={"guidance": _WELL_FORMED_GUIDANCE},
+    )
+    assert r.status_code == 403, r.text
+
+
+@pytest.mark.asyncio
+async def test_delete_specialty_guidance_clears_override(
+    app_client: AsyncClient,
+    marie: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    _, headers = marie
+    await app_client.patch(
+        _SPECIALTY_URL, headers=headers, json={"guidance": _WELL_FORMED_GUIDANCE}
+    )
+    r = await app_client.delete(_SPECIALTY_URL, headers=headers)
+    assert r.status_code == 200, r.text
+    payload = r.json()
+    assert payload["is_overridden"] is False
+    assert payload["user_guidance"] is None
+    assert payload["active_guidance"] == payload["guidance"]
+
+
+@pytest.mark.asyncio
+async def test_delete_specialty_guidance_idempotent(
+    app_client: AsyncClient,
+    marie: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    """Deleting with no saved override still returns 200 at the default."""
+    _, headers = marie
+    r = await app_client.delete(_SPECIALTY_URL, headers=headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["is_overridden"] is False
+
+
+@pytest.mark.asyncio
+async def test_specialty_guidance_physician_isolation(
+    app_client: AsyncClient,
+    marie: tuple[uuid.UUID, dict[str, str]],
+    perry: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    """Marie's saved guidance never appears in Perry's view."""
+    _, marie_headers = marie
+    _, perry_headers = perry
+    await app_client.patch(
+        _SPECIALTY_URL,
+        headers=marie_headers,
+        json={"guidance": _WELL_FORMED_GUIDANCE},
+    )
+    r = await app_client.get(
+        "/api/v1/me/prompts/specialties", headers=perry_headers
+    )
+    ortho = next(s for s in r.json() if s["key"] == _SPECIALTY)
+    assert ortho["is_overridden"] is False
+    assert ortho["user_guidance"] is None
+
+
+@pytest.mark.asyncio
+async def test_specialty_override_persisted_with_namespaced_id(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    marie: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    """The row lands in prompt_overrides under the specialty_style: namespace
+    so it never collides with a registry-prompt override."""
+    from app.core.models import PromptOverrideModel
+
+    marie_id, headers = marie
+    await app_client.patch(
+        _SPECIALTY_URL, headers=headers, json={"guidance": _WELL_FORMED_GUIDANCE}
+    )
+    stmt = select(PromptOverrideModel).where(
+        PromptOverrideModel.owner_id == marie_id,
+        PromptOverrideModel.prompt_id == f"specialty_style:{_SPECIALTY}",
+    )
+    row = (await db_session.execute(stmt)).scalar_one()
+    assert row.user_prompt_text == _WELL_FORMED_GUIDANCE

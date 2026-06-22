@@ -41,6 +41,7 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
         system_prompt: str | None = None,
         prior_context_text: str | None = None,
         participants: list[dict] | None = None,
+        specialty_prefix: str | None = None,
     ) -> Note:
         if not _GOOGLE_AI_API_KEY:
             raise ProviderError("gemini", "GOOGLE_AI_API_KEY not configured")
@@ -52,6 +53,7 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
             output_language,
             prior_context_text=prior_context_text,
             participants=participants,
+            specialty_prefix=specialty_prefix,
         )
         # AI-PROMPTS-B — service-assembled system prompt (base +
         # per-physician overlay) when present; bare base constant

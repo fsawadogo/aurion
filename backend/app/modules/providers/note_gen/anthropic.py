@@ -41,6 +41,7 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
         system_prompt: str | None = None,
         prior_context_text: str | None = None,
         participants: list[dict] | None = None,
+        specialty_prefix: str | None = None,
     ) -> Note:
         if not _ANTHROPIC_API_KEY:
             raise ProviderError("anthropic", "ANTHROPIC_API_KEY not configured")
@@ -52,6 +53,7 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
             output_language,
             prior_context_text=prior_context_text,
             participants=participants,
+            specialty_prefix=specialty_prefix,
         )
         # AI-PROMPTS-B — service-assembled system prompt (base +
         # per-physician overlay) when present; bare base constant

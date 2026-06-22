@@ -40,6 +40,7 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
         system_prompt: str | None = None,
         prior_context_text: str | None = None,
         participants: list[dict] | None = None,
+        specialty_prefix: str | None = None,
     ) -> Note:
         if not _OPENAI_API_KEY:
             raise ProviderError("openai", "OPENAI_API_KEY not configured")
@@ -51,6 +52,7 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
             output_language,
             prior_context_text=prior_context_text,
             participants=participants,
+            specialty_prefix=specialty_prefix,
         )
         # AI-PROMPTS-B — use the service-assembled system prompt when
         # provided (base + per-physician overlay). Falls back to the

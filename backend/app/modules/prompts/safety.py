@@ -276,6 +276,78 @@ def validate_user_prompt(text: str) -> ValidationResult:
     )
 
 
+# ── Specialty-guidance validation (ADDITIVE layer, not replacement) ─────────
+#
+# The per-specialty STYLE GUIDANCE block is layered ON TOP of the immutable
+# base note-generation system prompt — it does NOT replace it (unlike the
+# per-physician registry-prompt override above). The descriptive-mode
+# boundary therefore still lives in the base system prompt, which is always
+# present. So this validator runs the SAME injection / role-flip / "interpret
+# the findings" banlist + a (shorter) length cap, but DOES NOT require the
+# descriptive-mode anchor phrases: a legitimate style pointer like the
+# shipped emergency-medicine guidance ("lead with vital signs … never infer
+# severity or interpret results") is purely additive and would never pass the
+# replacement-semantics anchor gate, yet is perfectly safe.
+
+#: Specialty guidance is a focused style pointer, not a full standalone
+#: system prompt — a tighter cap than ``USER_PROMPT_MAX_LENGTH`` keeps it
+#: that way (a pointer that bloats into a second system prompt is a smell).
+SPECIALTY_GUIDANCE_MAX_LENGTH: Final[int] = 2000
+
+
+def validate_specialty_guidance(text: str) -> ValidationResult:
+    """Structural safety check for physician-supplied specialty STYLE guidance.
+
+    Same :class:`ValidationResult` shape as :func:`validate_user_prompt` so
+    the API + UI reuse one error-handling path, but with two differences that
+    follow from this text being ADDITIVE (layered on the always-present base
+    system prompt) rather than a REPLACEMENT:
+
+      1. Length cap is :data:`SPECIALTY_GUIDANCE_MAX_LENGTH` (tighter).
+      2. The :data:`DESCRIPTIVE_ANCHORS_REQUIRED` gate is skipped — the base
+         system prompt already carries the descriptive-mode boundary, so the
+         guidance need not re-state it. The banlist still runs, so a physician
+         cannot smuggle an interpretive / diagnostic / injection directive
+         into the additive layer.
+
+    Gate order: EMPTY → TOO_LONG → BANNED_PHRASE → OK.
+    """
+    stripped = text.strip() if text else ""
+    if not stripped:
+        return ValidationResult(
+            code=ValidationCode.EMPTY,
+            message=(
+                "Your guidance is empty. Either add specialty style "
+                "guidance, or remove the override to use the default."
+            ),
+        )
+    if len(stripped) > SPECIALTY_GUIDANCE_MAX_LENGTH:
+        return ValidationResult(
+            code=ValidationCode.TOO_LONG,
+            message=(
+                f"Your guidance is {len(stripped)} characters — the "
+                f"maximum is {SPECIALTY_GUIDANCE_MAX_LENGTH}."
+            ),
+        )
+    lowered = stripped.lower()
+    for phrase in BANNED_PHRASES:
+        if phrase in lowered:
+            return ValidationResult(
+                code=ValidationCode.BANNED_PHRASE,
+                message=(
+                    "Your guidance contains a phrase that would disable "
+                    "Aurion's descriptive-mode safety boundary. Rephrase "
+                    "without instructing the AI to interpret, diagnose, "
+                    "recommend treatment, or override prior rules."
+                ),
+                matched_phrase=phrase,
+            )
+    return ValidationResult(
+        code=ValidationCode.OK,
+        message="Guidance accepted.",
+    )
+
+
 def _anchor_failure_message(group_idx: int, group: tuple[str, ...]) -> str:
     """Build a human-readable failure message naming the missing group.
 

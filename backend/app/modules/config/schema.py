@@ -232,6 +232,18 @@ class FeatureFlagsConfig(BaseModel):
     # TTL alone governs retention. PHI-sensitive, so it ships dark and the
     # operator flips it via POST /admin/feature-flags.
     media_review_retention_enabled: bool = False
+    # ── Specialty style layer in the live note prompt ─────────────────────
+    # Master gate for injecting the per-specialty STYLE GUIDANCE block (and
+    # the specialty's few-shot examples) into the Stage 1 note user prompt —
+    # including any per-physician guidance override saved via
+    # PATCH /me/prompts/specialties/{key}. DEFAULT OFF: the specialty-style
+    # layer historically lived only in `note_gen.service.build_stage1_user_prompt`
+    # (test-only) and never reached the live provider path, so turning this on
+    # CHANGES the generated note for every specialty. Ships dark so the
+    # operator can review note quality on a non-pilot run, then flip it via
+    # AppConfig (or POST /admin/feature-flags) without a redeploy. When OFF
+    # the Stage 1 user prompt is byte-identical to the pre-feature build.
+    specialty_style_in_prompt_enabled: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────
