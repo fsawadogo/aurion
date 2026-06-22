@@ -305,3 +305,100 @@ def test_registry_keys_match_ids() -> None:
     on the portal page won't match the entry the client looks up."""
     for key, entry in PROMPTS.items():
         assert key == entry.id, f"registry dict key {key} != entry id {entry.id}"
+
+
+# ── GET /me/prompts/specialties — the "By specialty" portal view ───────────
+#
+# Surfaces the specialty layer the Stage 1 note prompt injects on top of the
+# base system prompt: style guidance + template sections + worked-example
+# summaries. Read-only, same reader roles as the global catalog, no DB access.
+
+from app.modules.note_gen.service import list_available_templates  # noqa: E402
+
+_SPECIALTIES_URL = "/api/v1/me/prompts/specialties"
+
+
+@pytest.mark.asyncio
+async def test_specialties_returns_one_entry_per_template(
+    app_client: AsyncClient,
+) -> None:
+    response = await app_client.get(
+        _SPECIALTIES_URL, headers=_headers("CLINICIAN")
+    )
+    assert response.status_code == 200, response.text
+    payload = response.json()
+    assert isinstance(payload, list)
+    keys = {s["key"] for s in payload}
+    assert keys == set(list_available_templates())
+    # The pilot specialties must be present.
+    assert "orthopedic_surgery" in keys
+    assert "plastic_surgery" in keys
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "role",
+    ["ADMIN", "EVAL_TEAM", "COMPLIANCE_OFFICER"],
+)
+async def test_specialties_readable_by_all_reader_roles(
+    app_client: AsyncClient, role: str
+) -> None:
+    response = await app_client.get(_SPECIALTIES_URL, headers=_headers(role))
+    assert response.status_code == 200, response.text
+    assert len(response.json()) == len(list_available_templates())
+
+
+@pytest.mark.asyncio
+async def test_specialties_unauthenticated_blocked(
+    app_client: AsyncClient,
+) -> None:
+    response = await app_client.get(_SPECIALTIES_URL)
+    assert response.status_code in (401, 403)
+
+
+@pytest.mark.asyncio
+async def test_specialty_entry_shape(app_client: AsyncClient) -> None:
+    response = await app_client.get(
+        _SPECIALTIES_URL, headers=_headers("CLINICIAN")
+    )
+    payload = response.json()
+    ortho = next(s for s in payload if s["key"] == "orthopedic_surgery")
+
+    # Display name + guidance present for the pilot specialty.
+    assert ortho["display_name"]
+    assert ortho["guidance"].strip()
+
+    # Sections carry the metadata the portal renders.
+    assert ortho["sections"], "orthopedic_surgery has template sections"
+    for sec in ortho["sections"]:
+        assert sec["id"]
+        assert sec["title"]
+        assert isinstance(sec["required"], bool)
+        assert isinstance(sec["visual_trigger_keywords"], list)
+
+    # At least one required section exists.
+    assert any(sec["required"] for sec in ortho["sections"])
+
+    # Examples count agrees with the embedded summaries; the pilot
+    # specialties were enriched to >= 2 worked examples.
+    assert ortho["examples_count"] == len(ortho["examples"])
+    assert ortho["examples_count"] >= 2
+    for ex in ortho["examples"]:
+        assert "description" in ex
+        assert isinstance(ex["populated_sections"], list)
+
+
+@pytest.mark.asyncio
+async def test_specialty_guidance_has_no_phi(app_client: AsyncClient) -> None:
+    response = await app_client.get(
+        _SPECIALTIES_URL, headers=_headers("CLINICIAN")
+    )
+    for s in response.json():
+        text = s["guidance"] + " " + " ".join(
+            sec["description"] for sec in s["sections"]
+        )
+        for pattern in _PHI_REGEXES:
+            assert not pattern.search(text), (
+                f"specialty {s['key']} guidance/sections contain a "
+                f"PHI-looking pattern matching {pattern.pattern}"
+            )

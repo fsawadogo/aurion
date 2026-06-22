@@ -677,6 +677,16 @@ export async function listMyPrompts(): Promise<import("@/types").AIPrompt[]> {
   return r.json();
 }
 
+/** GET /api/v1/me/prompts/specialties — the per-specialty Stage 1 prompt
+ *  layer (style guidance + template sections + example summaries). Read-only,
+ *  same reader role gate as the registry prompts. */
+export async function getSpecialtyPrompts(): Promise<
+  import("@/types").SpecialtyPrompt[]
+> {
+  const r = await fetchWithAuth("/api/v1/me/prompts/specialties");
+  return r.json();
+}
+
 /** PATCH /api/v1/me/prompts/{promptId} — save or update the user prompt
  *  that REPLACES the system default for this physician's sessions.
  *
