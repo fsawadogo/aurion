@@ -687,6 +687,34 @@ export async function getSpecialtyPrompts(): Promise<
   return r.json();
 }
 
+/** PATCH /api/v1/me/prompts/specialties/{key} — save/update the physician's
+ *  STYLE guidance override for a specialty. CLINICIAN-only on the server.
+ *  Returns the updated `SpecialtyPrompt`. On a banlist/length failure the
+ *  server returns 400 with `detail.matched_phrase` — same shape as the
+ *  registry-prompt validator. */
+export async function saveSpecialtyGuidance(
+  key: string,
+  guidance: string,
+): Promise<import("@/types").SpecialtyPrompt> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/prompts/specialties/${encodeURIComponent(key)}`,
+    { method: "PATCH", body: JSON.stringify({ guidance }) },
+  );
+  return r.json();
+}
+
+/** DELETE /api/v1/me/prompts/specialties/{key} — clear the override so the
+ *  shipped default takes over. Idempotent; returns the default projection. */
+export async function clearSpecialtyGuidance(
+  key: string,
+): Promise<import("@/types").SpecialtyPrompt> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/prompts/specialties/${encodeURIComponent(key)}`,
+    { method: "DELETE" },
+  );
+  return r.json();
+}
+
 /** PATCH /api/v1/me/prompts/{promptId} — save or update the user prompt
  *  that REPLACES the system default for this physician's sessions.
  *

@@ -455,7 +455,16 @@
       "optional": "Optional",
       "examplesLabel": "Worked examples",
       "exampleCount": "{count} example(s)",
-      "populates": "populates"
+      "populates": "populates",
+      "editButton": "Edit",
+      "customBadge": "Custom",
+      "activeCustom": "Your custom guidance is active",
+      "save": "Save guidance",
+      "cancel": "Cancel",
+      "resetToDefault": "Reset to default text",
+      "useDefault": "Use Aurion default",
+      "errorSaving": "Couldn't save your guidance. Please try again.",
+      "inactiveWarning": "Specialty guidance is not currently applied to generated notes — an administrator must enable it. Your edits are saved and will take effect once it's on."
     }
   },
   "FeatureFlags": {

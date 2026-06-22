@@ -455,7 +455,16 @@
       "optional": "Optionnel",
       "examplesLabel": "Exemples travaillés",
       "exampleCount": "{count} exemple(s)",
-      "populates": "renseigne"
+      "populates": "renseigne",
+      "editButton": "Modifier",
+      "customBadge": "Personnalisé",
+      "activeCustom": "Votre directive personnalisée est active",
+      "save": "Enregistrer la directive",
+      "cancel": "Annuler",
+      "resetToDefault": "Rétablir le texte par défaut",
+      "useDefault": "Utiliser la valeur par défaut d’Aurion",
+      "errorSaving": "Impossible d’enregistrer votre directive. Veuillez réessayer.",
+      "inactiveWarning": "La directive de spécialité n’est pas appliquée aux notes générées pour l’instant — un administrateur doit l’activer. Vos modifications sont enregistrées et prendront effet une fois activée."
     }
   },
   "FeatureFlags": {

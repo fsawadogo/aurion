@@ -1,25 +1,55 @@
 "use client";
 
 import {
+  AlertTriangle,
+  CheckCircle2,
+  Edit3,
   Eye,
   FileText,
   Info,
   Radio,
+  RotateCcw,
   ScanLine,
   Search,
   Sparkles,
   Stethoscope,
 } from "lucide-react";
-import { humanizeError } from "@/lib/api";
+import { ApiError, humanizeError } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import Badge from "@/components/ui/Badge";
+import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
 import PromptCard from "@/components/portal/PromptCard";
-import { getSpecialtyPrompts, listMyPrompts } from "@/lib/portal-api";
+import {
+  clearSpecialtyGuidance,
+  getSpecialtyPrompts,
+  listMyPrompts,
+  saveSpecialtyGuidance,
+} from "@/lib/portal-api";
 import type { AIPrompt, PromptCategory, SpecialtyPrompt } from "@/types";
+
+/** Pull a friendly message out of a PATCH 400 (banlist / length). The server
+ *  detail mirrors the registry-prompt validator: {message, matched_phrase}. */
+function parseGuidanceError(e: unknown, fallback: string): string {
+  if (e instanceof ApiError) {
+    try {
+      const detail = (JSON.parse(e.body) as { detail?: unknown }).detail;
+      if (detail && typeof detail === "object") {
+        const d = detail as { message?: string; matched_phrase?: string | null };
+        if (d.matched_phrase) {
+          return `${d.message ?? fallback} (“${d.matched_phrase}”)`;
+        }
+        if (d.message) return d.message;
+      }
+    } catch {
+      /* non-JSON body — fall through */
+    }
+  }
+  return humanizeError(e, fallback);
+}
 
 /**
  * /portal/prompts — AI Prompts Transparency.
@@ -255,7 +285,48 @@ export default function AIPromptsPage() {
 
 function SpecialtyCard({ specialty }: { specialty: SpecialtyPrompt }) {
   const t = useTranslations("AIPrompts.bySpecialty");
-  const s = specialty;
+  const [current, setCurrent] = useState<SpecialtyPrompt>(specialty);
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(specialty.active_guidance);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const s = current;
+
+  function openEditor() {
+    setDraft(s.active_guidance);
+    setError(null);
+    setEditing(true);
+  }
+
+  async function onSave() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await saveSpecialtyGuidance(s.key, draft.trim());
+      setCurrent(updated);
+      setEditing(false);
+    } catch (e) {
+      setError(parseGuidanceError(e, t("errorSaving")));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function onClear() {
+    setSaving(true);
+    setError(null);
+    try {
+      const updated = await clearSpecialtyGuidance(s.key);
+      setCurrent(updated);
+      setDraft(updated.active_guidance);
+      setEditing(false);
+    } catch (e) {
+      setError(parseGuidanceError(e, t("errorSaving")));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <div data-testid={`specialty-card-${s.key}`}>
     <Card>
@@ -265,22 +336,125 @@ function SpecialtyCard({ specialty }: { specialty: SpecialtyPrompt }) {
         <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-500">
           {s.key}
         </code>
-        {s.examples_count > 0 && (
-          <span className="ml-auto">
+        {s.is_overridden && (
+          <span data-testid={`specialty-card-${s.key}-override-badge`}>
+            <Badge variant="success">{t("customBadge")}</Badge>
+          </span>
+        )}
+        <span className="ml-auto flex items-center gap-2">
+          {s.examples_count > 0 && (
             <Badge variant="neutral">
               {t("exampleCount", { count: s.examples_count })}
             </Badge>
-          </span>
-        )}
+          )}
+          {!editing && (
+            <button
+              type="button"
+              onClick={openEditor}
+              data-testid={`specialty-card-${s.key}-edit`}
+              className="inline-flex items-center gap-1.5 rounded-aurion-xs bg-navy-50 px-2 py-1 text-aurion-micro text-navy-600 ring-1 ring-inset ring-navy-200 hover:bg-navy-100 transition-colors duration-short"
+            >
+              <Edit3 className="h-3 w-3" aria-hidden="true" />
+              {t("editButton")}
+            </button>
+          )}
+        </span>
       </div>
 
+      {/* When the specialty-style layer is not wired into live note generation,
+          edits are saved but dormant — say so plainly. */}
+      {!s.enabled && (
+        <div
+          className="mt-3 flex items-start gap-2 rounded-aurion-md border border-gold-200 bg-gold-50 px-3 py-2"
+          data-testid={`specialty-card-${s.key}-inactive`}
+          role="note"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0 text-gold-600 mt-0.5" aria-hidden="true" />
+          <p className="text-aurion-caption text-navy-600">{t("inactiveWarning")}</p>
+        </div>
+      )}
+
       {/* Style guidance — the specialty-specific instruction layered onto
-          the note prompt. */}
+          the note prompt. Editable (CLINICIAN-only on the server). */}
       <div className="mt-3">
-        <p className="aurion-micro text-gold-600 mb-1.5">{t("guidanceLabel")}</p>
-        {s.guidance ? (
+        <div className="mb-1.5 flex items-center gap-2">
+          <p className="aurion-micro text-gold-600">{t("guidanceLabel")}</p>
+          {s.is_overridden && !editing && (
+            <span className="inline-flex items-center gap-1 text-aurion-micro text-emerald-600">
+              <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+              {t("activeCustom")}
+            </span>
+          )}
+        </div>
+
+        {editing ? (
+          <div className="space-y-2">
+            <textarea
+              value={draft}
+              onChange={(e) => setDraft(e.target.value)}
+              rows={6}
+              aria-label={t("guidanceLabel")}
+              data-testid={`specialty-guidance-input-${s.key}`}
+              className="w-full rounded-aurion-md border border-hairline bg-white px-3 py-2 text-aurion-callout leading-relaxed text-navy-800 focus:outline-none focus:ring-2 focus:ring-gold-300/40 font-mono"
+              disabled={saving}
+            />
+            {error && (
+              <p
+                role="alert"
+                className="text-aurion-caption text-red-700"
+                data-testid={`specialty-guidance-error-${s.key}`}
+              >
+                {error}
+              </p>
+            )}
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                variant="primary"
+                size="sm"
+                loading={saving}
+                disabled={saving || !draft.trim()}
+                onClick={() => void onSave()}
+                data-testid={`specialty-guidance-save-${s.key}`}
+              >
+                {t("save")}
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                disabled={saving}
+                onClick={() => setDraft(s.guidance)}
+              >
+                <RotateCcw className="h-3.5 w-3.5 mr-1" aria-hidden="true" />
+                {t("resetToDefault")}
+              </Button>
+              {s.is_overridden && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  disabled={saving}
+                  onClick={() => void onClear()}
+                  data-testid={`specialty-guidance-clear-${s.key}`}
+                  className="text-navy-500 hover:text-navy-700"
+                >
+                  {t("useDefault")}
+                </Button>
+              )}
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={saving}
+                onClick={() => {
+                  setEditing(false);
+                  setError(null);
+                }}
+              >
+                {t("cancel")}
+              </Button>
+            </div>
+          </div>
+        ) : s.active_guidance ? (
           <p className="rounded-aurion-md border border-hairline bg-gray-50 px-3 py-2 text-aurion-callout leading-relaxed text-navy-700">
-            {s.guidance}
+            {s.active_guidance}
           </p>
         ) : (
           <p className="text-aurion-caption text-navy-400">{t("noGuidance")}</p>
