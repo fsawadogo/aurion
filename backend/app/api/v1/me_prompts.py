@@ -56,6 +56,9 @@ from app.core.database import get_db
 from app.core.models import PromptOverrideModel
 from app.core.types import UserRole
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.note_gen.few_shot import get_few_shot_examples
+from app.modules.note_gen.service import get_template, list_available_templates
+from app.modules.note_gen.specialty_style import get_specialty_style
 from app.modules.prompts import (
     PROMPTS,
     PromptDefinition,
@@ -275,6 +278,87 @@ async def list_my_prompts(
     return [
         _serialize(p, user_prompts_by_id.get(p.id)) for p in PROMPTS.values()
     ]
+
+
+# ── GET — per-specialty prompt layer (transparency) ─────────────────────────
+
+
+class SpecialtySectionResponse(BaseModel):
+    id: str
+    title: str
+    required: bool
+    description: str
+    visual_trigger_keywords: list[str]
+
+
+class SpecialtyExampleResponse(BaseModel):
+    description: str
+    populated_sections: list[str]
+
+
+class SpecialtyPromptResponse(BaseModel):
+    """The specialty-specific layer that is injected into the Stage 1 note
+    prompt on top of the (global) note-generation system prompt: the style
+    guidance, the template sections + their visual-trigger keywords, and a
+    summary of the worked few-shot examples. Read-only transparency surface —
+    distinct from the per-physician overridable registry prompts."""
+
+    key: str
+    display_name: str
+    guidance: str
+    sections: list[SpecialtySectionResponse]
+    examples: list[SpecialtyExampleResponse]
+    examples_count: int
+
+
+@router.get(
+    "/prompts/specialties",
+    response_model=list[SpecialtyPromptResponse],
+    summary="Per-specialty note-generation guidance, sections, and example summaries",
+)
+async def list_specialty_prompts(
+    user: CurrentUser = Depends(require_prompts_reader),
+) -> list[SpecialtyPromptResponse]:
+    """Read-only view of the specialty layer. No DB access — all from the
+    in-memory template / style / few-shot caches. Same reader role gate as
+    the registry-prompt list."""
+    out: list[SpecialtyPromptResponse] = []
+    for key in sorted(list_available_templates()):
+        template = get_template(key)
+        examples = get_few_shot_examples(key)
+        out.append(
+            SpecialtyPromptResponse(
+                key=template.key,
+                display_name=template.display_name,
+                guidance=get_specialty_style(key),
+                sections=[
+                    SpecialtySectionResponse(
+                        id=s.id,
+                        title=s.title,
+                        required=s.required,
+                        description=getattr(s, "description", "") or "",
+                        visual_trigger_keywords=getattr(
+                            s, "visual_trigger_keywords", []
+                        )
+                        or [],
+                    )
+                    for s in template.sections
+                ],
+                examples=[
+                    SpecialtyExampleResponse(
+                        description=ex.get("description", ""),
+                        populated_sections=[
+                            s.get("id", "")
+                            for s in ex.get("note", {}).get("sections", [])
+                            if s.get("status") == "populated"
+                        ],
+                    )
+                    for ex in examples
+                ],
+                examples_count=len(examples),
+            )
+        )
+    return out
 
 
 # ── PATCH — save / update user prompt ───────────────────────────────────────

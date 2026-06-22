@@ -442,6 +442,20 @@
       "missingAnchorNoInterpret": "Votre invite doit demander à l’IA de NE PAS interpréter, diagnostiquer ou inférer. Ajoutez une formulation comme « ne pas interpréter les observations », « ne pas diagnostiquer » ou « aucune interprétation ».",
       "empty": "Votre invite est vide. Écrivez une invite complète ou utilisez l’invite par défaut.",
       "unknown": "Impossible de valider votre invite. Réessayez."
+    },
+    "view": {
+      "global": "Invites globales",
+      "specialty": "Par spécialité"
+    },
+    "bySpecialty": {
+      "guidanceLabel": "Directives par spécialité",
+      "noGuidance": "Utilise l’invite de note de base — aucune directive propre à la spécialité.",
+      "sectionsLabel": "Sections",
+      "required": "Requis",
+      "optional": "Optionnel",
+      "examplesLabel": "Exemples travaillés",
+      "exampleCount": "{count} exemple(s)",
+      "populates": "renseigne"
     }
   },
   "FeatureFlags": {

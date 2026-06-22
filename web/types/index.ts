@@ -1154,6 +1154,30 @@ export interface CodingSuggestion {
 
 export type PromptCategory = "note" | "vision" | "extraction" | "preview";
 
+/** Per-specialty Stage 1 prompt layer (the "By specialty" view on
+ *  /portal/prompts). Read-only transparency surface. */
+export interface SpecialtyPromptSection {
+  id: string;
+  title: string;
+  required: boolean;
+  description: string;
+  visual_trigger_keywords: string[];
+}
+
+export interface SpecialtyPromptExample {
+  description: string;
+  populated_sections: string[];
+}
+
+export interface SpecialtyPrompt {
+  key: string;
+  display_name: string;
+  guidance: string;
+  sections: SpecialtyPromptSection[];
+  examples: SpecialtyPromptExample[];
+  examples_count: number;
+}
+
 /**
  * One LLM system prompt the encounter-analysis pipeline uses,
  * surfaced on /portal/prompts.

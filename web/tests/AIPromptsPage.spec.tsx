@@ -22,9 +22,11 @@ import { withIntl } from "./helpers/intl";
 
 vi.mock("@/lib/portal-api", () => ({
   listMyPrompts: vi.fn(),
+  getSpecialtyPrompts: vi.fn(),
 }));
 
-import { listMyPrompts } from "@/lib/portal-api";
+import { getSpecialtyPrompts, listMyPrompts } from "@/lib/portal-api";
+import type { SpecialtyPrompt } from "@/types";
 
 // Helper — every default-only fixture has active_prompt == system_prompt
 // (the server contract when no user prompt is set — replacement
@@ -95,8 +97,30 @@ const LIVE_PREVIEW: AIPrompt = basePrompt({
 
 const MOCK_PROMPTS = [NOTE_GEN, VISION_FRAME, PATIENT_SUMMARY, LIVE_PREVIEW];
 
+const MOCK_SPECIALTIES: SpecialtyPrompt[] = [
+  {
+    key: "orthopedic_surgery",
+    display_name: "Orthopedic Surgery",
+    guidance: "Style: document the exam in the order the physician follows.",
+    sections: [
+      {
+        id: "physical_exam",
+        title: "Physical Examination",
+        required: true,
+        description: "ROM in degrees, 0-5 strength, named special tests.",
+        visual_trigger_keywords: ["Lachman", "McMurray"],
+      },
+    ],
+    examples: [
+      { description: "right knee pain", populated_sections: ["physical_exam"] },
+    ],
+    examples_count: 1,
+  },
+];
+
 beforeEach(() => {
   vi.mocked(listMyPrompts).mockResolvedValue(MOCK_PROMPTS);
+  vi.mocked(getSpecialtyPrompts).mockResolvedValue(MOCK_SPECIALTIES);
 });
 
 describe("AIPromptsPage — page shell + load (AC-7)", () => {
@@ -203,6 +227,70 @@ describe("AIPromptsPage — search filter (AC-7)", () => {
     );
 
     expect(screen.getByTestId("prompts-no-results")).toBeInTheDocument();
+  });
+});
+
+describe("AIPromptsPage — by-specialty view (AC-7)", () => {
+  it("switches to the specialty view and renders one card per specialty", async () => {
+    const user = userEvent.setup();
+    render(withIntl(<AIPromptsPage />));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("prompt-card-note_generation-name"),
+      ).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("prompts-view-specialty"));
+
+    expect(screen.getByTestId("prompts-by-specialty")).toBeInTheDocument();
+    expect(
+      screen.getByTestId("specialty-card-orthopedic_surgery"),
+    ).toBeInTheDocument();
+    // Global category sections are no longer mounted in this view.
+    expect(
+      screen.queryByTestId("prompts-category-note"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("surfaces the specialty guidance, sections, and example summaries", async () => {
+    const user = userEvent.setup();
+    render(withIntl(<AIPromptsPage />));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("prompt-card-note_generation-name"),
+      ).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("prompts-view-specialty"));
+
+    expect(screen.getByText("Orthopedic Surgery")).toBeInTheDocument();
+    expect(
+      screen.getByText(/document the exam in the order/i),
+    ).toBeInTheDocument();
+    expect(screen.getByText("Physical Examination")).toBeInTheDocument();
+    expect(screen.getByText("Lachman")).toBeInTheDocument();
+    expect(screen.getByText(/right knee pain/i)).toBeInTheDocument();
+  });
+
+  it("filters specialties by display name", async () => {
+    const user = userEvent.setup();
+    render(withIntl(<AIPromptsPage />));
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("prompt-card-note_generation-name"),
+      ).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("prompts-view-specialty"));
+    await user.type(
+      screen.getByTestId("prompts-filter-input"),
+      "completely-bogus-needle-xyz",
+    );
+
+    expect(screen.getByTestId("prompts-no-results")).toBeInTheDocument();
+    expect(
+      screen.queryByTestId("specialty-card-orthopedic_surgery"),
+    ).not.toBeInTheDocument();
   });
 });
 

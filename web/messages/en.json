@@ -442,6 +442,20 @@
       "missingAnchorNoInterpret": "Your prompt must tell the AI NOT to interpret, diagnose, or infer. Add language like 'do not interpret findings', 'do not diagnose', or 'no interpretation'.",
       "empty": "Your prompt is empty. Either write a full prompt or use the system default.",
       "unknown": "Couldn't validate your prompt. Try again."
+    },
+    "view": {
+      "global": "Global prompts",
+      "specialty": "By specialty"
+    },
+    "bySpecialty": {
+      "guidanceLabel": "Specialty guidance",
+      "noGuidance": "Uses the base note prompt — no specialty-specific guidance.",
+      "sectionsLabel": "Sections",
+      "required": "Required",
+      "optional": "Optional",
+      "examplesLabel": "Worked examples",
+      "exampleCount": "{count} example(s)",
+      "populates": "populates"
     }
   },
   "FeatureFlags": {

@@ -1,33 +1,35 @@
 "use client";
 
-import { Eye, FileText, Info, Radio, ScanLine, Search, Sparkles } from "lucide-react";
+import {
+  Eye,
+  FileText,
+  Info,
+  Radio,
+  ScanLine,
+  Search,
+  Sparkles,
+  Stethoscope,
+} from "lucide-react";
 import { humanizeError } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
+import Badge from "@/components/ui/Badge";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
 import PromptCard from "@/components/portal/PromptCard";
-import { listMyPrompts } from "@/lib/portal-api";
-import type { AIPrompt, PromptCategory } from "@/types";
+import { getSpecialtyPrompts, listMyPrompts } from "@/lib/portal-api";
+import type { AIPrompt, PromptCategory, SpecialtyPrompt } from "@/types";
 
 /**
- * /portal/prompts — AI Prompts Transparency (Phase A).
+ * /portal/prompts — AI Prompts Transparency.
  *
- * Read-only catalog of every LLM system prompt the encounter pipeline
- * uses. The page is the safety boundary made legible: physicians can
- * see the EXACT instructions any model receives before describing
- * their patient's encounter.
- *
- * Layout:
- *   • Page header + descriptive-mode callout
- *   • Search filter (name + purpose)
- *   • One section per category (Notes / Vision / Extraction / Live
- *     preview). Cards inside follow the registry's insertion order.
- *
- * Phase B will add per-physician overlays. The card component already
- * prefers `override_text` when present, so the page itself doesn't
- * need to change when that lands.
+ * Read-only catalog of the LLM instructions the encounter pipeline uses.
+ * Two views:
+ *   • "Global prompts" — the registry system prompts (one per category),
+ *     overridable per-physician.
+ *   • "By specialty" — the specialty layer injected on top of the note
+ *     prompt: style guidance + template sections + worked-example summaries.
  */
 
 const CATEGORY_ORDER: readonly PromptCategory[] = [
@@ -37,9 +39,6 @@ const CATEGORY_ORDER: readonly PromptCategory[] = [
   "preview",
 ] as const;
 
-// Each category gets a glyph so the section rules read at a glance,
-// mirroring the icon + gold micro-label idiom used elsewhere in the
-// portal. Purely decorative — labels still come from t().
 const CATEGORY_ICON: Record<PromptCategory, typeof FileText> = {
   note: FileText,
   vision: Eye,
@@ -47,9 +46,13 @@ const CATEGORY_ICON: Record<PromptCategory, typeof FileText> = {
   preview: Radio,
 };
 
+type View = "global" | "specialty";
+
 export default function AIPromptsPage() {
   const t = useTranslations("AIPrompts");
   const [prompts, setPrompts] = useState<AIPrompt[]>([]);
+  const [specialties, setSpecialties] = useState<SpecialtyPrompt[]>([]);
+  const [view, setView] = useState<View>("global");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
@@ -58,8 +61,12 @@ export default function AIPromptsPage() {
     setLoading(true);
     setError(null);
     try {
-      const xs = await listMyPrompts();
+      const [xs, sp] = await Promise.all([
+        listMyPrompts(),
+        getSpecialtyPrompts(),
+      ]);
       setPrompts(xs);
+      setSpecialties(sp);
     } catch (e) {
       setError(humanizeError(e, t("loadError")));
     } finally {
@@ -71,10 +78,6 @@ export default function AIPromptsPage() {
     void load();
   }, [load]);
 
-  // Filter on lowercase name + purpose. Server stays read-only and
-  // returns the full catalog every time (it's small + cacheable on
-  // a future revision). The cost of filtering 8 cards client-side is
-  // a noop.
   const filtered = useMemo(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return prompts;
@@ -92,11 +95,23 @@ export default function AIPromptsPage() {
       extraction: [],
       preview: [],
     };
-    for (const p of filtered) {
-      buckets[p.category].push(p);
-    }
+    for (const p of filtered) buckets[p.category].push(p);
     return buckets;
   }, [filtered]);
+
+  const filteredSpecialties = useMemo(() => {
+    const needle = query.trim().toLowerCase();
+    if (!needle) return specialties;
+    return specialties.filter(
+      (s) =>
+        s.display_name.toLowerCase().includes(needle) ||
+        s.key.toLowerCase().includes(needle) ||
+        s.guidance.toLowerCase().includes(needle),
+    );
+  }, [specialties, query]);
+
+  const empty =
+    view === "global" ? filtered.length === 0 : filteredSpecialties.length === 0;
 
   return (
     <div
@@ -110,17 +125,46 @@ export default function AIPromptsPage() {
       />
 
       <div
-        className="mb-6 flex items-start gap-3 rounded-aurion-md border border-gold-200 bg-gold-50 px-4 py-3"
+        className="mb-5 flex items-start gap-3 rounded-aurion-md border border-gold-200 bg-gold-50 px-4 py-3"
         data-testid="descriptive-mode-callout"
         role="note"
       >
         <Info className="h-5 w-5 text-gold-600 shrink-0 mt-0.5" />
         <div className="space-y-1 text-aurion-callout text-navy-700">
           <p>{t("descriptiveModeCallout")}</p>
-          <p className="text-aurion-caption text-navy-500">
-            {t("phaseBHint")}
-          </p>
+          <p className="text-aurion-caption text-navy-500">{t("phaseBHint")}</p>
         </div>
+      </div>
+
+      {/* View toggle: Global prompts ↔ By specialty */}
+      <div
+        className="mb-5 inline-flex rounded-aurion-md border border-hairline bg-white p-0.5"
+        role="tablist"
+        aria-label={t("title")}
+      >
+        {(["global", "specialty"] as const).map((v) => {
+          const active = view === v;
+          const Icon = v === "global" ? FileText : Stethoscope;
+          return (
+            <button
+              key={v}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setView(v)}
+              data-testid={`prompts-view-${v}`}
+              className={
+                "flex items-center gap-1.5 rounded-aurion-sm px-3 py-1.5 text-aurion-callout font-medium transition-colors " +
+                (active
+                  ? "bg-navy-50 text-navy-800"
+                  : "text-navy-400 hover:text-navy-700")
+              }
+            >
+              <Icon className="h-4 w-4" aria-hidden="true" />
+              {t(`view.${v}`)}
+            </button>
+          );
+        })}
       </div>
 
       <div className="mb-5 relative">
@@ -152,7 +196,7 @@ export default function AIPromptsPage() {
         <Card>
           <LoadingSkeleton lines={8} />
         </Card>
-      ) : filtered.length === 0 ? (
+      ) : empty ? (
         <Card>
           <div className="py-10 text-center">
             <Sparkles className="mx-auto h-10 w-10 text-gold-300 mb-2" />
@@ -164,7 +208,7 @@ export default function AIPromptsPage() {
             </p>
           </div>
         </Card>
-      ) : (
+      ) : view === "global" ? (
         <div className="space-y-8">
           {CATEGORY_ORDER.map((category) => {
             const inCategory = grouped[category];
@@ -187,10 +231,7 @@ export default function AIPromptsPage() {
                   >
                     {t(`category.${category}`)}
                   </h2>
-                  <span
-                    className="h-px flex-1 bg-hairline"
-                    aria-hidden="true"
-                  />
+                  <span className="h-px flex-1 bg-hairline" aria-hidden="true" />
                 </div>
                 <div className="space-y-4">
                   {inCategory.map((p) => (
@@ -201,7 +242,107 @@ export default function AIPromptsPage() {
             );
           })}
         </div>
+      ) : (
+        <div className="space-y-4" data-testid="prompts-by-specialty">
+          {filteredSpecialties.map((s) => (
+            <SpecialtyCard key={s.key} specialty={s} />
+          ))}
+        </div>
       )}
+    </div>
+  );
+}
+
+function SpecialtyCard({ specialty }: { specialty: SpecialtyPrompt }) {
+  const t = useTranslations("AIPrompts.bySpecialty");
+  const s = specialty;
+  return (
+    <div data-testid={`specialty-card-${s.key}`}>
+    <Card>
+      <div className="flex items-center gap-2.5">
+        <Stethoscope className="h-4 w-4 shrink-0 text-gold-600" aria-hidden="true" />
+        <h3 className="aurion-headline text-navy-800">{s.display_name}</h3>
+        <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-[11px] text-gray-500">
+          {s.key}
+        </code>
+        {s.examples_count > 0 && (
+          <span className="ml-auto">
+            <Badge variant="neutral">
+              {t("exampleCount", { count: s.examples_count })}
+            </Badge>
+          </span>
+        )}
+      </div>
+
+      {/* Style guidance — the specialty-specific instruction layered onto
+          the note prompt. */}
+      <div className="mt-3">
+        <p className="aurion-micro text-gold-600 mb-1.5">{t("guidanceLabel")}</p>
+        {s.guidance ? (
+          <p className="rounded-aurion-md border border-hairline bg-gray-50 px-3 py-2 text-aurion-callout leading-relaxed text-navy-700">
+            {s.guidance}
+          </p>
+        ) : (
+          <p className="text-aurion-caption text-navy-400">{t("noGuidance")}</p>
+        )}
+      </div>
+
+      {/* Template sections + their visual-trigger keywords. */}
+      <div className="mt-4">
+        <p className="aurion-micro text-gold-600 mb-1.5">{t("sectionsLabel")}</p>
+        <ul className="space-y-2">
+          {s.sections.map((sec) => (
+            <li key={sec.id} className="rounded-aurion-md border border-hairline px-3 py-2">
+              <div className="flex items-center gap-2">
+                <span className="text-aurion-callout font-medium text-navy-800">
+                  {sec.title}
+                </span>
+                <Badge variant={sec.required ? "warning" : "neutral"}>
+                  {sec.required ? t("required") : t("optional")}
+                </Badge>
+              </div>
+              {sec.description && (
+                <p className="mt-0.5 text-aurion-caption text-navy-500">
+                  {sec.description}
+                </p>
+              )}
+              {sec.visual_trigger_keywords.length > 0 && (
+                <div className="mt-1.5 flex flex-wrap gap-1">
+                  {sec.visual_trigger_keywords.map((kw) => (
+                    <span
+                      key={kw}
+                      className="rounded bg-navy-50 px-1.5 py-0.5 text-[10px] text-navy-500"
+                    >
+                      {kw}
+                    </span>
+                  ))}
+                </div>
+              )}
+            </li>
+          ))}
+        </ul>
+      </div>
+
+      {/* Worked-example summaries. */}
+      {s.examples.length > 0 && (
+        <div className="mt-4">
+          <p className="aurion-micro text-gold-600 mb-1.5">{t("examplesLabel")}</p>
+          <ul className="space-y-1">
+            {s.examples.map((ex, i) => (
+              <li key={i} className="text-aurion-caption text-navy-600">
+                • {ex.description}
+                {ex.populated_sections.length > 0 && (
+                  <span className="text-navy-400">
+                    {" "}
+                    — {t("populates")}: {ex.populated_sections.join(", ")}
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </Card>
     </div>
   );
 }
