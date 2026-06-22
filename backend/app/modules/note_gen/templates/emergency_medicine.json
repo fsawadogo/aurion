@@ -26,7 +26,7 @@
         "oxygen saturation", "sat", "respiratory rate",
         "looking at the monitor", "on the screen"
       ],
-      "description": "Vital signs as observed on monitor or stated by physician"
+      "description": "Vital signs as observed on monitor or stated — capture each value with units: BP, HR, RR, temperature, SpO2 (and the O2 delivery, e.g. 'on room air')"
     },
     {
       "id": "physical_exam",
@@ -53,14 +53,14 @@
       "title": "Assessment",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Clinical assessment as stated by the physician — diagnosis or working diagnosis explicitly stated"
+      "description": "Working diagnosis as explicitly stated by the physician, verbatim. Do not add differentials the physician did not voice"
     },
     {
       "id": "disposition",
       "title": "Disposition",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Discharge plan, admission decision, referrals, follow-up instructions as stated by physician"
+      "description": "MANDATORY — the disposition the physician states (admit / discharge / transfer / observation), with referrals and follow-up instructions. Source to a physician statement; never infer the disposition"
     }
   ]
 }

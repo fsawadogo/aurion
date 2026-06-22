@@ -1,0 +1,96 @@
+{
+  "examples": [
+    {
+      "description": "runner with right knee pain — antalgic gait, special test + ROM degrees + 0-5 strength, MRI, stated dx + plan",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 4000,
+         "text": "What's bringing you in today?"},
+        {"id": "seg_002", "start_ms": 4000, "end_ms": 12000,
+         "text": "Right knee pain when I run, started about a month ago."},
+        {"id": "seg_003", "start_ms": 12000, "end_ms": 22000,
+         "text": "Watching you walk, there's an antalgic gait favouring the right — you're offloading the right leg."},
+        {"id": "seg_004", "start_ms": 22000, "end_ms": 34000,
+         "text": "McMurray is positive on the right. Knee flexion to 120 degrees. Quadriceps strength five out of five."},
+        {"id": "seg_005", "start_ms": 34000, "end_ms": 42000,
+         "text": "The MRI of the right knee shows a medial meniscus tear."},
+        {"id": "seg_006", "start_ms": 42000, "end_ms": 49000,
+         "text": "My working diagnosis is a right medial meniscus tear."},
+        {"id": "seg_007", "start_ms": 49000, "end_ms": 60000,
+         "text": "Plan is physiotherapy, and we'll consider an orthopedic referral if there's no improvement in six weeks."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_001", "text": "Patient reports right knee pain with running.",
+               "source_type": "transcript", "source_id": "seg_002",
+               "source_quote": "Right knee pain when I run"}
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_002", "text": "Patient reports onset approximately one month ago, associated with running.",
+               "source_type": "transcript", "source_id": "seg_002",
+               "source_quote": "started about a month ago"}
+            ]
+          },
+          {
+            "id": "functional_assessment",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_003", "text": "Physician noted an antalgic gait favouring the right, with offloading of the right leg.",
+               "source_type": "transcript", "source_id": "seg_003",
+               "source_quote": "an antalgic gait favouring the right — you're offloading the right leg"}
+            ]
+          },
+          {
+            "id": "physical_exam",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_004", "text": "Physician noted McMurray test positive on the right.",
+               "source_type": "transcript", "source_id": "seg_004",
+               "source_quote": "McMurray is positive on the right."},
+              {"id": "claim_005", "text": "Physician noted right knee flexion to 120 degrees.",
+               "source_type": "transcript", "source_id": "seg_004",
+               "source_quote": "Knee flexion to 120 degrees."},
+              {"id": "claim_006", "text": "Physician noted right quadriceps strength 5/5.",
+               "source_type": "transcript", "source_id": "seg_004",
+               "source_quote": "Quadriceps strength five out of five."}
+            ]
+          },
+          {
+            "id": "imaging_review",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_007", "text": "Physician described MRI of the right knee showing a medial meniscus tear.",
+               "source_type": "transcript", "source_id": "seg_005",
+               "source_quote": "The MRI of the right knee shows a medial meniscus tear."}
+            ]
+          },
+          {
+            "id": "assessment",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_008", "text": "Physician stated a working diagnosis of right medial meniscus tear.",
+               "source_type": "transcript", "source_id": "seg_006",
+               "source_quote": "My working diagnosis is a right medial meniscus tear."}
+            ]
+          },
+          {
+            "id": "plan",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_009", "text": "Physician stated a plan of physiotherapy, with orthopedic referral considered if no improvement in six weeks.",
+               "source_type": "transcript", "source_id": "seg_007",
+               "source_quote": "physiotherapy, and we'll consider an orthopedic referral if there's no improvement in six weeks"}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

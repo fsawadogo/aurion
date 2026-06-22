@@ -57,22 +57,34 @@ _STYLE: dict[str, str] = {
         "wound aetiology."
     ),
     "musculoskeletal": (
-        "Style: include functional context the physician mentions — gait "
-        "(antalgic, normal, limp side), sport- or activity-specific "
-        "movements, pain at rest vs with loading. Document special tests "
-        "by name + result (e.g. 'McMurray test positive on right')."
+        "Style: document the functional picture the physician describes — "
+        "gait (antalgic, normal, side of limp), weight-bearing and loading "
+        "tolerance, sport- or activity-specific movements, and pain at "
+        "rest vs with loading. In the exam, capture range of motion as "
+        "degrees (active vs passive when distinguished), strength on the "
+        "0-5 scale when graded, and named special tests with their result "
+        "and side (e.g. 'McMurray positive on the right'). Imaging review "
+        "notes modality + laterality + view. Record only what is stated — "
+        "never infer a diagnosis or injury mechanism."
     ),
     "emergency_medicine": (
-        "Style: lead with vital signs and chief complaint. Disposition is "
-        "MANDATORY — admit / discharge / transfer / observation — and "
-        "must be sourced to a physician statement. Time-stamp critical "
-        "interventions when the transcript provides them."
+        "Style: lead with vital signs — capture each value with units as "
+        "stated or shown (BP, HR, RR, temperature, SpO2) — and the chief "
+        "complaint. Document investigations (labs, ECG, imaging) as the "
+        "results are stated, and time-stamp critical interventions when "
+        "the transcript provides times. The Disposition section is "
+        "MANDATORY and must be sourced to a physician statement — admit / "
+        "discharge / transfer / observation — with any follow-up "
+        "instructions. Record the physician's stated working diagnosis "
+        "verbatim; never infer severity or interpret results."
     ),
     "general": (
-        "Style: prefer brevity over completeness. Use full sentences only "
-        "when the physician narrates in prose; otherwise terse, "
-        "telegraphic phrasing is appropriate (e.g. 'BP 132/84, HR 78, "
-        "afebrile')."
+        "Style: favour brevity and objective, measurable phrasing — "
+        "terse, telegraphic findings are appropriate (e.g. 'BP 132/84, HR "
+        "78, afebrile; chest clear'). Capture vitals with units and "
+        "physical findings as stated; use full sentences only when the "
+        "physician narrates in prose. Record the assessment as the "
+        "physician states it; never add interpretation."
     ),
     # ── Post-MVP templates (#70) ─────────────────────────────────────
     "family_medicine": (

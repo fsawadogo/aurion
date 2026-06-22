@@ -24,7 +24,12 @@ import pytest
 from app.modules.note_gen.few_shot import _clear_cache, get_few_shot_examples
 from app.modules.note_gen.specialty_style import get_specialty_style
 
+# Pilot specialties carry 2 worked examples; wave-2 carry >=1 (they had none
+# before). All five get the same descriptive-mode + validity guards.
 PILOT = ["orthopedic_surgery", "plastic_surgery"]
+WAVE2 = ["musculoskeletal", "emergency_medicine", "general"]
+ENRICHED = PILOT + WAVE2
+_MIN_EXAMPLES = {k: 2 for k in PILOT} | {k: 1 for k in WAVE2}
 
 # At least one of these must appear — the guidance must frame itself as
 # "describe/capture what was stated", not "decide/conclude".
@@ -63,7 +68,7 @@ def _load_template(key: str) -> dict:
     return json.loads((_TEMPLATES_DIR / f"{key}.json").read_text(encoding="utf-8"))
 
 
-@pytest.mark.parametrize("key", PILOT)
+@pytest.mark.parametrize("key", ENRICHED)
 def test_style_guidance_is_descriptive(key: str) -> None:
     style = get_specialty_style(key)
     assert style.strip(), f"{key} has empty style guidance"
@@ -75,11 +80,12 @@ def test_style_guidance_is_descriptive(key: str) -> None:
         assert bad not in low, f"{key} style guidance uses interpretive phrase {bad!r}"
 
 
-@pytest.mark.parametrize("key", PILOT)
+@pytest.mark.parametrize("key", ENRICHED)
 def test_few_shot_examples_valid_and_descriptive(key: str) -> None:
     _clear_cache()
     examples = get_few_shot_examples(key)
-    assert len(examples) >= 2, f"{key} should have >=2 worked examples"
+    want = _MIN_EXAMPLES[key]
+    assert len(examples) >= want, f"{key} should have >={want} worked example(s)"
 
     section_ids = {s["id"] for s in _load_template(key)["sections"]}
     for ex in examples:
@@ -98,7 +104,7 @@ def test_few_shot_examples_valid_and_descriptive(key: str) -> None:
                     )
 
 
-@pytest.mark.parametrize("key", PILOT)
+@pytest.mark.parametrize("key", ENRICHED)
 def test_template_keywords_are_nonempty_strings(key: str) -> None:
     for sec in _load_template(key)["sections"]:
         for kw in sec.get("visual_trigger_keywords", []):

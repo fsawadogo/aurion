@@ -1,0 +1,71 @@
+{
+  "examples": [
+    {
+      "description": "sore throat — terse, telegraphic objective findings, stated assessment + plan",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 3500,
+         "text": "What's going on today?"},
+        {"id": "seg_002", "start_ms": 3500, "end_ms": 10000,
+         "text": "Sore throat for two days, no fever."},
+        {"id": "seg_003", "start_ms": 10000, "end_ms": 20000,
+         "text": "Throat is erythematous, no exudate. Neck supple, no lymphadenopathy."},
+        {"id": "seg_004", "start_ms": 20000, "end_ms": 26000,
+         "text": "This looks like viral pharyngitis."},
+        {"id": "seg_005", "start_ms": 26000, "end_ms": 36000,
+         "text": "Supportive care — fluids and rest. Return if it worsens or a fever develops."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_001", "text": "Patient reports sore throat.",
+               "source_type": "transcript", "source_id": "seg_002",
+               "source_quote": "Sore throat for two days"}
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_002", "text": "Patient reports two-day duration, no fever.",
+               "source_type": "transcript", "source_id": "seg_002",
+               "source_quote": "for two days, no fever"}
+            ]
+          },
+          {
+            "id": "physical_exam",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_003", "text": "Physician noted erythematous throat with no exudate.",
+               "source_type": "transcript", "source_id": "seg_003",
+               "source_quote": "Throat is erythematous, no exudate."},
+              {"id": "claim_004", "text": "Physician noted neck supple with no lymphadenopathy.",
+               "source_type": "transcript", "source_id": "seg_003",
+               "source_quote": "Neck supple, no lymphadenopathy."}
+            ]
+          },
+          {
+            "id": "assessment",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_005", "text": "Physician stated a working diagnosis of viral pharyngitis.",
+               "source_type": "transcript", "source_id": "seg_004",
+               "source_quote": "This looks like viral pharyngitis."}
+            ]
+          },
+          {
+            "id": "plan",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_006", "text": "Physician stated a plan of supportive care with fluids and rest, and return precautions if worsening or fever develops.",
+               "source_type": "transcript", "source_id": "seg_005",
+               "source_quote": "Supportive care — fluids and rest. Return if it worsens or a fever develops."}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
