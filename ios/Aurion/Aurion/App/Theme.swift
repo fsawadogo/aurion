@@ -957,6 +957,8 @@ func sessionStateBadge(_ state: String) -> (text: String, color: Color) {
     case "PROCESSING_STAGE1": return (L("badge.processing"), Color.aurionAmber)
     case "PROCESSING_STAGE2": return (L("badge.enriching"), Color.aurionAmber)
     case "AWAITING_REVIEW": return (L("badge.review"), Color.aurionGold)
+    // Stage 2 finished — full note ready, awaiting the physician's approval.
+    case "STAGE2_REVIEW_READY": return (L("badge.readyReview"), Color.aurionGold)
     case "RECORDING": return (L("badge.recording"), Color.aurionRed)
     case "PAUSED": return (L("badge.paused"), Color.aurionAmber)
     case "CONSENT_PENDING": return (L("badge.consent"), Color.aurionStatusArchived)

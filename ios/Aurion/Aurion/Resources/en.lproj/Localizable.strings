@@ -574,6 +574,7 @@
 "badge.ready" = "Ready";
 "badge.archived" = "Archived";
 "badge.review" = "Review";
+"badge.readyReview" = "To review";
 "badge.processing" = "Processing";
 "badge.enriching" = "Enriching";
 "badge.recording" = "Recording";
@@ -791,6 +792,7 @@
 "state.archived" = "Archived";
 "state.pendingReview" = "Pending review";
 "state.processing" = "Processing";
+"state.readyForReview" = "Ready for review";
 "state.failed" = "Failed";
 "state.rec" = "REC";
 "state.paused" = "Paused";

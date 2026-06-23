@@ -109,14 +109,23 @@ struct DashboardView: View {
     }
 
     private var pendingReviewSessions: [SessionResponse] {
-        recentSessions.filter { $0.state == "AWAITING_REVIEW" }
+        // AWAITING_REVIEW (Stage 1) plus sessions whose Stage 2 has finished
+        // and now await the physician's final approval (stage2ReviewReady) —
+        // both are "ready for you to review", not "still processing".
+        recentSessions.filter {
+            $0.state == "AWAITING_REVIEW" || $0.stage2ReviewReady
+        }
     }
 
     /// Sessions whose Stage 2 visual enrichment is in flight on the
     /// backend (post-`/approve-stage1`, pre-`REVIEW_COMPLETE`). The tile
     /// polls each session's job state and self-promotes when complete.
+    /// Excludes sessions whose Stage 2 already finished (stage2ReviewReady) —
+    /// those move to the pending-review surface above.
     private var stage2InProgressSessions: [SessionResponse] {
-        recentSessions.filter { $0.state == "PROCESSING_STAGE2" }
+        recentSessions.filter {
+            $0.state == "PROCESSING_STAGE2" && !$0.stage2ReviewReady
+        }
     }
 
     /// Sessions on the backend still in an active capture state. Surfaced at
@@ -621,8 +630,8 @@ struct DashboardView: View {
         }
 
         let pill = AurionStatusPill(
-            kind: sessionStateKind(session.state),
-            labelOverride: sessionStateLabel(session.state)
+            kind: sessionStateKind(session.displayState),
+            labelOverride: sessionStateLabel(session.displayState)
         )
 
         Group {

@@ -115,7 +115,11 @@ struct SessionsInboxView: View {
     static func rowAction(for state: String) -> InboxRowAction {
         switch state {
         case "RECORDING", "PAUSED": return .resume
-        case "AWAITING_REVIEW": return .review
+        // AWAITING_REVIEW (Stage 1) and STAGE2_REVIEW_READY (full note, Stage 2
+        // done) both open the note review — the latter for the physician's
+        // final approval. Call sites pass `displayState` so a finished-but-
+        // unapproved Stage 2 session is tappable, not stuck on a status pill.
+        case "AWAITING_REVIEW", "STAGE2_REVIEW_READY": return .review
         default: return .status  // PROCESSING_STAGE1/2, REVIEW_COMPLETE, EXPORTED, PURGED…
         }
     }
@@ -293,7 +297,7 @@ struct SessionsInboxView: View {
                 VStack(spacing: 0) {
                     ForEach(Array(filtered.enumerated()), id: \.element.id) { index, session in
                         Group {
-                            switch Self.rowAction(for: session.state) {
+                            switch Self.rowAction(for: session.displayState) {
                             case .resume:
                                 // Resumable capture → re-engage CaptureView via
                                 // the same path the dashboard uses, NOT the note
@@ -448,15 +452,15 @@ struct SessionsInboxView: View {
                     .lineLimit(1)
             }
             Spacer()
-            switch Self.rowAction(for: s.state) {
+            switch Self.rowAction(for: s.displayState) {
             case .resume:
                 goldPill(L("sessions.resume"))
             case .review:
                 goldPill(L("sessions.review"))
             case .status:
                 AurionStatusPill(
-                    kind: sessionStateKind(s.state),
-                    labelOverride: sessionStateLabel(s.state)
+                    kind: sessionStateKind(s.displayState),
+                    labelOverride: sessionStateLabel(s.displayState)
                 )
             }
         }

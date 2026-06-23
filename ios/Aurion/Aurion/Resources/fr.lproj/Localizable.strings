@@ -562,6 +562,7 @@
 "badge.ready" = "Pr\U00EAt";
 "badge.archived" = "Archiv\U00E9";
 "badge.review" = "R\U00E9vision";
+"badge.readyReview" = "\U00C0 r\U00E9viser";
 "badge.processing" = "Traitement";
 "badge.enriching" = "Enrichissement";
 "badge.recording" = "Enregistrement";
@@ -779,6 +780,7 @@
 "state.archived" = "Archiv\U00E9e";
 "state.pendingReview" = "\U00C0 r\U00E9viser";
 "state.processing" = "Traitement";
+"state.readyForReview" = "Pr\U00EAt \U00E0 r\U00E9viser";
 "state.failed" = "\U00C9chec";
 "state.rec" = "ENR";
 "state.paused" = "En pause";

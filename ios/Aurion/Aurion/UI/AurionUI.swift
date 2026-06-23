@@ -1147,6 +1147,8 @@ func sessionStateKind(_ state: String) -> AurionStatusKind {
     case "REVIEW_COMPLETE": return .done
     case "PURGED": return .archived
     case "AWAITING_REVIEW", "PROCESSING_STAGE1", "PROCESSING_STAGE2": return .pending
+    // Stage 2 finished, full note ready, awaiting the physician's approval.
+    case "STAGE2_REVIEW_READY": return .pending
     case "RECORDING": return .recording
     case "PAUSED", "CONSENT_PENDING": return .pending
     // Terminal Stage 1 failures map to the muted archived kind here; the
@@ -1165,6 +1167,7 @@ func sessionStateLabel(_ state: String) -> String {
     case "PURGED": return L("state.archived")
     case "AWAITING_REVIEW": return L("state.pendingReview")
     case "PROCESSING_STAGE1", "PROCESSING_STAGE2": return L("state.processing")
+    case "STAGE2_REVIEW_READY": return L("state.readyForReview")
     case "RECORDING": return L("state.rec")
     case "PAUSED": return L("state.paused")
     case "CONSENT_PENDING": return L("state.consent")

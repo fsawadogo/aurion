@@ -1113,6 +1113,22 @@ struct SessionResponse: Codable, Sendable {
     let participants: [SessionParticipantPayload]?
     let createdAt: String
     let updatedAt: String
+    /// Display-only signal from the backend: Stage 2 has finished and the
+    /// full note is ready, with only the physician's manual final approval
+    /// left. The session genuinely stays in `PROCESSING_STAGE2` (approval is
+    /// a human step); this lets the UI show "Ready for review" instead of
+    /// "Processing/Enriching". Defaults false for older payloads.
+    let stage2ReviewReady: Bool
+
+    /// The state string the UI should render. Collapses the "Stage 2 done,
+    /// awaiting approval" case to a synthetic `STAGE2_REVIEW_READY` token so
+    /// the badge + row-action helpers can show (and make tappable) "Ready for
+    /// review" without a real state change.
+    var displayState: String {
+        (stage2ReviewReady && state == "PROCESSING_STAGE2")
+            ? "STAGE2_REVIEW_READY"
+            : state
+    }
 
     enum CodingKeys: String, CodingKey {
         case id, specialty, state, participants
@@ -1123,6 +1139,7 @@ struct SessionResponse: Codable, Sendable {
         case providerOverrides = "provider_overrides"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+        case stage2ReviewReady = "stage2_review_ready"
     }
 
     init(from decoder: Decoder) throws {
@@ -1138,6 +1155,7 @@ struct SessionResponse: Codable, Sendable {
         participants = try c.decodeIfPresent([SessionParticipantPayload].self, forKey: .participants)
         createdAt = try c.decode(String.self, forKey: .createdAt)
         updatedAt = try c.decode(String.self, forKey: .updatedAt)
+        stage2ReviewReady = try c.decodeIfPresent(Bool.self, forKey: .stage2ReviewReady) ?? false
     }
 
     init(
@@ -1151,7 +1169,8 @@ struct SessionResponse: Codable, Sendable {
         providerOverrides: ProviderOverrides? = nil,
         participants: [SessionParticipantPayload]? = nil,
         createdAt: String,
-        updatedAt: String
+        updatedAt: String,
+        stage2ReviewReady: Bool = false
     ) {
         self.id = id
         self.clinicianId = clinicianId
@@ -1164,6 +1183,7 @@ struct SessionResponse: Codable, Sendable {
         self.participants = participants
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+        self.stage2ReviewReady = stage2ReviewReady
     }
 }
 
