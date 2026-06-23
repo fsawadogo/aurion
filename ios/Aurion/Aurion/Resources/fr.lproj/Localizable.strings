@@ -271,6 +271,9 @@
 /* ── Appareils ────────────────────────────────────────── */
 "devices.audioSource" = "Source audio";
 "devices.videoSource" = "Source vid\U00E9o";
+"devices.meta.connect" = "Connecter les Ray-Ban Meta";
+"devices.meta.connectHint" = "Autorisez vos lunettes dans l\U2019app Meta AI pour diffuser la vid\U00E9o.";
+"devices.meta.registering" = "Ouverture de l\U2019app Meta AI\U2026";
 "devices.permissions" = "Autorisations";
 "devices.audio" = "Audio";
 "devices.video" = "Vid\U00E9o";

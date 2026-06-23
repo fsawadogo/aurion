@@ -9,6 +9,9 @@ import CoreBluetooth
 struct DeviceHubView: View {
     @StateObject private var registry = CaptureSourceRegistry.shared
     @ObservedObject private var builtIn = CaptureSourceRegistry.shared.builtIn
+    /// Meta Wearables (MWDAT) registration state — drives the "Connect glasses"
+    /// prompt below the video sources (#443).
+    @ObservedObject private var mwdat = MWDATManager.shared
     /// Matches the readable-measure clamp used by Dashboard / Inbox /
     /// Note so the four tabs feel like one app on iPad, not three
     /// stretched-phone views and one centred one.
@@ -38,6 +41,7 @@ struct DeviceHubView: View {
                     VStack(alignment: .leading, spacing: 12) {
                         SectionHeader(title: L("devices.videoSource"))
                         videoSourcesList
+                        metaConnectPrompt
                     }
 
                     VStack(alignment: .leading, spacing: 12) {
@@ -160,6 +164,50 @@ struct DeviceHubView: View {
                     registry.setActiveVideo($0)
                 }
             }
+        }
+    }
+
+    /// "Connect Ray-Ban Meta" prompt (#443). Shown only when the Meta
+    /// Wearables feature is enabled and no glasses are registered yet; tapping
+    /// kicks off the MWDAT registration flow (hands off to the Meta AI app).
+    @ViewBuilder
+    private var metaConnectPrompt: some View {
+        if RemoteConfig.shared.featureFlags.metaWearablesEnabled, !mwdat.isConnected {
+            Button {
+                AurionHaptics.selection()
+                mwdat.connect()
+            } label: {
+                HStack(spacing: 10) {
+                    Image(systemName: "eyeglasses")
+                        .foregroundColor(.aurionGold)
+                    VStack(alignment: .leading, spacing: 2) {
+                        Text(L("devices.meta.connect"))
+                            .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                            .foregroundColor(.aurionTextPrimary)
+                        Text(mwdat.connection == .registering
+                             ? L("devices.meta.registering")
+                             : L("devices.meta.connectHint"))
+                            .aurionFont(12, relativeTo: .caption)
+                            .foregroundColor(.aurionTextSecondary)
+                    }
+                    Spacer()
+                    if mwdat.connection == .registering {
+                        ProgressView()
+                    } else {
+                        Image(systemName: "chevron.right")
+                            .foregroundColor(.aurionTextSecondary)
+                    }
+                }
+                .padding(14)
+                .background(Color.aurionCardBackground)
+                .cornerRadius(16)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 16)
+                        .stroke(Color.aurionBorder, lineWidth: 1)
+                )
+            }
+            .buttonStyle(.plain)
+            .disabled(mwdat.connection == .registering)
         }
     }
 
