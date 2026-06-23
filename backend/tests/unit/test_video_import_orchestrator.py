@@ -265,3 +265,90 @@ async def test_extraction_failure_triggers_best_effort_purge() -> None:
         vi.jobs.mark_failed.assert_awaited_once()
     finally:
         _stop(started)
+
+
+# ── _auto_advance_stage2 records a stage2_jobs row (the stuck-tile fix) ───────
+#
+# Regression for the Jun-2026 bug: video-import auto-advance ran Stage 2 to
+# completion but never created a Stage2JobModel, so the iOS Stage-2 poll
+# returned `no_job` forever and the dashboard tile stayed "Stage 2 queued"
+# even though the full note was ready.
+
+
+def _auto_advance_patches(*, stage2_raises: bool = False):
+    job = SimpleNamespace(id=uuid.uuid4())
+    approved = SimpleNamespace(
+        version=1, provider_used="gemini", completeness_score=0.83
+    )
+    latest = SimpleNamespace(version=2)
+    result = SimpleNamespace(frames_processed=7)
+    run_stage2 = AsyncMock(
+        side_effect=RuntimeError("boom") if stage2_raises else None,
+        return_value=result,
+    )
+    mocks = {
+        "create_job": AsyncMock(return_value=job),
+        "mark_running": AsyncMock(),
+        "mark_completed": AsyncMock(),
+        "mark_failed": AsyncMock(),
+        "run_stage2_vision": run_stage2,
+        "approve_note": AsyncMock(return_value=approved),
+        "get_latest_note": AsyncMock(return_value=latest),
+        "job": job,
+    }
+    started = [
+        patch("app.modules.vision.jobs.create_job", mocks["create_job"]),
+        patch("app.modules.vision.jobs.mark_running", mocks["mark_running"]),
+        patch("app.modules.vision.jobs.mark_completed", mocks["mark_completed"]),
+        patch("app.modules.vision.jobs.mark_failed", mocks["mark_failed"]),
+        patch("app.api.v1.vision.run_stage2_vision", mocks["run_stage2_vision"]),
+        patch("app.modules.note_gen.service.approve_note", mocks["approve_note"]),
+        patch(
+            "app.modules.note_gen.service.get_latest_note",
+            mocks["get_latest_note"],
+        ),
+        patch.object(vi, "transition_session", AsyncMock()),
+        patch.object(vi, "write_audit", AsyncMock()),
+    ]
+    for p in started:
+        p.start()
+    return mocks, started
+
+
+@pytest.mark.asyncio
+async def test_auto_advance_creates_and_completes_stage2_job() -> None:
+    mocks, started = _auto_advance_patches()
+    try:
+        db, session, sid = AsyncMock(), _session(), uuid.uuid4()
+        version = await vi._auto_advance_stage2(db, session, sid)
+    finally:
+        for p in started:
+            p.stop()
+
+    assert version == 2
+    # The marker the iOS poll relies on: created, run, completed with the
+    # resulting note version + frames.
+    mocks["create_job"].assert_awaited_once()
+    mocks["mark_running"].assert_awaited_once()
+    mocks["mark_completed"].assert_awaited_once()
+    _, kwargs = mocks["mark_completed"].call_args
+    assert kwargs["new_note_version"] == 2
+    assert kwargs["frames_processed"] == 7
+    mocks["mark_failed"].assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auto_advance_marks_job_failed_then_reraises() -> None:
+    mocks, started = _auto_advance_patches(stage2_raises=True)
+    try:
+        db, session, sid = AsyncMock(), _session(), uuid.uuid4()
+        with pytest.raises(RuntimeError):
+            await vi._auto_advance_stage2(db, session, sid)
+    finally:
+        for p in started:
+            p.stop()
+
+    # Failure is recorded on the job (not left running) and bubbles so the
+    # outer orchestrator still marks VIDEO_IMPORT_FAILED.
+    mocks["mark_failed"].assert_awaited_once()
+    mocks["mark_completed"].assert_not_awaited()
