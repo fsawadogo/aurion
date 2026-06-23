@@ -153,6 +153,20 @@ class AuditEventType(StrEnum):
     FRAME_UPLOADED = "frame_uploaded"
     SCREEN_FRAME_PROCESSED = "screen_frame_processed"
     MASKING_CONFIRMED = "masking_confirmed"
+    # iOS-emitted masking FAILURE provenance (AUR-API-CLIENT-AUDIT). These
+    # are the compliance-critical complement to MASKING_CONFIRMED /
+    # FRAME_UPLOADED: a frame whose on-device masking FAILED is dropped
+    # fail-closed and NEVER uploaded, so the server has no other record it
+    # ever existed. iOS posts these via POST /sessions/{id}/client-audit-events
+    # so the PHI-masking report can prove dropped frames were discarded, not
+    # leaked. PHI-free: a bounded ``failure_reason`` enum + count fields only,
+    # never an image, S3 key, or body.
+    #   MASKING_FAILED           one frame/screen/clip failed to mask + was dropped.
+    #   MASKING_FAILURE_RETRIED  the physician re-ran masking on quarantined frames.
+    #   MASKING_FAILURE_SKIPPED  the physician discarded quarantined frames unmasked.
+    MASKING_FAILED = "masking_failed"
+    MASKING_FAILURE_RETRIED = "masking_failure_retried"
+    MASKING_FAILURE_SKIPPED = "masking_failure_skipped"
 
     # ── Transcription ────────────────────────────────────────────────────
     TRANSCRIPTION_COMPLETE = "transcription_complete"
@@ -610,6 +624,25 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     # iOS-only — server never emits these via write_audit
     AuditEventType.MASKING_CONFIRMED: frozenset(),
+    # iOS-emitted masking FAILURE provenance (AUR-API-CLIENT-AUDIT). All
+    # fields are PHI-free: ``frame_type`` ∈ {video, screen, clip};
+    # ``failure_reason`` is a bounded enum (MaskingFailureReason on iOS —
+    # invalid_image / detection_error / render_error / ocr_error); the
+    # remaining fields are integer counts. NEVER an image, S3 key, or body.
+    AuditEventType.MASKING_FAILED: frozenset(
+        {
+            "frame_type",
+            "failure_reason",
+            "faces_detected",
+            "phi_regions_redacted",
+            "frames_total",
+            "frames_with_faces",
+            "frames_failed",
+        }
+    ),
+    # Post-session quarantine resolution — count-only.
+    AuditEventType.MASKING_FAILURE_RETRIED: frozenset({"frame_count"}),
+    AuditEventType.MASKING_FAILURE_SKIPPED: frozenset({"frame_count"}),
     # Clip evidence (P1-1).
     # CLIP_UPLOADED is server-emitted and carries the same masking-proof
     # fields as FRAME_UPLOADED plus the clip-level metadata. Duration +
@@ -915,6 +948,28 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.SERVER_MASKING_FAILED: frozenset({"timestamp_ms", "reason"}),
 }
+
+
+# ── Client-origin audit allow-list (AUR-API-CLIENT-AUDIT) ─────────────────
+#
+# The set of event types iOS is permitted to POST to
+# ``/sessions/{id}/client-audit-events``. Deliberately NARROW: only events
+# the device is the sole authority for AND the server doesn't already emit
+# from the matching API call. This doubles as a de-dup guard — server-
+# authoritative events (consent_confirmed, login_success, frame_uploaded, …)
+# are NOT here, so a client can neither forge nor duplicate them.
+#
+# Scoped to the masking FAILURE family: a dropped frame never uploads, so
+# these are the one masking signal with no server-side equivalent. (Masking
+# of UPLOADED media is already audited via FRAME_UPLOADED / CLIP_UPLOADED /
+# SCREEN_FRAME_PROCESSED, which carry the same proof fields.)
+CLIENT_AUDIT_EVENTS: frozenset[AuditEventType] = frozenset(
+    {
+        AuditEventType.MASKING_FAILED,
+        AuditEventType.MASKING_FAILURE_RETRIED,
+        AuditEventType.MASKING_FAILURE_SKIPPED,
+    }
+)
 
 
 # Strict mode raises on unknown kwargs instead of warning. Pytest's

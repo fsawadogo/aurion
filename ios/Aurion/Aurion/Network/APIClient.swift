@@ -913,6 +913,36 @@ final class APIClient: Sendable {
         try await mutate(method: "POST", path: path, body: body)
     }
 
+    /// Fire-and-forget POST of a device-authoritative audit event
+    /// (AUR-API-CLIENT-AUDIT) — masking FAILURE provenance for frames that
+    /// were dropped fail-closed and never uploaded, so the server has no
+    /// other record they existed. Session-scoped.
+    ///
+    /// Deliberately does NOT decode a typed response and does NOT loop on
+    /// retry — `authedRequest` performs at most one 401-refresh, so this
+    /// can't burst the WAF the way the old 404-retry sender did (the reason
+    /// `AuditLogger.sendAuditEvent` was disabled). `validateResponse` throws
+    /// on a 4xx/5xx so the caller can swallow it; nothing here retries.
+    func postClientAuditEvent(
+        sessionId: String,
+        eventType: String,
+        fields: [String: String]
+    ) async throws {
+        let payload: [String: Any] = ["event_type": eventType, "fields": fields]
+        let bodyData = try JSONSerialization.data(withJSONObject: payload)
+        let (data, response) = try await authedRequest {
+            var request = URLRequest(
+                url: URL(string: "\(self.baseURL)/sessions/\(sessionId)/client-audit-events")!
+            )
+            request.httpMethod = "POST"
+            request.timeoutInterval = 15
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = bodyData
+            return request
+        }
+        try validateResponse(response, data: data)
+    }
+
     /// HTTP DELETE that decodes a JSON response body. Backend uses DELETE
     /// for soft-delete-with-return endpoints (e.g. /orders/{id} flipping
     /// the row to status=cancelled and returning the updated row), so

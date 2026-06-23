@@ -90,6 +90,9 @@ EXPECTED_VALUES: dict[str, str] = {
     "FRAME_UPLOADED": "frame_uploaded",
     "SCREEN_FRAME_PROCESSED": "screen_frame_processed",
     "MASKING_CONFIRMED": "masking_confirmed",
+    "MASKING_FAILED": "masking_failed",
+    "MASKING_FAILURE_RETRIED": "masking_failure_retried",
+    "MASKING_FAILURE_SKIPPED": "masking_failure_skipped",
     # Transcription
     "TRANSCRIPTION_COMPLETE": "transcription_complete",
     "TRANSCRIPTION_FAILED": "transcription_failed",

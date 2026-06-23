@@ -61,6 +61,32 @@ enum AuditEvent: String {
 }
 
 struct AuditLogger {
+    /// Events iOS is the SOLE authority for and the backend does NOT already
+    /// emit from the matching API call — the only ones worth transmitting
+    /// (everything else is written server-side when the corresponding
+    /// /sessions/* · /notes/* call is processed, and posting them would only
+    /// duplicate rows). Scoped to the masking FAILURE family: a frame that
+    /// fails masking is dropped fail-closed and never uploaded, so the server
+    /// otherwise has NO record it existed — the compliance gap
+    /// AUR-API-CLIENT-AUDIT closes. Mirrors the backend `CLIENT_AUDIT_EVENTS`
+    /// allow-list; the endpoint rejects anything outside it with 422.
+    /// Per-event field allow-list, mirroring the backend
+    /// `ALLOWED_AUDIT_KWARGS`. The transmitted payload is FILTERED to these
+    /// keys so a granular on-device debug key (e.g. the clip pipeline's
+    /// per-stage `writer_final_status` detail) can't trip the endpoint's
+    /// unknown-field 422 and *lose* the compliance row. The dropped keys
+    /// still appear in the local #DEBUG log — they're just debug-grade, not
+    /// the compliance signal (`failure_reason` + counts carry that).
+    private static let transmittableFields: [AuditEvent: Set<String>] = [
+        .maskingFailed: [
+            "frame_type", "failure_reason", "faces_detected",
+            "phi_regions_redacted", "frames_total", "frames_with_faces",
+            "frames_failed",
+        ],
+        .maskingFailureRetried: ["frame_count"],
+        .maskingFailureSkipped: ["frame_count"],
+    ]
+
     static func log(event: AuditEvent, sessionId: String? = nil, extra: [String: String] = [:]) {
         var payload: [String: String] = [
             "event_type": event.rawValue,
@@ -78,22 +104,18 @@ struct AuditLogger {
         print("[AUDIT] \(payload)")
         #endif
 
-        // Fire-and-forget POST to backend
+        // Transmit only the client-authoritative subset, and only when
+        // session-scoped (the endpoint lives under /sessions/{id}). Fire-
+        // and-forget; failures are swallowed (best-effort provenance, never
+        // retried — that retry storm is what disabled the old sender).
+        guard let allowed = transmittableFields[event], let sid = sessionId else { return }
+        let fields = extra.filter { allowed.contains($0.key) }
         Task {
-            await sendAuditEvent(payload)
+            try? await APIClient.shared.postClientAuditEvent(
+                sessionId: sid,
+                eventType: event.rawValue,
+                fields: fields
+            )
         }
-    }
-
-    private static func sendAuditEvent(_ payload: [String: String]) async {
-        // Disabled: the backend has no /api/v1/audit/event endpoint
-        // (every relevant lifecycle event is already written server-side
-        // when the matching /sessions/* /notes/* call is processed —
-        // see DynamoDB aurion-audit-log-dev). The 404 retry pattern from
-        // this method was bursting WAF's RateLimitPerIP and causing
-        // collateral 403s on legitimate /notes/{id}/stage1 polls.
-        //
-        // Restore once the backend exposes a typed /audit/event endpoint
-        // (tracked: AUR-API-CLIENT-AUDIT).
-        _ = payload
     }
 }
