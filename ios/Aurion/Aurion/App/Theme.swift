@@ -960,6 +960,11 @@ func sessionStateBadge(_ state: String) -> (text: String, color: Color) {
     case "RECORDING": return (L("badge.recording"), Color.aurionRed)
     case "PAUSED": return (L("badge.paused"), Color.aurionAmber)
     case "CONSENT_PENDING": return (L("badge.consent"), Color.aurionStatusArchived)
+    // Stage 1 terminal failures: provider failure (STAGE1_FAILED) or empty
+    // transcript (STAGE1_FAILED_NO_AUDIO). Surfaced as a distinct red "Failed"
+    // so a stranded session never reads as "processing".
+    case "STAGE1_FAILED", "STAGE1_FAILED_NO_AUDIO":
+        return (L("badge.failed"), Color.aurionRed)
     default: return (state, Color.aurionStatusArchived)
     }
 }
