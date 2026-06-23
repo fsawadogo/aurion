@@ -32,6 +32,11 @@ final class ScreenCaptureManager: ObservableObject {
 
     /// JPEG compression quality for screen captures.
     private let jpegQuality: CGFloat = 0.85
+    /// Reused across frames. `CIContext` lazily builds a Metal/GPU pipeline, so
+    /// allocating one per sample buffer (at the target FPS) churns GPU
+    /// resources and spikes memory over a long session. A single context is
+    /// thread-safe for rendering.
+    private nonisolated(unsafe) let ciContext = CIContext()
 
     // MARK: - Internal State
 
@@ -141,8 +146,7 @@ final class ScreenCaptureManager: ObservableObject {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return nil }
 
         let ciImage = CIImage(cvPixelBuffer: pixelBuffer)
-        let context = CIContext()
-        guard let cgImage = context.createCGImage(ciImage, from: ciImage.extent) else { return nil }
+        guard let cgImage = ciContext.createCGImage(ciImage, from: ciImage.extent) else { return nil }
 
         let uiImage = UIImage(cgImage: cgImage)
         return uiImage.jpegData(compressionQuality: jpegQuality)

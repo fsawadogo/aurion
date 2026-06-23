@@ -271,6 +271,13 @@
 /* ── Devices ──────────────────────────────────────────── */
 "devices.audioSource" = "Audio Source";
 "devices.videoSource" = "Video Source";
+"captureError.notImplemented" = "This capture source isn't available yet.";
+"captureError.permissionDenied" = "Permission required: %@.";
+"captureError.hardwareUnavailable" = "%@ is not available.";
+"captureError.featureGated" = "%@ is disabled by server config.";
+"devices.source" = "Capture Source";
+"devices.builtin" = "iPhone Camera + Mic";
+"devices.bluetooth" = "Bluetooth Audio";
 "devices.meta.connect" = "Connect Ray-Ban Meta";
 "devices.meta.connectHint" = "Authorize your glasses in the Meta AI app to stream video.";
 "devices.meta.registering" = "Opening Meta AI app…";

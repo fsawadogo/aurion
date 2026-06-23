@@ -13,7 +13,7 @@ import Combine
 @MainActor
 final class BluetoothAudioSource: CaptureSource {
     override var id: String { "bluetooth-audio" }
-    override var displayName: String { connectedRouteName ?? "Bluetooth Audio" }
+    override var displayName: String { connectedRouteName ?? L("devices.bluetooth") }
     override var iconSystemName: String { "headphones" }
     override var capabilities: CaptureCapability { [.audio] }
 

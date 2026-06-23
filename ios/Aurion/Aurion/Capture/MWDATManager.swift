@@ -40,6 +40,7 @@ final class MWDATManager: ObservableObject {
     private var frameToken: (any AnyListenerToken)?
     private var stateToken: (any AnyListenerToken)?
     private var registrationTask: Task<Void, Never>?
+    private var registrationObserveTask: Task<Void, Never>?
 
     private init() {
         observeRegistration()
@@ -65,9 +66,11 @@ final class MWDATManager: ObservableObject {
     }
 
     private func observeRegistration() {
-        // Seed from the current state, then follow the stream.
+        // Seed from the current state, then follow the stream. Tracked in its
+        // own field (not `registrationTask`, which `connect()` overwrites) so
+        // the long-lived observe loop is cancellable independently.
         apply(Wearables.shared.registrationState)
-        Task { [weak self] in
+        registrationObserveTask = Task { [weak self] in
             for await state in Wearables.shared.registrationStateStream() {
                 await MainActor.run { self?.apply(state) }
             }

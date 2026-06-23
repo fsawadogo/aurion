@@ -135,8 +135,15 @@ final class APIClient: Sendable {
     /// because the generic error formatter never echoes the URL — see
     /// `validateResponse` for the contract.
     func listMySessionsByPatientIdentifier(_ identifier: String) async throws -> [PatientSessionMatch] {
+        // `.urlPathAllowed` permits `/`, so a clinician-entered identifier
+        // containing `/` (or `..`) would alter the path structure and hit an
+        // unintended route. Subtract `/` so the identifier stays a single path
+        // segment.
+        let segmentAllowed = CharacterSet.urlPathAllowed.subtracting(
+            CharacterSet(charactersIn: "/")
+        )
         let escaped = identifier.addingPercentEncoding(
-            withAllowedCharacters: .urlPathAllowed
+            withAllowedCharacters: segmentAllowed
         ) ?? identifier
         return try await get(path: "/me/patients/\(escaped)/sessions")
     }
@@ -812,7 +819,7 @@ final class APIClient: Sendable {
             return request
         }
         try validateResponse(response, data: data)
-        return try JSONDecoder().decode(T.self, from: data)
+        return try decode(data)
     }
 
     /// Send an authenticated request with token-lifecycle handling:
@@ -874,7 +881,10 @@ final class APIClient: Sendable {
         let trimmed = String(data: data, encoding: .utf8)?
             .trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed == "null" { return nil }
-        return try JSONDecoder().decode(T.self, from: data)
+        // Explicit `T` (not `T?`) so the generic decode helper doesn't infer
+        // Optional<T> from the `T?` return context.
+        let value: T = try decode(data)
+        return value
     }
 
     private func mutate<T: Decodable>(method: String, path: String, body: [String: Any]? = nil) async throws -> T {
@@ -888,7 +898,7 @@ final class APIClient: Sendable {
             return request
         }
         try validateResponse(response, data: data)
-        return try JSONDecoder().decode(T.self, from: data)
+        return try decode(data)
     }
 
     private func patch<T: Decodable>(path: String, body: [String: Any]? = nil) async throws -> T {
@@ -911,6 +921,19 @@ final class APIClient: Sendable {
         try await mutate(method: "DELETE", path: path, body: body)
     }
 
+    /// Decode a response body, mapping a raw `Swift.DecodingError` (backend
+    /// schema drift / an unexpected body) to `APIError.decodingError` so every
+    /// caller's `catch APIError` classifies it — instead of letting a raw
+    /// DecodingError escape as an unhandled "unknown" error that also burns an
+    /// offline-queue bounded-retry attempt.
+    private func decode<T: Decodable>(_ data: Data) throws -> T {
+        do {
+            return try JSONDecoder().decode(T.self, from: data)
+        } catch {
+            throw APIError.decodingError(String(describing: error))
+        }
+    }
+
     private func performRequest(_ request: URLRequest) async throws -> (Data, URLResponse) {
         do {
             return try await URLSession.shared.data(for: request)
@@ -931,14 +954,20 @@ final class APIClient: Sendable {
     }
 
     private func validateResponse(_ response: URLResponse, data: Data) throws {
-        guard let http = response as? HTTPURLResponse else { return }
+        guard let http = response as? HTTPURLResponse else {
+            // A non-HTTP response is never a success — don't silently let the
+            // caller decode whatever bytes came back.
+            throw APIError.networkError("Unexpected response")
+        }
+        let body = { String(data: data, encoding: .utf8) ?? "" }
         switch http.statusCode {
         case 200..<300: return
+        case 400, 422: throw APIError.validation(body())
         case 401: throw APIError.unauthorized
         case 403: throw APIError.forbidden
         case 404: throw APIError.notFound
-        case 409: throw APIError.conflict(String(data: data, encoding: .utf8) ?? "")
-        case 500..<600: throw APIError.serverError(http.statusCode)
+        case 409: throw APIError.conflict(body())
+        case 429: throw APIError.rateLimited
         default: throw APIError.serverError(http.statusCode)
         }
     }
@@ -1039,6 +1068,12 @@ enum APIError: LocalizedError {
     case conflict(String)
     case serverError(Int)
     case decodingError(String)
+    /// 400 / 422 — the request was rejected with a validation message the
+    /// backend put in the body (e.g. an invalid field). Carries that message.
+    case validation(String)
+    /// 429 — rate limited. The dev backend returns this under probe load; the
+    /// offline queue should treat it as transient, not a bounded-retry failure.
+    case rateLimited
 
     var errorDescription: String? {
         switch self {
@@ -1051,6 +1086,8 @@ enum APIError: LocalizedError {
         case .conflict(let msg): return msg
         case .serverError(let code): return "Server error (\(code))"
         case .decodingError(let msg): return "Data error: \(msg)"
+        case .validation(let msg): return msg.isEmpty ? "Invalid request" : msg
+        case .rateLimited: return "Too many requests — please retry shortly"
         }
     }
 }
