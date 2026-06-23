@@ -455,6 +455,19 @@ final class CaptureManager: NSObject, ObservableObject {
                     options: [.allowBluetoothHFP]
                 )
                 try session.setActive(true, options: .notifyOthersOnDeactivation)
+                // Pin the built-in mic. With .allowBluetoothHFP, a connected
+                // Bluetooth device — e.g. Ray-Ban Meta glasses paired for their
+                // camera — would otherwise hijack the input route and deliver
+                // (near-)silence, so the "iPhone Camera + Mic" source recorded
+                // nothing and Stage 1 failed with "no speech detected". The
+                // phone-mic source must always record from the phone; the
+                // dedicated Bluetooth Audio source is a separate, explicit pick.
+                if let builtInMic = session.availableInputs?.first(
+                    where: { $0.portType == .builtInMic }
+                ) {
+                    try? session.setPreferredInput(builtInMic)
+                    NSLog("[Aurion] Pinned audio input to built-in mic")
+                }
                 NSLog("[Aurion] AVAudioSession ready: cat=%@ mode=%@ sampleRate=%.0f",
                       session.category.rawValue,
                       session.mode.rawValue,
