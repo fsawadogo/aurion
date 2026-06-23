@@ -101,7 +101,9 @@ final class MWDATManager: ObservableObject {
         }
 
         // AutoDeviceSelector picks the active registered device.
-        let session = try Wearables.shared.createSession(deviceSelector: AutoDeviceSelector())
+        let session = try Wearables.shared.createSession(
+            deviceSelector: AutoDeviceSelector(wearables: Wearables.shared)
+        )
         // RAW frames (uncompressed image buffers) so the on-device masking +
         // ring/clip path can read pixel data, exactly like the iPhone camera.
         let config = StreamConfiguration(videoCodec: .raw, resolution: .high, frameRate: 5)
