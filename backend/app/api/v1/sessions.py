@@ -12,6 +12,7 @@ from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import (
@@ -23,6 +24,7 @@ from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.identifier_hash import hash_identifier
 from app.core.kms_encryption import decrypt_str, encrypt_str
+from app.core.models import Stage2JobModel
 from app.core.text_validation import validate_user_text
 from app.core.types import SessionState
 from app.modules.auth.service import CurrentUser, get_current_user
@@ -188,6 +190,16 @@ class SessionResponse(BaseModel):
     # (`EvalSessionResponse`) that never carries participants. Anonymous
     # role chips (`name: null`) carry zero PHI. `None` when none were set.
     participants: Optional[list[dict]] = None
+    # Display-only signal (not a session state): True when the session is in
+    # PROCESSING_STAGE2 AND its latest Stage 2 job has completed — i.e. the
+    # full multimodal note is ready and the only remaining step is the
+    # physician's manual final approval. The session genuinely rests in
+    # PROCESSING_STAGE2 (final approval is a human boundary), so this is NOT a
+    # state-machine change; it just lets clients render "Ready for review"
+    # instead of "Processing/Enriching" for a finished-but-unapproved note
+    # (the case that left two web-imported sessions looking stuck). Defaults
+    # False, so older clients and non-Stage-2 sessions are unaffected.
+    stage2_review_ready: bool = False
     created_at: str
     updated_at: str
 
@@ -527,7 +539,8 @@ async def get_session_route(
     db: AsyncSession = Depends(get_db),
 ):
     session = await get_owned_session_or_404(db, session_id, user)
-    return _to_response(session)
+    ready = await _review_ready_session_ids(db, [session])
+    return _to_response(session, review_ready=session.id in ready)
 
 
 @router.get("", response_model=list[SessionResponse])
@@ -536,7 +549,8 @@ async def list_sessions_route(
     db: AsyncSession = Depends(get_db),
 ):
     sessions = await list_sessions(db, clinician_id=user.user_id)
-    return [_to_response(s) for s in sessions]
+    ready = await _review_ready_session_ids(db, sessions)
+    return [_to_response(s, review_ready=s.id in ready) for s in sessions]
 
 
 @router.delete("/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -586,7 +600,48 @@ async def _do_transition(db, session, target_state: SessionState) -> SessionResp
     return _to_response(session)
 
 
-def _to_response(session) -> SessionResponse:
+async def _review_ready_session_ids(db: AsyncSession, sessions) -> set:
+    """Session ids whose Stage 2 finished and now await final approval.
+
+    A session is "review ready" when it is in PROCESSING_STAGE2 AND its
+    latest ``stage2_jobs`` row is ``completed`` — the full note exists, only
+    the physician's manual approval remains. One batched query for all
+    PROCESSING_STAGE2 sessions (no N+1). Display-only — see
+    ``SessionResponse.stage2_review_ready``.
+    """
+    candidates = [
+        s.id
+        for s in sessions
+        if (
+            s.state.value if isinstance(s.state, SessionState) else s.state
+        )
+        == SessionState.PROCESSING_STAGE2.value
+    ]
+    if not candidates:
+        return set()
+    rows = (
+        await db.execute(
+            select(
+                Stage2JobModel.session_id,
+                Stage2JobModel.status,
+                Stage2JobModel.created_at,
+            )
+            .where(Stage2JobModel.session_id.in_(candidates))
+            .order_by(
+                Stage2JobModel.session_id,
+                Stage2JobModel.created_at.desc(),
+            )
+        )
+    ).all()
+    latest_status: dict = {}
+    for sid, st, _created in rows:
+        # First row per session_id is the latest (created_at desc).
+        if sid not in latest_status:
+            latest_status[sid] = st
+    return {sid for sid, st in latest_status.items() if st == "completed"}
+
+
+def _to_response(session, review_ready: bool = False) -> SessionResponse:
     """Map a SessionModel row to its API response.
 
     Every caller in this module is reached only after ownership has been
@@ -654,6 +709,7 @@ def _to_response(session) -> SessionResponse:
         external_reference_id=external_id,
         provider_overrides=overrides,
         participants=participants,
+        stage2_review_ready=review_ready,
         created_at=session.created_at.isoformat() if session.created_at else "",
         updated_at=session.updated_at.isoformat() if session.updated_at else "",
     )
