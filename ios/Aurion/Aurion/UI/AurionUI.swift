@@ -1149,6 +1149,9 @@ func sessionStateKind(_ state: String) -> AurionStatusKind {
     case "AWAITING_REVIEW", "PROCESSING_STAGE1", "PROCESSING_STAGE2": return .pending
     case "RECORDING": return .recording
     case "PAUSED", "CONSENT_PENDING": return .pending
+    // Terminal Stage 1 failures map to the muted archived kind here; the
+    // prominent red "Failed" treatment is in sessionStateBadge (Theme.swift).
+    case "STAGE1_FAILED", "STAGE1_FAILED_NO_AUDIO": return .archived
     default: return .archived
     }
 }
@@ -1165,6 +1168,7 @@ func sessionStateLabel(_ state: String) -> String {
     case "RECORDING": return L("state.rec")
     case "PAUSED": return L("state.paused")
     case "CONSENT_PENDING": return L("state.consent")
+    case "STAGE1_FAILED", "STAGE1_FAILED_NO_AUDIO": return L("state.failed")
     default: return state.replacingOccurrences(of: "_", with: " ").capitalized
     }
 }

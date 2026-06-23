@@ -577,6 +577,7 @@
 "badge.processing" = "Processing";
 "badge.enriching" = "Enriching";
 "badge.recording" = "Recording";
+"badge.failed" = "Failed";
 "badge.paused" = "Paused";
 "badge.consent" = "Consent";
 
@@ -790,6 +791,7 @@
 "state.archived" = "Archived";
 "state.pendingReview" = "Pending review";
 "state.processing" = "Processing";
+"state.failed" = "Failed";
 "state.rec" = "REC";
 "state.paused" = "Paused";
 "state.consent" = "Consent";

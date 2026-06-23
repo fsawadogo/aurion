@@ -565,6 +565,7 @@
 "badge.processing" = "Traitement";
 "badge.enriching" = "Enrichissement";
 "badge.recording" = "Enregistrement";
+"badge.failed" = "\U00C9chec";
 "badge.paused" = "En pause";
 "badge.consent" = "Consentement";
 
@@ -778,6 +779,7 @@
 "state.archived" = "Archiv\U00E9e";
 "state.pendingReview" = "\U00C0 r\U00E9viser";
 "state.processing" = "Traitement";
+"state.failed" = "\U00C9chec";
 "state.rec" = "ENR";
 "state.paused" = "En pause";
 "state.consent" = "Consentement";
