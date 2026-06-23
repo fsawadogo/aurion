@@ -103,6 +103,20 @@ final class AppState: ObservableObject {
     func applyAuth(userId: String, role: UserRole) {
         currentUserId = userId
         userRole = role
+        // Persist the legacy auth slot (token-presence marker + userId + role)
+        // that `init()` reads on relaunch. The login path only writes the
+        // `cognito.*` token slots via `AurionAuth.persistTokens`, so without
+        // this `hasAuthToken()`/`loadUserId()`/`loadUserRole()` are all empty
+        // on the next cold launch and a logged-in clinician is bounced to
+        // LoginView despite a valid refresh token. The stored token is only a
+        // presence marker — `bearerToken()` prefers the live cognito ID token —
+        // so it stays correct even after a refresh rotates the live token.
+        KeychainHelper.shared.saveAuthToken(
+            KeychainHelper.shared.bearerToken() ?? "session",
+            userId: userId,
+            role: role.rawValue,
+            name: KeychainHelper.shared.loadUserName() ?? ""
+        )
         isOnboardingComplete = Self.readUserFlag(Keys.onboarding, userId: userId)
         hasCompletedProfileSetup = Self.readUserFlag(Keys.profile, userId: userId)
         hasSeenTour = Self.readUserFlag(Keys.tour, userId: userId)

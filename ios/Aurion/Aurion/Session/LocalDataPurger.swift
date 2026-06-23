@@ -36,13 +36,26 @@ struct LocalDataPurger {
     /// Wipe in-memory frame buffers and audio PCM, delete any temp file
     /// artifacts we wrote, and audit-log the result. Idempotent.
     @discardableResult
-    static func purgeAll(sessionManager: SessionManager, reason: String) -> PurgeReport {
+    static func purgeAll(
+        sessionManager: SessionManager,
+        reason: String,
+        keep: Set<URL> = []
+    ) -> PurgeReport {
         let videoCount = sessionManager.allVideoFrameCount
         let screenCount = sessionManager.allScreenFrameCount
         let audioBytes = sessionManager.recordedAudioByteCount
 
         sessionManager.clearCapturedArtifacts()
-        let tempDeleted = sweepTempFiles(maxAge: nil)
+        let tempDeleted = sweepTempFiles(maxAge: nil, keep: keep)
+        // Also remove this session's raw-audio copies outside the temp dir so a
+        // copy can't survive a purge the clinician was told completed (#11):
+        // the active-upload staged WAV, and any still-queued offline WAV (an
+        // exported session's audio already produced its note, so a lingering
+        // queue entry is a stale duplicate, not pending work).
+        if let sessionId = sessionManager.session?.id {
+            _ = purgeStagedAudio(sessionId: sessionId)
+            OfflineUploadQueue.shared.purge(sessionId: sessionId)
+        }
 
         let report = PurgeReport(
             videoFramesPurged: videoCount,
@@ -112,11 +125,14 @@ struct LocalDataPurger {
     /// Delete temp files written by Aurion (audio recordings, export
     /// staging files). `maxAge == nil` means "delete everything we own";
     /// otherwise only files older than maxAge are removed.
-    private static func sweepTempFiles(maxAge: TimeInterval?) -> Int {
-        sweep(
+    private static func sweepTempFiles(maxAge: TimeInterval?, keep: Set<URL> = []) -> Int {
+        // `keep` protects files the caller still needs — e.g. the just-written
+        // export file the Share sheet is about to hand to UIActivityViewController.
+        let keepPaths = Set(keep.map { $0.standardizedFileURL.path })
+        return sweep(
             directory: FileManager.default.temporaryDirectory,
             maxAge: maxAge,
-            filter: isAurionArtifact
+            filter: { isAurionArtifact($0) && !keepPaths.contains($0.standardizedFileURL.path) }
         )
     }
 

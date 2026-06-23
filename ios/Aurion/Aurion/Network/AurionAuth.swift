@@ -24,6 +24,13 @@ final class AurionAuth {
     /// Injectable session for tests; production uses the shared session.
     private let session: URLSession
 
+    /// Single-flight guard for token refresh. The backend ROTATES the
+    /// refresh token on every `/auth/refresh`, so two concurrent refreshes
+    /// would race: the first rotates + invalidates the token, the second
+    /// then 401s and clears the Keychain — signing the user out mid-encounter.
+    /// All concurrent callers `await` this one in-flight task instead.
+    private var refreshTask: Task<AuthSession?, Error>?
+
     init(urlSession: URLSession = .shared) {
         self.session = urlSession
     }
@@ -115,18 +122,32 @@ final class AurionAuth {
     /// nil when there's nothing to refresh. Clears the Keychain on a 401
     /// so ContentView can route back to ``LoginView``.
     func refreshIfNeeded() async throws -> AuthSession? {
+        // Single-flight: if a refresh is already running, join it instead of
+        // POSTing /auth/refresh again with the same (about-to-rotate) token.
+        if let inFlight = refreshTask {
+            return try await inFlight.value
+        }
         guard let refreshToken = KeychainHelper.shared.getRefreshToken() else {
             return nil
         }
-        do {
-            return try await refresh(refreshToken: refreshToken)
-        } catch AuthError.invalidCredentials, AuthError.network {
-            // Treat any auth failure here as "session is gone" — clear
-            // local state so the user lands on LoginView, not in a
-            // perpetual retry loop with a stale token.
-            KeychainHelper.shared.clearTokens()
-            throw AuthError.invalidCredentials
+        let task = Task { @MainActor [weak self] () -> AuthSession? in
+            defer { self?.refreshTask = nil }
+            do {
+                return try await self?.refresh(refreshToken: refreshToken)
+            } catch AuthError.invalidCredentials {
+                // Genuine auth failure (backend rejected the refresh token) —
+                // the session is gone. Clear local state so the user lands on
+                // LoginView, not in a perpetual retry with a dead token.
+                KeychainHelper.shared.clearTokens()
+                throw AuthError.invalidCredentials
+            }
+            // A transient .network error (or anything else) propagates WITHOUT
+            // clearing the Keychain — a blip must not sign the clinician out
+            // mid-encounter; the existing token stays usable and the caller
+            // retries on the next request.
         }
+        refreshTask = task
+        return try await task.value
     }
 
     // MARK: - /auth/logout

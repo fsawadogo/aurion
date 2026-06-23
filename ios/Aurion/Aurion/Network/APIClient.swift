@@ -181,6 +181,7 @@ final class APIClient: Sendable {
             "multipart/form-data; boundary=\(boundary)",
             forHTTPHeaderField: "Content-Type"
         )
+        await ensureFreshToken()
         addAuth(&request)
         var builder = MultipartBuilder(boundary: boundary)
         builder.appendFile(
@@ -457,6 +458,7 @@ final class APIClient: Sendable {
         facesDetected: Int,
         phiRegionsRedacted: Int
     ) async throws -> FrameUploadResponse {
+        await ensureFreshToken()
         var (request, builder) = makeMultipartUpload(url: URL(string: "\(baseURL)/frames/\(sessionId)")!)
         builder.appendField("timestamp_ms", "\(timestampMs)")
         builder.appendField("frame_type", frameType)
@@ -666,6 +668,7 @@ final class APIClient: Sendable {
         timestampMs: Int,
         phiRegionsRedacted: Int
     ) async throws -> ScreenUploadResponse {
+        await ensureFreshToken()
         var (request, builder) = makeMultipartUpload(url: URL(string: "\(baseURL)/screen/\(sessionId)")!)
         builder.appendField("timestamp_ms", "\(timestampMs)")
         builder.appendField("frame_type", "screen")
@@ -713,6 +716,7 @@ final class APIClient: Sendable {
         request.httpMethod = "PATCH"
         request.timeoutInterval = 30
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        await ensureFreshToken()
         addAuth(&request)
         request.httpBody = try JSONEncoder().encode(SpeakerTagBatch(tags: tags))
         let (data, response) = try await performRequest(request)
@@ -802,13 +806,52 @@ final class APIClient: Sendable {
     // MARK: - Generic HTTP
 
     private func get<T: Decodable>(path: String) async throws -> T {
-        let url = URL(string: "\(baseURL)\(path)")!
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 30
-        addAuth(&request)
-        let (data, response) = try await performRequest(request)
+        let (data, response) = try await authedRequest {
+            var request = URLRequest(url: URL(string: "\(self.baseURL)\(path)")!)
+            request.timeoutInterval = 30
+            return request
+        }
         try validateResponse(response, data: data)
         return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// Send an authenticated request with token-lifecycle handling:
+    ///   1. Proactively refresh the token if it's within the staleness window
+    ///      (so long encounters that outlive the short access-token TTL don't
+    ///      silently 401 on every upload).
+    ///   2. If the response is still a 401 (token expired between the check and
+    ///      the send, or the window was missed), refresh ONCE and retry.
+    /// Refresh is single-flighted in `AurionAuth`, so concurrent calls share
+    /// one `/auth/refresh`. `build` must be pure (called up to twice).
+    private func authedRequest(
+        _ build: @escaping () -> URLRequest
+    ) async throws -> (Data, URLResponse) {
+        await ensureFreshToken()
+        var request = build()
+        addAuth(&request)
+        let (data, response) = try await performRequest(request)
+        guard (response as? HTTPURLResponse)?.statusCode == 401 else {
+            return (data, response)
+        }
+        // One refresh + retry before surfacing .unauthorized. Flatten the
+        // double-optional (`try?` over an `AuthSession?` return) so "no refresh
+        // token available" and "refresh failed" both skip the retry.
+        let refreshed = (try? await AurionAuth.shared.refreshIfNeeded()) ?? nil
+        guard refreshed != nil else {
+            return (data, response)  // refresh impossible/failed → let 401 stand
+        }
+        var retry = build()
+        addAuth(&retry)
+        return try await performRequest(retry)
+    }
+
+    /// Refresh the access token if it's about to expire. Best-effort — a
+    /// failed refresh leaves the existing token in place and the request
+    /// proceeds (and may 401, which `authedRequest` then retries / surfaces).
+    private func ensureFreshToken() async {
+        if KeychainHelper.shared.tokenIsStale {
+            _ = try? await AurionAuth.shared.refreshIfNeeded()
+        }
     }
 
     /// GET that accepts a literal JSON `null` body as `nil` instead
@@ -819,11 +862,11 @@ final class APIClient: Sendable {
     /// Used by the GET-latest paths for resources that may legitimately
     /// not exist yet (patient summary, live preview).
     private func getOptional<T: Decodable>(path: String) async throws -> T? {
-        let url = URL(string: "\(baseURL)\(path)")!
-        var request = URLRequest(url: url)
-        request.timeoutInterval = 30
-        addAuth(&request)
-        let (data, response) = try await performRequest(request)
+        let (data, response) = try await authedRequest {
+            var request = URLRequest(url: URL(string: "\(self.baseURL)\(path)")!)
+            request.timeoutInterval = 30
+            return request
+        }
         try validateResponse(response, data: data)
         // Treat literal `null` (4 bytes) as nil — avoids a decode
         // error when the backend signals "no resource yet" via the
@@ -835,16 +878,15 @@ final class APIClient: Sendable {
     }
 
     private func mutate<T: Decodable>(method: String, path: String, body: [String: Any]? = nil) async throws -> T {
-        let url = URL(string: "\(baseURL)\(path)")!
-        var request = URLRequest(url: url)
-        request.httpMethod = method
-        request.timeoutInterval = 30
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        addAuth(&request)
-        if let body = body {
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let bodyData = try body.map { try JSONSerialization.data(withJSONObject: $0) }
+        let (data, response) = try await authedRequest {
+            var request = URLRequest(url: URL(string: "\(self.baseURL)\(path)")!)
+            request.httpMethod = method
+            request.timeoutInterval = 30
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            if let bodyData { request.httpBody = bodyData }
+            return request
         }
-        let (data, response) = try await performRequest(request)
         try validateResponse(response, data: data)
         return try JSONDecoder().decode(T.self, from: data)
     }
