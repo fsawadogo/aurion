@@ -95,8 +95,18 @@ struct CaptureView: View {
         session.captureMode.includesVideo
             && showCameraPreview
             && (session.state == .recording || session.state == .paused)
-            && (CaptureSourceRegistry.shared.activeVideoSource as? BuiltInCaptureSource)?
-                .isReadyForPreview == true
+            && isVideoPreviewReady
+    }
+
+    /// Whether the active video source can render a live preview: the iPhone
+    /// camera once its AVCaptureSession is running, or the Ray-Ban Meta glasses
+    /// while streaming (#443). The glasses' AVSampleBufferDisplayLayer fills as
+    /// frames arrive, so it's "ready" as soon as the source is active.
+    private var isVideoPreviewReady: Bool {
+        let video = CaptureSourceRegistry.shared.activeVideoSource
+        if let builtIn = video as? BuiltInCaptureSource { return builtIn.isReadyForPreview }
+        if video is MetaWearablesSource { return true }
+        return false
     }
 
     // MARK: - Immersive Layout (full-bleed camera)
@@ -141,6 +151,10 @@ struct CaptureView: View {
         if let builtIn = registry.activeVideoSource as? BuiltInCaptureSource,
            builtIn.isReadyForPreview {
             CameraPreviewLayer(session: registry.builtIn.previewSession)
+        } else if let meta = registry.activeVideoSource as? MetaWearablesSource {
+            // Ray-Ban Meta POV preview (#443) — the glasses stream
+            // CMSampleBuffers over MWDAT into an AVSampleBufferDisplayLayer.
+            MetaPreviewView(displayLayer: meta.previewLayer)
         }
     }
 

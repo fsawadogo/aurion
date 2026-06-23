@@ -1,3 +1,4 @@
+import AVFoundation
 import Combine
 import CoreMedia
 import Foundation
@@ -40,6 +41,16 @@ final class MetaWearablesSource: CaptureSource, VideoClipSource {
     /// matching the ring's append/extract clock — see `CaptureManager`.
     private var sessionStartTime: TimeInterval = 0
 
+    /// Live POV preview for the glasses (#443). The iPhone-camera preview uses
+    /// an `AVCaptureVideoPreviewLayer` tied to its AVCaptureSession; the glasses
+    /// deliver `CMSampleBuffer`s over MWDAT instead, so we render them into an
+    /// `AVSampleBufferDisplayLayer` that `MetaPreviewView` displays. Otherwise
+    /// the physician sees a blank recording screen with no idea what the
+    /// glasses are capturing.
+    let previewLayer = AVSampleBufferDisplayLayer()
+    /// True once the stream is live, so `CaptureView` shows the POV preview.
+    @Published private(set) var isReadyForPreview = false
+
     override init() {
         super.init()
         observeAvailability()
@@ -65,15 +76,26 @@ final class MetaWearablesSource: CaptureSource, VideoClipSource {
         // (`append` is nonisolated); the ring is final by `start()` because
         // `applyPipelineConfig` runs first.
         let ring = clipRingBuffer
+        let preview = previewLayer
 
         Task { @MainActor [weak self] in
             guard let self else { return }
             do {
                 try await self.mwdat.startVideoStream { sampleBuffer in
+                    // Pipeline: raw frame → ring (thread-safe, off-main).
                     ring.append(sampleBuffer, at: Date.timeIntervalSinceReferenceDate)
+                    // Preview: render the same frame to the POV display layer.
+                    // Force immediate display so we don't depend on the frame's
+                    // presentation timing being display-suitable.
+                    Self.markDisplayImmediately(sampleBuffer)
+                    DispatchQueue.main.async {
+                        if preview.status == .failed { preview.flush() }
+                        preview.enqueue(sampleBuffer)
+                    }
                 }
                 self.status = .recording
                 self.detail = "Streaming · \(self.displayName)"
+                self.isReadyForPreview = true
             } catch {
                 self.status = .error(error.localizedDescription)
                 self.detail = error.localizedDescription
@@ -81,7 +103,26 @@ final class MetaWearablesSource: CaptureSource, VideoClipSource {
         }
     }
 
+    /// Tag a sample buffer for immediate display by the preview layer — MWDAT
+    /// raw frames may not carry display-suitable PTS, so we bypass the layer's
+    /// timing and show each frame as it arrives.
+    nonisolated private static func markDisplayImmediately(_ sb: CMSampleBuffer) {
+        guard let attachments = CMSampleBufferGetSampleAttachmentsArray(
+            sb, createIfNecessary: true
+        ), CFArrayGetCount(attachments) > 0 else { return }
+        let dict = unsafeBitCast(
+            CFArrayGetValueAtIndex(attachments, 0), to: CFMutableDictionary.self
+        )
+        CFDictionarySetValue(
+            dict,
+            Unmanaged.passUnretained(kCMSampleAttachmentKey_DisplayImmediately).toOpaque(),
+            Unmanaged.passUnretained(kCFBooleanTrue).toOpaque()
+        )
+    }
+
     override func stop() {
+        isReadyForPreview = false
+        previewLayer.flushAndRemoveImage()
         Task { @MainActor [weak self] in
             await self?.mwdat.stopVideoStream()
             self?.clipRingBuffer.clear()
