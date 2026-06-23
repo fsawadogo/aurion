@@ -370,6 +370,14 @@ class SessionState(str, Enum):
     # surfaces "re-record" and the session is discarded via
     # ``SESSION_DISCARDED``.
     STAGE1_FAILED_NO_AUDIO = "STAGE1_FAILED_NO_AUDIO"
+    # Generic Stage 1 failure: transcription succeeded but the note-generation
+    # provider call itself failed (parse error, rate limit, timeout, provider
+    # outage) — distinct from STAGE1_FAILED_NO_AUDIO (empty transcript, provider
+    # never called). Terminal, like NO_AUDIO. Before this state existed the
+    # generic-failure path left the session in PROCESSING_STAGE1 forever, so a
+    # provider hiccup stranded the session as perpetually "processing" with no
+    # recovery (the iOS in-memory Retry only works while the app stays open).
+    STAGE1_FAILED = "STAGE1_FAILED"
 
 
 class UserRole(str, Enum):

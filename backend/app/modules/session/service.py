@@ -45,6 +45,7 @@ VALID_TRANSITIONS: dict[SessionState, list[SessionState]] = {
     SessionState.PROCESSING_STAGE1: [
         SessionState.AWAITING_REVIEW,
         SessionState.STAGE1_FAILED_NO_AUDIO,
+        SessionState.STAGE1_FAILED,
     ],
     SessionState.AWAITING_REVIEW: [SessionState.PROCESSING_STAGE2],
     SessionState.PROCESSING_STAGE2: [SessionState.REVIEW_COMPLETE],
@@ -56,6 +57,12 @@ VALID_TRANSITIONS: dict[SessionState, list[SessionState]] = {
     # starting a fresh one. No forward transition because there's no
     # audio to retry against.
     SessionState.STAGE1_FAILED_NO_AUDIO: [],  # terminal
+    # STAGE1_FAILED is terminal for the same reason — the note-generation
+    # provider call failed and there's no automatic re-run path; recovery is
+    # the physician discarding the session and re-recording. Distinct from
+    # NO_AUDIO so compliance dashboards can tell an empty-transcript skip from
+    # a provider failure.
+    SessionState.STAGE1_FAILED: [],  # terminal
 }
 
 # ── Audit Event Mapping ──────────��────────────────────────────────────────
@@ -77,6 +84,7 @@ STATE_AUDIT_EVENTS: dict[SessionState, AuditEventType] = {
     # uniform and lets compliance dashboards continue to roll up "Stage 1
     # failed" without learning a new event name.
     SessionState.STAGE1_FAILED_NO_AUDIO: AuditEventType.STAGE1_FAILED,
+    SessionState.STAGE1_FAILED: AuditEventType.STAGE1_FAILED,
 }
 
 

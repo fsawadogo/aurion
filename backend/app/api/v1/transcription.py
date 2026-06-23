@@ -191,6 +191,21 @@ async def run_stage1(db: AsyncSession, session, audio_bytes: bytes):
         )
     except Exception as exc:
         reason = str(exc)[:200]
+        # Move the session to the terminal STAGE1_FAILED state. Without this
+        # the session was left in PROCESSING_STAGE1 forever — a provider parse
+        # error / rate-limit / timeout stranded it as perpetually "processing"
+        # with no recovery once the iOS app's in-memory recording was gone.
+        # Mirrors the empty-transcript path's transition to its own terminal
+        # failed state.
+        try:
+            await transition_session(db, session, SessionState.STAGE1_FAILED)
+        except InvalidTransitionError:
+            logger.warning(
+                "Stage 1 generation failed but session=%s could not transition "
+                "to STAGE1_FAILED from state=%s",
+                session_id,
+                session.state.value,
+            )
         await write_audit(session_id, AuditEventType.STAGE1_FAILED, reason=reason)
         await try_publish_alert(
             alert_type=AuditEventType.STAGE1_FAILED.value,
