@@ -158,6 +158,13 @@ final class OfflineUploadQueue: ObservableObject {
         try await api.uploadAudioForTranscription(sessionId: item.sessionId, audio: audio)
     }
 
+    /// Drop a session's queued upload — its WAV file + manifest entry. Used by
+    /// the post-export purge (#11): a session whose note already shipped must
+    /// not leave a raw-audio copy in the offline queue. No-op if absent.
+    func purge(sessionId: String) {
+        remove(sessionId)
+    }
+
     // MARK: - Manifest + file persistence
 
     private func remove(_ sessionId: String) {

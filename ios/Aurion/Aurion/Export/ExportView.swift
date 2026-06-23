@@ -105,7 +105,15 @@ struct ExportView: View {
                 note = try? await APIClient.shared.getFullNote(sessionId: sessionId)
             }
         }
-        .sheet(isPresented: $showShareSheet) {
+        .sheet(isPresented: $showShareSheet, onDismiss: {
+            // The export file (full note — PHI) was kept out of the post-export
+            // purge so Share could use it; remove it now that the user is done.
+            // The 24h stale sweep is the backstop if the app dies before this.
+            if let url = exportFileURL {
+                try? FileManager.default.removeItem(at: url)
+                exportFileURL = nil
+            }
+        }) {
             if let url = exportFileURL {
                 ShareSheet(items: [url])
             }
@@ -493,9 +501,15 @@ struct ExportView: View {
                 // local-data cleanup hook. We run it AFTER the audit
                 // event is written so the timeline reads
                 // exported → purged in the right order.
+                // Keep the just-written export file — the Share sheet is about
+                // to hand it to UIActivityViewController. Without this, the
+                // post-export sweep deleted it out from under Share, leaving a
+                // dead URL. It's cleaned when the Share sheet dismisses
+                // (`.sheet` onDismiss) or by the 24h stale sweep otherwise.
                 let report = LocalDataPurger.purgeAll(
                     sessionManager: sessionManager,
-                    reason: "post_export"
+                    reason: "post_export",
+                    keep: [url]
                 )
                 await MainActor.run { purgeReport = report }
             } catch {
