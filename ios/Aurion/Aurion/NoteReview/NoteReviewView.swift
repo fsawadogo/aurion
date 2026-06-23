@@ -1086,19 +1086,27 @@ struct NoteReviewView: View {
             // the backend returns 400. We treat that as "already approved":
             // play the success toast and dismiss, since there's nothing more
             // for the physician to do.
-            let stage1Result = await runApprovalStep {
+            // Best-effort advancement: AWAITING_REVIEW → PROCESSING_STAGE2.
+            // For a session already in/past PROCESSING_STAGE2 (e.g. an
+            // auto-advanced video import that's review-ready) this 409s with
+            // "…PROCESSING_STAGE2…", which the conflict classifier reads as
+            // "still processing". That is a FALSE failure here — stage 1 is
+            // already done — so its result must NOT gate the outcome.
+            _ = await runApprovalStep {
                 try await APIClient.shared.approveStage1(sessionId: sessionId)
             }
-            // Even if stage1 returned "already past" we still try /approve —
-            // the session may be in PROCESSING_STAGE2/REVIEW_COMPLETE which
-            // /approve accepts.
+            // /approve is the source of truth for a signed note — it accepts
+            // both PROCESSING_STAGE2 and REVIEW_COMPLETE. This is the only
+            // result that decides success/failure.
             let approveResult = await runApprovalStep {
                 try await APIClient.shared.approveFinalNote(sessionId: sessionId)
             }
 
-            // Surface only real failures (network, 5xx). State mismatches
-            // mean the session was already approved — treat as success.
-            if let err = stage1Result.realFailure ?? approveResult.realFailure {
+            // Surface only a real failure from the FINAL approve (network, 5xx,
+            // unresolved conflicts). A successful /approve means the note is
+            // signed regardless of the stage-1 step's state-mismatch 409 —
+            // which previously masked the success with "still processing".
+            if let err = approveResult.realFailure {
                 await MainActor.run {
                     isApproving = false
                     approveError = err
