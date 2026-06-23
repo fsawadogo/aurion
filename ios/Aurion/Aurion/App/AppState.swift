@@ -112,7 +112,7 @@ final class AppState: ObservableObject {
         // presence marker — `bearerToken()` prefers the live cognito ID token —
         // so it stays correct even after a refresh rotates the live token.
         KeychainHelper.shared.saveAuthToken(
-            token: KeychainHelper.shared.bearerToken() ?? "session",
+            KeychainHelper.shared.bearerToken() ?? "session",
             userId: userId,
             role: role.rawValue,
             name: KeychainHelper.shared.loadUserName() ?? ""
