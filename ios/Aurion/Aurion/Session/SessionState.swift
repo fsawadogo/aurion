@@ -276,19 +276,25 @@ final class CaptureSession: ObservableObject, Identifiable {
         AuditLogger.log(event: .sessionPaused, sessionId: id)
     }
 
-    func resume() {
-        guard state == .paused else { return }
+    /// Attempt to resume a paused session. Returns `false` when the resume
+    /// can't happen — wrong state, or the 30-min pause window elapsed — so the
+    /// caller does NOT re-arm local capture against a session that isn't
+    /// actually recording. On pause-timeout it sets `isPauseExpired` and leaves
+    /// the state `.paused` so the caller can finalize (stop+submit) rather than
+    /// strand the session.
+    @discardableResult
+    func resume() -> Bool {
+        guard state == .paused else { return false }
         // Check pause duration limit
         if let pausedAt, Date().timeIntervalSince(pausedAt) > Self.maxPauseDuration {
             isPauseExpired = true
-            AuditLogger.log(event: .recordingStopped, sessionId: id,
-                            extra: ["reason": "pause_timeout"])
-            return
+            return false
         }
         pausedAt = nil
         state = .recording
         persist()
         AuditLogger.log(event: .sessionResumed, sessionId: id)
+        return true
     }
 
     func stopRecording() {

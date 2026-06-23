@@ -588,18 +588,32 @@ final class SessionManager: ObservableObject {
     }
 
     func resumeRecording() {
+        guard let session else { return }
+        // Resolve the MODEL transition FIRST and gate every side-effect on it.
+        // Previously local capture (camera/mic/cadence/transcriber) was
+        // re-armed unconditionally — so if the model rejected the resume (state
+        // not .paused, or the 30-min pause window elapsed) the hardware went
+        // live for a session the model considered not-recording, and the
+        // backend got a spurious resume POST.
+        guard session.resume() else {
+            // Pause window elapsed (or invalid state): don't strand in .paused —
+            // finalize what was captured before the pause so the encounter
+            // still produces a note.
+            if session.isPauseExpired {
+                Task { await stopRecording() }
+            }
+            return
+        }
         for source in activeSourcesForCurrentMode { source.resume() }
         // Re-arm the cadence timer (#324). Same watermark + count as before
         // the pause; no-op when the driver was never created.
         cadenceDriver?.resume()
         liveActivity.setPaused(false)
-        if let session, wantsScreenCapture(for: session.captureMode) {
+        if wantsScreenCapture(for: session.captureMode) {
             screenCapture.startCapture()
         }
         liveTranscriber?.start()
-        session?.resume()
         Task {
-            guard let session else { return }
             do {
                 _ = try await api.resumeSession(sessionId: session.id)
             } catch {
@@ -610,6 +624,13 @@ final class SessionManager: ObservableObject {
 
     func stopRecording() async {
         guard let session else { return }
+        // Re-entry guard. The capture screen exposes TWO stop affordances (the
+        // center button and a dedicated Stop button) and the cadence flush can
+        // race; a double-invoke would fire two `stopRecording` POSTs (the
+        // second 409s and overwrites a successful stop with `self.error`), tear
+        // down sources twice, and double-beacon the clip summary. Only the
+        // first call from an active recording/paused state proceeds.
+        guard session.state == .recording || session.state == .paused else { return }
         // Granular audit (lane-ios/audio-upload-resilience). Fires the
         // instant the clinician taps Stop, BEFORE we touch the capture
         // sources. Pairs with `recording_file_finalized` later — the
@@ -1499,8 +1520,20 @@ final class SessionManager: ObservableObject {
     //    re-runs the upload from the same file rather than no-op'ing
     //    against an upload that never happened.
 
+    /// Re-entrancy guard for `submitAudio`. Set synchronously before the first
+    /// await (SessionManager is @MainActor, so the check + set are atomic) and
+    /// cleared on exit. Without it, PostEncounter "Generate" + the Retry button
+    /// (or a double-tap of either) can run two upload chains + two WS
+    /// subscribers against the same on-disk WAV; the first to 2xx wipes the
+    /// audio and the second then reports a spurious "recording lost" over a
+    /// note that actually succeeded.
+    private var isSubmittingStage1 = false
+
     private func submitAudio() async {
         guard let session else { return }
+        guard !isSubmittingStage1 else { return }
+        isSubmittingStage1 = true
+        defer { isSubmittingStage1 = false }
         uiState = .processing
 
         let captureSessionId = session.id
