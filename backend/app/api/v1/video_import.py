@@ -543,10 +543,24 @@ async def _auto_advance_stage2(
     (this is already a background task) and leaves the session in
     PROCESSING_STAGE2 — final approval + CONFLICTS resolution stay human.
     Returns the resulting note version (or None).
+
+    Records a ``stage2_jobs`` row exactly like the iOS background path
+    (``notes.py::_run_stage2_in_background``). Without it the iOS Stage-2
+    poll (``GET /notes/{id}/stage2-status``) returns ``no_job`` forever and
+    the dashboard tile stays "Stage 2 queued" even though the full note is
+    ready — the bug that left two Jun-2026 imports visibly stuck. The poll
+    reading ``completed`` is what drops the tile and surfaces the full note
+    for the human's final review.
     """
     # Lazy imports — avoid a circular import with the notes/vision routers.
     from app.api.v1.vision import run_stage2_vision
     from app.modules.note_gen.service import approve_note, get_latest_note
+    from app.modules.vision.jobs import (
+        create_job,
+        mark_completed,
+        mark_failed,
+        mark_running,
+    )
 
     approved = await approve_note(str(session_id), db)
     await transition_session(db, session, SessionState.PROCESSING_STAGE2)
@@ -557,9 +571,35 @@ async def _auto_advance_stage2(
         provider_used=approved.provider_used,
         completeness_score=approved.completeness_score,
     )
-    await run_stage2_vision(session_id, db)
-    latest = await get_latest_note(str(session_id), db)
-    return latest.version if latest is not None else None
+
+    job = await create_job(session_id, db)
+    await write_audit(
+        session_id, AuditEventType.STAGE2_STARTED, job_id=str(job.id)
+    )
+    try:
+        await mark_running(job.id, db)
+        result = await run_stage2_vision(session_id, db)
+        latest = await get_latest_note(str(session_id), db)
+        new_version = latest.version if latest is not None else 0
+        await mark_completed(
+            job.id,
+            new_note_version=new_version,
+            frames_processed=result.frames_processed,
+            db=db,
+        )
+        return new_version
+    except Exception as exc:  # noqa: BLE001 — record on the job, then bubble
+        # Mark the Stage-2 job failed so the iOS poll surfaces the failure
+        # (not a perpetual "queued"); the outer video-import handler still
+        # records VIDEO_IMPORT_FAILED + the CRITICAL alert when this re-raises.
+        await mark_failed(job.id, str(exc), db)
+        await write_audit(
+            session_id,
+            AuditEventType.STAGE2_FAILED,
+            job_id=str(job.id),
+            reason=str(exc)[:200],
+        )
+        raise
 
 
 async def _run_video_import_in_background(
