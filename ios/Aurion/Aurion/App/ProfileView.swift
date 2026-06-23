@@ -483,8 +483,8 @@ struct ProfileView: View {
                             }
                             Spacer()
                             AurionStatusPill(
-                                kind: sessionStateKind(session.displayState),
-                                labelOverride: sessionStateLabel(session.displayState)
+                                kind: sessionStateKind(session.state),
+                                labelOverride: sessionStateLabel(session.state)
                             )
                         }
                     }
