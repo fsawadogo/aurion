@@ -44,6 +44,25 @@ class TestValidTransitions:
         retry against."""
         assert VALID_TRANSITIONS[SessionState.STAGE1_FAILED_NO_AUDIO] == []
 
+    def test_processing_stage1_to_stage1_failed(self):
+        """Generic note-gen provider failure (parse error / rate limit /
+        timeout) drops PROCESSING_STAGE1 into the terminal STAGE1_FAILED —
+        previously this path left the session stranded in PROCESSING_STAGE1."""
+        assert (
+            SessionState.STAGE1_FAILED
+            in VALID_TRANSITIONS[SessionState.PROCESSING_STAGE1]
+        )
+
+    def test_stage1_failed_is_terminal_with_audit_mapping(self):
+        from app.core.audit_events import AuditEventType
+        from app.modules.session.service import STATE_AUDIT_EVENTS
+
+        assert VALID_TRANSITIONS[SessionState.STAGE1_FAILED] == []
+        assert (
+            STATE_AUDIT_EVENTS[SessionState.STAGE1_FAILED]
+            is AuditEventType.STAGE1_FAILED
+        )
+
     def test_awaiting_review_to_processing_stage2(self):
         assert VALID_TRANSITIONS[SessionState.AWAITING_REVIEW] == [SessionState.PROCESSING_STAGE2]
 
@@ -95,11 +114,12 @@ class TestAuditEventMapping:
 
 class TestStateCompleteness:
     def test_state_count_matches_documented_set(self):
-        """The CLAUDE.md spec pinned 10 happy-path states; the empty-
-        transcript guard adds STAGE1_FAILED_NO_AUDIO as a terminal off-
-        ramp. Total is 10 + 1 = 11 — every state still maps in
+        """The CLAUDE.md spec pinned 10 happy-path states; two terminal
+        off-ramps were added — STAGE1_FAILED_NO_AUDIO (empty-transcript
+        guard) and STAGE1_FAILED (generic note-gen provider failure).
+        Total is 10 + 2 = 12 — every state still maps in
         ``VALID_TRANSITIONS`` and ``STATE_AUDIT_EVENTS``."""
-        assert len(SessionState) == 11
+        assert len(SessionState) == 12
         # Every member has a transition entry — guard against silent
         # state additions that skip the transition table.
         for state in SessionState:
