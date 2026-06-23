@@ -836,6 +836,8 @@
 "noteReview.a11yScrollConflict" = "Scroll to first conflict";
 "noteReview.stage2InProgress" = "Visual enrichment in progress\U2026";
 "noteReview.stage2Failed" = "Stage 2 failed: %@. You can still approve the Stage 1 note.";
+"noteReview.stage2FailedTitle" = "Visual enrichment unavailable";
+"noteReview.stage2FailedBody" = "Stage 2 couldn\U2019t process the captured imagery. The audio note is complete and can be signed \U2014 but any visual findings (imaging, wound photos) may be missing. Review before approving.";
 "noteReview.approved" = "Note Approved";
 "noteReview.conflictBadge" = "CONFLICT";
 "noteReview.optionalBadge" = "OPTIONAL";
