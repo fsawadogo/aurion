@@ -116,7 +116,7 @@ def upgrade() -> None:
         sa.Column(
             "target_user_id",
             sa.UUID(as_uuid=True),
-            sa.ForeignKey("users.id", ondelete="CASCADE"),
+            sa.ForeignKey("users.id", ondelete="SET NULL"),
             nullable=True,
         ),
         sa.Column(

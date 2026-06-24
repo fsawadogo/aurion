@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.clock import utcnow
 from app.core.database import Base
 from app.core.types import SessionState, UserRole
 
@@ -1378,15 +1379,13 @@ class StudioPromptModel(Base):
         DateTime(timezone=True), nullable=True
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True), nullable=False, default=utcnow
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
-        default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        default=utcnow,
+        onupdate=utcnow,
     )
 
 
@@ -1421,9 +1420,7 @@ class StudioPromptVersionModel(Base):
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True), nullable=False, default=utcnow
     )
 
     __table_args__ = (
@@ -1468,10 +1465,13 @@ class PromptPublicationModel(Base):
     scope: Mapped[str] = mapped_column(String(8), nullable=False)
     # Set only when scope == "ROLE" — a UserRole value.
     target_role: Mapped[str | None] = mapped_column(String(24), nullable=True)
-    # Set only when scope == "SELF" — the publishing admin's user id.
+    # Set only when scope == "SELF" — the publishing admin's user id. SET NULL
+    # (not CASCADE) on user delete: this table is append-only / auditable, so a
+    # deleted clinician's SELF publication is orphaned (no SELF match), never
+    # erased from the rollout history.
     target_user_id: Mapped[uuid.UUID | None] = mapped_column(
         UUID(as_uuid=True),
-        ForeignKey("users.id", ondelete="CASCADE"),
+        ForeignKey("users.id", ondelete="SET NULL"),
         nullable=True,
     )
     published_by: Mapped[uuid.UUID | None] = mapped_column(
@@ -1480,9 +1480,7 @@ class PromptPublicationModel(Base):
         nullable=True,
     )
     published_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True),
-        nullable=False,
-        default=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True), nullable=False, default=utcnow
     )
     # NULL = active. Stamped (not deleted) when a later publication takes over
     # the same (job_id, scope, target).
