@@ -244,6 +244,16 @@ class FeatureFlagsConfig(BaseModel):
     # AppConfig (or POST /admin/feature-flags) without a redeploy. When OFF
     # the Stage 1 user prompt is byte-identical to the pre-feature build.
     specialty_style_in_prompt_enabled: bool = False
+    # ── Prompt Studio (create & share, #524) ──────────────────────────────
+    # Master gate for the admin Prompt Studio (/api/v1/admin/prompt-studio):
+    # authoring + publishing global prompts. Ships DARK — every Studio route
+    # 403s while False. When ON, only roles in `prompt_studio_roles` (default
+    # ADMIN) may use it, so the surface widens to EVAL_TEAM / CLINICIAN later
+    # via AppConfig without a redeploy. Publishing is the consequential action
+    # (it moves the global default a clinician's note resolves to); authoring
+    # a draft is inert until published.
+    prompt_studio_enabled: bool = False
+    prompt_studio_roles: list[str] = Field(default_factory=lambda: ["ADMIN"])
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────

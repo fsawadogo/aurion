@@ -287,6 +287,10 @@ class AuditEventType(StrEnum):
     # any real session's history.
     PROMPT_USER_PROMPT_SET = "prompt_user_prompt_set"
     PROMPT_USER_PROMPT_CLEARED = "prompt_user_prompt_cleared"
+    # Prompt Studio (create & share, #524) — an admin published a prompt
+    # version to a cohort (self / role / all). Provenance only: actor + job +
+    # version_no + scope (+ target_role for ROLE). NEVER the prompt text.
+    PROMPT_STUDIO_PUBLISHED = "prompt_studio_published"
     # ── Auth pivot (backend JWT + TOTP + password reset) ──────────────────
     # Replaces the Cognito-managed flow. Every auth state change writes
     # one of these. Emitted with the synthetic session id
@@ -876,6 +880,11 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.PROMPT_USER_PROMPT_CLEARED: frozenset(
         {"actor_id", "prompt_id"}
+    ),
+    # Prompt Studio publish — provenance only, never the prompt text.
+    # target_role rides only on ROLE-scoped publications.
+    AuditEventType.PROMPT_STUDIO_PUBLISHED: frozenset(
+        {"actor_id", "job_id", "version_no", "scope", "target_role"}
     ),
     # Longitudinal patient context loaded into Stage 1 note generation
     # (#61, full slice). The whitelist is the entire PHI-safety

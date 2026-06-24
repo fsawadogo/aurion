@@ -16,6 +16,7 @@ import os
 import socket
 import uuid
 from typing import AsyncGenerator
+from unittest.mock import AsyncMock, MagicMock
 
 os.environ.setdefault("APP_ENV", "local")
 os.environ.setdefault("AWS_DEFAULT_REGION", "ca-central-1")
@@ -157,6 +158,37 @@ async def _seed_user(db: AsyncSession, role: UserRole) -> uuid.UUID:
 async def admin(db_session: AsyncSession) -> tuple[uuid.UUID, dict[str, str]]:
     uid = await _seed_user(db_session, UserRole.ADMIN)
     return uid, {"Authorization": f"Bearer ADMIN:{uid}"}
+
+
+@pytest.fixture(autouse=True)
+def _enable_studio(monkeypatch):
+    """The Studio ships dark — enable the flag (ADMIN-only) for the suite."""
+    from app.modules.config.appconfig_client import get_config
+
+    flags = get_config().feature_flags
+    monkeypatch.setattr(flags, "prompt_studio_enabled", True)
+    monkeypatch.setattr(flags, "prompt_studio_roles", ["ADMIN"])
+
+
+@pytest.fixture(autouse=True)
+def mock_audit_log(monkeypatch):
+    """Mock AuditLogService so publish's audit write never touches DynamoDB."""
+    from app.modules.audit_log import service as audit_module
+
+    mock_service = MagicMock(spec=audit_module.AuditLogService)
+    mock_service.write_event = AsyncMock(return_value={})
+    monkeypatch.setattr(audit_module, "_service", mock_service)
+    return mock_service
+
+
+async def _create_prompt(client, headers, name="P", text=_WELL_FORMED):
+    r = await client.post(
+        f"{_BASE}/prompts",
+        headers=headers,
+        json={"job_id": _JOB, "name": name, "text": text},
+    )
+    assert r.status_code == 201, r.text
+    return r.json()
 
 
 # ── Tests ────────────────────────────────────────────────────────────────────
@@ -310,4 +342,162 @@ async def test_non_admin_forbidden(app_client: AsyncClient, role: str) -> None:
         headers=headers,
         json={"job_id": _JOB, "name": "X", "text": _WELL_FORMED},
     )
+    assert r.status_code == 403, r.text
+
+
+# ── Publish (PS-05) ────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_publish_to_all(
+    app_client: AsyncClient, admin: tuple[uuid.UUID, dict[str, str]]
+) -> None:
+    _, headers = admin
+    p = await _create_prompt(app_client, headers)
+    vid = p["versions"][0]["id"]
+    r = await app_client.post(
+        f"{_BASE}/prompts/{p['id']}/publish",
+        headers=headers,
+        json={"version_id": vid, "scope": "ALL"},
+    )
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["scope"] == "ALL"
+    assert body["job_id"] == _JOB
+    assert body["version_no"] == 1
+    assert body["target_user_id"] is None
+    assert body["target_role"] is None
+
+
+@pytest.mark.asyncio
+async def test_publish_self_targets_publisher(
+    app_client: AsyncClient, admin: tuple[uuid.UUID, dict[str, str]]
+) -> None:
+    admin_id, headers = admin
+    p = await _create_prompt(app_client, headers)
+    vid = p["versions"][0]["id"]
+    r = await app_client.post(
+        f"{_BASE}/prompts/{p['id']}/publish",
+        headers=headers,
+        json={"version_id": vid, "scope": "SELF"},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["target_user_id"] == str(admin_id)
+
+
+@pytest.mark.asyncio
+async def test_publish_role_requires_target_role(
+    app_client: AsyncClient, admin: tuple[uuid.UUID, dict[str, str]]
+) -> None:
+    _, headers = admin
+    p = await _create_prompt(app_client, headers)
+    vid = p["versions"][0]["id"]
+    r = await app_client.post(
+        f"{_BASE}/prompts/{p['id']}/publish",
+        headers=headers,
+        json={"version_id": vid, "scope": "ROLE"},
+    )
+    assert r.status_code == 400, r.text
+
+
+@pytest.mark.asyncio
+async def test_publish_role_targets_that_role(
+    app_client: AsyncClient, admin: tuple[uuid.UUID, dict[str, str]]
+) -> None:
+    _, headers = admin
+    p = await _create_prompt(app_client, headers)
+    vid = p["versions"][0]["id"]
+    r = await app_client.post(
+        f"{_BASE}/prompts/{p['id']}/publish",
+        headers=headers,
+        json={"version_id": vid, "scope": "ROLE", "target_role": "CLINICIAN"},
+    )
+    assert r.status_code == 201, r.text
+    assert r.json()["target_role"] == "CLINICIAN"
+
+
+@pytest.mark.asyncio
+async def test_publish_supersedes_prior_active(
+    app_client: AsyncClient,
+    db_session: AsyncSession,
+    admin: tuple[uuid.UUID, dict[str, str]],
+) -> None:
+    from sqlalchemy import select as _select
+
+    from app.core.models import PromptPublicationModel
+
+    _, headers = admin
+    p = await _create_prompt(app_client, headers)
+    vid = p["versions"][0]["id"]
+    for _ in range(2):
+        await app_client.post(
+            f"{_BASE}/prompts/{p['id']}/publish",
+            headers=headers,
+            json={"version_id": vid, "scope": "ALL"},
+        )
+    rows = (
+        await db_session.execute(
+            _select(PromptPublicationModel).where(
+                PromptPublicationModel.job_id == _JOB,
+                PromptPublicationModel.scope == "ALL",
+            )
+        )
+    ).scalars().all()
+    assert len(rows) == 2
+    assert sum(1 for r in rows if r.superseded_at is None) == 1
+
+
+@pytest.mark.asyncio
+async def test_publish_unknown_version_404(
+    app_client: AsyncClient, admin: tuple[uuid.UUID, dict[str, str]]
+) -> None:
+    _, headers = admin
+    p = await _create_prompt(app_client, headers)
+    r = await app_client.post(
+        f"{_BASE}/prompts/{p['id']}/publish",
+        headers=headers,
+        json={"version_id": str(uuid.uuid4()), "scope": "ALL"},
+    )
+    assert r.status_code == 404, r.text
+
+
+@pytest.mark.asyncio
+async def test_publish_writes_audit_no_text(
+    app_client: AsyncClient,
+    admin: tuple[uuid.UUID, dict[str, str]],
+    mock_audit_log: MagicMock,
+) -> None:
+    from app.core.audit_events import AuditEventType
+
+    _, headers = admin
+    p = await _create_prompt(app_client, headers)
+    vid = p["versions"][0]["id"]
+    await app_client.post(
+        f"{_BASE}/prompts/{p['id']}/publish",
+        headers=headers,
+        json={"version_id": vid, "scope": "ALL"},
+    )
+    call = mock_audit_log.write_event.call_args
+    assert call.kwargs["event_type"] is AuditEventType.PROMPT_STUDIO_PUBLISHED
+    assert call.kwargs["job_id"] == _JOB
+    assert call.kwargs["scope"] == "ALL"
+    assert call.kwargs["version_no"] == 1
+    # The prompt text must never ride on the audit row.
+    assert _WELL_FORMED not in repr(call.kwargs)
+
+
+@pytest.mark.asyncio
+async def test_disabled_flag_forbids_all(
+    app_client: AsyncClient,
+    admin: tuple[uuid.UUID, dict[str, str]],
+    monkeypatch,
+) -> None:
+    """Flag off → every Studio route 403s, even for ADMIN."""
+    from app.modules.config.appconfig_client import get_config
+
+    monkeypatch.setattr(
+        get_config().feature_flags, "prompt_studio_enabled", False
+    )
+    _, headers = admin
+    r = await app_client.get(f"{_BASE}/prompts", headers=headers)
     assert r.status_code == 403, r.text

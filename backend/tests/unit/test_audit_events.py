@@ -146,6 +146,7 @@ EXPECTED_VALUES: dict[str, str] = {
     # semantics — see app.modules.prompts).
     "PROMPT_USER_PROMPT_SET": "prompt_user_prompt_set",
     "PROMPT_USER_PROMPT_CLEARED": "prompt_user_prompt_cleared",
+    "PROMPT_STUDIO_PUBLISHED": "prompt_studio_published",
     # Longitudinal patient context (#61, full slice). Fires once per
     # Stage 1 note-gen call where prior encounters were consumed.
     "LONGITUDINAL_CONTEXT_LOADED": "longitudinal_context_loaded",
