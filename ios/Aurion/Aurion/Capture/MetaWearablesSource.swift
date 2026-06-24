@@ -97,6 +97,15 @@ final class MetaWearablesSource: CaptureSource, VideoClipSource {
                 self.detail = "Streaming · \(self.displayName)"
                 self.isReadyForPreview = true
             } catch {
+                // The throw can't reach `start()`'s caller (it returned the
+                // moment this Task was spawned), so surface the failure every
+                // other way: log it for on-device diagnostics, drop the
+                // half-started preview so the POV view doesn't sit frozen on a
+                // stale frame, and leave an explicit `.error` status + detail
+                // the capture UI renders instead of a silent dead stream.
+                NSLog("[Aurion] Meta startVideoStream failed: %@", String(describing: error))
+                self.isReadyForPreview = false
+                self.previewLayer.flushAndRemoveImage()
                 self.status = .error(error.localizedDescription)
                 self.detail = error.localizedDescription
             }
