@@ -60,9 +60,14 @@ class FeatureFlagsResponse(BaseModel):
     """Full snapshot of the feature_flags block from live AppConfig.
 
     Mirrors ``FeatureFlagsConfig`` field-for-field so the portal can
-    bind a row per flag without server-side filtering. Snake-case wire
-    matches the rest of the admin API; the web portal already speaks
-    snake_case for AppConfig responses.
+    bind a row per flag without server-side filtering. This mirror is
+    load-bearing: ``update_feature_flags`` rebuilds the config from this
+    body, so any flag missing here is silently reset to its schema
+    default on every save. ``test_response_mirrors_config_field_for_field``
+    locks the two field sets together so a newly-added config flag can't
+    drift out of this model unnoticed. Snake-case wire matches the rest
+    of the admin API; the web portal already speaks snake_case for
+    AppConfig responses.
     """
 
     screen_capture_enabled: bool
@@ -78,6 +83,10 @@ class FeatureFlagsResponse(BaseModel):
     patient_summary_card_enabled: bool
     emr_writeback_card_enabled: bool
     media_review_retention_enabled: bool
+    measurement_enabled: bool
+    video_import_enabled: bool
+    video_import_drop_zero_face_frames: bool
+    specialty_style_in_prompt_enabled: bool
     prompt_studio_enabled: bool
     prompt_studio_roles: list[str]
 
@@ -167,6 +176,14 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         emr_writeback_card_enabled=cfg_feature_flags.emr_writeback_card_enabled,
         media_review_retention_enabled=(
             cfg_feature_flags.media_review_retention_enabled
+        ),
+        measurement_enabled=cfg_feature_flags.measurement_enabled,
+        video_import_enabled=cfg_feature_flags.video_import_enabled,
+        video_import_drop_zero_face_frames=(
+            cfg_feature_flags.video_import_drop_zero_face_frames
+        ),
+        specialty_style_in_prompt_enabled=(
+            cfg_feature_flags.specialty_style_in_prompt_enabled
         ),
         prompt_studio_enabled=cfg_feature_flags.prompt_studio_enabled,
         # Copy the list so the response never aliases the live config's.
