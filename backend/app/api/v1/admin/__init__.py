@@ -22,6 +22,7 @@ from app.api.v1.admin import (
     media,
     metrics,
     probe,
+    prompt_studio,
     providers,
     sessions,
     templates,
@@ -46,3 +47,4 @@ router.include_router(feature_flags.router)
 router.include_router(media.router)
 router.include_router(analytics.router)
 router.include_router(video_import.router)
+router.include_router(prompt_studio.router)
