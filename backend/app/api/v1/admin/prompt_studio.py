@@ -36,11 +36,12 @@ from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.v1._helpers import raise_if_validation_failed
 from app.core.database import get_db
 from app.core.models import StudioPromptModel, StudioPromptVersionModel
 from app.core.types import UserRole
 from app.modules.auth.service import CurrentUser, require_role
-from app.modules.prompts import PROMPTS, ValidationCode, validate_user_prompt
+from app.modules.prompts import PROMPTS, validate_user_prompt
 
 router = APIRouter(prefix="/admin/prompt-studio", tags=["admin"])
 
@@ -109,17 +110,7 @@ def _validated(text: str) -> str:
     override path in ``me_prompts.py`` — the web parses both identically.
     """
     cleaned = text.strip() if text else ""
-    result = validate_user_prompt(cleaned)
-    if result.code is not ValidationCode.OK:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "message": result.message,
-                "code": result.code.value,
-                "matched_phrase": result.matched_phrase,
-                "missing_anchor_group": result.missing_anchor_group,
-            },
-        )
+    raise_if_validation_failed(validate_user_prompt(cleaned))
     return cleaned
 
 

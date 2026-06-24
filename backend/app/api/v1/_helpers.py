@@ -21,6 +21,7 @@ from app.core.types import ClipMaskingMetadata, MaskingProof, SessionState, User
 from app.core.uuids import to_uuid
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser
+from app.modules.prompts import ValidationCode, ValidationResult
 from app.modules.session.service import get_session
 
 # Roles that bypass row-level ownership checks. Compliance and admin both
@@ -115,6 +116,27 @@ async def write_audit(
     """
     audit = get_audit_log_service()
     await audit.write_event(session_id=session_id, event_type=event_type, **fields)
+
+
+def raise_if_validation_failed(validation: ValidationResult) -> None:
+    """Raise 400 with the standard prompt-validation detail shape, or no-op.
+
+    The detail dict (``message`` / ``code`` / ``matched_phrase`` /
+    ``missing_anchor_group``) is parsed identically by the web client across
+    every prompt-save surface — per-physician overrides in ``me_prompts`` and
+    admin authoring in ``admin/prompt_studio``. Centralised here once the
+    pattern reached a third caller (DRY, §6c).
+    """
+    if validation.code is not ValidationCode.OK:
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "message": validation.message,
+                "code": validation.code.value,
+                "matched_phrase": validation.matched_phrase,
+                "missing_anchor_group": validation.missing_anchor_group,
+            },
+        )
 
 
 def require_state(session: SessionModel, *allowed: SessionState) -> None:

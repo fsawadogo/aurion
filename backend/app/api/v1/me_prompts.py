@@ -50,7 +50,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1._helpers import write_audit
+from app.api.v1._helpers import raise_if_validation_failed, write_audit
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import PromptOverrideModel
@@ -67,7 +67,6 @@ from app.modules.note_gen.specialty_style import get_specialty_style
 from app.modules.prompts import (
     PROMPTS,
     PromptDefinition,
-    ValidationCode,
     select_active_prompt,
     validate_specialty_guidance,
     validate_user_prompt,
@@ -489,16 +488,7 @@ async def patch_my_user_prompt(
         body.user_prompt_text.strip() if body.user_prompt_text else ""
     )
     validation = validate_user_prompt(user_prompt_text)
-    if validation.code is not ValidationCode.OK:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "message": validation.message,
-                "code": validation.code.value,
-                "matched_phrase": validation.matched_phrase,
-                "missing_anchor_group": validation.missing_anchor_group,
-            },
-        )
+    raise_if_validation_failed(validation)
 
     # Upsert. We avoid the dialect-specific INSERT ... ON CONFLICT
     # because the SQLAlchemy 2.0 async path here is the same one the
@@ -624,16 +614,7 @@ async def patch_my_specialty_guidance(
 
     guidance = body.guidance.strip() if body.guidance else ""
     validation = validate_specialty_guidance(guidance)
-    if validation.code is not ValidationCode.OK:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={
-                "message": validation.message,
-                "code": validation.code.value,
-                "matched_phrase": validation.matched_phrase,
-                "missing_anchor_group": validation.missing_anchor_group,
-            },
-        )
+    raise_if_validation_failed(validation)
 
     prompt_id = specialty_style_prompt_id(key)
     existing = await db.execute(
