@@ -14,7 +14,7 @@ import {
   Sparkles,
   Stethoscope,
 } from "lucide-react";
-import { ApiError, humanizeError } from "@/lib/api";
+import { humanizeError, parseDetailError } from "@/lib/api";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import Badge from "@/components/ui/Badge";
@@ -30,26 +30,6 @@ import {
   saveSpecialtyGuidance,
 } from "@/lib/portal-api";
 import type { AIPrompt, PromptCategory, SpecialtyPrompt } from "@/types";
-
-/** Pull a friendly message out of a PATCH 400 (banlist / length). The server
- *  detail mirrors the registry-prompt validator: {message, matched_phrase}. */
-function parseGuidanceError(e: unknown, fallback: string): string {
-  if (e instanceof ApiError) {
-    try {
-      const detail = (JSON.parse(e.body) as { detail?: unknown }).detail;
-      if (detail && typeof detail === "object") {
-        const d = detail as { message?: string; matched_phrase?: string | null };
-        if (d.matched_phrase) {
-          return `${d.message ?? fallback} (“${d.matched_phrase}”)`;
-        }
-        if (d.message) return d.message;
-      }
-    } catch {
-      /* non-JSON body — fall through */
-    }
-  }
-  return humanizeError(e, fallback);
-}
 
 /**
  * /portal/prompts — AI Prompts Transparency.
@@ -306,7 +286,7 @@ function SpecialtyCard({ specialty }: { specialty: SpecialtyPrompt }) {
       setCurrent(updated);
       setEditing(false);
     } catch (e) {
-      setError(parseGuidanceError(e, t("errorSaving")));
+      setError(parseDetailError(e, t("errorSaving")));
     } finally {
       setSaving(false);
     }
@@ -321,7 +301,7 @@ function SpecialtyCard({ specialty }: { specialty: SpecialtyPrompt }) {
       setDraft(updated.active_guidance);
       setEditing(false);
     } catch (e) {
-      setError(parseGuidanceError(e, t("errorSaving")));
+      setError(parseDetailError(e, t("errorSaving")));
     } finally {
       setSaving(false);
     }

@@ -1,4 +1,44 @@
 {
+  "AdminPromptStudio": {
+    "eyebrow": "Espace admin",
+    "title": "Studio d'invites",
+    "description": "Rédigez ou importez une invite, puis publiez-la pour l'équipe.",
+    "createButton": "Créer une invite",
+    "loadError": "Impossible de charger le Studio d'invites.",
+    "saveError": "Impossible d'enregistrer l'invite.",
+    "publishError": "Impossible de publier l'invite.",
+    "libraryLabel": "Bibliothèque d'invites",
+    "detailLabel": "Détail de l'invite",
+    "empty": "Aucune invite pour l'instant — créez la première.",
+    "selectHint": "Sélectionnez une invite pour la consulter, la versionner et la publier.",
+    "cancel": "Annuler",
+    "currentVersionLabel": "Version actuelle",
+    "newVersionLabel": "Nouvelle version",
+    "newVersionPlaceholder": "Modifiez l'invite et enregistrez une nouvelle version…",
+    "saveVersion": "Enregistrer la version",
+    "versionSaved": "Version {n} enregistrée.",
+    "publishLabel": "Publier la v{n} pour",
+    "scopeLabel": "Portée",
+    "roleLabel": "Rôle",
+    "publish": "Publier",
+    "publishedNotice": "v{v} publiée pour {scope}.",
+    "scope": {
+      "SELF": "Moi uniquement",
+      "ROLE": "Un rôle",
+      "ALL": "Tous les cliniciens"
+    },
+    "createModal": {
+      "title": "Créer une invite",
+      "nameLabel": "Nom",
+      "namePlaceholder": "ex. Génération de note — examen plus détaillé",
+      "jobLabel": "Tâche IA",
+      "jobPlaceholder": "Sélectionnez la tâche pilotée par cette invite…",
+      "textLabel": "Texte de l'invite",
+      "textPlaceholder": "Vous êtes un assistant de documentation clinique…",
+      "safetyHint": "Doit conserver le mode descriptif : décrire ce qui a été observé ; ne pas interpréter ni diagnostiquer.",
+      "submit": "Créer"
+    }
+  },
   "Sidebar": {
     "portal": "Portail",
     "admin": "Admin",
@@ -17,6 +57,7 @@
       "myProfile": "Mon profil",
       "myActivity": "Mon activité",
       "aiPrompts": "Invites IA",
+      "promptStudio": "Studio d'invites",
       "featureFlags": "Indicateurs",
       "providers": "Fournisseurs IA",
       "capturedMedia": "Médias capturés",

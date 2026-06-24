@@ -20,6 +20,7 @@ import {
   Settings,
   Search,
   ShieldCheck,
+  Sparkles,
   Users,
   X,
   Zap,
@@ -76,6 +77,10 @@ const navigation: {
   // — matches the backend _ROLES on /admin/templates. Distinct from the
   // clinician-facing /portal/templates (per-physician custom templates).
   { tKey: "systemTemplates", href: "/portal/admin/templates", icon: LayoutGrid, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },
+  // Prompt Studio (create & share, #524). ADMIN-only — matches the backend
+  // prompt_studio_roles allowlist; the page is also flag-gated
+  // (prompt_studio_enabled) and shows a "not enabled" state when off.
+  { tKey: "promptStudio", href: "/portal/admin/prompt-studio", icon: Sparkles, roles: ["ADMIN"] },
   // Operational alerts (#76). ADMIN + COMPLIANCE_OFFICER — matches the
   // backend gate on /admin/alerts (list + acknowledge).
   { tKey: "alerts", href: "/portal/admin/alerts", icon: Bell, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },

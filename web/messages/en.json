@@ -1,4 +1,44 @@
 {
+  "AdminPromptStudio": {
+    "eyebrow": "Admin workspace",
+    "title": "Prompt Studio",
+    "description": "Author or upload a prompt, then publish it to the team.",
+    "createButton": "Create new prompt",
+    "loadError": "Couldn't load the Prompt Studio.",
+    "saveError": "Couldn't save the prompt.",
+    "publishError": "Couldn't publish the prompt.",
+    "libraryLabel": "Prompt library",
+    "detailLabel": "Prompt detail",
+    "empty": "No prompts yet — create your first one.",
+    "selectHint": "Select a prompt to view, version, and publish it.",
+    "cancel": "Cancel",
+    "currentVersionLabel": "Current version",
+    "newVersionLabel": "New version",
+    "newVersionPlaceholder": "Edit the prompt and save a new version…",
+    "saveVersion": "Save new version",
+    "versionSaved": "Saved version {n}.",
+    "publishLabel": "Publish v{n} to",
+    "scopeLabel": "Scope",
+    "roleLabel": "Role",
+    "publish": "Publish",
+    "publishedNotice": "Published v{v} to {scope}.",
+    "scope": {
+      "SELF": "Just me",
+      "ROLE": "A role",
+      "ALL": "All clinicians"
+    },
+    "createModal": {
+      "title": "Create new prompt",
+      "nameLabel": "Name",
+      "namePlaceholder": "e.g. Note generation — tighter PE detail",
+      "jobLabel": "AI job",
+      "jobPlaceholder": "Select the job this prompt drives…",
+      "textLabel": "Prompt text",
+      "textPlaceholder": "You are a clinical documentation assistant…",
+      "safetyHint": "Must keep descriptive mode: describe what was observed; do not interpret or diagnose.",
+      "submit": "Create"
+    }
+  },
   "Sidebar": {
     "portal": "Portal",
     "admin": "Admin",
@@ -17,6 +57,7 @@
       "myProfile": "My Profile",
       "myActivity": "My Activity",
       "aiPrompts": "AI Prompts",
+      "promptStudio": "Prompt Studio",
       "featureFlags": "Feature Flags",
       "providers": "AI Providers",
       "capturedMedia": "Captured Media",

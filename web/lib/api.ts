@@ -224,6 +224,26 @@ export function humanizeError(
   return fallback;
 }
 
+/** Pull a prompt-validator 400 detail (`{ message, matched_phrase }`) into a
+ * friendly line — the Prompt Studio author/publish endpoints and the
+ * per-physician prompt-save endpoints share this shape. Falls back to
+ * `humanizeError` for any other error. */
+export function parseDetailError(e: unknown, fallback: string): string {
+  if (e instanceof ApiError) {
+    try {
+      const detail = (JSON.parse(e.body) as { detail?: unknown }).detail;
+      if (detail && typeof detail === "object") {
+        const d = detail as { message?: string; matched_phrase?: string | null };
+        if (d.matched_phrase) return `${d.message ?? fallback} (“${d.matched_phrase}”)`;
+        if (d.message) return d.message;
+      }
+    } catch {
+      /* non-JSON body — fall through */
+    }
+  }
+  return humanizeError(e, fallback);
+}
+
 export async function fetchWithAuth(
   path: string,
   options: RequestInit = {},
@@ -910,6 +930,105 @@ export async function getAdminVideoImportStatus(
 ): Promise<VideoImportStatus> {
   const res = await fetchWithAuth(
     `/api/v1/admin/video-imports/${sessionId}/status`,
+  );
+  return res.json();
+}
+
+/* ─── Prompt Studio (admin, create & share #524) ─────────────────────────────
+ *
+ * ADMIN-only surface (gated by `feature_flags.prompt_studio_enabled` +
+ * `prompt_studio_roles`): author/upload a prompt, save versions, publish it to
+ * a cohort. When the flag is off every call 403s — the page surfaces a
+ * "not enabled" state. Backend: app/api/v1/admin/prompt_studio.py.
+ */
+
+export interface StudioJob {
+  job_id: string;
+  name: string;
+  system_prompt: string;
+}
+
+export interface StudioPromptVersion {
+  id: string;
+  version_no: number;
+  text: string;
+  created_at: string;
+}
+
+export interface StudioPromptSummary {
+  id: string;
+  job_id: string;
+  name: string;
+  latest_version_no: number;
+  created_at: string;
+}
+
+export interface StudioPromptDetail {
+  id: string;
+  job_id: string;
+  name: string;
+  created_at: string;
+  versions: StudioPromptVersion[];
+}
+
+export type StudioScope = "SELF" | "ROLE" | "ALL";
+
+export interface StudioPublication {
+  id: string;
+  job_id: string;
+  version_id: string;
+  version_no: number;
+  scope: string;
+  target_role: string | null;
+  target_user_id: string | null;
+  published_at: string;
+}
+
+export async function getStudioJobs(): Promise<StudioJob[]> {
+  const res = await fetchWithAuth("/api/v1/admin/prompt-studio/jobs");
+  return res.json();
+}
+
+export async function listStudioPrompts(): Promise<StudioPromptSummary[]> {
+  const res = await fetchWithAuth("/api/v1/admin/prompt-studio/prompts");
+  return res.json();
+}
+
+export async function getStudioPrompt(id: string): Promise<StudioPromptDetail> {
+  const res = await fetchWithAuth(`/api/v1/admin/prompt-studio/prompts/${id}`);
+  return res.json();
+}
+
+export async function createStudioPrompt(body: {
+  job_id: string;
+  name: string;
+  text: string;
+}): Promise<StudioPromptDetail> {
+  const res = await fetchWithAuth("/api/v1/admin/prompt-studio/prompts", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+export async function saveStudioVersion(
+  id: string,
+  text: string,
+): Promise<StudioPromptVersion> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/prompt-studio/prompts/${id}/versions`,
+    { method: "POST", body: JSON.stringify({ text }) },
+  );
+  return res.json();
+}
+
+export async function publishStudioPrompt(
+  id: string,
+  body: { version_id: string; scope: StudioScope; target_role?: string },
+): Promise<StudioPublication> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/prompt-studio/prompts/${id}/publish`,
+    { method: "POST", body: JSON.stringify(body) },
   );
   return res.json();
 }
