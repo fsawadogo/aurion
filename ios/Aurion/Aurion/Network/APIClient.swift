@@ -750,14 +750,6 @@ final class APIClient: Sendable {
     /// Server-side DOCX generation. Kept for the web portal flow; the
     /// mobile MVP path uses on-device generation + `recordExportAudit`
     /// instead so nothing crosses the wire on export.
-    func exportNote(sessionId: String) async throws -> Data {
-        let url = URL(string: "\(baseURL)/notes/\(sessionId)/export")!
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        let (data, _) = try await URLSession.shared.data(for: request)
-        return data
-    }
-
     /// Record an on-device export. Called after the local file has been
     /// generated and offered to the share sheet — no bytes are sent.
     @discardableResult
