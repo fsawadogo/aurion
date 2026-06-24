@@ -243,3 +243,15 @@ async def test_registry_default_when_nothing_published(db_session: AsyncSession)
     assert (
         await assemble_prompt(_JOB, clinician, db_session) == PROMPTS[_JOB].system_prompt
     )
+
+
+@pytest.mark.asyncio
+async def test_unknown_job_raises_even_with_a_publication(db_session: AsyncSession) -> None:
+    """A prompt_id not in the registry fails loud — even if a (malformed)
+    publication exists for it, its text must never reach the LLM."""
+    clinician = await _seed_user(db_session, UserRole.CLINICIAN)
+    await _seed_publication(
+        db_session, text="SHOULD_NEVER_SHIP", scope=PublicationScope.ALL, job_id="not_a_real_job"
+    )
+    with pytest.raises(KeyError):
+        await assemble_prompt("not_a_real_job", clinician, db_session)

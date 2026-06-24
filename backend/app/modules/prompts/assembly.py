@@ -185,13 +185,18 @@ async def assemble_prompt(
     physician who has signed off on their own prompt keeps it; a clinic-wide
     change reaches only physicians who haven't.
 
-    Raises ``KeyError`` when ``prompt_id`` is not in the registry and no
-    publication exists — a programmer bug (the registry is in code), surfaced
-    loudly rather than sending an empty prompt.
+    Raises ``KeyError`` when ``prompt_id`` is not in the registry — a
+    programmer bug (the registry is in code). Checked up front so an unknown
+    id fails loud regardless of any stored override or publication, rather
+    than silently sending unvetted text to the LLM (defence in depth on the
+    descriptive-mode boundary: a publication for a non-registry job must never
+    reach the model).
 
     Name kept as ``assemble_prompt`` so the eight consumer call sites compile
     unchanged.
     """
+    if prompt_id not in PROMPTS:
+        raise KeyError(prompt_id)
     user_prompt = await _get_user_prompt(db, owner_id, prompt_id)
     if user_prompt:
         return user_prompt
