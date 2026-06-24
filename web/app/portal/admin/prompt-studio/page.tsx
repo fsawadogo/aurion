@@ -317,7 +317,6 @@ function PromptDetail({
   onChanged: (d: StudioPromptDetail) => void;
 }) {
   const t = useTranslations("AdminPromptStudio");
-  const latest = detail.versions[detail.versions.length - 1];
   const [draft, setDraft] = useState("");
   const [savingVersion, setSavingVersion] = useState(false);
   const [scope, setScope] = useState<StudioScope>("ALL");
@@ -325,6 +324,11 @@ function PromptDetail({
   const [publishing, setPublishing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  // Backend always creates v1 with the prompt, so versions is non-empty in
+  // practice; guard anyway so a malformed payload can't crash the panel.
+  const latest = detail.versions[detail.versions.length - 1];
+  if (!latest) return null;
 
   async function saveVersion() {
     setSavingVersion(true);
