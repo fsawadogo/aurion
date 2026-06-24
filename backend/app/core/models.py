@@ -21,6 +21,7 @@ from sqlalchemy import (
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.clock import utcnow
 from app.core.database import Base
 from app.core.types import SessionState, UserRole
 
@@ -1338,6 +1339,153 @@ class PromptOverrideModel(Base):
         nullable=False,
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
+class StudioPromptModel(Base):
+    """An admin-authored, versioned candidate prompt for one AI job
+    (PROMPT-STUDIO / PS-01).
+
+    Distinct from ``PromptOverrideModel``: that table holds a *clinician's*
+    personal replacement for their own sessions. This one holds an *admin's*
+    named candidate for a pipeline job (``job_id`` = a key in
+    ``app.modules.prompts.registry.PROMPTS``) that — once published (ps-05) —
+    becomes the global default underneath every clinician who has not saved a
+    personal override. A job can carry several candidates; their text lives in
+    the append-only ``StudioPromptVersionModel`` children.
+
+    ``job_id`` is NOT a foreign key, for the same reason as
+    ``PromptOverrideModel.prompt_id``: the registry lives in code, not the DB.
+    ``created_by`` is nullable / ``SET NULL`` on user delete so a global prompt
+    outlives the admin who authored it — it is org config, not personal config.
+    """
+
+    __tablename__ = "studio_prompts"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    # Matches a PROMPTS dict key in ``app.modules.prompts.registry``.
+    job_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Soft-archive: hidden from the library but versions/publications stay
+    # referenceable. NULL = active.
+    archived_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=utcnow,
+        onupdate=utcnow,
+    )
+
+
+class StudioPromptVersionModel(Base):
+    """One immutable version of a ``StudioPromptModel`` (PS-01).
+
+    Append-only: every save in the Studio writes a new row with the next
+    ``version_no`` for its parent; rows are never updated or deleted. The
+    ``UNIQUE (studio_prompt_id, version_no)`` constraint keeps the version
+    sequence monotonic and collision-free. ``text`` is the full standalone
+    system prompt (validated structurally before insert by ps-03 via
+    ``app.modules.prompts.safety.validate_user_prompt``); it is not PHI but is
+    sensitive, so it never enters logs or audit rows — only its length does.
+    """
+
+    __tablename__ = "studio_prompt_versions"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    studio_prompt_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("studio_prompts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    version_no: Mapped[int] = mapped_column(Integer, nullable=False)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    created_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "studio_prompt_id",
+            "version_no",
+            name="uq_studio_prompt_versions_prompt_version",
+        ),
+    )
+
+
+class PromptPublicationModel(Base):
+    """Append-only record that a ``StudioPromptVersionModel`` is (or was) live
+    for a cohort of a job (PS-01; written by ps-05).
+
+    Resolution (ps-02) reads the active publication — ``superseded_at IS
+    NULL`` — for a clinician's job, picking the most specific scope: ``SELF``
+    (``target_user_id``) over ``ROLE`` (``target_role``) over ``ALL``.
+    Publishing a new version supersedes the prior active row for the same
+    ``(job_id, scope, target)`` by stamping ``superseded_at`` rather than
+    deleting it, so the full rollout history stays auditable.
+
+    ``job_id`` is denormalized (also reachable via the version's parent) so the
+    hot resolution lookup filters one indexed column without a join. ``scope``
+    / ``target_role`` carry ``PublicationScope`` / ``UserRole`` values (see
+    ``app.core.types``) as plain strings, keeping a new scope a code change,
+    not a schema migration.
+    """
+
+    __tablename__ = "prompt_publications"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    job_id: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    version_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("studio_prompt_versions.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # PublicationScope value: "SELF" | "ROLE" | "ALL".
+    scope: Mapped[str] = mapped_column(String(8), nullable=False)
+    # Set only when scope == "ROLE" — a UserRole value.
+    target_role: Mapped[str | None] = mapped_column(String(24), nullable=True)
+    # Set only when scope == "SELF" — the publishing admin's user id. SET NULL
+    # (not CASCADE) on user delete: this table is append-only / auditable, so a
+    # deleted clinician's SELF publication is orphaned (no SELF match), never
+    # erased from the rollout history.
+    target_user_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    published_by: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    published_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
+    # NULL = active. Stamped (not deleted) when a later publication takes over
+    # the same (job_id, scope, target).
+    superseded_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
 
 

@@ -387,6 +387,26 @@ class UserRole(str, Enum):
     ADMIN = "ADMIN"
 
 
+class PublicationScope(str, Enum):
+    """Rollout scope for a Prompt Studio publication (PROMPT-STUDIO / PS-01).
+
+    A published prompt version is made live for a cohort, narrowest first:
+      * ``SELF`` — only the publishing admin's own sessions (test-in-prod).
+      * ``ROLE`` — every user holding the publication's ``target_role``.
+      * ``ALL``  — every clinician; the global default moves underneath
+        anyone who has not saved a personal override.
+
+    Resolution (ps-02) picks the most specific active publication for a
+    given user. Stored as a plain ``VARCHAR`` column, never a Postgres enum,
+    so adding a future scope stays a code change rather than a schema
+    migration.
+    """
+
+    SELF = "SELF"
+    ROLE = "ROLE"
+    ALL = "ALL"
+
+
 # ── Provider Error ────────────────────────────────────────────────────────
 
 class ProviderError(Exception):
