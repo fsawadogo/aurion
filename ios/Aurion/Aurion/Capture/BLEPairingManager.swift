@@ -153,7 +153,7 @@ final class BLEPairingManager: NSObject, ObservableObject {
         }
 
         guard centralManager.state == .poweredOn else {
-            error = "Bluetooth is not available. Please enable Bluetooth in Settings."
+            error = L("error.bluetoothUnavailable")
             return
         }
 
@@ -180,7 +180,7 @@ final class BLEPairingManager: NSObject, ObservableObject {
                 guard let self, self.isScanning else { return }
                 self.stopScanning()
                 if !self.isPaired && self.discoveredDevices.isEmpty {
-                    self.error = "No devices found. Make sure your wearable is powered on and nearby."
+                    self.error = L("error.noDevicesFound")
                 }
             }
         }
@@ -219,7 +219,7 @@ final class BLEPairingManager: NSObject, ObservableObject {
         }
 
         guard let peripheral = discoveredPeripherals.first(where: { $0.identifier == deviceId }) else {
-            error = "Device no longer available. Tap Scan to refresh."
+            error = L("error.deviceUnavailable")
             return
         }
         connect(to: peripheral)
@@ -358,7 +358,7 @@ final class BLEPairingManager: NSObject, ObservableObject {
         connectionState = .failedOver
         connectedPeripheral = nil
 
-        error = "Wearable disconnected. Using device camera."
+        error = L("error.wearableDisconnected")
 
         AuditLogger.log(
             event: .deviceFailover,
@@ -511,20 +511,20 @@ extension BLEPairingManager: CBCentralManagerDelegate {
                 self.attemptRestore()
             case .poweredOff:
                 self.bluetoothEnabled = false
-                self.error = "Bluetooth is turned off."
+                self.error = L("error.bluetoothOff")
                 // Do NOT call disconnect() — that wipes the saved pairing. The
                 // user just toggled the radio; we want to reconnect on power-on.
                 self.connectionState = .disconnected
                 self.isPaired = false
             case .unauthorized:
                 self.bluetoothEnabled = false
-                self.error = "Bluetooth permission denied. Enable in Settings > Privacy > Bluetooth."
+                self.error = L("error.bluetoothPermissionDenied")
             case .unsupported:
                 self.bluetoothEnabled = false
-                self.error = "Bluetooth is not supported on this device."
+                self.error = L("error.bluetoothUnsupported")
             case .resetting:
                 self.bluetoothEnabled = false
-                self.error = "Bluetooth is resetting..."
+                self.error = L("error.bluetoothResetting")
             case .unknown:
                 self.bluetoothEnabled = false
             @unknown default:
@@ -655,7 +655,7 @@ extension BLEPairingManager: CBCentralManagerDelegate {
                 self.attemptReconnect()
             } else {
                 self.connectionState = .disconnected
-                self.error = "Failed to connect to \(name). Try again."
+                self.error = L("error.connectFailed", name)
             }
         }
     }

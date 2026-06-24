@@ -63,11 +63,11 @@ final class ScreenCaptureManager: ObservableObject {
     func startCapture(fps: Int? = nil) {
         guard !isRecording else { return }
         guard RemoteConfig.shared.featureFlags.screenCaptureEnabled else {
-            error = "Screen capture is disabled by server config."
+            error = L("error.screenCaptureDisabled")
             return
         }
         guard recorder.isAvailable else {
-            error = "Screen recording is not available on this device."
+            error = L("error.screenRecordingUnavailable")
             return
         }
 
@@ -82,7 +82,7 @@ final class ScreenCaptureManager: ObservableObject {
             // This handler is called on an arbitrary queue
             if let captureError {
                 Task { @MainActor [weak self] in
-                    self?.error = "Screen capture error: \(captureError.localizedDescription)"
+                    self?.error = L("error.screenCaptureError", captureError.localizedDescription)
                 }
                 return
             }
@@ -95,7 +95,7 @@ final class ScreenCaptureManager: ObservableObject {
         }, completionHandler: { [weak self] captureError in
             Task { @MainActor [weak self] in
                 if let captureError {
-                    self?.error = "Failed to start screen capture: \(captureError.localizedDescription)"
+                    self?.error = L("error.screenCaptureFailedStart", captureError.localizedDescription)
                     self?.isRecording = false
                 } else {
                     self?.isRecording = true
@@ -118,7 +118,7 @@ final class ScreenCaptureManager: ObservableObject {
             Task { @MainActor [weak self] in
                 self?.isRecording = false
                 if let captureError {
-                    self?.error = "Failed to stop screen capture: \(captureError.localizedDescription)"
+                    self?.error = L("error.screenCaptureFailedStop", captureError.localizedDescription)
                 }
             }
         }

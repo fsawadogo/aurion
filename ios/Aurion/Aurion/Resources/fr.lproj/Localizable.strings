@@ -1087,3 +1087,55 @@
 "measurement.error.title" = "Impossible d\U2019enregistrer la mesure";
 "measurement.error.disabled" = "La mesure n\U2019est pas activ\U00E9e pour ce compte.";
 "measurement.error.offline" = "Vous semblez hors ligne. R\U00E9essayez une fois connect\U00E9.";
+
+/* Status chips (AurionStatusKind) */
+"status.completed" = "Termin\U00E9";
+"status.pending" = "En attente";
+"status.rec" = "REC";
+"status.archived" = "Archiv\U00E9";
+"status.exported" = "Export\U00E9";
+"status.review" = "\U00C0 r\U00E9viser";
+
+/* Bluetooth audio source status */
+"bluetooth.recordingFrom" = "Enregistrement depuis %@";
+"bluetooth.connected" = "Connect\U00E9 \U00B7 %@";
+"bluetooth.disconnected" = "D\U00E9connect\U00E9";
+"bluetooth.pairInstructions" = "Associez un appareil Bluetooth dans les R\U00E9glages iOS";
+
+/* Meta Wearables source status */
+"meta.defaultName" = "Ray-Ban Meta";
+"meta.connected" = "Connect\U00E9 \U00B7 %@";
+"meta.streaming" = "Diffusion \U00B7 %@";
+"meta.connectInstructions" = "Connectez dans Configuration \U2192 Appareils";
+"meta.sdkPending" = "Acc\U00E8s au SDK Meta en attente";
+"meta.registered" = "Enregistr\U00E9 %@ \U2014 activez dans les indicateurs de fonctionnalit\U00E9";
+"meta.comingSoon" = "Bient\U00F4t disponible";
+"meta.comingSoonDetail" = "Bient\U00F4t disponible \U2014 activez Meta Wearables pour vous connecter";
+
+/* Capture / device error banners */
+"error.noAudioDevice" = "Aucun appareil audio disponible.";
+"error.noVideoDevice" = "Aucun appareil vid\U00E9o disponible.";
+"error.permissionsRequired" = "Les autorisations cam\U00E9ra et microphone sont requises.";
+"error.captureInterrupted" = "Capture interrompue.";
+"error.bluetoothUnavailable" = "Le Bluetooth n\U2019est pas disponible. Veuillez l\U2019activer dans les R\U00E9glages.";
+"error.noDevicesFound" = "Aucun appareil trouv\U00E9. Assurez-vous que votre appareil est allum\U00E9 et \U00E0 proximit\U00E9.";
+"error.deviceUnavailable" = "Appareil non disponible. Touchez Analyser pour actualiser.";
+"error.wearableDisconnected" = "Appareil d\U00E9connect\U00E9. Utilisation de la cam\U00E9ra de l\U2019appareil.";
+"error.screenCaptureDisabled" = "La capture d\U2019\U00E9cran est d\U00E9sactiv\U00E9e par la configuration du serveur.";
+"error.screenRecordingUnavailable" = "L\U2019enregistrement d\U2019\U00E9cran n\U2019est pas disponible sur cet appareil.";
+"error.exportFailed" = "\U00C9chec de l\U2019exportation";
+"error.micPermissionDenied" = "Autorisation microphone refus\U00E9e.";
+"error.cameraPermissionDenied" = "Autorisation cam\U00E9ra refus\U00E9e.";
+"error.screenCaptureError" = "Erreur de capture d\U2019\U00E9cran : %@";
+"error.screenCaptureFailedStart" = "\U00C9chec du d\U00E9marrage de la capture d\U2019\U00E9cran : %@";
+"error.screenCaptureFailedStop" = "\U00C9chec de l\U2019arr\U00EAt de la capture d\U2019\U00E9cran : %@";
+"error.bluetoothOff" = "Le Bluetooth est d\U00E9sactiv\U00E9.";
+"error.bluetoothPermissionDenied" = "Autorisation Bluetooth refus\U00E9e. Activez-la dans R\U00E9glages > Confidentialit\U00E9 > Bluetooth.";
+"error.bluetoothUnsupported" = "Le Bluetooth n\U2019est pas pris en charge sur cet appareil.";
+"error.bluetoothResetting" = "R\U00E9initialisation du Bluetooth\U2026";
+"error.connectFailed" = "\U00C9chec de la connexion \U00E0 %@. R\U00E9essayez.";
+"error.audioSessionFailed" = "\U00C9chec de l\U2019activation de la session audio : %@";
+
+/* Accessibility — session-count chip */
+"a11y.sessionCount.one" = "%lld s\U00E9ance";
+"a11y.sessionCount.many" = "%lld s\U00E9ances";

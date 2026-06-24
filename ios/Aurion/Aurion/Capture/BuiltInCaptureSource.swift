@@ -49,11 +49,11 @@ final class BuiltInCaptureSource: CaptureSource, VideoClipSource {
             .sink { [weak self] camera, mic, capturing in
                 guard let self else { return }
                 if mic == .denied {
-                    self.status = .unavailable("Microphone permission denied.")
+                    self.status = .unavailable(L("error.micPermissionDenied"))
                 } else if camera == .denied && self.includeVideo {
                     // Camera denied only blocks when this session needs video.
                     // Audio-only sessions fall through and record normally.
-                    self.status = .unavailable("Camera permission denied.")
+                    self.status = .unavailable(L("error.cameraPermissionDenied"))
                 } else if capturing {
                     self.status = self.manager.isPaused ? .paused : .recording
                 } else {
@@ -84,9 +84,9 @@ final class BuiltInCaptureSource: CaptureSource, VideoClipSource {
         if manager.permissionsGranted {
             status = .ready
         } else if manager.microphonePermission == .denied {
-            status = .unavailable("Microphone permission denied.")
+            status = .unavailable(L("error.micPermissionDenied"))
         } else if manager.cameraPermission == .denied && includeVideo {
-            status = .unavailable("Camera permission denied.")
+            status = .unavailable(L("error.cameraPermissionDenied"))
         } else {
             status = .disconnected
         }
