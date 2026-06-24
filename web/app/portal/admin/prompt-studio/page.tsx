@@ -11,12 +11,12 @@
 
 import { FileText, Plus, Rocket } from "lucide-react";
 import {
-  ApiError,
   createStudioPrompt,
   getStudioJobs,
   getStudioPrompt,
   humanizeError,
   listStudioPrompts,
+  parseDetailError,
   publishStudioPrompt,
   saveStudioVersion,
 } from "@/lib/api";
@@ -40,24 +40,6 @@ const ROLES = ["CLINICIAN", "EVAL_TEAM", "COMPLIANCE_OFFICER", "ADMIN"];
 
 const INPUT_CLS =
   "w-full rounded-aurion-md border border-hairline bg-white px-3 py-2 text-aurion-callout text-navy-800 placeholder:text-navy-300 focus:outline-none focus:ring-2 focus:ring-gold-300/40";
-
-/** Pull the studio 400 detail ({message, matched_phrase}) into a friendly
- *  line — the save endpoints reuse the descriptive-mode validator's shape. */
-function parseStudioError(e: unknown, fallback: string): string {
-  if (e instanceof ApiError) {
-    try {
-      const detail = (JSON.parse(e.body) as { detail?: unknown }).detail;
-      if (detail && typeof detail === "object") {
-        const d = detail as { message?: string; matched_phrase?: string | null };
-        if (d.matched_phrase) return `${d.message ?? fallback} (“${d.matched_phrase}”)`;
-        if (d.message) return d.message;
-      }
-    } catch {
-      /* non-JSON body — fall through */
-    }
-  }
-  return humanizeError(e, fallback);
-}
 
 export default function PromptStudioPage() {
   const t = useTranslations("AdminPromptStudio");
@@ -242,7 +224,7 @@ function CreatePromptModal({
       setText("");
       await onCreated(detail);
     } catch (e) {
-      setError(parseStudioError(e, t("saveError")));
+      setError(parseDetailError(e, t("saveError")));
     } finally {
       setSaving(false);
     }
@@ -355,7 +337,7 @@ function PromptDetail({
       onChanged(fresh);
       setNotice(t("versionSaved", { n: fresh.versions.length }));
     } catch (e) {
-      setError(parseStudioError(e, t("saveError")));
+      setError(parseDetailError(e, t("saveError")));
     } finally {
       setSavingVersion(false);
     }
@@ -373,7 +355,7 @@ function PromptDetail({
       });
       setNotice(t("publishedNotice", { scope: pub.scope, v: pub.version_no }));
     } catch (e) {
-      setError(parseStudioError(e, t("publishError")));
+      setError(parseDetailError(e, t("publishError")));
     } finally {
       setPublishing(false);
     }

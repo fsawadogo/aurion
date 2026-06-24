@@ -224,6 +224,26 @@ export function humanizeError(
   return fallback;
 }
 
+/** Pull a prompt-validator 400 detail (`{ message, matched_phrase }`) into a
+ * friendly line — the Prompt Studio author/publish endpoints and the
+ * per-physician prompt-save endpoints share this shape. Falls back to
+ * `humanizeError` for any other error. */
+export function parseDetailError(e: unknown, fallback: string): string {
+  if (e instanceof ApiError) {
+    try {
+      const detail = (JSON.parse(e.body) as { detail?: unknown }).detail;
+      if (detail && typeof detail === "object") {
+        const d = detail as { message?: string; matched_phrase?: string | null };
+        if (d.matched_phrase) return `${d.message ?? fallback} (“${d.matched_phrase}”)`;
+        if (d.message) return d.message;
+      }
+    } catch {
+      /* non-JSON body — fall through */
+    }
+  }
+  return humanizeError(e, fallback);
+}
+
 export async function fetchWithAuth(
   path: string,
   options: RequestInit = {},
