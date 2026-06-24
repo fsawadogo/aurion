@@ -68,6 +68,12 @@ def _all_flags_response(**overrides) -> FeatureFlagsResponse:
         "patient_summary_card_enabled": False,
         "emr_writeback_card_enabled": False,
         "media_review_retention_enabled": False,
+        "measurement_enabled": False,
+        "video_import_enabled": False,
+        "video_import_drop_zero_face_frames": True,
+        "specialty_style_in_prompt_enabled": False,
+        "prompt_studio_enabled": False,
+        "prompt_studio_roles": ["ADMIN"],
     }
     base.update(overrides)
     return FeatureFlagsResponse(**base)
@@ -100,6 +106,20 @@ class TestPureHelpers:
             "emr_writeback_card_enabled",
             "orders_card_enabled",
         ]
+
+    def test_response_mirrors_config_field_for_field(self) -> None:
+        """Lock: FeatureFlagsResponse must list EVERY FeatureFlagsConfig flag.
+
+        update_feature_flags rebuilds the live config from the response body
+        (FeatureFlagsConfig.model_validate(body.model_dump())), so any config
+        field missing from the response is silently reset to its schema default
+        on every save — a real bug that hit prompt_studio_*, video_import_*,
+        measurement, and specialty_style before this was locked down. If this
+        fails, add the new flag to FeatureFlagsResponse + _build_response (and
+        the _all_flags_response fixture above)."""
+        assert set(FeatureFlagsResponse.model_fields) == set(
+            FeatureFlagsConfig.model_fields
+        )
 
     def test_build_response_round_trips_all_fields(self) -> None:
         cfg = FeatureFlagsConfig(
@@ -155,6 +175,25 @@ class TestGetFeatureFlags:
         assert "frame_by_frame_video_enabled" in dumped
         assert resp.clip_video_interpretation_enabled is True
         assert resp.frame_by_frame_video_enabled is False
+
+    @pytest.mark.asyncio
+    async def test_get_response_round_trips_prompt_studio_flag(self) -> None:
+        """The Prompt Studio gate surfaces in the GET response so the portal
+        can render + toggle it; the roles list round-trips so a portal save
+        doesn't silently reset it (regression guard for the field-for-field
+        mirror that ps-05 broke)."""
+        live = AppConfigSchema(
+            feature_flags=FeatureFlagsConfig(
+                prompt_studio_enabled=True,
+                prompt_studio_roles=["ADMIN", "EVAL_TEAM"],
+            )
+        )
+        with patch(
+            "app.api.v1.admin.feature_flags.get_config", return_value=live
+        ):
+            resp = await get_feature_flags(_=_admin_user())
+        assert resp.prompt_studio_enabled is True
+        assert resp.prompt_studio_roles == ["ADMIN", "EVAL_TEAM"]
 
 
 # ── POST /admin/feature-flags ──────────────────────────────────────────────
@@ -289,6 +328,91 @@ class TestUpdateFeatureFlags:
             "orders_card_enabled",
             "patient_summary_card_enabled",
         ]
+
+    @pytest.mark.asyncio
+    async def test_save_preserves_prompt_studio_state(self) -> None:
+        """Regression: flipping a card flag must NOT reset the Prompt Studio
+        gate. ps-05 added prompt_studio_enabled/roles to FeatureFlagsConfig but
+        not to FeatureFlagsResponse, so model_validate(body) silently zeroed
+        them on every save. With the fields restored, the portal echoes the
+        live studio state and the pushed doc preserves it."""
+        current = AppConfigSchema(
+            feature_flags=FeatureFlagsConfig(
+                prompt_studio_enabled=True,
+                prompt_studio_roles=["ADMIN", "EVAL_TEAM"],
+            )
+        )
+        body = _all_flags_response(
+            prompt_studio_enabled=True,
+            prompt_studio_roles=["ADMIN", "EVAL_TEAM"],
+            orders_card_enabled=True,  # the only intended change
+        )
+        with (
+            patch("app.api.v1.admin.feature_flags.get_config", return_value=current),
+            patch(
+                "app.api.v1.admin.feature_flags._publish_appconfig_version",
+                return_value=11,
+            ) as publish_mock,
+            patch(
+                "app.api.v1.admin.feature_flags.get_appconfig_client",
+                return_value=MagicMock(),
+            ),
+            patch("app.api.v1.admin.feature_flags.write_audit", new=AsyncMock()),
+        ):
+            resp = await update_feature_flags(body=body, user=_admin_user())
+
+        pushed_doc, _ = publish_mock.call_args[0]
+        assert pushed_doc["feature_flags"]["prompt_studio_enabled"] is True
+        assert pushed_doc["feature_flags"]["prompt_studio_roles"] == [
+            "ADMIN",
+            "EVAL_TEAM",
+        ]
+        # Studio state is untouched — only the card flag is in the diff.
+        assert resp.changed_fields == ["orders_card_enabled"]
+        assert resp.feature_flags.prompt_studio_enabled is True
+
+    @pytest.mark.asyncio
+    async def test_save_preserves_other_live_flags(self) -> None:
+        """Regression: flipping one card flag must not reset other LIVE gates.
+
+        video_import_enabled, measurement_enabled, and
+        specialty_style_in_prompt_enabled were all missing from
+        FeatureFlagsResponse, so model_validate(body) zeroed them on every save
+        — silently disabling live pipelines from an unrelated card toggle."""
+        current = AppConfigSchema(
+            feature_flags=FeatureFlagsConfig(
+                video_import_enabled=True,
+                measurement_enabled=True,
+                specialty_style_in_prompt_enabled=True,
+            )
+        )
+        body = _all_flags_response(
+            video_import_enabled=True,
+            measurement_enabled=True,
+            specialty_style_in_prompt_enabled=True,
+            orders_card_enabled=True,  # the only intended change
+        )
+        with (
+            patch("app.api.v1.admin.feature_flags.get_config", return_value=current),
+            patch(
+                "app.api.v1.admin.feature_flags._publish_appconfig_version",
+                return_value=12,
+            ) as publish_mock,
+            patch(
+                "app.api.v1.admin.feature_flags.get_appconfig_client",
+                return_value=MagicMock(),
+            ),
+            patch("app.api.v1.admin.feature_flags.write_audit", new=AsyncMock()),
+        ):
+            resp = await update_feature_flags(body=body, user=_admin_user())
+
+        ff = publish_mock.call_args[0][0]["feature_flags"]
+        assert ff["video_import_enabled"] is True
+        assert ff["measurement_enabled"] is True
+        assert ff["specialty_style_in_prompt_enabled"] is True
+        # The video sub-flag keeps its non-default (True) live value too.
+        assert ff["video_import_drop_zero_face_frames"] is True
+        assert resp.changed_fields == ["orders_card_enabled"]
 
     @pytest.mark.asyncio
     async def test_publish_failure_surfaces_as_http(self) -> None:

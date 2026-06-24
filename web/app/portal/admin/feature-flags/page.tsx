@@ -3,18 +3,19 @@
 /**
  * /portal/admin/feature-flags — ADMIN-only feature flag toggles.
  *
- * Scope (lane-full/card-visibility-flags): four post-pilot cards on
- * the iOS note-review screen (Orders, Coding & Billing, Patient
- * Summary, EMR Write-Back) each ship behind their own AppConfig flag.
- * This page is the only writer for those flags — backend pushes a new
- * AppConfig hosted-version every save and the live FeatureFlagsConfig
- * propagates to iOS within ~30 seconds via the existing polling
- * client.
+ * Scope: a handful of post-pilot flags, grouped by where they take
+ * effect (see FLAG_GROUPS). Group 1 — four iOS note-review cards
+ * (Orders, Coding & Billing, Patient Summary, EMR Write-Back). Group 2
+ * — web "Workspace tools" (Prompt Studio). Each ships behind its own
+ * AppConfig flag. This page is the only writer for them — backend
+ * pushes a new AppConfig hosted-version every save and the live
+ * FeatureFlagsConfig propagates to clients within ~30 seconds via the
+ * existing polling client.
  *
- * The other six feature flags (screen capture, note versioning, etc.)
- * are read-only here. They're tied to deeper pipeline behaviors and
- * aren't intended for ad-hoc admin toggling during pilot. The save
- * action only writes the four card flags; the other six pass through
+ * Every other flag in the block (screen capture, note versioning, the
+ * video-vision gates, prompt_studio_roles, etc.) is read-only here —
+ * tied to deeper pipeline behavior or not a simple boolean. The save
+ * action writes only the grouped flags; everything else passes through
  * verbatim from the loaded snapshot.
  *
  * Role gate: the link only appears in the Sidebar for ADMIN, AND the
@@ -33,13 +34,32 @@ import PageHeader from "@/components/portal/PageHeader";
 import { getFeatureFlags, updateFeatureFlags, humanizeError} from "@/lib/api";
 import type { FeatureFlags } from "@/types";
 
-/** The four flags this page actually mutates. Order = display order. */
-const EDITABLE_FLAGS = [
-  "orders_card_enabled",
-  "coding_card_enabled",
-  "patient_summary_card_enabled",
-  "emr_writeback_card_enabled",
-] as const satisfies readonly (keyof FeatureFlags)[];
+/** The flags this page mutates, grouped by where they take effect. Each group
+ *  renders as its own card with a heading + hint; order = display order. The
+ *  `titleKey`/`hintKey` resolve under the `FeatureFlags` i18n namespace. */
+const FLAG_GROUPS = [
+  {
+    titleKey: "sectionCards",
+    hintKey: "sectionCardsHint",
+    flags: [
+      "orders_card_enabled",
+      "coding_card_enabled",
+      "patient_summary_card_enabled",
+      "emr_writeback_card_enabled",
+    ],
+  },
+  {
+    titleKey: "workspaceTools",
+    hintKey: "workspaceToolsHint",
+    flags: ["prompt_studio_enabled"],
+  },
+] as const satisfies readonly {
+  titleKey: string;
+  hintKey: string;
+  flags: readonly (keyof FeatureFlags)[];
+}[];
+
+const EDITABLE_FLAGS = FLAG_GROUPS.flatMap((g) => g.flags);
 
 type EditableFlag = (typeof EDITABLE_FLAGS)[number];
 
@@ -191,56 +211,60 @@ export default function FeatureFlagsPage() {
         </Card>
       ) : (
         <>
-          <Card>
-            <div className="mb-4 flex items-center gap-2">
-              <Flag className="h-4 w-4 text-gold-600" />
-              <h2 className="aurion-micro text-gold-600">
-                {t("sectionCards")}
-              </h2>
-            </div>
-            <p className="mb-5 text-aurion-callout text-navy-500">
-              {t("sectionCardsHint")}
-            </p>
+          <div className="space-y-6">
+            {FLAG_GROUPS.map((group) => (
+              <Card key={group.titleKey}>
+                <div className="mb-4 flex items-center gap-2">
+                  <Flag className="h-4 w-4 text-gold-600" />
+                  <h2 className="aurion-micro text-gold-600">
+                    {t(group.titleKey)}
+                  </h2>
+                </div>
+                <p className="mb-5 text-aurion-callout text-navy-500">
+                  {t(group.hintKey)}
+                </p>
 
-            <ul className="divide-y divide-hairline">
-              {EDITABLE_FLAGS.map((key) => {
-                const name = t(`flags.${key}.name`);
-                const description = t(`flags.${key}.description`);
-                const enabled = draft[key];
-                const changed = loaded ? loaded[key] !== draft[key] : false;
-                return (
-                  <li
-                    key={key}
-                    className="flex items-start justify-between gap-6 py-4"
-                    data-testid={`flag-row-${key}`}
-                  >
-                    <div className="min-w-0">
-                      <p className="text-aurion-body font-semibold text-navy-800">
-                        {name}
-                      </p>
-                      <p className="mt-1 text-aurion-caption text-navy-500">
-                        {description}
-                      </p>
-                    </div>
-                    <div className="flex shrink-0 items-center gap-2.5 pt-0.5">
-                      <span
-                        aria-hidden="true"
-                        className={
-                          "h-2 w-2 rounded-full bg-gold-500 transition-opacity duration-short ease-aurion " +
-                          (changed ? "opacity-100" : "opacity-0")
-                        }
-                      />
-                      <ToggleSwitch
-                        enabled={enabled}
-                        onChange={() => toggle(key)}
-                        ariaLabel={name}
-                      />
-                    </div>
-                  </li>
-                );
-              })}
-            </ul>
-          </Card>
+                <ul className="divide-y divide-hairline">
+                  {group.flags.map((key) => {
+                    const name = t(`flags.${key}.name`);
+                    const description = t(`flags.${key}.description`);
+                    const enabled = draft[key];
+                    const changed = loaded ? loaded[key] !== draft[key] : false;
+                    return (
+                      <li
+                        key={key}
+                        className="flex items-start justify-between gap-6 py-4"
+                        data-testid={`flag-row-${key}`}
+                      >
+                        <div className="min-w-0">
+                          <p className="text-aurion-body font-semibold text-navy-800">
+                            {name}
+                          </p>
+                          <p className="mt-1 text-aurion-caption text-navy-500">
+                            {description}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center gap-2.5 pt-0.5">
+                          <span
+                            aria-hidden="true"
+                            className={
+                              "h-2 w-2 rounded-full bg-gold-500 transition-opacity duration-short ease-aurion " +
+                              (changed ? "opacity-100" : "opacity-0")
+                            }
+                          />
+                          <ToggleSwitch
+                            enabled={enabled}
+                            onChange={() => toggle(key)}
+                            ariaLabel={name}
+                          />
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ul>
+              </Card>
+            ))}
+          </div>
 
           <div className="mt-6 flex items-center justify-end gap-2">
             <Button

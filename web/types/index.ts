@@ -428,6 +428,22 @@ export interface FeatureFlags {
   coding_card_enabled: boolean;
   patient_summary_card_enabled: boolean;
   emr_writeback_card_enabled: boolean;
+  // Pipeline / vision / retention gates. Not portal-editable today — surfaced
+  // for field-for-field parity with the backend FeatureFlagsResponse so they
+  // ride along in the snapshot and a flag save doesn't reset them.
+  clip_video_interpretation_enabled: boolean;
+  frame_by_frame_video_enabled: boolean;
+  media_review_retention_enabled: boolean;
+  measurement_enabled: boolean;
+  video_import_enabled: boolean;
+  video_import_drop_zero_face_frames: boolean;
+  specialty_style_in_prompt_enabled: boolean;
+  // Web-portal workspace tool — gates the Prompt Studio admin surface.
+  prompt_studio_enabled: boolean;
+  // Prompt Studio role allowlist. Server-authoritative (AppConfig-only, not a
+  // portal toggle), but round-trips with the snapshot so a flag save doesn't
+  // drop it. Mirrors the backend list[str].
+  prompt_studio_roles: string[];
 }
 
 export interface UpdateFeatureFlagsResponse {

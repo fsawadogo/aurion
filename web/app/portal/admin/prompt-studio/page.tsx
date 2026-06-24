@@ -11,6 +11,7 @@
 
 import { FileText, Plus, Rocket } from "lucide-react";
 import {
+  ApiError,
   createStudioPrompt,
   getStudioJobs,
   getStudioPrompt,
@@ -33,6 +34,7 @@ import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import Modal from "@/components/ui/Modal";
+import EmptyPanelState from "@/components/portal/EmptyPanelState";
 import PageHeader from "@/components/portal/PageHeader";
 
 const SCOPES: StudioScope[] = ["SELF", "ROLE", "ALL"];
@@ -48,17 +50,29 @@ export default function PromptStudioPage() {
   const [selected, setSelected] = useState<StudioPromptDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [disabled, setDisabled] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setDisabled(false);
     try {
       const [js, ps] = await Promise.all([getStudioJobs(), listStudioPrompts()]);
       setJobs(js);
       setPrompts(ps);
     } catch (e) {
-      setError(humanizeError(e, t("loadError")));
+      // The studio gate raises 403 for two reasons: prompt_studio_enabled is
+      // off, or the role isn't in prompt_studio_roles. Under the default config
+      // (flag dark, allowlist [ADMIN], nav ADMIN-only) the only 403 an admin
+      // hits is flag-off, so both render the "enable it in Feature Flags" state.
+      // Distinguishing them for a widened allowlist needs a machine-readable
+      // gate error code — deferred follow-up.
+      if (e instanceof ApiError && e.status === 403) {
+        setDisabled(true);
+      } else {
+        setError(humanizeError(e, t("loadError")));
+      }
     } finally {
       setLoading(false);
     }
@@ -93,13 +107,15 @@ export default function PromptStudioPage() {
         title={t("title")}
         description={t("description")}
         actions={
-          <Button
-            onClick={() => setCreateOpen(true)}
-            data-testid="create-prompt-button"
-          >
-            <Plus className="h-4 w-4 mr-1.5" aria-hidden="true" />
-            {t("createButton")}
-          </Button>
+          disabled ? undefined : (
+            <Button
+              onClick={() => setCreateOpen(true)}
+              data-testid="create-prompt-button"
+            >
+              <Plus className="h-4 w-4 mr-1.5" aria-hidden="true" />
+              {t("createButton")}
+            </Button>
+          )
         }
       />
 
@@ -113,7 +129,17 @@ export default function PromptStudioPage() {
         </div>
       )}
 
-      {loading ? (
+      {disabled ? (
+        <Card>
+          <div data-testid="prompt-studio-disabled">
+            <EmptyPanelState
+              icon={<Rocket className="h-5 w-5" aria-hidden="true" />}
+              title={t("notEnabledTitle")}
+              hint={t("notEnabledBody")}
+            />
+          </div>
+        </Card>
+      ) : loading ? (
         <Card>
           <LoadingSkeleton lines={6} />
         </Card>

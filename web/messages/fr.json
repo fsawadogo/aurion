@@ -11,6 +11,8 @@
     "detailLabel": "Détail de l'invite",
     "empty": "Aucune invite pour l'instant — créez la première.",
     "selectHint": "Sélectionnez une invite pour la consulter, la versionner et la publier.",
+    "notEnabledTitle": "Le Studio d'invites n'est pas encore activé",
+    "notEnabledBody": "Cette fonctionnalité est protégée par un indicateur. Un administrateur peut l'activer dans les indicateurs de fonctionnalités pour commencer à rédiger et publier des invites.",
     "cancel": "Annuler",
     "currentVersionLabel": "Version actuelle",
     "newVersionLabel": "Nouvelle version",
@@ -520,6 +522,8 @@
     "loading": "Chargement…",
     "sectionCards": "Fiches de révision de note (iOS)",
     "sectionCardsHint": "Ces quatre fiches apparaissent sous la note SOAP dans l’application iOS. Chacune est une fonctionnalité post-pilote — gardez-la masquée tant que le backend correspondant n’est pas en service. Les changements sont appliqués dans ~30 secondes sur tous les iPhones.",
+    "workspaceTools": "Outils de l’espace de travail (web)",
+    "workspaceToolsHint": "Outils d’administration dans le portail web. Activez la disponibilité ici ; l’accès reste limité par rôle. Les changements sont appliqués dans ~30 secondes.",
     "flags": {
       "orders_card_enabled": {
         "name": "Ordonnances",
@@ -536,6 +540,10 @@
       "emr_writeback_card_enabled": {
         "name": "Renvoi vers le DPI",
         "description": "File d’attente sortante qui envoie la note approuvée vers un système de dossier médical."
+      },
+      "prompt_studio_enabled": {
+        "name": "Studio d’invites",
+        "description": "Permet aux administrateurs de rédiger, versionner et publier des invites IA depuis le portail. Désactivé, la page Studio d’invites est indisponible."
       }
     }
   },
