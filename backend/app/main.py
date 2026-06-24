@@ -13,6 +13,7 @@ from fastapi.responses import JSONResponse
 from app.api.v1.admin import router as admin_router
 from app.api.v1.auth import router as auth_router
 from app.api.v1.auth import seed_dev_users
+from app.api.v1.client_audit import router as client_audit_router
 from app.api.v1.clips import router as clips_router
 from app.api.v1.config import router as config_router
 from app.api.v1.export import router as export_router
@@ -142,6 +143,7 @@ app.include_router(config_router, prefix="/api/v1")
 app.include_router(admin_router, prefix="/api/v1")
 app.include_router(privacy_router, prefix="/api/v1")
 app.include_router(sessions_router, prefix="/api/v1")
+app.include_router(client_audit_router, prefix="/api/v1")
 app.include_router(transcription_router, prefix="/api/v1")
 app.include_router(video_import_router, prefix="/api/v1")
 app.include_router(frames_router, prefix="/api/v1")

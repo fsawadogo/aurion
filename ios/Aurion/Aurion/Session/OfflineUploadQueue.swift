@@ -125,15 +125,17 @@ final class OfflineUploadQueue: ObservableObject {
                     sessionId: item.sessionId,
                     extra: ["bytes": "\(audio.count)"]
                 )
-            } catch APIError.offline, APIError.timeout, APIError.unauthorized {
-                // Network gone again, or the token expired — both are
-                // transient. Leave everything queued and retry on the next
-                // reconnect / launch; don't burn a bounded-retry attempt.
+            } catch APIError.offline, APIError.timeout, APIError.unauthorized,
+                    APIError.rateLimited, APIError.serverError(_) {
+                // Transient: network gone again, token expired, rate-limited, or
+                // a 5xx. Leave everything queued and retry on the next reconnect
+                // / launch; don't burn a bounded-retry attempt on a server-side
+                // hiccup (the encounter is the only clinical record).
                 break
             } catch APIError.notFound {
                 remove(item.sessionId)  // session no longer exists server-side
             } catch {
-                bumpAttempts(item.sessionId)  // other 4xx/5xx — bounded retry
+                bumpAttempts(item.sessionId)  // genuine 4xx rejection — bounded retry
             }
         }
     }

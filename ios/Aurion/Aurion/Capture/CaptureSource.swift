@@ -66,7 +66,7 @@ struct CaptureCapability: OptionSet, Sendable {
 class CaptureSource: ObservableObject, Identifiable {
     // MARK: - Static identity (subclasses override)
     var id: String { "abstract" }
-    var displayName: String { "Capture Source" }
+    var displayName: String { L("devices.source") }
     var iconSystemName: String { "circle" }
     var capabilities: CaptureCapability { [] }
 
@@ -162,10 +162,10 @@ enum CaptureSourceError: LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .notImplemented: return "This capture source isn't available yet."
-        case .permissionDenied(let what): return "Permission required: \(what)."
-        case .hardwareUnavailable(let what): return "\(what) is not available."
-        case .featureGated(let what): return "\(what) is disabled by server config."
+        case .notImplemented: return L("captureError.notImplemented")
+        case .permissionDenied(let what): return L("captureError.permissionDenied", what)
+        case .hardwareUnavailable(let what): return L("captureError.hardwareUnavailable", what)
+        case .featureGated(let what): return L("captureError.featureGated", what)
         }
     }
 }

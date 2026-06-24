@@ -271,6 +271,13 @@
 /* ── Devices ──────────────────────────────────────────── */
 "devices.audioSource" = "Audio Source";
 "devices.videoSource" = "Video Source";
+"captureError.notImplemented" = "This capture source isn't available yet.";
+"captureError.permissionDenied" = "Permission required: %@.";
+"captureError.hardwareUnavailable" = "%@ is not available.";
+"captureError.featureGated" = "%@ is disabled by server config.";
+"devices.source" = "Capture Source";
+"devices.builtin" = "iPhone Camera + Mic";
+"devices.bluetooth" = "Bluetooth Audio";
 "devices.meta.connect" = "Connect Ray-Ban Meta";
 "devices.meta.connectHint" = "Authorize your glasses in the Meta AI app to stream video.";
 "devices.meta.registering" = "Opening Meta AI app…";
@@ -829,6 +836,8 @@
 "noteReview.a11yScrollConflict" = "Scroll to first conflict";
 "noteReview.stage2InProgress" = "Visual enrichment in progress\U2026";
 "noteReview.stage2Failed" = "Stage 2 failed: %@. You can still approve the Stage 1 note.";
+"noteReview.stage2FailedTitle" = "Visual enrichment unavailable";
+"noteReview.stage2FailedBody" = "Stage 2 couldn\U2019t process the captured imagery. The audio note is complete and can be signed \U2014 but any visual findings (imaging, wound photos) may be missing. Review before approving.";
 "noteReview.approved" = "Note Approved";
 "noteReview.conflictBadge" = "CONFLICT";
 "noteReview.optionalBadge" = "OPTIONAL";

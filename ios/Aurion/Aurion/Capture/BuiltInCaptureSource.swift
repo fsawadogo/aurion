@@ -9,7 +9,7 @@ import CoreMedia
 @MainActor
 final class BuiltInCaptureSource: CaptureSource, VideoClipSource {
     override var id: String { "builtin" }
-    override var displayName: String { "iPhone Camera + Mic" }
+    override var displayName: String { L("devices.builtin") }
     override var iconSystemName: String { "iphone" }
     override var capabilities: CaptureCapability { [.audio, .video] }
 

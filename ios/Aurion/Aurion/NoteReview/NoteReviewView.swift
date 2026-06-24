@@ -499,6 +499,30 @@ struct NoteReviewView: View {
             .padding(.horizontal, 16)
             .padding(.vertical, 10)
             .background(Color.aurionAmberBg.opacity(0.6))
+        } else if let status = stage2Status, status.isFailed {
+            // Stage 2 (visual enrichment) failed. The Stage 1 audio note is
+            // already a complete clinical record, so we DON'T block the
+            // physician from signing — but we surface a persistent warning so
+            // they know any imaging/wound visual findings may be missing before
+            // they finalize, rather than discovering it later.
+            HStack(alignment: .top, spacing: 10) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .foregroundColor(.aurionAmber)
+                    .font(.system(size: 15))
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(L("noteReview.stage2FailedTitle"))
+                        .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                        .foregroundColor(.aurionTextPrimary)
+                    Text(L("noteReview.stage2FailedBody"))
+                        .aurionFont(12, relativeTo: .caption)
+                        .foregroundColor(.aurionTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 10)
+            .background(Color.aurionAmberBg.opacity(0.6))
         }
     }
 
@@ -530,9 +554,9 @@ struct NoteReviewView: View {
                 return
             }
             if status.isFailed {
-                await MainActor.run {
-                    approveError = L("noteReview.stage2Failed", status.errorMessage ?? "unknown error")
-                }
+                // `stage2Status` is already published above, which renders the
+                // persistent failed-state warning banner. Stop polling — the
+                // physician can still sign (Stage 1 is complete).
                 return
             }
             let nextInterval = status.hasStarted ? activePollInterval : idlePollInterval

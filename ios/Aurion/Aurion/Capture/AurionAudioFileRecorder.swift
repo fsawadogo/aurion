@@ -38,6 +38,14 @@ final class AurionAudioFileRecorder: ObservableObject {
     private var levelTimer: Timer?
     private var currentURL: URL?
 
+    deinit {
+        // `pause()`/`stop()` invalidate the 0.1s level timer, but a recorder
+        // deallocated while still recording (no explicit stop) would otherwise
+        // leave the repeating Timer retained by the run loop, waking it every
+        // 100ms forever.
+        levelTimer?.invalidate()
+    }
+
     /// Begin recording to a fresh temp file. Returns the file URL.
     @discardableResult
     func start(

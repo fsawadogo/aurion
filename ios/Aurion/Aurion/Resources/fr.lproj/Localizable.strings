@@ -271,6 +271,13 @@
 /* ── Appareils ────────────────────────────────────────── */
 "devices.audioSource" = "Source audio";
 "devices.videoSource" = "Source vid\U00E9o";
+"captureError.notImplemented" = "Cette source de capture n'est pas encore disponible.";
+"captureError.permissionDenied" = "Autorisation requise : %@.";
+"captureError.hardwareUnavailable" = "%@ n'est pas disponible.";
+"captureError.featureGated" = "%@ est d\U00E9sactiv\U00E9 par la configuration du serveur.";
+"devices.source" = "Source de capture";
+"devices.builtin" = "Cam\U00E9ra + micro de l'iPhone";
+"devices.bluetooth" = "Audio Bluetooth";
 "devices.meta.connect" = "Connecter les Ray-Ban Meta";
 "devices.meta.connectHint" = "Autorisez vos lunettes dans l\U2019app Meta AI pour diffuser la vid\U00E9o.";
 "devices.meta.registering" = "Ouverture de l\U2019app Meta AI\U2026";
@@ -817,6 +824,8 @@
 "noteReview.a11yScrollConflict" = "Aller au premier conflit";
 "noteReview.stage2InProgress" = "Enrichissement visuel en cours\U2026";
 "noteReview.stage2Failed" = "\U00C9chec de l\U2019\U00E9tape 2 : %@. Vous pouvez tout de m\U00EAme approuver la note de l\U2019\U00E9tape 1.";
+"noteReview.stage2FailedTitle" = "Enrichissement visuel indisponible";
+"noteReview.stage2FailedBody" = "L\U2019\U00E9tape 2 n\U2019a pas pu traiter les images captur\U00E9es. La note audio est compl\U00E8te et peut \U00EAtre sign\U00E9e \U2014 mais les constatations visuelles (imagerie, photos de plaie) peuvent manquer. V\U00E9rifiez avant d\U2019approuver.";
 "noteReview.approved" = "Note approuv\U00E9e";
 "noteReview.conflictBadge" = "CONFLIT";
 "noteReview.optionalBadge" = "OPTIONNEL";
