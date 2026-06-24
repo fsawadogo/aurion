@@ -51,8 +51,6 @@ from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.config.appconfig_client import get_config
 from app.modules.prompts import PROMPTS, validate_user_prompt
 
-router = APIRouter(prefix="/admin/prompt-studio", tags=["admin"])
-
 #: Prompt-config audit events aren't bound to a session — the all-zeros
 #: sentinel keeps them out of any real session's history (matches me_prompts).
 _PROMPT_AUDIT_SESSION_ID: str = "00000000-0000-0000-0000-000000000000"
@@ -83,6 +81,17 @@ async def require_prompt_studio(
             detail=f"Prompt Studio is not available for role {user.role.value}.",
         )
     return user
+
+
+# Router-level gate: EVERY route is flag + role gated, so a route added later
+# can't ship ungated. Routes that need the CurrentUser still declare
+# ``Depends(require_prompt_studio)`` (FastAPI caches it per request, so the gate
+# runs once); read routes omit the param.
+router = APIRouter(
+    prefix="/admin/prompt-studio",
+    tags=["admin"],
+    dependencies=[Depends(require_prompt_studio)],
+)
 
 
 # ── Wire shapes ──────────────────────────────────────────────────────────────
@@ -208,9 +217,7 @@ async def _prompt_or_404(
 
 
 @router.get("/jobs", response_model=list[StudioJobResponse])
-async def list_jobs(
-    user: CurrentUser = Depends(require_prompt_studio),
-) -> list[StudioJobResponse]:
+async def list_jobs() -> list[StudioJobResponse]:
     """The AI jobs a prompt can target + each job's current default text."""
     return [
         StudioJobResponse(job_id=p.id, name=p.name, system_prompt=p.system_prompt)
@@ -220,7 +227,6 @@ async def list_jobs(
 
 @router.get("/prompts", response_model=list[StudioPromptSummary])
 async def list_prompts(
-    user: CurrentUser = Depends(require_prompt_studio),
     db: AsyncSession = Depends(get_db),
 ) -> list[StudioPromptSummary]:
     """The library: every (non-archived) authored prompt + its latest version
@@ -253,7 +259,6 @@ async def list_prompts(
 @router.get("/prompts/{prompt_id}", response_model=StudioPromptDetail)
 async def get_prompt(
     prompt_id: uuid.UUID,
-    user: CurrentUser = Depends(require_prompt_studio),
     db: AsyncSession = Depends(get_db),
 ) -> StudioPromptDetail:
     """One prompt + its full version history (oldest first)."""
@@ -429,14 +434,18 @@ async def publish_prompt(
     )
     db.add(pub)
     await db.flush()
+    audit_kwargs = {
+        "actor_id": str(user.user_id),
+        "job_id": sp.job_id,
+        "version_no": version.version_no,
+        "scope": body.scope.value,
+    }
+    if target_role:
+        audit_kwargs["target_role"] = target_role
     await write_audit(
         _PROMPT_AUDIT_SESSION_ID,
         AuditEventType.PROMPT_STUDIO_PUBLISHED,
-        actor_id=str(user.user_id),
-        job_id=sp.job_id,
-        version_no=version.version_no,
-        scope=body.scope.value,
-        **({"target_role": target_role} if target_role else {}),
+        **audit_kwargs,
     )
     await db.commit()
     return PublicationResponse(
