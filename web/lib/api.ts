@@ -913,3 +913,102 @@ export async function getAdminVideoImportStatus(
   );
   return res.json();
 }
+
+/* ─── Prompt Studio (admin, create & share #524) ─────────────────────────────
+ *
+ * ADMIN-only surface (gated by `feature_flags.prompt_studio_enabled` +
+ * `prompt_studio_roles`): author/upload a prompt, save versions, publish it to
+ * a cohort. When the flag is off every call 403s — the page surfaces a
+ * "not enabled" state. Backend: app/api/v1/admin/prompt_studio.py.
+ */
+
+export interface StudioJob {
+  job_id: string;
+  name: string;
+  system_prompt: string;
+}
+
+export interface StudioPromptVersion {
+  id: string;
+  version_no: number;
+  text: string;
+  created_at: string;
+}
+
+export interface StudioPromptSummary {
+  id: string;
+  job_id: string;
+  name: string;
+  latest_version_no: number;
+  created_at: string;
+}
+
+export interface StudioPromptDetail {
+  id: string;
+  job_id: string;
+  name: string;
+  created_at: string;
+  versions: StudioPromptVersion[];
+}
+
+export type StudioScope = "SELF" | "ROLE" | "ALL";
+
+export interface StudioPublication {
+  id: string;
+  job_id: string;
+  version_id: string;
+  version_no: number;
+  scope: string;
+  target_role: string | null;
+  target_user_id: string | null;
+  published_at: string;
+}
+
+export async function getStudioJobs(): Promise<StudioJob[]> {
+  const res = await fetchWithAuth("/api/v1/admin/prompt-studio/jobs");
+  return res.json();
+}
+
+export async function listStudioPrompts(): Promise<StudioPromptSummary[]> {
+  const res = await fetchWithAuth("/api/v1/admin/prompt-studio/prompts");
+  return res.json();
+}
+
+export async function getStudioPrompt(id: string): Promise<StudioPromptDetail> {
+  const res = await fetchWithAuth(`/api/v1/admin/prompt-studio/prompts/${id}`);
+  return res.json();
+}
+
+export async function createStudioPrompt(body: {
+  job_id: string;
+  name: string;
+  text: string;
+}): Promise<StudioPromptDetail> {
+  const res = await fetchWithAuth("/api/v1/admin/prompt-studio/prompts", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return res.json();
+}
+
+export async function saveStudioVersion(
+  id: string,
+  text: string,
+): Promise<StudioPromptVersion> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/prompt-studio/prompts/${id}/versions`,
+    { method: "POST", body: JSON.stringify({ text }) },
+  );
+  return res.json();
+}
+
+export async function publishStudioPrompt(
+  id: string,
+  body: { version_id: string; scope: StudioScope; target_role?: string },
+): Promise<StudioPublication> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/prompt-studio/prompts/${id}/publish`,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+  return res.json();
+}
