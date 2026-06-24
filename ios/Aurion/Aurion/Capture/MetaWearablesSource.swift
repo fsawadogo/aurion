@@ -22,7 +22,7 @@ import Foundation
 final class MetaWearablesSource: CaptureSource, VideoClipSource {
     override var id: String { "meta-wearables" }
     override var displayName: String {
-        BLEPairingManager.shared.pairedDeviceName ?? "Ray-Ban Meta"
+        BLEPairingManager.shared.pairedDeviceName ?? L("meta.defaultName")
     }
     override var iconSystemName: String { "eyeglasses" }
     override var capabilities: CaptureCapability { [.video] }
@@ -94,7 +94,7 @@ final class MetaWearablesSource: CaptureSource, VideoClipSource {
                     }
                 }
                 self.status = .recording
-                self.detail = "Streaming · \(self.displayName)"
+                self.detail = L("meta.streaming", self.displayName)
                 self.isReadyForPreview = true
             } catch {
                 // The throw can't reach `start()`'s caller (it returned the
@@ -193,16 +193,16 @@ final class MetaWearablesSource: CaptureSource, VideoClipSource {
         switch (flagOn, registered) {
         case (true, true):
             status = .ready
-            detail = "Connected · \(name ?? "Ray-Ban Meta")"
+            detail = L("meta.connected", name ?? L("meta.defaultName"))
         case (true, false):
             status = .disconnected
-            detail = "Connect in Setup → Devices"
+            detail = L("meta.connectInstructions")
         case (false, true):
-            status = .unavailable("Meta SDK access pending")
-            detail = "Registered \(name.map { "· \($0)" } ?? "") — enable in feature flags"
+            status = .unavailable(L("meta.sdkPending"))
+            detail = L("meta.registered", name.map { "· \($0)" } ?? "")
         case (false, false):
-            status = .unavailable("Coming soon")
-            detail = "Coming soon — enable Meta Wearables to connect"
+            status = .unavailable(L("meta.comingSoon"))
+            detail = L("meta.comingSoonDetail")
         }
     }
 }

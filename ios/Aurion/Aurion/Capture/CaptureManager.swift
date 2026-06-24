@@ -358,7 +358,7 @@ final class CaptureManager: NSObject, ObservableObject {
                 }
             } else {
                 Task { @MainActor in
-                    self.error = "No audio device available."
+                    self.error = L("error.noAudioDevice")
                 }
             }
 
@@ -384,7 +384,7 @@ final class CaptureManager: NSObject, ObservableObject {
                     Task { @MainActor in self.useUltraWide = isUltraWide }
                 } else {
                     Task { @MainActor in
-                        self.error = "No video device available."
+                        self.error = L("error.noVideoDevice")
                     }
                 }
             }
@@ -418,7 +418,7 @@ final class CaptureManager: NSObject, ObservableObject {
     /// Starts audio + video capture. The session must be configured first.
     func startCapture() {
         guard permissionsGranted else {
-            error = "Camera and microphone permissions are required."
+            error = L("error.permissionsRequired")
             return
         }
 
@@ -485,7 +485,7 @@ final class CaptureManager: NSObject, ObservableObject {
                 NSLog("[Aurion] AVAudioSession activate FAILED: %@",
                       error.localizedDescription)
                 Task { @MainActor in
-                    self.error = "Audio session activation failed: \(error.localizedDescription)"
+                    self.error = L("error.audioSessionFailed", error.localizedDescription)
                 }
                 return
             }
@@ -804,7 +804,7 @@ final class CaptureManager: NSObject, ObservableObject {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor [weak self] in
-                self?.error = "Capture interrupted."
+                self?.error = L("error.captureInterrupted")
             }
         }
 

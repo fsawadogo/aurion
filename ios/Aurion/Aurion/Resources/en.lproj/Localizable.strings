@@ -1099,3 +1099,55 @@
 "measurement.error.title" = "Couldn\U2019t save measurement";
 "measurement.error.disabled" = "Measurement isn\U2019t enabled for this account.";
 "measurement.error.offline" = "You appear to be offline. Try again when connected.";
+
+/* Status chips (AurionStatusKind) */
+"status.completed" = "Completed";
+"status.pending" = "Pending";
+"status.rec" = "REC";
+"status.archived" = "Archived";
+"status.exported" = "Exported";
+"status.review" = "Review";
+
+/* Bluetooth audio source status */
+"bluetooth.recordingFrom" = "Recording from %@";
+"bluetooth.connected" = "Connected \U00B7 %@";
+"bluetooth.disconnected" = "Disconnected";
+"bluetooth.pairInstructions" = "Pair a Bluetooth device in iOS Settings";
+
+/* Meta Wearables source status */
+"meta.defaultName" = "Ray-Ban Meta";
+"meta.connected" = "Connected \U00B7 %@";
+"meta.streaming" = "Streaming \U00B7 %@";
+"meta.connectInstructions" = "Connect in Setup \U2192 Devices";
+"meta.sdkPending" = "Meta SDK access pending";
+"meta.registered" = "Registered %@ \U2014 enable in feature flags";
+"meta.comingSoon" = "Coming soon";
+"meta.comingSoonDetail" = "Coming soon \U2014 enable Meta Wearables to connect";
+
+/* Capture / device error banners */
+"error.noAudioDevice" = "No audio device available.";
+"error.noVideoDevice" = "No video device available.";
+"error.permissionsRequired" = "Camera and microphone permissions are required.";
+"error.captureInterrupted" = "Capture interrupted.";
+"error.bluetoothUnavailable" = "Bluetooth is not available. Please enable Bluetooth in Settings.";
+"error.noDevicesFound" = "No devices found. Make sure your wearable is powered on and nearby.";
+"error.deviceUnavailable" = "Device no longer available. Tap Scan to refresh.";
+"error.wearableDisconnected" = "Wearable disconnected. Using device camera.";
+"error.screenCaptureDisabled" = "Screen capture is disabled by server config.";
+"error.screenRecordingUnavailable" = "Screen recording is not available on this device.";
+"error.exportFailed" = "Export failed";
+"error.micPermissionDenied" = "Microphone permission denied.";
+"error.cameraPermissionDenied" = "Camera permission denied.";
+"error.screenCaptureError" = "Screen capture error: %@";
+"error.screenCaptureFailedStart" = "Failed to start screen capture: %@";
+"error.screenCaptureFailedStop" = "Failed to stop screen capture: %@";
+"error.bluetoothOff" = "Bluetooth is turned off.";
+"error.bluetoothPermissionDenied" = "Bluetooth permission denied. Enable in Settings > Privacy > Bluetooth.";
+"error.bluetoothUnsupported" = "Bluetooth is not supported on this device.";
+"error.bluetoothResetting" = "Bluetooth is resetting\U2026";
+"error.connectFailed" = "Failed to connect to %@. Try again.";
+"error.audioSessionFailed" = "Audio session activation failed: %@";
+
+/* Accessibility — session-count chip */
+"a11y.sessionCount.one" = "%lld session";
+"a11y.sessionCount.many" = "%lld sessions";

@@ -222,12 +222,12 @@ enum AurionStatusKind {
 
     var label: String {
         switch self {
-        case .done: return "Completed"
-        case .pending: return "Pending"
-        case .recording: return "REC"
-        case .archived: return "Archived"
-        case .exported: return "Exported"
-        case .conflict: return "Review"
+        case .done: return L("status.completed")
+        case .pending: return L("status.pending")
+        case .recording: return L("status.rec")
+        case .archived: return L("status.archived")
+        case .exported: return L("status.exported")
+        case .conflict: return L("status.review")
         }
     }
 
@@ -644,7 +644,7 @@ struct AurionFilterChip: View {
         // element ("12, button") with no relation to the filter label.
         // Combining flattens it to "Pending, 12 sessions, button".
         .accessibilityElement(children: .combine)
-        .accessibilityLabel("\(label), \(count) sessions")
+        .accessibilityLabel("\(label), " + Lplural("a11y.sessionCount", count))
         .accessibilityAddTraits(active ? [.isSelected, .isButton] : .isButton)
     }
 

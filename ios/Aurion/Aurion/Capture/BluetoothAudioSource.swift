@@ -52,7 +52,7 @@ final class BluetoothAudioSource: CaptureSource {
             throw error
         }
         status = .recording
-        detail = "Recording from \(routeName)"
+        detail = L("bluetooth.recordingFrom", routeName)
     }
 
     override func pause() {
@@ -71,7 +71,7 @@ final class BluetoothAudioSource: CaptureSource {
             try? FileManager.default.removeItem(at: url)
         }
         status = connectedRouteName != nil ? .ready : .disconnected
-        detail = connectedRouteName.map { "Connected · \($0)" } ?? "Disconnected"
+        detail = connectedRouteName.map { L("bluetooth.connected", $0) } ?? L("bluetooth.disconnected")
     }
 
     override func getRecordedAudioData() -> Data? { recordedData }
@@ -102,10 +102,10 @@ final class BluetoothAudioSource: CaptureSource {
         guard status != .recording && status != .paused else { return }
         if let newName {
             status = .ready
-            detail = "Connected · \(newName)"
+            detail = L("bluetooth.connected", newName)
         } else {
             status = .disconnected
-            detail = "Pair a Bluetooth device in iOS Settings"
+            detail = L("bluetooth.pairInstructions")
         }
     }
 

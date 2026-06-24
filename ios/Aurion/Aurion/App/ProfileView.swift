@@ -605,7 +605,7 @@ struct ProfileView: View {
                 myData = try JSONDecoder().decode(MyDataResponse.self, from: data)
                 showDataExport = true
             } catch {
-                self.error = "Export failed"
+                self.error = L("error.exportFailed")
             }
             isLoadingData = false
         }
