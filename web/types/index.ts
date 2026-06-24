@@ -428,6 +428,8 @@ export interface FeatureFlags {
   coding_card_enabled: boolean;
   patient_summary_card_enabled: boolean;
   emr_writeback_card_enabled: boolean;
+  // Web-portal workspace tool — gates the Prompt Studio admin surface.
+  prompt_studio_enabled: boolean;
 }
 
 export interface UpdateFeatureFlagsResponse {

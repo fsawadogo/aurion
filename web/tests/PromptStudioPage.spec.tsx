@@ -24,6 +24,7 @@ vi.mock("@/lib/api", () => ({
 }));
 
 import {
+  ApiError,
   createStudioPrompt,
   getStudioJobs,
   getStudioPrompt,
@@ -128,5 +129,23 @@ describe("PromptStudioPage", () => {
     expect(id).toBe("p1");
     expect(body.scope).toBe("ALL");
     expect(body.version_id).toBe("v1");
+  });
+
+  it("shows the not-enabled state when the gate 403s (flag off)", async () => {
+    vi.mocked(getStudioJobs).mockRejectedValue(
+      new ApiError(403, "Prompt Studio is not enabled."),
+    );
+    vi.mocked(listStudioPrompts).mockRejectedValue(
+      new ApiError(403, "Prompt Studio is not enabled."),
+    );
+    render(withIntl(<PromptStudioPage />));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("prompt-studio-disabled")).toBeInTheDocument(),
+    );
+    // A 403 is "feature off", not an error or a permission scare — the create
+    // button and the red error banner are both suppressed.
+    expect(screen.queryByTestId("create-prompt-button")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("prompt-studio-error")).not.toBeInTheDocument();
   });
 });

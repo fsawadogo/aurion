@@ -11,6 +11,8 @@
     "detailLabel": "Prompt detail",
     "empty": "No prompts yet — create your first one.",
     "selectHint": "Select a prompt to view, version, and publish it.",
+    "notEnabledTitle": "Prompt Studio isn't enabled yet",
+    "notEnabledBody": "This feature is gated behind a flag. An admin can enable it under Feature Flags to start authoring and publishing prompts.",
     "cancel": "Cancel",
     "currentVersionLabel": "Current version",
     "newVersionLabel": "New version",
@@ -520,6 +522,8 @@
     "loading": "Loading…",
     "sectionCards": "Note-review cards (iOS)",
     "sectionCardsHint": "These four cards appear under the SOAP note inside the iOS app. Each one is post-pilot scaffolding — leave hidden until the matching backend goes live. Changes apply within ~30 seconds across every iPhone.",
+    "workspaceTools": "Workspace tools (web)",
+    "workspaceToolsHint": "Admin tools in the web portal. Toggle availability here; access stays role-gated. Changes apply within ~30 seconds.",
     "flags": {
       "orders_card_enabled": {
         "name": "Orders",
@@ -536,6 +540,10 @@
       "emr_writeback_card_enabled": {
         "name": "EMR Write-Back",
         "description": "Outbound queue that sends the approved note to a chart system."
+      },
+      "prompt_studio_enabled": {
+        "name": "Prompt Studio",
+        "description": "Lets admins author, version, and publish AI prompts from the portal. When off, the Prompt Studio page is unavailable."
       }
     }
   },

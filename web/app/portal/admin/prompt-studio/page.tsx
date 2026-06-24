@@ -11,6 +11,7 @@
 
 import { FileText, Plus, Rocket } from "lucide-react";
 import {
+  ApiError,
   createStudioPrompt,
   getStudioJobs,
   getStudioPrompt,
@@ -48,17 +49,26 @@ export default function PromptStudioPage() {
   const [selected, setSelected] = useState<StudioPromptDetail | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [disabled, setDisabled] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setDisabled(false);
     try {
       const [js, ps] = await Promise.all([getStudioJobs(), listStudioPrompts()]);
       setJobs(js);
       setPrompts(ps);
     } catch (e) {
-      setError(humanizeError(e, t("loadError")));
+      // A 403 here means the gate rejected us — the feature flag is off (or
+      // this role isn't on the allowlist), not a generic failure. Show the
+      // dedicated "not enabled" state instead of a scary error banner.
+      if (e instanceof ApiError && e.status === 403) {
+        setDisabled(true);
+      } else {
+        setError(humanizeError(e, t("loadError")));
+      }
     } finally {
       setLoading(false);
     }
@@ -93,13 +103,15 @@ export default function PromptStudioPage() {
         title={t("title")}
         description={t("description")}
         actions={
-          <Button
-            onClick={() => setCreateOpen(true)}
-            data-testid="create-prompt-button"
-          >
-            <Plus className="h-4 w-4 mr-1.5" aria-hidden="true" />
-            {t("createButton")}
-          </Button>
+          disabled ? undefined : (
+            <Button
+              onClick={() => setCreateOpen(true)}
+              data-testid="create-prompt-button"
+            >
+              <Plus className="h-4 w-4 mr-1.5" aria-hidden="true" />
+              {t("createButton")}
+            </Button>
+          )
         }
       />
 
@@ -113,7 +125,25 @@ export default function PromptStudioPage() {
         </div>
       )}
 
-      {loading ? (
+      {disabled ? (
+        <Card>
+          <div
+            className="py-12 text-center"
+            data-testid="prompt-studio-disabled"
+          >
+            <Rocket
+              className="mx-auto mb-3 h-9 w-9 text-gold-300"
+              aria-hidden="true"
+            />
+            <p className="aurion-body font-semibold text-navy-800">
+              {t("notEnabledTitle")}
+            </p>
+            <p className="mx-auto mt-1.5 max-w-md aurion-callout text-navy-500">
+              {t("notEnabledBody")}
+            </p>
+          </div>
+        </Card>
+      ) : loading ? (
         <Card>
           <LoadingSkeleton lines={6} />
         </Card>

@@ -68,6 +68,8 @@ def _all_flags_response(**overrides) -> FeatureFlagsResponse:
         "patient_summary_card_enabled": False,
         "emr_writeback_card_enabled": False,
         "media_review_retention_enabled": False,
+        "prompt_studio_enabled": False,
+        "prompt_studio_roles": ["ADMIN"],
     }
     base.update(overrides)
     return FeatureFlagsResponse(**base)
@@ -155,6 +157,25 @@ class TestGetFeatureFlags:
         assert "frame_by_frame_video_enabled" in dumped
         assert resp.clip_video_interpretation_enabled is True
         assert resp.frame_by_frame_video_enabled is False
+
+    @pytest.mark.asyncio
+    async def test_get_response_round_trips_prompt_studio_flag(self) -> None:
+        """The Prompt Studio gate surfaces in the GET response so the portal
+        can render + toggle it; the roles list round-trips so a portal save
+        doesn't silently reset it (regression guard for the field-for-field
+        mirror that ps-05 broke)."""
+        live = AppConfigSchema(
+            feature_flags=FeatureFlagsConfig(
+                prompt_studio_enabled=True,
+                prompt_studio_roles=["ADMIN", "EVAL_TEAM"],
+            )
+        )
+        with patch(
+            "app.api.v1.admin.feature_flags.get_config", return_value=live
+        ):
+            resp = await get_feature_flags(_=_admin_user())
+        assert resp.prompt_studio_enabled is True
+        assert resp.prompt_studio_roles == ["ADMIN", "EVAL_TEAM"]
 
 
 # ── POST /admin/feature-flags ──────────────────────────────────────────────
@@ -289,6 +310,48 @@ class TestUpdateFeatureFlags:
             "orders_card_enabled",
             "patient_summary_card_enabled",
         ]
+
+    @pytest.mark.asyncio
+    async def test_save_preserves_prompt_studio_state(self) -> None:
+        """Regression: flipping a card flag must NOT reset the Prompt Studio
+        gate. ps-05 added prompt_studio_enabled/roles to FeatureFlagsConfig but
+        not to FeatureFlagsResponse, so model_validate(body) silently zeroed
+        them on every save. With the fields restored, the portal echoes the
+        live studio state and the pushed doc preserves it."""
+        current = AppConfigSchema(
+            feature_flags=FeatureFlagsConfig(
+                prompt_studio_enabled=True,
+                prompt_studio_roles=["ADMIN", "EVAL_TEAM"],
+            )
+        )
+        body = _all_flags_response(
+            prompt_studio_enabled=True,
+            prompt_studio_roles=["ADMIN", "EVAL_TEAM"],
+            orders_card_enabled=True,  # the only intended change
+        )
+        with (
+            patch("app.api.v1.admin.feature_flags.get_config", return_value=current),
+            patch(
+                "app.api.v1.admin.feature_flags._publish_appconfig_version",
+                return_value=11,
+            ) as publish_mock,
+            patch(
+                "app.api.v1.admin.feature_flags.get_appconfig_client",
+                return_value=MagicMock(),
+            ),
+            patch("app.api.v1.admin.feature_flags.write_audit", new=AsyncMock()),
+        ):
+            resp = await update_feature_flags(body=body, user=_admin_user())
+
+        pushed_doc, _ = publish_mock.call_args[0]
+        assert pushed_doc["feature_flags"]["prompt_studio_enabled"] is True
+        assert pushed_doc["feature_flags"]["prompt_studio_roles"] == [
+            "ADMIN",
+            "EVAL_TEAM",
+        ]
+        # Studio state is untouched — only the card flag is in the diff.
+        assert resp.changed_fields == ["orders_card_enabled"]
+        assert resp.feature_flags.prompt_studio_enabled is True
 
     @pytest.mark.asyncio
     async def test_publish_failure_surfaces_as_http(self) -> None:

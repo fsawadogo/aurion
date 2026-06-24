@@ -78,6 +78,8 @@ class FeatureFlagsResponse(BaseModel):
     patient_summary_card_enabled: bool
     emr_writeback_card_enabled: bool
     media_review_retention_enabled: bool
+    prompt_studio_enabled: bool
+    prompt_studio_roles: list[str]
 
 
 class UpdateFeatureFlagsResponse(BaseModel):
@@ -166,6 +168,9 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         media_review_retention_enabled=(
             cfg_feature_flags.media_review_retention_enabled
         ),
+        prompt_studio_enabled=cfg_feature_flags.prompt_studio_enabled,
+        # Copy the list so the response never aliases the live config's.
+        prompt_studio_roles=list(cfg_feature_flags.prompt_studio_roles),
     )
 
 
