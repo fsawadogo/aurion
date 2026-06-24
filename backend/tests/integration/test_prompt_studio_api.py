@@ -487,17 +487,30 @@ async def test_publish_writes_audit_no_text(
 
 
 @pytest.mark.asyncio
-async def test_disabled_flag_forbids_all(
+@pytest.mark.parametrize("path", ["/jobs", "/prompts"])
+async def test_disabled_flag_forbids_reads(
     app_client: AsyncClient,
     admin: tuple[uuid.UUID, dict[str, str]],
     monkeypatch,
+    path: str,
 ) -> None:
-    """Flag off → every Studio route 403s, even for ADMIN."""
+    """Flag off → every Studio route 403s, even ADMIN — including the
+    zero-param GET /jobs, proving the router-level gate covers it (not just
+    routes that declare the dependency)."""
     from app.modules.config.appconfig_client import get_config
 
     monkeypatch.setattr(
         get_config().feature_flags, "prompt_studio_enabled", False
     )
     _, headers = admin
-    r = await app_client.get(f"{_BASE}/prompts", headers=headers)
+    r = await app_client.get(f"{_BASE}{path}", headers=headers)
+    assert r.status_code == 403, r.text
+
+
+@pytest.mark.asyncio
+async def test_read_route_role_gated(app_client: AsyncClient) -> None:
+    """A non-allowlisted role is 403'd on a READ route too — the gate is
+    router-level, not only on writes. Flag is on (autouse); allowlist is ADMIN."""
+    headers = {"Authorization": f"Bearer CLINICIAN:{uuid.uuid4()}"}
+    r = await app_client.get(f"{_BASE}/jobs", headers=headers)
     assert r.status_code == 403, r.text
