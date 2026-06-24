@@ -261,6 +261,14 @@ def select_active_prompt(
     otherwise. This is the projection rule the wire schema exposes as
     ``active_prompt`` on every ``PromptResponse``.
 
+    Scope note (PS-02): this projection deliberately knows only the
+    per-physician override vs. the registry default — NOT admin
+    publications. A publication is an admin→clinician delivery mechanism
+    resolved in :func:`assemble_prompt`; it does not surface in the
+    clinician's transparency view, which shows what the physician
+    themselves saved or the shipped default. Revisit only if a future
+    feature makes publications clinician-visible.
+
     For an unbound caller that only has ``owner_id`` and ``prompt_id``,
     use :func:`assemble_prompt` instead — that's the one with the DB
     lookup.
