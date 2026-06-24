@@ -48,8 +48,12 @@ final class BuiltInCaptureSource: CaptureSource, VideoClipSource {
             .receive(on: RunLoop.main)
             .sink { [weak self] camera, mic, capturing in
                 guard let self else { return }
-                if mic == .denied || camera == .denied {
-                    self.status = .unavailable("Camera or microphone permission denied.")
+                if mic == .denied {
+                    self.status = .unavailable("Microphone permission denied.")
+                } else if camera == .denied && self.includeVideo {
+                    // Camera denied only blocks when this session needs video.
+                    // Audio-only sessions fall through and record normally.
+                    self.status = .unavailable("Camera permission denied.")
                 } else if capturing {
                     self.status = self.manager.isPaused ? .paused : .recording
                 } else {
@@ -74,10 +78,15 @@ final class BuiltInCaptureSource: CaptureSource, VideoClipSource {
 
     override func discoverIfNeeded() {
         manager.checkPermissions()
+        // `permissionsGranted` is mode-aware (camera optional when
+        // `includeVideo` is false), so an audio-only session with a denied
+        // camera resolves to `.ready` here rather than `.unavailable`.
         if manager.permissionsGranted {
             status = .ready
-        } else if manager.cameraPermission == .denied || manager.microphonePermission == .denied {
-            status = .unavailable("Camera or microphone permission denied.")
+        } else if manager.microphonePermission == .denied {
+            status = .unavailable("Microphone permission denied.")
+        } else if manager.cameraPermission == .denied && includeVideo {
+            status = .unavailable("Camera permission denied.")
         } else {
             status = .disconnected
         }
@@ -122,12 +131,30 @@ final class BuiltInCaptureSource: CaptureSource, VideoClipSource {
     /// this rather than on `status` or `session.state`, both of which can
     /// flip to "recording" before the capture pipeline is actually live.
     var isReadyForPreview: Bool {
-        manager.permissionsGranted && status == .recording
+        // Audio-only sessions (`includeVideo == false`) never wire a camera
+        // input, so there's nothing to preview even when permissions/status
+        // would otherwise allow it — gate on includeVideo to avoid a black
+        // preview surface.
+        manager.permissionsGranted && status == .recording && includeVideo
     }
 
     /// Set by SessionManager before `start()` to gate the camera input.
-    /// False keeps the LED dark in audio-only modes.
-    var includeVideo: Bool = true
+    /// False keeps the LED dark in audio-only modes. Propagates to the
+    /// manager's `videoRequired` so a denied camera permission doesn't block
+    /// an audio-only session, and re-evaluates the pre-session status so the
+    /// device hub stops showing the source as unavailable once an audio-only
+    /// mode is picked.
+    var includeVideo: Bool = true {
+        didSet {
+            manager.videoRequired = includeVideo
+            switch status {
+            case .recording, .starting, .paused:
+                break  // don't disturb an in-flight capture
+            default:
+                discoverIfNeeded()
+            }
+        }
+    }
 
     /// Whether this device has a back ultra-wide (0.5×) lens. Drives the
     /// capture screen's 0.5× toggle visibility. `false` on the Simulator (no

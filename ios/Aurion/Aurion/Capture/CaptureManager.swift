@@ -259,8 +259,17 @@ final class CaptureManager: NSObject, ObservableObject {
         microphonePermission = audioGranted ? .authorized : .denied
     }
 
+    /// Whether the current/next capture actually needs the camera. Audio-only
+    /// sessions set this false (via `BuiltInCaptureSource.includeVideo`) so a
+    /// previously-denied camera permission doesn't block audio capture — the
+    /// physician who tapped "Don't Allow" on the camera once can still record
+    /// an audio-only encounter. Multimodal sessions leave it true, so a denied
+    /// camera still blocks (video genuinely can't run).
+    nonisolated(unsafe) var videoRequired: Bool = true
+
     var permissionsGranted: Bool {
-        cameraPermission == .authorized && microphonePermission == .authorized
+        microphonePermission == .authorized
+            && (cameraPermission == .authorized || !videoRequired)
     }
 
     // MARK: - Session Setup
