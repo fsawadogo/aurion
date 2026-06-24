@@ -37,7 +37,7 @@ final class MetaWearablesSource: CaptureSource, VideoClipSource {
 
     private let mwdat = MWDATManager.shared
     private var cancellables = Set<AnyCancellable>()
-    /// Wall-clock baseline (Date.timeIntervalSinceReferenceDate) set on start,
+    /// Monotonic baseline (`captureClockNow()`) set on start,
     /// matching the ring's append/extract clock — see `CaptureManager`.
     private var sessionStartTime: TimeInterval = 0
 
@@ -70,7 +70,7 @@ final class MetaWearablesSource: CaptureSource, VideoClipSource {
             throw CaptureSourceError.hardwareUnavailable("Meta glasses (not connected)")
         }
         status = .starting
-        sessionStartTime = Date.timeIntervalSinceReferenceDate
+        sessionStartTime = captureClockNow()
         // Capture the ring locally so the off-main SDK frame callback never
         // touches @MainActor `self`. `VideoRingBuffer` is thread-safe
         // (`append` is nonisolated); the ring is final by `start()` because
@@ -83,7 +83,7 @@ final class MetaWearablesSource: CaptureSource, VideoClipSource {
             do {
                 try await self.mwdat.startVideoStream { sampleBuffer in
                     // Pipeline: raw frame → ring (thread-safe, off-main).
-                    ring.append(sampleBuffer, at: Date.timeIntervalSinceReferenceDate)
+                    ring.append(sampleBuffer, at: captureClockNow())
                     // Preview: render the same frame to the POV display layer.
                     // Force immediate display so we don't depend on the frame's
                     // presentation timing being display-suitable.
@@ -154,7 +154,7 @@ final class MetaWearablesSource: CaptureSource, VideoClipSource {
 
     func extractCadenceClip(windowMs: Int) async -> (url: URL, timestampMs: Int)? {
         guard windowMs > 0 else { return nil }
-        let now = Date.timeIntervalSinceReferenceDate
+        let now = captureClockNow()
         // Reuse the exact window math the built-in camera path uses so the
         // session-relative timestamp + center are computed identically.
         let w = CaptureManager.cadenceClipWindow(

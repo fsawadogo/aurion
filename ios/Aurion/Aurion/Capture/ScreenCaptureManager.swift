@@ -75,7 +75,7 @@ final class ScreenCaptureManager: ObservableObject {
         targetFPS = max(1, resolvedFps)
         capturedScreenFrames = []
         lastCaptureTime = 0
-        sessionStartTime = Date.timeIntervalSinceReferenceDate
+        sessionStartTime = captureClockNow()
         error = nil
 
         recorder.startCapture(handler: { [weak self] sampleBuffer, sampleBufferType, captureError in
@@ -109,6 +109,12 @@ final class ScreenCaptureManager: ObservableObject {
         guard isRecording else { return }
 
         recorder.stopCapture { [weak self] captureError in
+            // Release the CIContext's cached GPU intermediates now that no more
+            // frames will arrive. `clearCaches()` frees the bulk of the held
+            // texture memory while keeping the (reusable) Metal pipeline intact
+            // — the safe half of "clear on stop" without tearing down and
+            // rebuilding the context on the next capture.
+            self?.ciContext.clearCaches()
             Task { @MainActor [weak self] in
                 self?.isRecording = false
                 if let captureError {
@@ -122,7 +128,7 @@ final class ScreenCaptureManager: ObservableObject {
 
     /// Handles a video sample buffer from RPScreenRecorder, throttling to the target FPS.
     private nonisolated func handleScreenSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        let now = Date.timeIntervalSinceReferenceDate
+        let now = captureClockNow()
         let interval = 1.0 / Double(targetFPS)
 
         // Throttle: skip frames that arrive faster than the target interval

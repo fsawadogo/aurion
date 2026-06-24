@@ -437,7 +437,7 @@ final class CaptureManager: NSObject, ObservableObject {
         // (they'd age out within the cap), but wasteful of memory.
         clipRingBuffer.clear()
         lastFrameExtractionTime = 0
-        sessionStartTime = Date.timeIntervalSinceReferenceDate
+        sessionStartTime = captureClockNow()
         error = nil
 
         sessionQueue.async { [weak self] in
@@ -606,6 +606,17 @@ final class CaptureManager: NSObject, ObservableObject {
             // every access to the unsynchronized Bool on this one serial queue.
             self.desiredUltraWide = enabled
 
+            // This device has no ultra-wide lens to switch to — publish the
+            // lens as wide and skip the begin/commit input swap entirely
+            // (re-adding the wide lens to satisfy an unsatisfiable ultra-wide
+            // request is a pointless reconfiguration). The Simulator and
+            // single-lens iPhones land here.
+            if enabled && !self.ultraWideAvailable {
+                self.desiredUltraWide = false
+                Task { @MainActor in self.useUltraWide = false }
+                return
+            }
+
             // Lens switching only applies to a video-wired session — audio-only
             // modes have no camera input to swap.
             guard self.configuredCaptureVideo else {
@@ -737,8 +748,8 @@ final class CaptureManager: NSObject, ObservableObject {
     /// `now - windowMs/2` with the full window duration, which resolves to
     /// the span `[now - windowMs, now]`.
     ///
-    /// `now` and `sessionStart` are BOTH on the ring's own wall-clock
-    /// baseline (`Date.timeIntervalSinceReferenceDate`, the same clock
+    /// `now` and `sessionStart` are BOTH on the ring's own monotonic
+    /// baseline (`captureClockNow()`, the same clock
     /// `VideoRingBuffer.append(_:at:)` stamps each entry with). Using that
     /// absolute baseline for the extract center is the fix for the existing
     /// post-stop bug, where a session-RELATIVE timestamp was used to query a
@@ -771,7 +782,7 @@ final class CaptureManager: NSObject, ObservableObject {
     func extractCadenceClip(windowMs: Int) async -> (url: URL, timestampMs: Int)? {
         guard windowMs > 0 else { return nil }
         // Same wall-clock baseline the ring stamps entries with on append.
-        let now = Date.timeIntervalSinceReferenceDate
+        let now = captureClockNow()
         let w = Self.cadenceClipWindow(now: now, sessionStart: sessionStartTime, windowMs: windowMs)
         do {
             let url = try await clipRingBuffer.extract(around: w.center, duration: w.durationSeconds)
@@ -857,7 +868,7 @@ extension CaptureManager: AVCaptureVideoDataOutputSampleBufferDelegate, AVCaptur
 
     /// Processes a video sample buffer: extracts a frame at the configured FPS interval.
     private nonisolated func handleVideoSampleBuffer(_ sampleBuffer: CMSampleBuffer) {
-        let now = Date.timeIntervalSinceReferenceDate
+        let now = captureClockNow()
         let interval = 1.0 / videoCaptureFPS
 
         // Throttle frame extraction to configured FPS
