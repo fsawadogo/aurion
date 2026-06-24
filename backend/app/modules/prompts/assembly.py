@@ -43,6 +43,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import PromptOverrideModel
+from app.core.types import PublicationScope
 from app.modules.prompts.registry import PROMPTS
 
 
@@ -83,6 +84,87 @@ def _select(base: str, user_prompt: Optional[str]) -> str:
     return base
 
 
+def _select_published(
+    rows: list[tuple[str, Optional[uuid.UUID], Optional[str], str]],
+    owner_id: uuid.UUID,
+    role_value: Optional[str],
+) -> Optional[str]:
+    """Pick the winning publication text by scope specificity (PS-02).
+
+    ``rows`` are the ACTIVE publications for one job, each
+    ``(scope, target_user_id, target_role, version_text)``. Precedence,
+    most specific first: ``SELF`` (matching ``owner_id``) → ``ROLE``
+    (matching ``role_value``) → ``ALL``. Returns the version text of the
+    most specific match, or ``None`` when nothing applies.
+
+    Pure (no DB) so the precedence rule is unit-testable in isolation —
+    the same pure/async split as :func:`_select` for the per-physician path.
+    """
+    for sc, tu, _tr, text in rows:
+        if sc == PublicationScope.SELF.value and tu == owner_id:
+            return text
+    if role_value is not None:
+        for sc, _tu, tr, text in rows:
+            if sc == PublicationScope.ROLE.value and tr == role_value:
+                return text
+    for sc, _tu, _tr, text in rows:
+        if sc == PublicationScope.ALL.value:
+            return text
+    return None
+
+
+async def _get_published_prompt(
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+    prompt_id: str,
+) -> Optional[str]:
+    """Text of the active admin-published prompt for this clinician's cohort
+    and job, or ``None`` (PS-02).
+
+    Reads the ACTIVE publications (``superseded_at IS NULL``) for
+    ``job_id == prompt_id``, newest first, joins each to its version's text,
+    then applies :func:`_select_published`. Only reached when the clinician has
+    no personal override of their own — the override wins in
+    :func:`assemble_prompt` before this runs.
+
+    Models are imported at function scope, matching the
+    :func:`assemble_prompt_for_session` pattern below, to keep
+    ``app.core.models`` off the ``prompts`` package import path at app startup.
+    """
+    from app.core.models import (
+        PromptPublicationModel,
+        StudioPromptVersionModel,
+        UserModel,
+    )
+
+    role = (
+        await db.execute(select(UserModel.role).where(UserModel.id == owner_id))
+    ).scalar_one_or_none()
+    rows = (
+        await db.execute(
+            select(
+                PromptPublicationModel.scope,
+                PromptPublicationModel.target_user_id,
+                PromptPublicationModel.target_role,
+                StudioPromptVersionModel.text,
+            )
+            .join(
+                StudioPromptVersionModel,
+                PromptPublicationModel.version_id == StudioPromptVersionModel.id,
+            )
+            .where(
+                PromptPublicationModel.job_id == prompt_id,
+                PromptPublicationModel.superseded_at.is_(None),
+            )
+            .order_by(PromptPublicationModel.published_at.desc())
+        )
+    ).all()
+    if not rows:
+        return None
+    role_value = role.value if role is not None else None
+    return _select_published(list(rows), owner_id, role_value)
+
+
 async def assemble_prompt(
     prompt_id: str,
     owner_id: uuid.UUID,
@@ -90,21 +172,38 @@ async def assemble_prompt(
 ) -> str:
     """Return the prompt text to send to the LLM for ``owner_id``.
 
-    Resolution (REPLACEMENT, not append):
-      1. If a saved user prompt exists for ``(owner_id, prompt_id)`` →
-         return it alone.
-      2. Otherwise → return ``PROMPTS[prompt_id].system_prompt`` as
-         the fallback.
+    Resolution order (most specific first), all REPLACEMENT (no append):
+      1. The clinician's own saved user prompt for ``(owner_id, prompt_id)``
+         → returned alone. Unchanged from Phase B.
+      2. The active admin **publication** for this job that targets the
+         clinician — ``SELF`` → ``ROLE`` → ``ALL`` (PS-02). This is how a
+         prompt an admin authored + shared takes effect for clinicians who
+         haven't overridden it.
+      3. The registry default ``PROMPTS[prompt_id].system_prompt``.
 
-    Raises ``KeyError`` when ``prompt_id`` is not in the registry —
-    that's a programmer bug (the registry is in code) and surfacing it
-    loudly is preferable to silently sending an empty prompt.
+    A personal override (1) always outranks an admin publication (2): a
+    physician who has signed off on their own prompt keeps it; a clinic-wide
+    change reaches only physicians who haven't.
 
-    Name kept as ``assemble_prompt`` so the eight consumer call sites
-    compile unchanged. Body is now selection, not assembly.
+    Raises ``KeyError`` when ``prompt_id`` is not in the registry — a
+    programmer bug (the registry is in code). Checked up front so an unknown
+    id fails loud regardless of any stored override or publication, rather
+    than silently sending unvetted text to the LLM (defence in depth on the
+    descriptive-mode boundary: a publication for a non-registry job must never
+    reach the model).
+
+    Name kept as ``assemble_prompt`` so the eight consumer call sites compile
+    unchanged.
     """
+    if prompt_id not in PROMPTS:
+        raise KeyError(prompt_id)
     user_prompt = await _get_user_prompt(db, owner_id, prompt_id)
-    return _select(PROMPTS[prompt_id].system_prompt, user_prompt)
+    if user_prompt:
+        return user_prompt
+    published = await _get_published_prompt(db, owner_id, prompt_id)
+    if published is not None:
+        return published
+    return PROMPTS[prompt_id].system_prompt
 
 
 async def assemble_prompt_for_session(
@@ -166,6 +265,14 @@ def select_active_prompt(
     Returns the user prompt verbatim when set; the base prompt
     otherwise. This is the projection rule the wire schema exposes as
     ``active_prompt`` on every ``PromptResponse``.
+
+    Scope note (PS-02): this projection deliberately knows only the
+    per-physician override vs. the registry default — NOT admin
+    publications. A publication is an admin→clinician delivery mechanism
+    resolved in :func:`assemble_prompt`; it does not surface in the
+    clinician's transparency view, which shows what the physician
+    themselves saved or the shipped default. Revisit only if a future
+    feature makes publications clinician-visible.
 
     For an unbound caller that only has ``owner_id`` and ``prompt_id``,
     use :func:`assemble_prompt` instead — that's the one with the DB
