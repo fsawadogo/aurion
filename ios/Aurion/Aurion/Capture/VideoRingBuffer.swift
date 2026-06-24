@@ -106,8 +106,8 @@ final class VideoRingBuffer: @unchecked Sendable {
 
     // MARK: - Stored entry
 
-    /// One slot in the ring — the sample buffer plus the wall-clock time
-    /// it arrived. Wall-clock matches `Date.timeIntervalSinceReferenceDate`
+    /// One slot in the ring — the sample buffer plus the monotonic time
+    /// it arrived. Stamped with `captureClockNow()` (CACurrentMediaTime)
     /// to align with `CaptureManager`'s own `sessionStartTime` baseline.
     ///
     /// `@unchecked Sendable` because `CMSampleBuffer` is not natively
