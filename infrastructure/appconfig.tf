@@ -240,6 +240,19 @@ resource "aws_appconfig_configuration_profile" "main" {
             # additionalProperties = false — the backend Pydantic schema
             # defaults it false (specialty layer stays dark until enabled).
             specialty_style_in_prompt_enabled = { type = "boolean" }
+            # On-device visual measurement gate (#63). Had drifted out of this
+            # validator — with additionalProperties = false that rejected EVERY
+            # feature-flags hosted-version write (the backend publishes the full
+            # FeatureFlagsConfig dump). NOT in `required` so older documents
+            # without the key still validate; the backend defaults it false.
+            measurement_enabled = { type = "boolean" }
+            # Prompt Studio (create & share, #524). Master gate + the role
+            # allowlist permitted to use it. NOT in `required` so older
+            # documents validate — the backend defaults the gate false and the
+            # allowlist to ["ADMIN"]. These MUST be here (additionalProperties =
+            # false) or the portal Feature Flags save is rejected by AWS.
+            prompt_studio_enabled = { type = "boolean" }
+            prompt_studio_roles   = { type = "array", items = { type = "string" } }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in
