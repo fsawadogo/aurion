@@ -57,6 +57,19 @@ never appears in the hosted doc — correctly left out.)
   `FeatureFlagsConfig` field must appear in the appconfig.tf `feature_flags`
   validator block (this is the test that would have caught the bug).
 
+## ⚠️ Deploy order (critical)
+
+Deploy the **backend (B) first, then `terraform apply` the validator (A)**.
+
+The currently-live backend already publishes the full `feature_flags` dump but
+only 4 top-level sections (no `model_versions`). Today the AWS validator's
+rejection of `prompt_studio_enabled` is the *only* thing stopping a
+`model_versions`-stripping write. If A is applied while the old (B-less) backend
+is still live, the next Feature Flags save succeeds and **resets the Gemini 3.1
+override (#438) + alert SLAs**. Backend-first is safe: saves keep 502'ing until A
+lands, but nothing resets. (Merge→app-deploy is automatic; `terraform apply` is
+manual — so the natural flow is safe as long as the apply waits for the deploy.)
+
 ## Verify
 - `ruff` + `pytest tests/unit/test_feature_flags_admin.py`.
 - `terraform fmt -check` / `validate` on appconfig.tf if available.
