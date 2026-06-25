@@ -19,6 +19,7 @@ setup is needed.
 from __future__ import annotations
 
 import uuid
+from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -33,7 +34,12 @@ from app.api.v1.admin.feature_flags import (
 )
 from app.core.audit_events import AuditEventType
 from app.core.types import UserRole
-from app.modules.config.schema import AppConfigSchema, FeatureFlagsConfig
+from app.modules.config.schema import (
+    AlertingConfig,
+    AppConfigSchema,
+    FeatureFlagsConfig,
+    ModelVersionsConfig,
+)
 
 
 def _admin_user() -> MagicMock:
@@ -119,6 +125,44 @@ class TestPureHelpers:
         the _all_flags_response fixture above)."""
         assert set(FeatureFlagsResponse.model_fields) == set(
             FeatureFlagsConfig.model_fields
+        )
+
+    def test_appconfig_validator_covers_all_feature_flags(self) -> None:
+        """Drift guard: the Terraform AppConfig JSON-Schema validator has
+        additionalProperties:false on feature_flags, so any FeatureFlagsConfig
+        field absent from it makes AWS REJECT every hosted-version write that
+        carries that field — i.e. the portal Feature Flags save 502s. This is
+        the check that would have caught the prompt_studio_enabled /
+        measurement_enabled drift that broke saving."""
+        import re
+
+        tf_path = (
+            Path(__file__).resolve().parents[3] / "infrastructure" / "appconfig.tf"
+        )
+        if not tf_path.exists():
+            pytest.skip("infrastructure/appconfig.tf not in this checkout")
+        tf = tf_path.read_text(encoding="utf-8")
+
+        # Brace-match the feature_flags validator block so a field name that
+        # only appears elsewhere (e.g. a comment) can't mask a real omission.
+        m = re.search(r"feature_flags\s*=\s*\{", tf)
+        assert m is not None, "feature_flags validator block not found in appconfig.tf"
+        depth = 0
+        ff_block = ""
+        for i in range(m.end() - 1, len(tf)):
+            if tf[i] == "{":
+                depth += 1
+            elif tf[i] == "}":
+                depth -= 1
+                if depth == 0:
+                    ff_block = tf[m.end() - 1 : i + 1]
+                    break
+
+        missing = [f for f in FeatureFlagsConfig.model_fields if f not in ff_block]
+        assert not missing, (
+            f"appconfig.tf feature_flags validator is missing {missing} — with "
+            "additionalProperties:false AWS rejects every hosted-version write "
+            "carrying these. Add them as properties (NOT in `required`)."
         )
 
     def test_build_response_round_trips_all_fields(self) -> None:
@@ -413,6 +457,41 @@ class TestUpdateFeatureFlags:
         # The video sub-flag keeps its non-default (True) live value too.
         assert ff["video_import_drop_zero_face_frames"] is True
         assert resp.changed_fields == ["orders_card_enabled"]
+
+    @pytest.mark.asyncio
+    async def test_save_preserves_top_level_sections(self) -> None:
+        """Regression: a feature-flags save must NOT drop model_versions /
+        alerting. The publish re-sent only providers/model_params/pipeline/
+        feature_flags, so the first successful save would have reset
+        operator-set AI model-id overrides (the Gemini flip, #438) and alert
+        SLAs back to defaults."""
+        current = AppConfigSchema(
+            feature_flags=FeatureFlagsConfig(),
+            model_versions=ModelVersionsConfig(gemini="gemini-3.1-pro"),
+            alerting=AlertingConfig(sla_stage1_ms=12345),
+        )
+        body = _all_flags_response(orders_card_enabled=True)
+        with (
+            patch("app.api.v1.admin.feature_flags.get_config", return_value=current),
+            patch(
+                "app.api.v1.admin.feature_flags._publish_appconfig_version",
+                return_value=21,
+            ) as publish_mock,
+            patch(
+                "app.api.v1.admin.feature_flags.get_appconfig_client",
+                return_value=MagicMock(),
+            ),
+            patch("app.api.v1.admin.feature_flags.write_audit", new=AsyncMock()),
+        ):
+            await update_feature_flags(body=body, user=_admin_user())
+
+        doc = publish_mock.call_args[0][0]
+        # Operator-set overrides survive the feature-flags save.
+        assert doc["model_versions"]["gemini"] == "gemini-3.1-pro"
+        assert doc["alerting"]["sla_stage1_ms"] == 12345
+        # Null model ids are dropped so the doc stays valid under the AppConfig
+        # validator (gemini/openai/anthropic are typed string, not null).
+        assert "openai" not in doc["model_versions"]
 
     @pytest.mark.asyncio
     async def test_publish_failure_surfaces_as_http(self) -> None:

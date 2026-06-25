@@ -287,9 +287,12 @@ async def update_feature_flags(
     ``feature_flags`` block.
 
     The full ``feature_flags`` block must be supplied (partial updates
-    are rejected at the Pydantic boundary — required fields). The other
-    AppConfig sections (``providers``, ``model_params``, ``pipeline``)
-    are preserved verbatim from the current live config.
+    are rejected at the Pydantic boundary — required fields). Every other
+    AppConfig section (``providers``, ``model_params``, ``pipeline``,
+    ``alerting``, ``model_versions``) is preserved verbatim from the
+    current live config, so a feature-flags save never resets them — in
+    particular ``model_versions`` carries the AI model-id overrides
+    (e.g. the Gemini 3.1 flip, #438).
 
     On success: emits ``FEATURE_FLAGS_UPDATED`` with the actor UUID,
     sorted list of changed field names, and the new hosted-version
@@ -303,12 +306,23 @@ async def update_feature_flags(
     current = get_config()
     proposed_flags = FeatureFlagsConfig.model_validate(body.model_dump())
 
-    # Compose the full doc preserving non-feature-flag sections verbatim.
+    # Compose the full doc, preserving every non-feature-flag section from the
+    # live config so a feature-flags save never resets them. model_versions
+    # carries the AI model-id overrides (the Gemini flip, #438) and alerting the
+    # SLA thresholds; without re-sending them the new hosted version would drop
+    # both. exclude_none keeps model_versions valid under the AppConfig schema
+    # validator (null model ids aren't strings). `measurement` is intentionally
+    # omitted — it isn't in the AppConfig validator's root, so it never belongs
+    # in the hosted document.
     proposed_doc = {
         "providers": current.providers.model_dump(mode="json"),
         "model_params": current.model_params.model_dump(mode="json"),
         "pipeline": current.pipeline.model_dump(mode="json"),
         "feature_flags": proposed_flags.model_dump(mode="json"),
+        "alerting": current.alerting.model_dump(mode="json"),
+        "model_versions": current.model_versions.model_dump(
+            mode="json", exclude_none=True
+        ),
     }
 
     # Server-side validation (defense in depth — AWS validator catches
