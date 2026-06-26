@@ -253,6 +253,10 @@ resource "aws_appconfig_configuration_profile" "main" {
             # false) or the portal Feature Flags save is rejected by AWS.
             prompt_studio_enabled = { type = "boolean" }
             prompt_studio_roles   = { type = "array", items = { type = "string" } }
+            # Clinician AI-Prompts display scope (ps-fu5). NOT in `required` so
+            # an older hosted document without the key still validates — the
+            # backend Pydantic schema defaults it false (all categories shown).
+            clinician_prompts_note_only = { type = "boolean" }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in

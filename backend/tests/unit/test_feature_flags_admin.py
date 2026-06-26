@@ -80,6 +80,7 @@ def _all_flags_response(**overrides) -> FeatureFlagsResponse:
         "specialty_style_in_prompt_enabled": False,
         "prompt_studio_enabled": False,
         "prompt_studio_roles": ["ADMIN"],
+        "clinician_prompts_note_only": False,
     }
     base.update(overrides)
     return FeatureFlagsResponse(**base)
