@@ -49,9 +49,9 @@ const FLAG_GROUPS = [
     ],
   },
   {
-    titleKey: "workspaceTools",
-    hintKey: "workspaceToolsHint",
-    flags: ["prompt_studio_enabled"],
+    titleKey: "aiPrompts",
+    hintKey: "aiPromptsHint",
+    flags: ["prompt_studio_enabled", "clinician_prompts_note_only"],
   },
 ] as const satisfies readonly {
   titleKey: string;

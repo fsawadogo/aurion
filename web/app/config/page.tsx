@@ -247,14 +247,25 @@ export default function ConfigPage() {
               </h2>
             </div>
             <div className="space-y-3">
-              {Object.entries(cfg.feature_flags).map(([key, value]) => (
-                <div key={key} className="flex items-center justify-between">
-                  <span className="text-sm capitalize text-gray-500">
-                    {key.replace(/_/g, " ")}
-                  </span>
-                  <ToggleSwitch enabled={value} />
-                </div>
-              ))}
+              {Object.entries(cfg.feature_flags).map(([key, value]) => {
+                // Most flags are booleans (toggle); prompt_studio_roles is a
+                // list — render it as text, not an always-on switch.
+                const v = value as boolean | string[];
+                return (
+                  <div key={key} className="flex items-center justify-between">
+                    <span className="text-sm capitalize text-gray-500">
+                      {key.replace(/_/g, " ")}
+                    </span>
+                    {typeof v === "boolean" ? (
+                      <ToggleSwitch enabled={v} />
+                    ) : (
+                      <span className="text-sm font-medium text-navy-600">
+                        {Array.isArray(v) ? v.join(", ") : String(v)}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </Card>
         </div>
