@@ -37,7 +37,9 @@ Nothing else.
 from __future__ import annotations
 
 import uuid
-from typing import Optional
+from collections import defaultdict
+from datetime import datetime
+from typing import NamedTuple, Optional
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -84,33 +86,53 @@ def _select(base: str, user_prompt: Optional[str]) -> str:
     return base
 
 
+def _select_published_index(
+    keys: list[tuple[str, Optional[uuid.UUID], Optional[str]]],
+    owner_id: uuid.UUID,
+    role_value: Optional[str],
+) -> Optional[int]:
+    """Index of the winning publication by scope specificity (PS-02).
+
+    ``keys`` are the routing columns of the ACTIVE publications for one job,
+    each ``(scope, target_user_id, target_role)``, ordered newest-first.
+    Precedence, most specific first: ``SELF`` (matching ``owner_id``) → ``ROLE``
+    (matching ``role_value``) → ``ALL``. Returns the index of the most specific
+    match, or ``None`` when nothing applies.
+
+    Pure (no DB) and the single home of the PS-02 precedence rule — shared by
+    the note-gen text path (:func:`_select_published`) and the visibility
+    metadata path (:func:`get_active_publications_for`), so the two can never
+    drift on which publication "wins".
+    """
+    for i, (scope, target_user_id, _role) in enumerate(keys):
+        if scope == PublicationScope.SELF.value and target_user_id == owner_id:
+            return i
+    if role_value is not None:
+        for i, (scope, _user, target_role) in enumerate(keys):
+            if scope == PublicationScope.ROLE.value and target_role == role_value:
+                return i
+    for i, (scope, _user, _role) in enumerate(keys):
+        if scope == PublicationScope.ALL.value:
+            return i
+    return None
+
+
 def _select_published(
     rows: list[tuple[str, Optional[uuid.UUID], Optional[str], str]],
     owner_id: uuid.UUID,
     role_value: Optional[str],
 ) -> Optional[str]:
-    """Pick the winning publication text by scope specificity (PS-02).
+    """Winning publication TEXT by scope specificity (PS-02).
 
-    ``rows`` are the ACTIVE publications for one job, each
-    ``(scope, target_user_id, target_role, version_text)``. Precedence,
-    most specific first: ``SELF`` (matching ``owner_id``) → ``ROLE``
-    (matching ``role_value``) → ``ALL``. Returns the version text of the
-    most specific match, or ``None`` when nothing applies.
-
-    Pure (no DB) so the precedence rule is unit-testable in isolation —
-    the same pure/async split as :func:`_select` for the per-physician path.
+    Thin wrapper over :func:`_select_published_index`: ``rows`` are
+    ``(scope, target_user_id, target_role, version_text)``; returns the winner's
+    text or ``None``. The note-gen entry point — the precedence rule itself
+    lives in :func:`_select_published_index`.
     """
-    for sc, tu, _tr, text in rows:
-        if sc == PublicationScope.SELF.value and tu == owner_id:
-            return text
-    if role_value is not None:
-        for sc, _tu, tr, text in rows:
-            if sc == PublicationScope.ROLE.value and tr == role_value:
-                return text
-    for sc, _tu, _tr, text in rows:
-        if sc == PublicationScope.ALL.value:
-            return text
-    return None
+    idx = _select_published_index(
+        [(scope, tu, tr) for scope, tu, tr, _text in rows], owner_id, role_value
+    )
+    return rows[idx][3] if idx is not None else None
 
 
 async def _get_published_prompt(
@@ -163,6 +185,100 @@ async def _get_published_prompt(
         return None
     role_value = role.value if role is not None else None
     return _select_published(list(rows), owner_id, role_value)
+
+
+class PublishedPromptMeta(NamedTuple):
+    """Display metadata for the active admin publication applying to a clinician
+    for one job — the visibility surface's counterpart to the note-gen text.
+    Never carries the prompt text."""
+
+    name: str
+    version_no: int
+    scope: str
+    target_role: Optional[str]
+    published_at: datetime
+
+
+async def get_active_publications_for(
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+    prompt_ids: list[str],
+) -> dict[str, PublishedPromptMeta]:
+    """Active admin-publication metadata applying to ``owner_id``, keyed by job.
+
+    Resolves the SAME ``SELF → ROLE → ALL`` precedence as note-gen
+    (:func:`_select_published`, via :func:`_select_published_index`) but returns
+    DISPLAY metadata (name, version, scope, date) instead of text — for the AI
+    Prompts Transparency banner so a clinician can SEE the prompt an admin
+    shared.
+
+    Deliberately does NOT short-circuit on a personal override (unlike
+    :func:`assemble_prompt`): the banner shows the publication even when the
+    clinician's own override shadows it at runtime. The caller pairs this with
+    ``is_overridden`` to message the shadow.
+
+    One role lookup + one publications query for all ``prompt_ids`` (no N+1);
+    returns only jobs that have an applicable active publication.
+    """
+    from app.core.models import (
+        PromptPublicationModel,
+        StudioPromptModel,
+        StudioPromptVersionModel,
+        UserModel,
+    )
+
+    if not prompt_ids:
+        return {}
+    role = (
+        await db.execute(select(UserModel.role).where(UserModel.id == owner_id))
+    ).scalar_one_or_none()
+    role_value = role.value if role is not None else None
+
+    rows = (
+        await db.execute(
+            select(
+                PromptPublicationModel.job_id,
+                PromptPublicationModel.scope,
+                PromptPublicationModel.target_user_id,
+                PromptPublicationModel.target_role,
+                StudioPromptModel.name,
+                StudioPromptVersionModel.version_no,
+                PromptPublicationModel.published_at,
+            )
+            .join(
+                StudioPromptVersionModel,
+                PromptPublicationModel.version_id == StudioPromptVersionModel.id,
+            )
+            .join(
+                StudioPromptModel,
+                StudioPromptVersionModel.studio_prompt_id == StudioPromptModel.id,
+            )
+            .where(
+                PromptPublicationModel.job_id.in_(prompt_ids),
+                PromptPublicationModel.superseded_at.is_(None),
+            )
+            .order_by(PromptPublicationModel.published_at.desc())
+        )
+    ).all()
+
+    by_job: dict[str, list] = defaultdict(list)
+    for row in rows:
+        by_job[row.job_id].append(row)
+
+    resolved: dict[str, PublishedPromptMeta] = {}
+    for job_id, job_rows in by_job.items():
+        keys = [(r.scope, r.target_user_id, r.target_role) for r in job_rows]
+        idx = _select_published_index(keys, owner_id, role_value)
+        if idx is not None:
+            winner = job_rows[idx]
+            resolved[job_id] = PublishedPromptMeta(
+                name=winner.name,
+                version_no=winner.version_no,
+                scope=winner.scope,
+                target_role=winner.target_role,
+                published_at=winner.published_at,
+            )
+    return resolved
 
 
 async def assemble_prompt(

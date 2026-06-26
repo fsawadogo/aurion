@@ -1,6 +1,13 @@
 "use client";
 
-import { CheckCircle2, ChevronDown, ChevronUp, Edit3, Lock } from "lucide-react";
+import {
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  Edit3,
+  Lock,
+  Megaphone,
+} from "lucide-react";
 import { useState } from "react";
 import { useTranslations } from "next-intl";
 import Card from "@/components/ui/Card";
@@ -125,6 +132,35 @@ export default function PromptCard({ prompt, onChange }: PromptCardProps) {
         }
       >
         <div className="space-y-3">
+          {current.admin_publication && (
+            <div
+              className={
+                "flex items-start gap-2 rounded-aurion-sm px-3 py-2 text-aurion-caption ring-1 ring-inset " +
+                (current.is_overridden
+                  ? "bg-amber-50 text-amber-800 ring-amber-200"
+                  : "bg-sky-50 text-sky-800 ring-sky-200")
+              }
+              data-testid={`prompt-card-${current.id}-publication`}
+            >
+              <Megaphone
+                className="h-3.5 w-3.5 shrink-0 mt-0.5"
+                aria-hidden="true"
+              />
+              <span>
+                {current.is_overridden
+                  ? t("adminPublication.shadowed", {
+                      name: current.admin_publication.name,
+                    })
+                  : t("adminPublication.active", {
+                      name: current.admin_publication.name,
+                      version: current.admin_publication.version_no,
+                      date: new Date(
+                        current.admin_publication.published_at,
+                      ).toLocaleDateString(),
+                    })}
+              </span>
+            </div>
+          )}
           <div>
             <p className="aurion-micro text-gold-600">{t("purposeLabel")}</p>
             <p className="text-aurion-callout text-navy-700 mt-1">

@@ -43,6 +43,7 @@ from __future__ import annotations
 
 import logging
 import uuid
+from datetime import datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -70,6 +71,10 @@ from app.modules.prompts import (
     select_active_prompt,
     validate_specialty_guidance,
     validate_user_prompt,
+)
+from app.modules.prompts.assembly import (
+    PublishedPromptMeta,
+    get_active_publications_for,
 )
 
 logger = logging.getLogger("aurion.api.me_prompts")
@@ -136,6 +141,27 @@ async def require_clinician(
     return user
 
 
+class AdminPublicationResponse(BaseModel):
+    """An active admin-published Studio prompt applying to the caller's cohort
+    for this job (``SELF`` / ``ROLE`` / ``ALL``), shown read-only on the
+    Transparency page so a clinician can SEE the prompt an admin shared.
+
+    Present whenever such a publication exists — even when the caller has their
+    own override (``is_overridden`` True), in which case the override still wins
+    at runtime and the UI flags this as shadowed. Display metadata only; never
+    the prompt text.
+    """
+
+    name: str
+    version_no: int
+    scope: str = Field(description="Publication cohort: SELF | ROLE | ALL.")
+    target_role: str | None = Field(
+        default=None,
+        description="Role the prompt was published to, when scope == ROLE.",
+    )
+    published_at: datetime
+
+
 class PromptResponse(BaseModel):
     """Wire shape for one prompt card on the portal Transparency page.
 
@@ -197,6 +223,15 @@ class PromptResponse(BaseModel):
             "system_prompt otherwise. NOT concatenation."
         ),
     )
+    admin_publication: AdminPublicationResponse | None = Field(
+        default=None,
+        description=(
+            "Active admin-published Studio prompt applying to the caller for "
+            "this job, or None. Drives the read-only 'published by your admin' "
+            "banner. When is_overridden is also True, the publication is "
+            "shadowed by the caller's personal prompt at runtime."
+        ),
+    )
 
 
 class PromptUserPromptUpdate(BaseModel):
@@ -213,12 +248,29 @@ class PromptUserPromptUpdate(BaseModel):
     )
 
 
+def _publication_response(
+    meta: Optional[PublishedPromptMeta],
+) -> Optional[AdminPublicationResponse]:
+    """Project the assembly-layer publication metadata onto the wire model
+    (or None when no admin publication applies to the caller for this job)."""
+    if meta is None:
+        return None
+    return AdminPublicationResponse(
+        name=meta.name,
+        version_no=meta.version_no,
+        scope=meta.scope,
+        target_role=meta.target_role,
+        published_at=meta.published_at,
+    )
+
+
 def _serialize(
     prompt: PromptDefinition,
     user_prompt_text: Optional[str],
+    publication: Optional[AdminPublicationResponse] = None,
 ) -> PromptResponse:
-    """Project a registry entry + the caller's user prompt (or None)
-    onto the wire schema.
+    """Project a registry entry + the caller's user prompt (or None) + the
+    active admin publication (or None) onto the wire schema.
 
     Single point of projection logic. The list endpoint maps every
     registry entry through this; the PATCH / DELETE endpoints project
@@ -238,6 +290,7 @@ def _serialize(
         user_prompt_text=user_prompt_text,
         is_overridden=user_prompt_text is not None,
         active_prompt=select_active_prompt(prompt.id, user_prompt_text),
+        admin_publication=publication,
     )
 
 
@@ -280,8 +333,16 @@ async def list_my_prompts(
     user_prompts_by_id: dict[str, str] = {}
     if user.role is UserRole.CLINICIAN:
         user_prompts_by_id = await _get_owner_user_prompts(db, user.user_id)
+    publications = await get_active_publications_for(
+        db, user.user_id, list(PROMPTS.keys())
+    )
     return [
-        _serialize(p, user_prompts_by_id.get(p.id)) for p in PROMPTS.values()
+        _serialize(
+            p,
+            user_prompts_by_id.get(p.id),
+            _publication_response(publications.get(p.id)),
+        )
+        for p in PROMPTS.values()
     ]
 
 
@@ -528,7 +589,10 @@ async def patch_my_user_prompt(
         "User prompt saved: clinician=%s prompt=%s length=%d",
         user.user_id, prompt_id, len(user_prompt_text),
     )
-    return _serialize(prompt, user_prompt_text)
+    publications = await get_active_publications_for(db, user.user_id, [prompt_id])
+    return _serialize(
+        prompt, user_prompt_text, _publication_response(publications.get(prompt_id))
+    )
 
 
 # ── DELETE — remove user prompt (fall back to system default) ──────────────
@@ -570,7 +634,10 @@ async def delete_my_user_prompt(
         "User prompt cleared: clinician=%s prompt=%s",
         user.user_id, prompt_id,
     )
-    return _serialize(prompt, None)
+    publications = await get_active_publications_for(db, user.user_id, [prompt_id])
+    return _serialize(
+        prompt, None, _publication_response(publications.get(prompt_id))
+    )
 
 
 # ── PATCH / DELETE — per-physician specialty STYLE guidance override ─────────

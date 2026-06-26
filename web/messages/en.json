@@ -448,6 +448,10 @@
       "extraction": "Extraction",
       "preview": "Live preview"
     },
+    "adminPublication": {
+      "active": "Set by your admin: {name} (v{version}, {date}). This is the prompt your notes currently use.",
+      "shadowed": "Your admin published {name}, but your own custom prompt above takes priority."
+    },
     "userPrompt": {
       "activeBadge": "Custom prompt active",
       "editButton": "Edit your prompt",

@@ -184,6 +184,7 @@ async def test_response_schema_keys_stable(app_client: AsyncClient) -> None:
         "user_prompt_text",
         "is_overridden",
         "active_prompt",
+        "admin_publication",
     }
     for prompt in payload:
         assert set(prompt.keys()) == expected_keys, prompt["id"]

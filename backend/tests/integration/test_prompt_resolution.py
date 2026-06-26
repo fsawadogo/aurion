@@ -33,6 +33,9 @@ from sqlalchemy.ext.asyncio import (  # noqa: E402
 
 from app.core.types import PublicationScope, UserRole  # noqa: E402
 from app.modules.prompts import PROMPTS, assemble_prompt  # noqa: E402
+from app.modules.prompts.assembly import (  # noqa: E402
+    get_active_publications_for,
+)
 
 _JOB = "note_generation"
 
@@ -255,3 +258,70 @@ async def test_unknown_job_raises_even_with_a_publication(db_session: AsyncSessi
     )
     with pytest.raises(KeyError):
         await assemble_prompt("not_a_real_job", clinician, db_session)
+
+
+# ── get_active_publications_for (visibility surface, ps-fu3) ─────────────────
+
+
+@pytest.mark.asyncio
+async def test_publications_for_returns_metadata(db_session: AsyncSession) -> None:
+    """The visibility resolver returns display metadata for an ALL publication."""
+    clinician = await _seed_user(db_session, UserRole.CLINICIAN)
+    await _seed_publication(db_session, text="SHARED_TO_ALL", scope=PublicationScope.ALL)
+
+    pubs = await get_active_publications_for(db_session, clinician, [_JOB])
+    assert set(pubs) == {_JOB}
+    meta = pubs[_JOB]
+    assert meta.name == "test prompt"
+    assert meta.version_no == 1
+    assert meta.scope == PublicationScope.ALL.value
+
+
+@pytest.mark.asyncio
+async def test_publications_for_self_targets_owner_only(db_session: AsyncSession) -> None:
+    """A SELF publication is visible to its target only — others get nothing."""
+    target = await _seed_user(db_session, UserRole.CLINICIAN)
+    other = await _seed_user(db_session, UserRole.CLINICIAN)
+    await _seed_publication(
+        db_session, text="JUST_ME", scope=PublicationScope.SELF, target_user_id=target
+    )
+
+    assert _JOB in await get_active_publications_for(db_session, target, [_JOB])
+    assert await get_active_publications_for(db_session, other, [_JOB]) == {}
+
+
+@pytest.mark.asyncio
+async def test_publications_for_present_even_when_overridden(
+    db_session: AsyncSession,
+) -> None:
+    """Unlike ``assemble_prompt``, the visibility resolver surfaces the
+    publication even when the clinician has a personal override — so the UI can
+    flag it as shadowed (the override still wins at runtime)."""
+    from app.core.models import PromptOverrideModel
+
+    clinician = await _seed_user(db_session, UserRole.CLINICIAN)
+    await _seed_publication(db_session, text="SHARED_TO_ALL", scope=PublicationScope.ALL)
+    db_session.add(
+        PromptOverrideModel(
+            id=uuid.uuid4(),
+            owner_id=clinician,
+            prompt_id=_JOB,
+            user_prompt_text="OVERRIDE_WINS",
+        )
+    )
+    await db_session.flush()
+
+    # Runtime: the override wins.
+    assert await assemble_prompt(_JOB, clinician, db_session) == "OVERRIDE_WINS"
+    # Visibility: the publication is still surfaced (shadowed in the UI).
+    pubs = await get_active_publications_for(db_session, clinician, [_JOB])
+    assert pubs[_JOB].name == "test prompt"
+
+
+@pytest.mark.asyncio
+async def test_publications_for_empty_when_nothing_published(
+    db_session: AsyncSession,
+) -> None:
+    """No publication for the job → empty mapping (no banner)."""
+    clinician = await _seed_user(db_session, UserRole.CLINICIAN)
+    assert await get_active_publications_for(db_session, clinician, [_JOB]) == {}
