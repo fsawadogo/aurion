@@ -54,6 +54,7 @@ function basePrompt<
     is_overridden: false,
     system_prompt_is_fallback: true,
     active_prompt: p.system_prompt,
+    active_source: "default",
   };
 }
 

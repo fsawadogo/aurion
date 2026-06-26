@@ -449,8 +449,8 @@
       "preview": "Live preview"
     },
     "adminPublication": {
-      "active": "Set by your admin: {name} (v{version}, {date}). This is the prompt your notes currently use.",
-      "shadowed": "Your admin published {name}, but your own custom prompt above takes priority."
+      "active": "Set by your admin: {name} (v{version}) — this is the prompt your notes use.",
+      "shadowed": "Your own custom prompt is active. Your admin also published {name}."
     },
     "userPrompt": {
       "activeBadge": "Custom prompt active",

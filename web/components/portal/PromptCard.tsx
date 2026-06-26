@@ -136,9 +136,9 @@ export default function PromptCard({ prompt, onChange }: PromptCardProps) {
             <div
               className={
                 "flex items-start gap-2 rounded-aurion-sm px-3 py-2 text-aurion-caption ring-1 ring-inset " +
-                (current.is_overridden
-                  ? "bg-amber-50 text-amber-800 ring-amber-200"
-                  : "bg-sky-50 text-sky-800 ring-sky-200")
+                (current.active_source === "published"
+                  ? "bg-sky-50 text-sky-800 ring-sky-200"
+                  : "bg-amber-50 text-amber-800 ring-amber-200")
               }
               data-testid={`prompt-card-${current.id}-publication`}
             >
@@ -147,16 +147,13 @@ export default function PromptCard({ prompt, onChange }: PromptCardProps) {
                 aria-hidden="true"
               />
               <span>
-                {current.is_overridden
-                  ? t("adminPublication.shadowed", {
-                      name: current.admin_publication.name,
-                    })
-                  : t("adminPublication.active", {
+                {current.active_source === "published"
+                  ? t("adminPublication.active", {
                       name: current.admin_publication.name,
                       version: current.admin_publication.version_no,
-                      date: new Date(
-                        current.admin_publication.published_at,
-                      ).toLocaleDateString(),
+                    })
+                  : t("adminPublication.shadowed", {
+                      name: current.admin_publication.name,
                     })}
               </span>
             </div>

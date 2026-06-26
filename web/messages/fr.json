@@ -449,8 +449,8 @@
       "preview": "Aperçu en direct"
     },
     "adminPublication": {
-      "active": "Défini par votre administrateur : {name} (v{version}, {date}). C’est l’invite actuellement utilisée pour vos notes.",
-      "shadowed": "Votre administrateur a publié {name}, mais votre propre invite personnalisée ci-dessus est prioritaire."
+      "active": "Défini par votre administrateur : {name} (v{version}) — c’est l’invite utilisée pour vos notes.",
+      "shadowed": "Votre propre invite personnalisée est active. Votre administrateur a aussi publié {name}."
     },
     "userPrompt": {
       "activeBadge": "Invite personnalisée active",

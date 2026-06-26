@@ -275,6 +275,7 @@ async def test_publications_for_returns_metadata(db_session: AsyncSession) -> No
     assert meta.name == "test prompt"
     assert meta.version_no == 1
     assert meta.scope == PublicationScope.ALL.value
+    assert meta.text == "SHARED_TO_ALL"
 
 
 @pytest.mark.asyncio
