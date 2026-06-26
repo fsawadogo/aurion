@@ -89,6 +89,7 @@ class FeatureFlagsResponse(BaseModel):
     specialty_style_in_prompt_enabled: bool
     prompt_studio_enabled: bool
     prompt_studio_roles: list[str]
+    clinician_prompts_note_only: bool
 
 
 class UpdateFeatureFlagsResponse(BaseModel):
@@ -188,6 +189,7 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         prompt_studio_enabled=cfg_feature_flags.prompt_studio_enabled,
         # Copy the list so the response never aliases the live config's.
         prompt_studio_roles=list(cfg_feature_flags.prompt_studio_roles),
+        clinician_prompts_note_only=cfg_feature_flags.clinician_prompts_note_only,
     )
 
 

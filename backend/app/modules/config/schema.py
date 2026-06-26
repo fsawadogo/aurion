@@ -254,6 +254,13 @@ class FeatureFlagsConfig(BaseModel):
     # a draft is inert until published.
     prompt_studio_enabled: bool = False
     prompt_studio_roles: list[str] = Field(default_factory=lambda: ["ADMIN"])
+    # ── Clinician AI-Prompts scope (ps-fu5) ───────────────────────────────
+    # When ON, the clinician AI Prompts page (GET /api/v1/me/prompts) shows
+    # only the `note` category and hides vision / extraction / preview. Ships
+    # DARK (False = all categories, the current behaviour). Support roles
+    # (ADMIN / EVAL_TEAM / COMPLIANCE_OFFICER) always see the full catalog for
+    # transparency. Display scope only — never changes what a prompt resolves to.
+    clinician_prompts_note_only: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────

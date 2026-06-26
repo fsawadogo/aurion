@@ -329,6 +329,25 @@ async def _get_owner_user_prompts(
     return {row.prompt_id: row.user_prompt_text for row in result.scalars().all()}
 
 
+def _visible_prompts(role: UserRole) -> list[PromptDefinition]:
+    """Registry prompts a caller may see on the Transparency page.
+
+    CLINICIANs are narrowed to the ``note`` category when
+    ``feature_flags.clinician_prompts_note_only`` is on (ps-fu5) — note
+    generation is the only prompt relevant to their workflow. Support roles
+    (ADMIN / EVAL_TEAM / COMPLIANCE_OFFICER) always see the full catalog for
+    transparency, regardless of the flag. Display scope only — it never changes
+    what any prompt resolves to.
+    """
+    prompts = list(PROMPTS.values())
+    if (
+        role is UserRole.CLINICIAN
+        and get_config().feature_flags.clinician_prompts_note_only
+    ):
+        return [p for p in prompts if p.category == "note"]
+    return prompts
+
+
 # ── GET — list ──────────────────────────────────────────────────────────────
 
 
@@ -355,12 +374,13 @@ async def list_my_prompts(
     user_prompts_by_id: dict[str, str] = {}
     if user.role is UserRole.CLINICIAN:
         user_prompts_by_id = await _get_owner_user_prompts(db, user.user_id)
+    prompts = _visible_prompts(user.role)
     publications = await get_active_publications_for(
-        db, user.user_id, list(PROMPTS.keys())
+        db, user.user_id, [p.id for p in prompts]
     )
     return [
         _serialize(p, user_prompts_by_id.get(p.id), publications.get(p.id))
-        for p in PROMPTS.values()
+        for p in prompts
     ]
 
 
