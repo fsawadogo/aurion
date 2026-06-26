@@ -1230,6 +1230,20 @@ export interface SpecialtyPrompt {
  * AI is actually told" view, and `system_prompt` when they
  * specifically want the system default (the fallback).
  */
+/**
+ * Active admin-published Studio prompt applying to the caller's cohort for a
+ * job. Present on an AIPrompt when an admin has shared a prompt (SELF/ROLE/ALL)
+ * that reaches this clinician — drives the read-only "published by your admin"
+ * banner. Display metadata only; never the prompt text.
+ */
+export interface AdminPublicationMeta {
+  name: string;
+  version_no: number;
+  scope: "SELF" | "ROLE" | "ALL";
+  target_role?: string | null;
+  published_at: string;
+}
+
 export interface AIPrompt {
   id: string;
   name: string;
@@ -1243,6 +1257,10 @@ export interface AIPrompt {
   user_prompt_text: string | null;
   is_overridden: boolean;
   active_prompt: string;
+  /** Active admin publication for this job, or null/absent when none applies.
+   *  When `is_overridden` is also true, the publication is shadowed by the
+   *  clinician's own prompt at runtime (the UI flags this). */
+  admin_publication?: AdminPublicationMeta | null;
 }
 
 /**
