@@ -444,6 +444,9 @@ export interface FeatureFlags {
   // portal toggle), but round-trips with the snapshot so a flag save doesn't
   // drop it. Mirrors the backend list[str].
   prompt_studio_roles: string[];
+  // Clinician AI-Prompts display scope — when on, the clinician AI Prompts page
+  // shows only the note-generation prompt. Portal toggle (ps-fu6).
+  clinician_prompts_note_only: boolean;
 }
 
 export interface UpdateFeatureFlagsResponse {

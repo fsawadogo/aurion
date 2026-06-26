@@ -526,8 +526,8 @@
     "loading": "Chargement…",
     "sectionCards": "Fiches de révision de note (iOS)",
     "sectionCardsHint": "Ces quatre fiches apparaissent sous la note SOAP dans l’application iOS. Chacune est une fonctionnalité post-pilote — gardez-la masquée tant que le backend correspondant n’est pas en service. Les changements sont appliqués dans ~30 secondes sur tous les iPhones.",
-    "workspaceTools": "Outils de l’espace de travail (web)",
-    "workspaceToolsHint": "Outils d’administration dans le portail web. Activez la disponibilité ici ; l’accès reste limité par rôle. Les changements sont appliqués dans ~30 secondes.",
+    "aiPrompts": "Invites IA (web)",
+    "aiPromptsHint": "Contrôles d’administration de l’expérience des invites IA — Studio d’invites et ce que voient les cliniciens. Activez ici ; l’accès reste limité par rôle. Les changements sont appliqués dans ~30 secondes.",
     "flags": {
       "orders_card_enabled": {
         "name": "Ordonnances",
@@ -548,6 +548,10 @@
       "prompt_studio_enabled": {
         "name": "Studio d’invites",
         "description": "Permet aux administrateurs de rédiger, versionner et publier des invites IA depuis le portail. Désactivé, la page Studio d’invites est indisponible."
+      },
+      "clinician_prompts_note_only": {
+        "name": "Invites de génération de note uniquement",
+        "description": "Les cliniciens ne voient que l’invite de génération de note sur leur page Invites IA ; les invites de vision, d’extraction et d’aperçu sont masquées. Les rôles de support voient tout."
       }
     }
   },

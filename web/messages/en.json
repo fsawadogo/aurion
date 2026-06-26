@@ -526,8 +526,8 @@
     "loading": "Loading…",
     "sectionCards": "Note-review cards (iOS)",
     "sectionCardsHint": "These four cards appear under the SOAP note inside the iOS app. Each one is post-pilot scaffolding — leave hidden until the matching backend goes live. Changes apply within ~30 seconds across every iPhone.",
-    "workspaceTools": "Workspace tools (web)",
-    "workspaceToolsHint": "Admin tools in the web portal. Toggle availability here; access stays role-gated. Changes apply within ~30 seconds.",
+    "aiPrompts": "AI Prompts (web)",
+    "aiPromptsHint": "Admin controls for the AI Prompts experience — Prompt Studio and what clinicians see. Toggle here; access stays role-gated. Changes apply within ~30 seconds.",
     "flags": {
       "orders_card_enabled": {
         "name": "Orders",
@@ -548,6 +548,10 @@
       "prompt_studio_enabled": {
         "name": "Prompt Studio",
         "description": "Lets admins author, version, and publish AI prompts from the portal. When off, the Prompt Studio page is unavailable."
+      },
+      "clinician_prompts_note_only": {
+        "name": "Clinician note-only prompts",
+        "description": "Clinicians see only the Note-generation prompt on their AI Prompts page; vision, extraction, and preview prompts are hidden. Support roles always see all."
       }
     }
   },
