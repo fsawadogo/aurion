@@ -259,6 +259,12 @@ resource "aws_iam_role_policy" "api_task_policy" {
         ]
         Resource = [
           aws_appconfig_application.main.arn,
+          # StartDeployment is IAM-evaluated against the configuration
+          # profile too (not just the environment) — without this ARN the
+          # call is denied on `.../configurationprofile/<id>`, which 502'd
+          # the portal Feature Flags save (the backend created the hosted
+          # version then failed to deploy it).
+          "${aws_appconfig_application.main.arn}/configurationprofile/${aws_appconfig_configuration_profile.main.configuration_profile_id}",
           "${aws_appconfig_application.main.arn}/environment/${aws_appconfig_environment.main.environment_id}",
           "${aws_appconfig_application.main.arn}/environment/${aws_appconfig_environment.main.environment_id}/deployment/*",
           aws_appconfig_deployment_strategy.all_at_once.arn,
