@@ -188,15 +188,17 @@ async def _get_published_prompt(
 
 
 class PublishedPromptMeta(NamedTuple):
-    """Display metadata for the active admin publication applying to a clinician
-    for one job — the visibility surface's counterpart to the note-gen text.
-    Never carries the prompt text."""
+    """The active admin publication applying to a clinician for one job — its
+    display metadata plus the prompt ``text`` (so the Transparency page can show
+    the published prompt AS the active prompt, not just a label about it). The
+    text is an org-authored prompt, never patient data."""
 
     name: str
     version_no: int
     scope: str
     target_role: Optional[str]
     published_at: datetime
+    text: str
 
 
 async def get_active_publications_for(
@@ -244,6 +246,7 @@ async def get_active_publications_for(
                 StudioPromptModel.name,
                 StudioPromptVersionModel.version_no,
                 PromptPublicationModel.published_at,
+                StudioPromptVersionModel.text,
             )
             .join(
                 StudioPromptVersionModel,
@@ -277,6 +280,7 @@ async def get_active_publications_for(
                 scope=winner.scope,
                 target_role=winner.target_role,
                 published_at=winner.published_at,
+                text=winner.text,
             )
     return resolved
 
@@ -382,13 +386,13 @@ def select_active_prompt(
     otherwise. This is the projection rule the wire schema exposes as
     ``active_prompt`` on every ``PromptResponse``.
 
-    Scope note (PS-02): this projection deliberately knows only the
-    per-physician override vs. the registry default — NOT admin
-    publications. A publication is an admin→clinician delivery mechanism
-    resolved in :func:`assemble_prompt`; it does not surface in the
-    clinician's transparency view, which shows what the physician
-    themselves saved or the shipped default. Revisit only if a future
-    feature makes publications clinician-visible.
+    Scope note (PS-02): this projection knows only the per-physician
+    override vs. the registry default. Admin publications are layered on
+    top in the API — ``me_prompts._serialize`` picks override → published →
+    default for ``active_prompt`` (the clinician-visible cascade), and
+    :func:`assemble_prompt` does the same for live note generation. This
+    pure helper stays publication-free so the override-vs-default rule is
+    unit-testable without a DB.
 
     For an unbound caller that only has ``owner_id`` and ``prompt_id``,
     use :func:`assemble_prompt` instead — that's the one with the DB

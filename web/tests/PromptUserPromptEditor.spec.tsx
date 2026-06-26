@@ -61,6 +61,7 @@ const PROMPT_DEFAULT_ONLY: AIPrompt = {
   user_prompt_text: null,
   is_overridden: false,
   active_prompt: SYSTEM_DEFAULT, // replacement: fallback to default
+  active_source: "default",
 };
 
 const PROMPT_WITH_USER_PROMPT: AIPrompt = {
@@ -68,6 +69,7 @@ const PROMPT_WITH_USER_PROMPT: AIPrompt = {
   user_prompt_text: WELL_FORMED_USER_PROMPT,
   is_overridden: true,
   active_prompt: WELL_FORMED_USER_PROMPT, // replacement: user prompt verbatim
+  active_source: "override",
 };
 
 beforeEach(() => {

@@ -184,6 +184,7 @@ async def test_response_schema_keys_stable(app_client: AsyncClient) -> None:
         "user_prompt_text",
         "is_overridden",
         "active_prompt",
+        "active_source",
         "admin_publication",
     }
     for prompt in payload:

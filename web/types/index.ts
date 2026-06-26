@@ -1257,6 +1257,9 @@ export interface AIPrompt {
   user_prompt_text: string | null;
   is_overridden: boolean;
   active_prompt: string;
+  /** Where `active_prompt` resolved from — the cascade override → published →
+   *  default. Drives the source label on the card. */
+  active_source: "override" | "published" | "default";
   /** Active admin publication for this job, or null/absent when none applies.
    *  When `is_overridden` is also true, the publication is shadowed by the
    *  clinician's own prompt at runtime (the UI flags this). */
