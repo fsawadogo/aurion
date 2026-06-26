@@ -48,11 +48,33 @@ def _resolve_database_url() -> str:
 
 DATABASE_URL = _resolve_database_url()
 
+
+def _ssl_connect_args(url: str) -> dict[str, str]:
+    """Force TLS on the asyncpg connection for RDS, plaintext for local dev.
+
+    RDS enforces ``rds.force_ssl = 1``, but the URL we rebuild from the
+    RDS-managed master secret (see ``_resolve_database_url``) carries no
+    ``sslmode``. asyncpg defaults to a non-SSL connection, which RDS rejects
+    with ``no pg_hba.conf entry for host ... no encryption`` — a latent
+    fragility that surfaced as intermittent 500s when a task's connections
+    churned. Pinning ``ssl=require`` here makes every connection encrypted
+    regardless of how the URL was assembled (the env-var path *or* the
+    rebuilt-from-JSON path), decoupling TLS from URL formatting.
+
+    Local dev (docker-compose Postgres) has no TLS, so hosts that are clearly
+    local stay plaintext. ``require`` encrypts without CA verification, which
+    matches RDS's default posture and needs no cert bundle.
+    """
+    is_local = any(h in url for h in ("@localhost", "@127.0.0.1", "@db:", "@db/"))
+    return {} if is_local else {"ssl": "require"}
+
+
 engine = create_async_engine(
     DATABASE_URL,
     echo=os.getenv("LOG_LEVEL", "").upper() == "DEBUG",
     pool_size=10,
     max_overflow=20,
+    connect_args=_ssl_connect_args(DATABASE_URL),
 )
 
 async_session_factory = async_sessionmaker(
