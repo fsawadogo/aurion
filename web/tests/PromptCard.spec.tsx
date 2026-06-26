@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import PromptCard from "@/components/portal/PromptCard";
 import { withIntl } from "./helpers/intl";
 import type { AIPrompt } from "@/types";
@@ -17,6 +18,7 @@ const BASE: AIPrompt = {
   user_prompt_text: null,
   is_overridden: false,
   active_prompt: "SYSTEM PROMPT",
+  active_source: "default",
 };
 
 const PUBLICATION = {
@@ -27,37 +29,23 @@ const PUBLICATION = {
   published_at: "2026-06-24T00:00:00Z",
 };
 
-describe("PromptCard — admin publication banner", () => {
-  it("renders no banner when no publication applies", () => {
+describe("PromptCard — admin publication source label", () => {
+  it("renders no banner when the active prompt is the system default", () => {
     render(withIntl(<PromptCard prompt={BASE} />));
     expect(
       screen.queryByTestId("prompt-card-note_generation-publication"),
     ).not.toBeInTheDocument();
   });
 
-  it("shows the active banner when a publication applies and there's no override", () => {
-    render(
-      withIntl(
-        <PromptCard prompt={{ ...BASE, admin_publication: PUBLICATION }} />,
-      ),
-    );
-    const banner = screen.getByTestId(
-      "prompt-card-note_generation-publication",
-    );
-    expect(banner).toBeInTheDocument();
-    expect(banner.textContent).toContain("Tighter PE");
-    expect(banner.textContent).toContain("your notes currently use");
-  });
-
-  it("shows the shadowed banner when the clinician also has an override", () => {
+  it("shows 'set by your admin' and the published text when a publication is active", async () => {
+    const user = userEvent.setup();
     render(
       withIntl(
         <PromptCard
           prompt={{
             ...BASE,
-            is_overridden: true,
-            user_prompt_text: "MY OWN PROMPT",
-            active_prompt: "MY OWN PROMPT",
+            active_prompt: "PUBLISHED PROMPT BODY",
+            active_source: "published",
             admin_publication: PUBLICATION,
           }}
         />,
@@ -66,6 +54,33 @@ describe("PromptCard — admin publication banner", () => {
     const banner = screen.getByTestId(
       "prompt-card-note_generation-publication",
     );
-    expect(banner.textContent).toContain("takes priority");
+    expect(banner.textContent).toContain("Tighter PE");
+    expect(banner.textContent).toContain("your notes use");
+    // The active prompt shown IS the published text, not the registry default.
+    await user.click(screen.getByTestId("prompt-card-note_generation-toggle"));
+    expect(
+      screen.getByTestId("prompt-card-note_generation-pre").textContent,
+    ).toContain("PUBLISHED PROMPT BODY");
+  });
+
+  it("flags the publication as shadowed when the clinician has an override", () => {
+    render(
+      withIntl(
+        <PromptCard
+          prompt={{
+            ...BASE,
+            is_overridden: true,
+            user_prompt_text: "MY OWN PROMPT",
+            active_prompt: "MY OWN PROMPT",
+            active_source: "override",
+            admin_publication: PUBLICATION,
+          }}
+        />,
+      ),
+    );
+    const banner = screen.getByTestId(
+      "prompt-card-note_generation-publication",
+    );
+    expect(banner.textContent).toContain("also published");
   });
 });

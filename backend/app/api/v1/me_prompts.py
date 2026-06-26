@@ -44,7 +44,7 @@ from __future__ import annotations
 import logging
 import uuid
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
@@ -219,8 +219,17 @@ class PromptResponse(BaseModel):
     active_prompt: str = Field(
         description=(
             "The exact prompt text the LLM would receive for this "
-            "physician's next call: user_prompt_text when set, "
-            "system_prompt otherwise. NOT concatenation."
+            "physician's next call, resolved by the SAME cascade as note "
+            "generation: the personal override when set, else the active "
+            "admin publication, else the registry default. NOT concatenation."
+        ),
+    )
+    active_source: Literal["override", "published", "default"] = Field(
+        description=(
+            "Where active_prompt came from: 'override' (the physician's own "
+            "saved prompt), 'published' (an admin-published prompt for their "
+            "cohort), or 'default' (the registry default). Drives the source "
+            "label on the Transparency page."
         ),
     )
     admin_publication: AdminPublicationResponse | None = Field(
@@ -267,16 +276,28 @@ def _publication_response(
 def _serialize(
     prompt: PromptDefinition,
     user_prompt_text: Optional[str],
-    publication: Optional[AdminPublicationResponse] = None,
+    publication: Optional[PublishedPromptMeta] = None,
 ) -> PromptResponse:
     """Project a registry entry + the caller's user prompt (or None) + the
     active admin publication (or None) onto the wire schema.
 
-    Single point of projection logic. The list endpoint maps every
-    registry entry through this; the PATCH / DELETE endpoints project
-    the freshly-saved (or just-cleared) row through it too — so all
+    ``active_prompt`` / ``active_source`` follow the SAME cascade as note
+    generation (:func:`assemble_prompt`): personal override → active admin
+    publication → registry default. Single point of projection logic — the
+    list endpoint maps every registry entry through this; PATCH / DELETE
+    project the freshly-saved (or just-cleared) row through it too, so all
     three endpoints return byte-identical shapes.
     """
+    if user_prompt_text is None and publication is not None:
+        # No personal override, but an admin published a prompt for this
+        # clinician's cohort — that published text is what note-gen uses.
+        active_prompt = publication.text
+        active_source: Literal["override", "published", "default"] = "published"
+    else:
+        # Personal override (verbatim) or the registry default — the
+        # publication-free projection.
+        active_prompt = select_active_prompt(prompt.id, user_prompt_text)
+        active_source = "override" if user_prompt_text is not None else "default"
     return PromptResponse(
         id=prompt.id,
         name=prompt.name,
@@ -289,8 +310,9 @@ def _serialize(
         schema_note=prompt.schema_note,
         user_prompt_text=user_prompt_text,
         is_overridden=user_prompt_text is not None,
-        active_prompt=select_active_prompt(prompt.id, user_prompt_text),
-        admin_publication=publication,
+        active_prompt=active_prompt,
+        active_source=active_source,
+        admin_publication=_publication_response(publication),
     )
 
 
@@ -337,11 +359,7 @@ async def list_my_prompts(
         db, user.user_id, list(PROMPTS.keys())
     )
     return [
-        _serialize(
-            p,
-            user_prompts_by_id.get(p.id),
-            _publication_response(publications.get(p.id)),
-        )
+        _serialize(p, user_prompts_by_id.get(p.id), publications.get(p.id))
         for p in PROMPTS.values()
     ]
 
@@ -590,9 +608,7 @@ async def patch_my_user_prompt(
         user.user_id, prompt_id, len(user_prompt_text),
     )
     publications = await get_active_publications_for(db, user.user_id, [prompt_id])
-    return _serialize(
-        prompt, user_prompt_text, _publication_response(publications.get(prompt_id))
-    )
+    return _serialize(prompt, user_prompt_text, publications.get(prompt_id))
 
 
 # ── DELETE — remove user prompt (fall back to system default) ──────────────
@@ -635,9 +651,7 @@ async def delete_my_user_prompt(
         user.user_id, prompt_id,
     )
     publications = await get_active_publications_for(db, user.user_id, [prompt_id])
-    return _serialize(
-        prompt, None, _publication_response(publications.get(prompt_id))
-    )
+    return _serialize(prompt, None, publications.get(prompt_id))
 
 
 # ── PATCH / DELETE — per-physician specialty STYLE guidance override ─────────
