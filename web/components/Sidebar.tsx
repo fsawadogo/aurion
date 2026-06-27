@@ -21,6 +21,7 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
+  Share2,
   Users,
   X,
   Zap,
@@ -81,6 +82,7 @@ const navigation: {
   // prompt_studio_roles allowlist; the page is also flag-gated
   // (prompt_studio_enabled) and shows a "not enabled" state when off.
   { tKey: "promptStudio", href: "/portal/admin/prompt-studio", icon: Sparkles, roles: ["ADMIN"] },
+  { tKey: "sharedTemplates", href: "/portal/admin/shared-templates", icon: Share2, roles: ["ADMIN"] },
   // Operational alerts (#76). ADMIN + COMPLIANCE_OFFICER — matches the
   // backend gate on /admin/alerts (list + acknowledge).
   { tKey: "alerts", href: "/portal/admin/alerts", icon: Bell, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },

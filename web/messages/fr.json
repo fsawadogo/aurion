@@ -41,6 +41,20 @@
       "submit": "Créer"
     }
   },
+  "AdminSharedTemplates": {
+    "eyebrow": "Espace admin",
+    "title": "Modèles partagés",
+    "description": "Créez un modèle de note et partagez-le avec tous les cliniciens. Les modèles partagés apparaissent dans leurs Modèles et sélecteurs, prêts à appliquer.",
+    "createButton": "Nouveau modèle partagé",
+    "createHint": "Construisez la structure de la note et, en option, ses instructions IA. Chaque clinicien pourra l’appliquer (en lecture seule).",
+    "save": "Partager avec les cliniciens",
+    "cancel": "Annuler",
+    "delete": "Supprimer le modèle partagé",
+    "empty": "Aucun modèle partagé — créez-en un pour le partager avec tous les cliniciens.",
+    "loadError": "Impossible de charger les modèles partagés.",
+    "saveError": "Impossible d’enregistrer le modèle partagé.",
+    "deleteError": "Impossible de supprimer le modèle partagé."
+  },
   "Sidebar": {
     "portal": "Portail",
     "admin": "Admin",
@@ -60,6 +74,7 @@
       "myActivity": "Mon activité",
       "aiPrompts": "Invites IA",
       "promptStudio": "Studio d'invites",
+      "sharedTemplates": "Modèles partagés",
       "featureFlags": "Indicateurs",
       "providers": "Fournisseurs IA",
       "capturedMedia": "Médias capturés",
