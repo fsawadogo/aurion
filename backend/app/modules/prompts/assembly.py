@@ -289,21 +289,27 @@ async def assemble_prompt(
     prompt_id: str,
     owner_id: uuid.UUID,
     db: AsyncSession,
+    template_prompt: str | None = None,
 ) -> str:
     """Return the prompt text to send to the LLM for ``owner_id``.
 
     Resolution order (most specific first), all REPLACEMENT (no append):
       1. The clinician's own saved user prompt for ``(owner_id, prompt_id)``
          → returned alone. Unchanged from Phase B.
-      2. The active admin **publication** for this job that targets the
+      2. ``template_prompt`` — note-gen instructions carried by the template the
+         clinician picked for this encounter (tpl-01). The caller passes it in
+         (it has the resolved template in scope); ``None``/empty for jobs or
+         templates that don't carry one.
+      3. The active admin **publication** for this job that targets the
          clinician — ``SELF`` → ``ROLE`` → ``ALL`` (PS-02). This is how a
          prompt an admin authored + shared takes effect for clinicians who
          haven't overridden it.
-      3. The registry default ``PROMPTS[prompt_id].system_prompt``.
+      4. The registry default ``PROMPTS[prompt_id].system_prompt``.
 
-    A personal override (1) always outranks an admin publication (2): a
-    physician who has signed off on their own prompt keeps it; a clinic-wide
-    change reaches only physicians who haven't.
+    A personal override (1) always outranks the picked template's instructions
+    (2), which in turn outrank a clinic-wide publication (3): a physician who
+    signed off on their own prompt keeps it; otherwise the template they chose
+    for this visit wins over a generic org-wide default.
 
     Raises ``KeyError`` when ``prompt_id`` is not in the registry — a
     programmer bug (the registry is in code). Checked up front so an unknown
@@ -317,9 +323,16 @@ async def assemble_prompt(
     """
     if prompt_id not in PROMPTS:
         raise KeyError(prompt_id)
+    if template_prompt is not None and not template_prompt.strip():
+        # Whitespace-only carries no instructions — matches the write-time gate
+        # (validate_user_prompt treats blank as EMPTY), so a blank template
+        # prompt can never blank out the descriptive-mode base prompt.
+        template_prompt = None
     user_prompt = await _get_user_prompt(db, owner_id, prompt_id)
     if user_prompt:
         return user_prompt
+    if template_prompt:
+        return template_prompt
     published = await _get_published_prompt(db, owner_id, prompt_id)
     if published is not None:
         return published
@@ -330,6 +343,7 @@ async def assemble_prompt_for_session(
     prompt_id: str,
     session_id: uuid.UUID | str,
     db: AsyncSession,
+    template_prompt: str | None = None,
 ) -> str:
     """Variant for services that have ``session_id`` instead of
     ``owner_id`` in scope.
@@ -347,6 +361,11 @@ async def assemble_prompt_for_session(
     live preview) and callers that only have ``session_id`` (Stage 1
     note generation, Stage 2 vision).
     """
+    if template_prompt is not None and not template_prompt.strip():
+        # Whitespace-only = no instructions (see assemble_prompt); keep the
+        # missing-session fallbacks below from returning a blank prompt.
+        template_prompt = None
+
     # Local import to avoid a circular dependency on app.core.models
     # when prompts/__init__ is loaded during app startup. Importing at
     # function scope keeps the module's top-level clean.
@@ -361,14 +380,16 @@ async def assemble_prompt_for_session(
             else uuid.UUID(str(session_id))
         )
     except (ValueError, AttributeError):
-        return PROMPTS[prompt_id].system_prompt
+        return template_prompt or PROMPTS[prompt_id].system_prompt
     result = await db.execute(
         select(SessionModel.clinician_id).where(SessionModel.id == sid)
     )
     clinician_id = result.scalar_one_or_none()
     if clinician_id is None:
-        return PROMPTS[prompt_id].system_prompt
-    return await assemble_prompt(prompt_id, clinician_id, db)
+        return template_prompt or PROMPTS[prompt_id].system_prompt
+    return await assemble_prompt(
+        prompt_id, clinician_id, db, template_prompt=template_prompt
+    )
 
 
 def select_active_prompt(

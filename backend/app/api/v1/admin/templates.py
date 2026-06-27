@@ -33,6 +33,7 @@ from app.modules.note_gen.template_overrides import (
     list_overrides,
     upsert_override,
 )
+from app.modules.prompts.safety import ValidationCode, validate_user_prompt
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -139,6 +140,14 @@ async def upsert_template(
                 f"key '{template_key}'"
             ),
         )
+    # tpl-01: a template may carry note-gen instructions that REPLACE the
+    # descriptive-mode base prompt at generation time, so an admin-set prompt
+    # passes the same safety gate as a clinician's personal override / custom
+    # template. Empty / whitespace = no instructions (structure only).
+    if body.system_prompt and body.system_prompt.strip():
+        result = validate_user_prompt(body.system_prompt)
+        if result.code is not ValidationCode.OK:
+            raise HTTPException(status_code=422, detail=result.message)
     saved = await upsert_override(db, template_key, body, updated_by=user.user_id)
     # #72 runtime integration: the serving task honours the edit
     # immediately; the rest of the fleet converges via the ~10s poller.

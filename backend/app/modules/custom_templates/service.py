@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import CustomTemplateModel
 from app.core.types import Template
+from app.modules.prompts.safety import ValidationCode, validate_user_prompt
 
 logger = logging.getLogger("aurion.custom_templates")
 
@@ -105,6 +106,14 @@ def _validate_custom_template_fields(
         raise CustomTemplateError(
             f"Template version exceeds {_VERSION_MAX} characters"
         )
+    # tpl-01: a template may carry note-gen instructions. When present they
+    # REPLACE the note-gen system prompt at generation time, so they pass the
+    # same descriptive-mode safety gate as a clinician's personal prompt
+    # override. Empty / whitespace means "no instructions" (structure only).
+    if template.system_prompt and template.system_prompt.strip():
+        result = validate_user_prompt(template.system_prompt)
+        if result.code is not ValidationCode.OK:
+            raise CustomTemplateError(result.message)
     if not template.sections:
         raise CustomTemplateError("Template must have at least one section")
     if not check_section_caps:

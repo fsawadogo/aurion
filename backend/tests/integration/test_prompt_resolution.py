@@ -222,6 +222,73 @@ async def test_self_publication_targets_only_owner(db_session: AsyncSession) -> 
 
 
 @pytest.mark.asyncio
+async def test_template_prompt_used_when_no_override(db_session: AsyncSession) -> None:
+    """A template-carried prompt is used when the clinician has no personal
+    override and no publication applies (tpl-01)."""
+    clinician = await _seed_user(db_session, UserRole.CLINICIAN)
+    assert (
+        await assemble_prompt(
+            _JOB, clinician, db_session, template_prompt="FROM_TEMPLATE"
+        )
+        == "FROM_TEMPLATE"
+    )
+
+
+@pytest.mark.asyncio
+async def test_template_prompt_beats_publication(db_session: AsyncSession) -> None:
+    """The picked template's instructions outrank a clinic-wide publication
+    (tpl-01 precedence: template > publication)."""
+    clinician = await _seed_user(db_session, UserRole.CLINICIAN)
+    await _seed_publication(db_session, text="SHARED_TO_ALL", scope=PublicationScope.ALL)
+    assert (
+        await assemble_prompt(
+            _JOB, clinician, db_session, template_prompt="FROM_TEMPLATE"
+        )
+        == "FROM_TEMPLATE"
+    )
+
+
+@pytest.mark.asyncio
+async def test_personal_override_beats_template_prompt(
+    db_session: AsyncSession,
+) -> None:
+    """A physician's own saved prompt still outranks a template-carried prompt
+    (tpl-01 precedence: override > template)."""
+    from app.core.models import PromptOverrideModel
+
+    clinician = await _seed_user(db_session, UserRole.CLINICIAN)
+    db_session.add(
+        PromptOverrideModel(
+            id=uuid.uuid4(),
+            owner_id=clinician,
+            prompt_id=_JOB,
+            user_prompt_text="OVERRIDE_WINS",
+        )
+    )
+    await db_session.flush()
+    assert (
+        await assemble_prompt(
+            _JOB, clinician, db_session, template_prompt="FROM_TEMPLATE"
+        )
+        == "OVERRIDE_WINS"
+    )
+
+
+@pytest.mark.asyncio
+async def test_blank_template_prompt_falls_through(db_session: AsyncSession) -> None:
+    """An empty OR whitespace-only template_prompt is ignored — resolution falls
+    through to the publication/default (tpl-01: blank means structure only, and a
+    blank prompt must never blank out the descriptive-mode base)."""
+    clinician = await _seed_user(db_session, UserRole.CLINICIAN)
+    await _seed_publication(db_session, text="SHARED_TO_ALL", scope=PublicationScope.ALL)
+    for blank in ("", "   ", "\n\t"):
+        assert (
+            await assemble_prompt(_JOB, clinician, db_session, template_prompt=blank)
+            == "SHARED_TO_ALL"
+        )
+
+
+@pytest.mark.asyncio
 async def test_role_publication_targets_only_that_role(db_session: AsyncSession) -> None:
     """A ROLE publication reaches users of that role only."""
     clinician = await _seed_user(db_session, UserRole.CLINICIAN)

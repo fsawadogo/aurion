@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from sqlalchemy.exc import IntegrityError
 
+from app.core.types import Template
 from app.modules.custom_templates import service as svc
 
 
@@ -28,6 +29,38 @@ def _tmpl(**over) -> dict:
     }
     base.update(over)
     return base
+
+
+def test_validate_accepts_descriptive_system_prompt():
+    """A descriptive-mode template prompt passes the safety gate (tpl-01)."""
+    tmpl = Template.model_validate(
+        _tmpl(
+            system_prompt=(
+                "Describe and document only what was observed and recorded. "
+                "Do not interpret, do not diagnose, and do not infer."
+            )
+        )
+    )
+    svc._validate_custom_template_fields(tmpl)
+
+
+def test_validate_allows_no_system_prompt():
+    """A template without instructions is unaffected (tpl-01: structure only)."""
+    svc._validate_custom_template_fields(Template.model_validate(_tmpl()))
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_non_descriptive_system_prompt():
+    """A template prompt missing descriptive-mode anchors is rejected at write —
+    tpl-01 reuses validate_user_prompt, the same gate as personal overrides."""
+    db = AsyncMock()
+    with pytest.raises(svc.CustomTemplateError):
+        await svc.create_for_owner(
+            uuid.uuid4(),
+            _tmpl(system_prompt="Make the note sound professional and complete."),
+            db,
+        )
+    db.add.assert_not_called()
 
 
 @pytest.mark.asyncio
