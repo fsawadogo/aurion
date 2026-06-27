@@ -1328,6 +1328,8 @@
       "language": "Note language",
       "langEn": "English",
       "langFr": "French",
+      "template": "Note template",
+      "templateDefault": "Default (by specialty)",
       "submit": "Upload & process"
     },
     "consent": {

@@ -83,6 +83,10 @@ class CreateVideoImportRequest(BaseModel):
     output_language: str = "en"
     encounter_type: str = "doctor_patient"
     capture_mode: str = "multimodal"
+    # Optional custom template (tpl-03) to apply to the imported note — its
+    # section structure + any AI instructions it carries. Validated as owned by
+    # the clinician; None = the specialty default.
+    custom_template_id: Optional[str] = None
     # The clinician attests patient consent was obtained at the ORIGINAL
     # recording (the import substitute for the bypassed live consent gate).
     # Must be True or the create is rejected — the consent hard-block is
@@ -173,6 +177,23 @@ async def create_import_session(
     The caller validates the consent attestation before calling this (the
     hard gate) so the rejection message stays at the HTTP boundary.
     """
+    resolved_custom_template_id: Optional[uuid.UUID] = None
+    if body.custom_template_id:
+        # tpl-03: apply a clinician-owned custom template (carries structure +
+        # AI instructions). Ownership-scoped lookup; reject an unknown/foreign
+        # id rather than silently falling back, since the upload UI only lists
+        # owned templates (a miss means a stale pick or tampering).
+        from app.modules.custom_templates.service import get_owned
+
+        try:
+            ref = uuid.UUID(body.custom_template_id)
+        except (ValueError, TypeError, AttributeError):
+            raise HTTPException(status_code=404, detail="Custom template not found")
+        owned = await get_owned(ref, clinician_id, db)
+        if owned is None:
+            raise HTTPException(status_code=404, detail="Custom template not found")
+        resolved_custom_template_id = owned.id
+
     session = await create_session(
         db,
         clinician_id=clinician_id,
@@ -182,6 +203,7 @@ async def create_import_session(
         output_language=body.output_language,
         encounter_type=body.encounter_type,
         capture_mode=body.capture_mode,
+        custom_template_id=resolved_custom_template_id,
     )
     session.import_source = "video_upload"
     await db.flush()
