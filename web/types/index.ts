@@ -988,6 +988,10 @@ export interface TemplateDefinition {
   display_name: string;
   version: string;
   sections: TemplateSection[];
+  // Optional note-gen instructions carried by the template (tpl-01). When set,
+  // replaces the default note-generation prompt for notes built with this
+  // template. Validated against the descriptive-mode gate server-side.
+  system_prompt?: string | null;
 }
 
 /** Mirrors backend `/me/custom-templates` response. */
