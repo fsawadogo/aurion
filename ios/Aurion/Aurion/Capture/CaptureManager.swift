@@ -458,19 +458,25 @@ final class CaptureManager: NSObject, ObservableObject {
             do {
                 let session = AVAudioSession.sharedInstance()
                 try? session.setActive(false, options: .notifyOthersOnDeactivation)
+                // NO .allowBluetoothHFP here. The built-in ("iPhone Camera +
+                // Mic") source must ALWAYS record from the phone's own mic. A
+                // previous attempt allowed BT-HFP and then tried to pin the
+                // built-in mic with setPreferredInput — but that pin does not
+                // reliably override an already-active Bluetooth HFP route, so a
+                // connected BT device (AirPods, Ray-Ban glasses paired for their
+                // camera, a car kit, …) hijacked the input and delivered
+                // (near-)silence → Stage 1 failed with "no speech detected".
+                // Without the option, .record simply cannot route to a BT input,
+                // so the phone mic is guaranteed regardless of what's paired.
+                // (The dedicated Bluetooth Audio source is a separate, explicit
+                // pick and configures its own session.)
                 try session.setCategory(
                     .record,
                     mode: .default,
-                    options: [.allowBluetoothHFP]
+                    options: []
                 )
                 try session.setActive(true, options: .notifyOthersOnDeactivation)
-                // Pin the built-in mic. With .allowBluetoothHFP, a connected
-                // Bluetooth device — e.g. Ray-Ban Meta glasses paired for their
-                // camera — would otherwise hijack the input route and deliver
-                // (near-)silence, so the "iPhone Camera + Mic" source recorded
-                // nothing and Stage 1 failed with "no speech detected". The
-                // phone-mic source must always record from the phone; the
-                // dedicated Bluetooth Audio source is a separate, explicit pick.
+                // Belt-and-braces: still prefer the built-in mic explicitly.
                 if let builtInMic = session.availableInputs?.first(
                     where: { $0.portType == .builtInMic }
                 ) {
