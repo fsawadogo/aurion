@@ -275,15 +275,17 @@ async def test_personal_override_beats_template_prompt(
 
 
 @pytest.mark.asyncio
-async def test_empty_template_prompt_falls_through(db_session: AsyncSession) -> None:
-    """An empty template_prompt is ignored — resolution falls through to the
-    publication/default (tpl-01: empty means the template shapes structure only)."""
+async def test_blank_template_prompt_falls_through(db_session: AsyncSession) -> None:
+    """An empty OR whitespace-only template_prompt is ignored — resolution falls
+    through to the publication/default (tpl-01: blank means structure only, and a
+    blank prompt must never blank out the descriptive-mode base)."""
     clinician = await _seed_user(db_session, UserRole.CLINICIAN)
     await _seed_publication(db_session, text="SHARED_TO_ALL", scope=PublicationScope.ALL)
-    assert (
-        await assemble_prompt(_JOB, clinician, db_session, template_prompt="")
-        == "SHARED_TO_ALL"
-    )
+    for blank in ("", "   ", "\n\t"):
+        assert (
+            await assemble_prompt(_JOB, clinician, db_session, template_prompt=blank)
+            == "SHARED_TO_ALL"
+        )
 
 
 @pytest.mark.asyncio

@@ -149,6 +149,33 @@ async def test_admin_upsert_sets_cache_immediately() -> None:
 
 
 @pytest.mark.asyncio
+async def test_admin_upsert_rejects_non_descriptive_system_prompt() -> None:
+    """tpl-01: an admin-set template prompt REPLACES the descriptive-mode base at
+    generation, so it passes the same safety gate as a clinician override — a
+    non-descriptive one is rejected (422) before any write."""
+    from fastapi import HTTPException
+
+    from app.api.v1.admin.templates import upsert_template
+
+    body = Template(
+        key="musculoskeletal",
+        display_name="MSK",
+        sections=[TemplateSection(id="cc", title="CC", required=True)],
+        system_prompt="Make the note sound professional and complete.",
+    )
+    user = MagicMock()
+    user.user_id = uuid.uuid4()
+    upsert = AsyncMock()
+    with patch("app.api.v1.admin.templates.upsert_override", upsert), patch(
+        "app.api.v1.admin.templates.write_audit", AsyncMock()
+    ):
+        with pytest.raises(HTTPException) as ei:
+            await upsert_template("musculoskeletal", body, user=user, db=AsyncMock())
+    assert ei.value.status_code == 422
+    upsert.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_admin_revert_clears_cache_immediately() -> None:
     from app.api.v1.admin.templates import revert_template
 

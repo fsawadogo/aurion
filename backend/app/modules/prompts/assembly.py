@@ -323,6 +323,11 @@ async def assemble_prompt(
     """
     if prompt_id not in PROMPTS:
         raise KeyError(prompt_id)
+    if template_prompt is not None and not template_prompt.strip():
+        # Whitespace-only carries no instructions — matches the write-time gate
+        # (validate_user_prompt treats blank as EMPTY), so a blank template
+        # prompt can never blank out the descriptive-mode base prompt.
+        template_prompt = None
     user_prompt = await _get_user_prompt(db, owner_id, prompt_id)
     if user_prompt:
         return user_prompt
@@ -356,6 +361,11 @@ async def assemble_prompt_for_session(
     live preview) and callers that only have ``session_id`` (Stage 1
     note generation, Stage 2 vision).
     """
+    if template_prompt is not None and not template_prompt.strip():
+        # Whitespace-only = no instructions (see assemble_prompt); keep the
+        # missing-session fallbacks below from returning a blank prompt.
+        template_prompt = None
+
     # Local import to avoid a circular dependency on app.core.models
     # when prompts/__init__ is loaded during app startup. Importing at
     # function scope keeps the module's top-level clean.
