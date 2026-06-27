@@ -97,7 +97,7 @@ async def test_create_applies_owned_custom_template() -> None:
             vi, "generate_presigned_evidence_url", MagicMock(return_value="https://put")
         ), \
         patch(
-            "app.modules.custom_templates.service.get_owned",
+            "app.modules.custom_templates.service.get_owned_or_shared",
             AsyncMock(return_value=SimpleNamespace(id=cid)),
         ):
         await vi.create_video_import(body, None, user, db)
@@ -116,7 +116,7 @@ async def test_create_rejects_unowned_custom_template() -> None:
     db = AsyncMock()
     with patch.object(vi, "create_session", AsyncMock()) as create, \
         patch(
-            "app.modules.custom_templates.service.get_owned",
+            "app.modules.custom_templates.service.get_owned_or_shared",
             AsyncMock(return_value=None),
         ):
         with pytest.raises(HTTPException) as exc:

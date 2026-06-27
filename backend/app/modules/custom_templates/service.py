@@ -208,6 +208,52 @@ async def get_by_id(
     return result.scalar_one_or_none()
 
 
+async def get_owned_or_shared(
+    template_id: uuid.UUID, owner_id: uuid.UUID, db: AsyncSession
+) -> Optional[CustomTemplateModel]:
+    """Fetch a template by id when it's owned by the caller OR is a shared org
+    template (``is_shared``). For clinician READ + the note-gen SELECTION paths
+    (context binding, video-import picker) so an admin-created shared template
+    the caller doesn't own still resolves. Edit/delete must keep using
+    :func:`get_owned` — a clinician must never mutate a shared row.
+
+    Narrower than :func:`get_by_id` (unscoped, trusted-callers-only): a *private*
+    template owned by someone else is still not returned."""
+    stmt = select(CustomTemplateModel).where(
+        CustomTemplateModel.id == template_id,
+        (CustomTemplateModel.owner_id == owner_id)
+        | (CustomTemplateModel.is_shared.is_(True)),
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def get_shared(
+    template_id: uuid.UUID, db: AsyncSession
+) -> Optional[CustomTemplateModel]:
+    """Fetch a shared org template by id (``is_shared=True``). For the admin
+    shared-templates surface (manage / delete). Returns None for a non-shared
+    row so that path can't touch a clinician's private template."""
+    stmt = select(CustomTemplateModel).where(
+        CustomTemplateModel.id == template_id,
+        CustomTemplateModel.is_shared.is_(True),
+    )
+    result = await db.execute(stmt)
+    return result.scalar_one_or_none()
+
+
+async def list_shared(db: AsyncSession) -> list[CustomTemplateModel]:
+    """Every shared org template (``is_shared=True``), newest first. For the
+    admin shared-templates management surface."""
+    stmt = (
+        select(CustomTemplateModel)
+        .where(CustomTemplateModel.is_shared.is_(True))
+        .order_by(CustomTemplateModel.updated_at.desc())
+    )
+    result = await db.execute(stmt)
+    return list(result.scalars().all())
+
+
 async def _flush_mapping_unique(db: AsyncSession, key: str) -> None:
     """``db.flush()`` that maps the (owner_id, key) unique-constraint
     violation to a friendly ``CustomTemplateError`` (→ 409).
@@ -231,7 +277,7 @@ async def _flush_mapping_unique(db: AsyncSession, key: str) -> None:
 
 
 async def create_for_owner(
-    owner_id: uuid.UUID, payload: dict, db: AsyncSession
+    owner_id: uuid.UUID, payload: dict, db: AsyncSession, *, is_shared: bool = False
 ) -> CustomTemplateModel:
     """Validate `payload` against the Template schema and persist.
 
@@ -239,6 +285,11 @@ async def create_for_owner(
     template's `key` doubles as the row's runtime key — if a custom
     template with that key already exists for the same owner, we 409
     (handled at the route layer via CustomTemplateError).
+
+    `is_shared=True` marks an org/shared template (tpl-04): it then appears
+    read-only in every clinician's library + picker via
+    ``list_for_owner(include_shared=True)`` and resolves at note generation via
+    ``get_owned_or_shared``. Only the admin shared-templates surface passes True.
     """
     try:
         template = Template.model_validate(payload)
@@ -258,7 +309,7 @@ async def create_for_owner(
         display_name=template.display_name,
         version=template.version,
         owner_id=owner_id,
-        is_shared=False,
+        is_shared=is_shared,
         content=template.model_dump_json(),
     )
     db.add(row)

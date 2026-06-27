@@ -109,6 +109,44 @@ async def test_putAcceptsOwnedCustomRef(
     assert row["template_key"] is None
 
 
+# ── get_owned_or_shared: owned OR shared, never another's private (tpl-04) ────
+
+
+async def test_get_owned_or_shared_resolves_shared_not_private(db_session) -> None:
+    """A shared org template resolves for a non-owner; another owner's PRIVATE
+    template does not; an owned one always does. This is the selection-path
+    security boundary that lets admin-shared templates reach clinicians without
+    leaking private ones."""
+    admin_id, _ = await seed_user(db_session)
+    clinician_id, _ = await seed_user(db_session)
+
+    shared = await custom_templates_service.create_for_owner(
+        admin_id, _template_payload("shared_org"), db_session, is_shared=True
+    )
+    private = await custom_templates_service.create_for_owner(
+        admin_id, _template_payload("admin_private"), db_session
+    )
+    await db_session.flush()
+
+    # Shared → visible to a non-owner clinician.
+    got = await custom_templates_service.get_owned_or_shared(
+        shared.id, clinician_id, db_session
+    )
+    assert got is not None and got.id == shared.id
+    # Another owner's PRIVATE template → NOT visible.
+    assert (
+        await custom_templates_service.get_owned_or_shared(
+            private.id, clinician_id, db_session
+        )
+        is None
+    )
+    # Owned → always visible to the owner.
+    owned = await custom_templates_service.get_owned_or_shared(
+        private.id, admin_id, db_session
+    )
+    assert owned is not None and owned.id == private.id
+
+
 # ── Non-owned / nonexistent ref rejected at PUT (SECURITY) ───────────────────
 
 

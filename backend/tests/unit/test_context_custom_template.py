@@ -91,7 +91,7 @@ async def test_owned_custom_ref_snapshots_custom_template_id(
     fake_row = SimpleNamespace(id=custom_id)
     get_owned_mock = AsyncMock(return_value=fake_row)
     monkeypatch.setattr(
-        "app.modules.custom_templates.service.get_owned", get_owned_mock
+        "app.modules.custom_templates.service.get_owned_or_shared", get_owned_mock
     )
 
     clinician = uuid.uuid4()
@@ -116,7 +116,7 @@ async def test_custom_ref_lookup_is_scoped_to_caller(
 
     get_owned_mock = AsyncMock(return_value=SimpleNamespace(id=custom_id))
     monkeypatch.setattr(
-        "app.modules.custom_templates.service.get_owned", get_owned_mock
+        "app.modules.custom_templates.service.get_owned_or_shared", get_owned_mock
     )
 
     clinician = uuid.uuid4()
@@ -124,7 +124,7 @@ async def test_custom_ref_lookup_is_scoped_to_caller(
         db, clinician, "new_patient", "ctx_aaaaaaaa"
     )
 
-    # get_owned(template_id, owner_id, db) — owner_id MUST be the caller.
+    # get_owned_or_shared(template_id, owner_id, db) — owner_id MUST be the caller.
     args = get_owned_mock.await_args.args
     assert args[0] == custom_id
     assert args[1] == clinician
@@ -141,7 +141,7 @@ async def test_deleted_or_unowned_custom_ref_coerces_to_default(
     db = _db_with_profile(_profile({"new_patient": [_custom_ctx(ref)]}))
 
     monkeypatch.setattr(
-        "app.modules.custom_templates.service.get_owned",
+        "app.modules.custom_templates.service.get_owned_or_shared",
         AsyncMock(return_value=None),
     )
 
@@ -164,7 +164,7 @@ async def test_malformed_custom_ref_coerces_without_db_lookup(
 
     get_owned_mock = AsyncMock(return_value=None)
     monkeypatch.setattr(
-        "app.modules.custom_templates.service.get_owned", get_owned_mock
+        "app.modules.custom_templates.service.get_owned_or_shared", get_owned_mock
     )
 
     key, cid, coerced = await resolve_context_template_key(
