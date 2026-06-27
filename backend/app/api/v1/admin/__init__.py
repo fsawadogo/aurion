@@ -25,6 +25,7 @@ from app.api.v1.admin import (
     prompt_studio,
     providers,
     sessions,
+    shared_templates,
     templates,
     users,
     video_import,
@@ -48,3 +49,4 @@ router.include_router(media.router)
 router.include_router(analytics.router)
 router.include_router(video_import.router)
 router.include_router(prompt_studio.router)
+router.include_router(shared_templates.router)

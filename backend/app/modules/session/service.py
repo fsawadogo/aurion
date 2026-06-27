@@ -244,10 +244,11 @@ async def _resolve_custom_template_ref(
         return None, None, True
 
     # Lazy import — same import-order rationale as the note_gen import
-    # above; the custom-templates service owns the ownership-scoped read.
-    from app.modules.custom_templates.service import get_owned
+    # above. owned-or-shared so a context pinned to an admin-created shared org
+    # template (tpl-04) resolves instead of coercing to the specialty default.
+    from app.modules.custom_templates.service import get_owned_or_shared
 
-    owned = await get_owned(ref_uuid, clinician_id, db)
+    owned = await get_owned_or_shared(ref_uuid, clinician_id, db)
     if owned is None:
         logger.info(
             "Context template_ref for clinician=%s coerced to specialty "

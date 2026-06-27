@@ -64,6 +64,19 @@ async def test_create_rejects_non_descriptive_system_prompt():
 
 
 @pytest.mark.asyncio
+async def test_create_for_owner_marks_shared_when_requested(monkeypatch) -> None:
+    """tpl-04: create_for_owner(..., is_shared=True) marks the row shared; the
+    default stays False so every existing caller is unchanged."""
+    db = AsyncMock()
+    monkeypatch.setattr(svc, "_find_by_owner_and_key", AsyncMock(return_value=None))
+    monkeypatch.setattr(svc, "_flush_mapping_unique", AsyncMock())
+    shared = await svc.create_for_owner(uuid.uuid4(), _tmpl(), db, is_shared=True)
+    assert shared.is_shared is True
+    default = await svc.create_for_owner(uuid.uuid4(), _tmpl(key="k2"), db)
+    assert default.is_shared is False
+
+
+@pytest.mark.asyncio
 async def test_create_rejects_empty_sections():
     db = AsyncMock()
     with pytest.raises(svc.CustomTemplateError, match="at least one section"):

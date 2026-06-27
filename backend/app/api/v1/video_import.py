@@ -183,13 +183,13 @@ async def create_import_session(
         # AI instructions). Ownership-scoped lookup; reject an unknown/foreign
         # id rather than silently falling back, since the upload UI only lists
         # owned templates (a miss means a stale pick or tampering).
-        from app.modules.custom_templates.service import get_owned
+        from app.modules.custom_templates.service import get_owned_or_shared
 
         try:
             ref = uuid.UUID(body.custom_template_id)
         except (ValueError, TypeError, AttributeError):
             raise HTTPException(status_code=404, detail="Custom template not found")
-        owned = await get_owned(ref, clinician_id, db)
+        owned = await get_owned_or_shared(ref, clinician_id, db)
         if owned is None:
             raise HTTPException(status_code=404, detail="Custom template not found")
         resolved_custom_template_id = owned.id
