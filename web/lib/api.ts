@@ -31,6 +31,7 @@ import type {
   ProviderQualityCompareResponse,
   AdminTemplateListResponse,
   AdoptionResponse,
+  CustomTemplate,
   OperationalAlert,
   ProviderUsageResponse,
   Session,
@@ -676,6 +677,32 @@ export async function putAdminTemplate(
 /** Delete the override — the template reverts to its disk default. */
 export async function revertAdminTemplate(key: string): Promise<void> {
   await fetchWithAuth(`/api/v1/admin/templates/${key}`, { method: "DELETE" });
+}
+
+/* ─── Shared / org templates (admin, tpl-04) ─────────────────────────────────
+ * Admin authors a custom template marked shared; it surfaces read-only in every
+ * clinician's library + the upload/visit picker (via list_for_owner). Returns
+ * the same CustomTemplate shape the clinician /me endpoints use. */
+
+export async function listSharedTemplates(): Promise<CustomTemplate[]> {
+  const res = await fetchWithAuth("/api/v1/admin/shared-templates");
+  return res.json();
+}
+
+export async function createSharedTemplate(
+  template: TemplateDefinition,
+): Promise<CustomTemplate> {
+  const res = await fetchWithAuth("/api/v1/admin/shared-templates", {
+    method: "POST",
+    body: JSON.stringify({ template }),
+  });
+  return res.json();
+}
+
+export async function deleteSharedTemplate(id: string): Promise<void> {
+  await fetchWithAuth(`/api/v1/admin/shared-templates/${id}`, {
+    method: "DELETE",
+  });
 }
 
 /**

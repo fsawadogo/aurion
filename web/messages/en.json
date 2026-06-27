@@ -41,6 +41,20 @@
       "submit": "Create"
     }
   },
+  "AdminSharedTemplates": {
+    "eyebrow": "Admin workspace",
+    "title": "Shared templates",
+    "description": "Author a note template and share it with every clinician. Shared templates appear in their Templates and pickers, ready to apply.",
+    "createButton": "New shared template",
+    "createHint": "Build the note's structure and, optionally, its AI instructions. Every clinician will be able to apply it (read-only).",
+    "save": "Share with clinicians",
+    "cancel": "Cancel",
+    "delete": "Delete shared template",
+    "empty": "No shared templates yet — create one to share with all clinicians.",
+    "loadError": "Couldn't load shared templates.",
+    "saveError": "Couldn't save the shared template.",
+    "deleteError": "Couldn't delete the shared template."
+  },
   "Sidebar": {
     "portal": "Portal",
     "admin": "Admin",
@@ -60,6 +74,7 @@
       "myActivity": "My Activity",
       "aiPrompts": "AI Prompts",
       "promptStudio": "Prompt Studio",
+      "sharedTemplates": "Shared Templates",
       "featureFlags": "Feature Flags",
       "providers": "AI Providers",
       "capturedMedia": "Captured Media",
