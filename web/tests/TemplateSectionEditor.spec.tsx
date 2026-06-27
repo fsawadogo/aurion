@@ -110,6 +110,17 @@ describe("template editor helpers", () => {
     expect(n.sections[0].id).toBe("s");
     expect(n.sections[0].visual_trigger_keywords).toEqual(["a", "b"]);
   });
+
+  it("blankTemplate seeds system_prompt; normalizeTemplate trims it / nulls when blank", () => {
+    expect(blankTemplate().system_prompt).toBe("");
+    expect(
+      normalizeTemplate({ ...good, system_prompt: "  Describe only.  " }).system_prompt,
+    ).toBe("Describe only.");
+    expect(
+      normalizeTemplate({ ...good, system_prompt: "   " }).system_prompt,
+    ).toBeNull();
+    expect(normalizeTemplate(good).system_prompt).toBeNull();
+  });
 });
 
 function Harness({ initial }: { initial?: TemplateDefinition }) {
@@ -139,5 +150,15 @@ describe("TemplateSectionEditor", () => {
     // Remove the second section → back to one.
     fireEvent.click(screen.getByTestId("section-remove-1"));
     expect(screen.queryByTestId("section-row-1")).toBeNull();
+  });
+
+  it("edits the AI instructions field", () => {
+    render(withIntl(<Harness />));
+    const ta = screen.getByTestId("template-system-prompt") as HTMLTextAreaElement;
+    expect(ta.value).toBe("");
+    fireEvent.change(ta, { target: { value: "Describe only what was observed." } });
+    expect(
+      (screen.getByTestId("template-system-prompt") as HTMLTextAreaElement).value,
+    ).toBe("Describe only what was observed.");
   });
 });

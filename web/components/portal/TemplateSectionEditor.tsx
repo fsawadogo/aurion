@@ -40,6 +40,7 @@ export function blankTemplate(): TemplateDefinition {
     key: "",
     display_name: "",
     version: "1.0",
+    system_prompt: "",
     sections: [
       { id: "", title: "", required: true, visual_trigger_keywords: [], description: "" },
     ],
@@ -53,6 +54,9 @@ export function normalizeTemplate(t: TemplateDefinition): TemplateDefinition {
     key: t.key.trim(),
     display_name: t.display_name.trim(),
     version: t.version.trim() || "1.0",
+    // Empty / whitespace → null so the backend treats it as "no instructions"
+    // (structure only), matching the descriptive-mode write gate.
+    system_prompt: t.system_prompt?.trim() || null,
     sections: t.sections.map((s) => ({
       ...s,
       id: s.id.trim(),
@@ -195,6 +199,27 @@ export default function TemplateSectionEditor({
             {t("keyHint")}
           </span>
         </div>
+      </div>
+
+      {/* ── AI instructions (optional, tpl-01) ────────────────────────── */}
+      <div>
+        <label className="block">
+          <span className={fieldLabel}>{t("aiInstructions")}</span>
+          <textarea
+            className="form-input w-full resize-y font-mono"
+            rows={4}
+            value={value.system_prompt ?? ""}
+            onChange={(e) => setMeta({ system_prompt: e.target.value })}
+            placeholder={t("aiInstructionsPlaceholder")}
+            disabled={disabled}
+            maxLength={5000}
+            aria-describedby="tmpl-ai-hint"
+            data-testid="template-system-prompt"
+          />
+        </label>
+        <span id="tmpl-ai-hint" className="mt-1 block text-aurion-caption text-navy-400">
+          {t("aiInstructionsHint")}
+        </span>
       </div>
 
       {/* ── Sections ──────────────────────────────────────────────────── */}
