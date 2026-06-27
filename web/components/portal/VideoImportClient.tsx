@@ -11,7 +11,7 @@
 
 import { Film, ShieldCheck, UploadCloud } from "lucide-react";
 import { useTranslations } from "next-intl";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -26,10 +26,12 @@ import {
   completeVideoImportMultipart,
   createVideoImport,
   getVideoImportStatus,
+  listMyCustomTemplates,
   processVideoImport,
   startVideoImportMultipart,
   type VideoImportStatus,
 } from "@/lib/portal-api";
+import type { CustomTemplate } from "@/types";
 
 const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 // Above this, use S3 multipart (resumable per-part) instead of a single PUT.
@@ -171,6 +173,8 @@ export default function VideoImportClient({
   const [encounterType, setEncounterType] = useState("doctor_patient");
   const [language, setLanguage] = useState("en");
   const [consent, setConsent] = useState(false);
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
+  const [customTemplateId, setCustomTemplateId] = useState("");
 
   const [phase, setPhase] = useState<Phase>("form");
   const [uploadPct, setUploadPct] = useState(0);
@@ -178,6 +182,22 @@ export default function VideoImportClient({
   const [error, setError] = useState<string | null>(null);
   const dragRef = useRef(false);
   const [, forceDrag] = useState(0);
+
+  // Clinician-only: list the clinician's custom templates so they can apply one
+  // (its structure + AI instructions) to the imported note. Admin/eval uploads
+  // use the specialty default. Best-effort — a fetch failure just hides the picker.
+  useEffect(() => {
+    if (surface !== "clinician") return;
+    let alive = true;
+    listMyCustomTemplates()
+      .then((rows) => {
+        if (alive) setCustomTemplates(rows);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [surface]);
 
   const pickFile = useCallback((f: File | null) => {
     setError(null);
@@ -239,6 +259,7 @@ export default function VideoImportClient({
         specialty,
         encounter_type: encounterType,
         output_language: language,
+        custom_template_id: customTemplateId || null,
         consent_attested: true,
         consent_method: "attested",
       });
@@ -354,6 +375,26 @@ export default function VideoImportClient({
                   <option value="fr">{t("form.langFr")}</option>
                 </select>
               </label>
+              {surface === "clinician" && customTemplates.length > 0 && (
+                <label className="block text-sm">
+                  <span className="mb-1 block font-medium text-navy-700">
+                    {t("form.template")}
+                  </span>
+                  <select
+                    className="form-input"
+                    value={customTemplateId}
+                    onChange={(e) => setCustomTemplateId(e.target.value)}
+                    data-testid="video-import-template"
+                  >
+                    <option value="">{t("form.templateDefault")}</option>
+                    {customTemplates.map((tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.display_name}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              )}
             </div>
           </Card>
 

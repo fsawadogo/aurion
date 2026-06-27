@@ -76,6 +76,56 @@ async def test_create_sets_import_source_and_audits_attestation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_create_applies_owned_custom_template() -> None:
+    """tpl-03: an owned custom_template_id is validated and forwarded to
+    create_session (so the upload uses that template's structure + AI
+    instructions)."""
+    cid = uuid.uuid4()
+    body = vi.CreateVideoImportRequest(
+        specialty="general", consent_attested=True, custom_template_id=str(cid)
+    )
+    user = SimpleNamespace(user_id=uuid.uuid4())
+    db = AsyncMock()
+    session = SimpleNamespace(id=uuid.uuid4(), import_source=None)
+    job = SimpleNamespace(id=uuid.uuid4())
+
+    with patch.object(vi, "create_session", AsyncMock(return_value=session)) as create, \
+        patch.object(vi, "confirm_consent", AsyncMock()), \
+        patch.object(vi, "write_audit", AsyncMock()), \
+        patch.object(vi.jobs, "create_job", AsyncMock(return_value=job)), \
+        patch.object(
+            vi, "generate_presigned_evidence_url", MagicMock(return_value="https://put")
+        ), \
+        patch(
+            "app.modules.custom_templates.service.get_owned",
+            AsyncMock(return_value=SimpleNamespace(id=cid)),
+        ):
+        await vi.create_video_import(body, None, user, db)
+
+    assert create.call_args.kwargs["custom_template_id"] == cid
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_unowned_custom_template() -> None:
+    """tpl-03: a custom_template_id not owned by the clinician → 404, and no
+    session is created."""
+    body = vi.CreateVideoImportRequest(
+        specialty="general", consent_attested=True, custom_template_id=str(uuid.uuid4())
+    )
+    user = SimpleNamespace(user_id=uuid.uuid4())
+    db = AsyncMock()
+    with patch.object(vi, "create_session", AsyncMock()) as create, \
+        patch(
+            "app.modules.custom_templates.service.get_owned",
+            AsyncMock(return_value=None),
+        ):
+        with pytest.raises(HTTPException) as exc:
+            await vi.create_video_import(body, None, user, db)
+    assert exc.value.status_code == 404
+    create.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_admin_create_rejects_missing_consent() -> None:
     from app.api.v1.admin import video_import as avi
 

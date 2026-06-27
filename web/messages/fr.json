@@ -1328,6 +1328,8 @@
       "language": "Langue de la note",
       "langEn": "Anglais",
       "langFr": "Français",
+      "template": "Modèle de note",
+      "templateDefault": "Par défaut (selon la spécialité)",
       "submit": "Téléverser et traiter"
     },
     "consent": {

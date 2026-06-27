@@ -862,6 +862,9 @@ export interface VideoImportCreateBody {
   specialty: string;
   encounter_type: string;
   output_language: string;
+  /** Optional custom template (tpl-03) to apply — its structure + any AI
+   *  instructions. Omit / null = the specialty default. */
+  custom_template_id?: string | null;
   /** Required-true: the clinician attests consent was obtained at the
    *  original recording (the import substitute for the live consent gate). */
   consent_attested: true;
