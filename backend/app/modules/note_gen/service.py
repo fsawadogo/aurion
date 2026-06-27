@@ -891,7 +891,7 @@ async def generate_stage1_note(
     # clinician_id always use the default (defensive — shouldn't happen
     # in production but the helper handles it).
     system_prompt = await assemble_prompt_for_session(
-        "note_generation", session_id, db
+        "note_generation", session_id, db, template_prompt=template.system_prompt
     )
 
     # #61, full slice — load prior-encounter context for this clinician

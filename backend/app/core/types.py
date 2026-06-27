@@ -50,6 +50,13 @@ class Template(BaseModel):
     display_name: str
     version: str = "1.0"
     sections: list[TemplateSection] = Field(default_factory=list)
+    # Optional note-generation instructions carried by the template (tpl-01).
+    # When set, this REPLACES the registry default note-gen system prompt for
+    # notes produced with this template — slotted between a clinician's personal
+    # override and an admin publication in `assemble_prompt`. None (or empty) =
+    # the template shapes structure only. Validated against the descriptive-mode
+    # gate (`validate_user_prompt`) whenever a custom template is written.
+    system_prompt: Optional[str] = None
 
 
 # ── Note Types ─────────────────────────────────────────────────────────────
