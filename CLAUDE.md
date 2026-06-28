@@ -104,12 +104,17 @@ Universal SwiftUI app — full feature parity iPhone + iPad. Single codebase. iO
 
 ## The Single Most Important Constraint
 
-**Aurion MVP operates exclusively in Descriptive Mode.**
+**Aurion documents in Descriptive Mode by default. Grounded Synthesis Mode (v3.2) is the only sanctioned way to go beyond it — and it is OFF until clinical + regulatory sign-off.**
 
+**Descriptive Mode** — default; `feature_flags.grounded_synthesis_enabled = false`. Describe only what was captured; do not interpret, diagnose, or infer.
 ✅ `"Patient demonstrated restricted internal rotation at approximately 20 degrees on the right side."`
 ❌ `"Restricted internal rotation at 20 degrees is consistent with rotator cuff pathology. Consider imaging."`
 
-**Every prompt you write for any AI model call must enforce this boundary. If you are unsure — it crosses the line. Stop and rewrite.**
+**Grounded Synthesis Mode** — v3.2; `feature_flags.grounded_synthesis_enabled = true`, shipping **dark** until sign-off (#551, GS-9). The note MAY synthesize an Assessment & Plan from the captured findings **only if every synthesized statement cites the source segment(s) it rests on**.
+✅ (grounded) `"Working assessment: rotator cuff pathology — supported by restricted internal rotation ~20° (seg_014) and positive Hawkins test (seg_021)."` — every clause cited.
+❌ (grounded) `"Consider rotator cuff pathology."` with no cited source — **ungrounded, still forbidden.**
+
+**Ungrounded interpretation, uncited conclusions, and fabrication are forbidden in BOTH modes.** The flag is OFF by default; flipping it ON is gated on GS-9. Until then, every AI prompt must enforce Descriptive Mode. Even with it ON, no statement may be ungrounded. If you are unsure — it crosses the line. Stop and rewrite.
 
 ---
 
@@ -461,7 +466,7 @@ Web portal: `cd web && npm run dev` → `localhost:3000`
 
 ## What NOT to Build
 
-Post-Op/Procedural Mode · EMR/FHIR integration · LLM fine-tuning · French support · Admin dashboard · Clinician frame viewer · Voice record commands · Interpretative AI · Android · Speaker diarization · Diagnostic inference · Face enrollment · Multi-physician voice profiles · Cloud voice verification
+Post-Op/Procedural Mode · EMR/FHIR integration · LLM fine-tuning · French support · Admin dashboard · Clinician frame viewer · Voice record commands · Ungrounded interpretation (uncited inference/diagnosis is forbidden in both modes; grounded, cited A&P synthesis is sanctioned only via Grounded Synthesis Mode behind its flag + GS-9 sign-off) · Android · Speaker diarization · Face enrollment · Multi-physician voice profiles · Cloud voice verification
 
 **If you are building any of these — stop and re-read this file.**
 
