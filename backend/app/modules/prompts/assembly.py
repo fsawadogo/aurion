@@ -46,7 +46,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.models import PromptOverrideModel
 from app.core.types import PublicationScope
+from app.modules.config.appconfig_client import get_config
 from app.modules.prompts.registry import PROMPTS
+from app.modules.providers.note_gen.shared import NOTE_GEN_GROUNDED_SYSTEM_PROMPT
+
+
+def resolve_base_system_prompt(prompt_id: str) -> str:
+    """The registry default for ``prompt_id``, with Grounded Synthesis Mode
+    (#552, GS-1) applied.
+
+    When ``feature_flags.grounded_synthesis_enabled`` is ON, the
+    ``note_generation`` base swaps to the grounded variant that permits cited
+    A&P synthesis. When OFF (the default), this is byte-identical to
+    ``PROMPTS[prompt_id].system_prompt`` for EVERY prompt. Only
+    ``note_generation`` is ever swapped — vision / reconcile / preview prompts
+    stay literal (the GS-8 keep-list).
+
+    This is the single base-default read site for the prompt cascade; an
+    explicit override / published / template prompt still wins over it
+    (resolved before this is reached).
+    """
+    base = PROMPTS[prompt_id].system_prompt
+    if (
+        prompt_id == "note_generation"
+        and get_config().feature_flags.grounded_synthesis_enabled
+    ):
+        return NOTE_GEN_GROUNDED_SYSTEM_PROMPT
+    return base
 
 
 async def _get_user_prompt(
@@ -336,7 +362,7 @@ async def assemble_prompt(
     published = await _get_published_prompt(db, owner_id, prompt_id)
     if published is not None:
         return published
-    return PROMPTS[prompt_id].system_prompt
+    return resolve_base_system_prompt(prompt_id)
 
 
 async def assemble_prompt_for_session(
@@ -380,7 +406,7 @@ async def assemble_prompt_for_session(
             else uuid.UUID(str(session_id))
         )
     except (ValueError, AttributeError):
-        return template_prompt or PROMPTS[prompt_id].system_prompt
+        return template_prompt or resolve_base_system_prompt(prompt_id)
     result = await db.execute(
         select(SessionModel.clinician_id).where(SessionModel.id == sid)
     )
