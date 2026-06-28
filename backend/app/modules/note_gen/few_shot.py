@@ -44,42 +44,58 @@ import json
 import logging
 from pathlib import Path
 
+from app.modules.config.appconfig_client import get_config
+
 logger = logging.getLogger("aurion.note_gen.few_shot")
 
 _EXAMPLES_DIR = Path(__file__).parent / "templates"
+# Cache keyed by FILE (descriptive vs grounded), not by the flag-dependent
+# combined result, so toggling the flag never serves a stale combination.
 _cache: dict[str, list[dict]] = {}
 
 
-def get_few_shot_examples(specialty_key: str) -> list[dict]:
-    """Return cached examples for ``specialty_key``. Empty list if no
-    examples file exists or the file is malformed (logged, never raises).
-    """
-    if specialty_key in _cache:
-        return _cache[specialty_key]
-
-    path = _EXAMPLES_DIR / f"{specialty_key}.examples.json"
+def _load_examples_file(filename: str) -> list[dict]:
+    """Load + cache one examples file. Empty list if absent/malformed
+    (logged, never raises)."""
+    if filename in _cache:
+        return _cache[filename]
+    path = _EXAMPLES_DIR / filename
     if not path.exists():
-        _cache[specialty_key] = []
+        _cache[filename] = []
         return []
-
     try:
         raw = json.loads(path.read_text(encoding="utf-8"))
         examples = raw.get("examples", [])
         if not isinstance(examples, list):
             raise ValueError("'examples' must be a list")
-        _cache[specialty_key] = examples
-        logger.info(
-            "Loaded %d few-shot example(s) for specialty=%s",
-            len(examples), specialty_key,
-        )
+        _cache[filename] = examples
+        logger.info("Loaded %d few-shot example(s) from %s", len(examples), filename)
         return examples
     except Exception as exc:  # noqa: BLE001 — defensive against operator-authored JSON
         logger.error(
-            "Failed to load few-shot examples for %s: %s — proceeding without",
-            specialty_key, exc,
+            "Failed to load few-shot examples from %s: %s — proceeding without",
+            filename, exc,
         )
-        _cache[specialty_key] = []
+        _cache[filename] = []
         return []
+
+
+def get_few_shot_examples(specialty_key: str) -> list[dict]:
+    """Few-shot examples for ``specialty_key``. Empty list if none exist.
+
+    Grounded Synthesis Mode (#552, GS-2): when
+    ``feature_flags.grounded_synthesis_enabled`` is ON, the grounded examples
+    (``{key}.grounded.examples.json``) — which model cited A&P SYNTHESIS — are
+    appended to the descriptive set. OFF (the default) returns only the
+    descriptive examples, byte-identical to pre-v3.2.
+    """
+    descriptive = _load_examples_file(f"{specialty_key}.examples.json")
+    if not get_config().feature_flags.grounded_synthesis_enabled:
+        # Return the cached object directly — identity-stable + byte-identical
+        # to pre-v3.2 (the OFF path must not change existing behaviour).
+        return descriptive
+    grounded = _load_examples_file(f"{specialty_key}.grounded.examples.json")
+    return descriptive + grounded if grounded else descriptive
 
 
 def render_examples_block(examples: list[dict]) -> str:
