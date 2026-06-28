@@ -1,0 +1,47 @@
+{
+  "examples": [
+    {
+      "description": "sacral wound — grounded assessment synthesized from wound-bed + exudate + periwound findings, each cited (Grounded Synthesis Mode, v3.2)",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 6000, "text": "Let's examine the sacral wound. It measures four by two by half a centimetre."},
+        {"id": "seg_002", "start_ms": 6000, "end_ms": 14000, "text": "The wound bed is about eighty percent granulation with twenty percent slough. Scant serous exudate, no odour."},
+        {"id": "seg_003", "start_ms": 14000, "end_ms": 21000, "text": "Periwound skin is intact, no erythema or maceration."},
+        {"id": "seg_004", "start_ms": 21000, "end_ms": 29000, "text": "Continue the current foam dressing and reassess in one week."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "assessment",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_a1",
+                "text": "Working assessment: clean, predominantly granulating sacral wound (4 x 2 x 0.5 cm) with minor slough, scant serous exudate, and intact periwound skin.",
+                "source_type": "transcript",
+                "source_id": "seg_002",
+                "source_quote": "The wound bed is about eighty percent granulation with twenty percent slough. Scant serous exudate, no odour.",
+                "additional_sources": [
+                  {"source_id": "seg_001", "source_quote": "It measures four by two by half a centimetre."},
+                  {"source_id": "seg_003", "source_quote": "Periwound skin is intact, no erythema or maceration."}
+                ]
+              }
+            ]
+          },
+          {
+            "id": "plan",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_p1",
+                "text": "Continue current foam dressing; reassess in one week.",
+                "source_type": "transcript",
+                "source_id": "seg_004",
+                "source_quote": "Continue the current foam dressing and reassess in one week."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

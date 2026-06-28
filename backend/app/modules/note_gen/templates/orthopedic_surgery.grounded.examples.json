@@ -1,0 +1,46 @@
+{
+  "examples": [
+    {
+      "description": "left knee — grounded assessment synthesized from a special test + MRI, each cited (Grounded Synthesis Mode, v3.2)",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 5000, "text": "Let's look at that left knee. I'm going to test the ligaments."},
+        {"id": "seg_002", "start_ms": 5000, "end_ms": 12000, "text": "Lachman is positive on the left with a soft endpoint, and the anterior drawer is positive too."},
+        {"id": "seg_003", "start_ms": 12000, "end_ms": 20000, "text": "The MRI of the left knee shows a complete tear of the anterior cruciate ligament."},
+        {"id": "seg_004", "start_ms": 20000, "end_ms": 28000, "text": "So we'll set you up with orthopedics for a reconstruction discussion, and start prehab physiotherapy in the meantime."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "assessment",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_a1",
+                "text": "Working assessment: complete tear of the left anterior cruciate ligament.",
+                "source_type": "transcript",
+                "source_id": "seg_002",
+                "source_quote": "Lachman is positive on the left with a soft endpoint, and the anterior drawer is positive too.",
+                "additional_sources": [
+                  {"source_id": "seg_003", "source_quote": "The MRI of the left knee shows a complete tear of the anterior cruciate ligament."}
+                ]
+              }
+            ]
+          },
+          {
+            "id": "plan",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_p1",
+                "text": "Refer to orthopedics for ACL reconstruction discussion; begin prehabilitation physiotherapy in the interim.",
+                "source_type": "transcript",
+                "source_id": "seg_004",
+                "source_quote": "we'll set you up with orthopedics for a reconstruction discussion, and start prehab physiotherapy in the meantime."
+              }
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
