@@ -39,6 +39,8 @@ from dataclasses import dataclass
 from enum import StrEnum
 from typing import Final
 
+from app.modules.config.appconfig_client import get_config
+
 # ── Limits ──────────────────────────────────────────────────────────────────
 
 #: Hard cap on a saved user prompt's length, in characters. Raised from
@@ -150,6 +152,64 @@ DESCRIPTIVE_ANCHORS_REQUIRED: Final[tuple[tuple[str, ...], ...]] = (
 )
 
 
+# ── Grounded Synthesis Mode sets (v3.2, #552 / GS-4) ────────────────────────
+#
+# Selected by ``validate_user_prompt`` ONLY when
+# feature_flags.grounded_synthesis_enabled is ON. The boundary moves from
+# "describe, never interpret" to "synthesize, but stay grounded": a saved
+# prompt MAY instruct diagnosis / plan / treatment reasoning, provided it also
+# mandates grounding (cite every claim to its source). Default OFF → the
+# descriptive sets above apply, byte-identical to pre-v3.2.
+
+# Injection / override / role-flip vectors stay banned in BOTH modes — these
+# are attacks on the prompt itself, not clinical-reasoning instructions. The
+# descriptive-only bans (diagnose / interpret / recommend-treatment) are
+# intentionally absent here: grounded synthesis permits them when cited.
+GROUNDED_BANNED_PHRASES: Final[tuple[str, ...]] = (
+    "ignore previous instructions",
+    "ignore the above",
+    "disregard prior rules",
+    "system prompt override",
+    "your new role is",
+    "override the system",
+    "replace the system prompt",
+    # Ungrounded synthesis is still forbidden even in grounded mode. (Note:
+    # bare "fabricate" is intentionally NOT here — it would false-match the
+    # legitimate instruction "never fabricate"; the cite-skipping phrases below
+    # are the precise ban.)
+    "ignore the sources",
+    "without citing",
+    "you do not need to cite",
+    "no need to cite",
+    "do not cite",
+)
+
+GROUNDED_ANCHORS_REQUIRED: Final[tuple[tuple[str, ...], ...]] = (
+    # Group 0 — documentation/synthesis intent.
+    (
+        "describe",
+        "document",
+        "record",
+        "report what",
+        "synthesize",
+        "synthesise",
+        "assessment and plan",
+    ),
+    # Group 1 — GROUNDING requirement (replaces the descriptive "do not
+    # interpret" group): the prompt must require every statement to be tied to
+    # its source. This is what keeps synthesis grounded rather than speculative.
+    (
+        "cite",
+        "grounded",
+        "traceable",
+        "source id",
+        "source_id",
+        "every claim",
+        "supported by",
+    ),
+)
+
+
 # ── Result shape ────────────────────────────────────────────────────────────
 
 
@@ -192,6 +252,19 @@ class ValidationResult:
 
 
 # ── Public API ──────────────────────────────────────────────────────────────
+
+
+def _active_safety_sets() -> tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]:
+    """The (banlist, anchor-groups) the validators enforce right now.
+
+    Grounded Synthesis Mode (#552, GS-4): when
+    feature_flags.grounded_synthesis_enabled is ON, the grounding sets apply
+    (synthesis allowed, grounding required, injection still banned). OFF (the
+    default) returns the descriptive sets, byte-identical to pre-v3.2.
+    """
+    if get_config().feature_flags.grounded_synthesis_enabled:
+        return GROUNDED_BANNED_PHRASES, GROUNDED_ANCHORS_REQUIRED
+    return BANNED_PHRASES, DESCRIPTIVE_ANCHORS_REQUIRED
 
 
 def validate_user_prompt(text: str) -> ValidationResult:
@@ -245,16 +318,17 @@ def validate_user_prompt(text: str) -> ValidationResult:
                 f"maximum is {USER_PROMPT_MAX_LENGTH}."
             ),
         )
+    banned_phrases, anchors_required = _active_safety_sets()
     lowered = stripped.lower()
-    for phrase in BANNED_PHRASES:
+    for phrase in banned_phrases:
         if phrase in lowered:
             return ValidationResult(
                 code=ValidationCode.BANNED_PHRASE,
                 message=(
                     "Your prompt contains a phrase that would disable "
-                    "Aurion's descriptive-mode safety boundary. Rephrase "
-                    "without instructing the AI to interpret, diagnose, "
-                    "recommend treatment, or override prior rules."
+                    "Aurion's safety boundary. Rephrase without instructing "
+                    "the AI to override prior rules or produce ungrounded "
+                    "(uncited) conclusions."
                 ),
                 matched_phrase=phrase,
             )
@@ -263,7 +337,7 @@ def validate_user_prompt(text: str) -> ValidationResult:
     # boundary entirely inside the physician's text; this is what
     # preserves CLAUDE.md's "describe, do not interpret" guarantee when
     # the base system prompt is no longer concatenated underneath.
-    for group_idx, group in enumerate(DESCRIPTIVE_ANCHORS_REQUIRED):
+    for group_idx, group in enumerate(anchors_required):
         if not any(phrase in lowered for phrase in group):
             return ValidationResult(
                 code=ValidationCode.MISSING_DESCRIPTIVE_ANCHOR,
@@ -329,8 +403,9 @@ def validate_specialty_guidance(text: str) -> ValidationResult:
                 f"maximum is {SPECIALTY_GUIDANCE_MAX_LENGTH}."
             ),
         )
+    banned_phrases, _ = _active_safety_sets()
     lowered = stripped.lower()
-    for phrase in BANNED_PHRASES:
+    for phrase in banned_phrases:
         if phrase in lowered:
             return ValidationResult(
                 code=ValidationCode.BANNED_PHRASE,
