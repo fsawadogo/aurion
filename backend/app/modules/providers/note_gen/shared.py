@@ -48,6 +48,20 @@ NOTE_RESPONSE_SCHEMA: dict = {
                                 },
                                 "source_id": {"type": "string"},
                                 "source_quote": {"type": "string"},
+                                # GS-6 (#552): OPTIONAL extra anchors for a
+                                # synthesized A&P claim resting on several
+                                # findings. Absent for descriptive claims.
+                                "additional_sources": {
+                                    "type": "array",
+                                    "items": {
+                                        "type": "object",
+                                        "properties": {
+                                            "source_id": {"type": "string"},
+                                            "source_quote": {"type": "string"},
+                                        },
+                                        "required": ["source_id", "source_quote"],
+                                    },
+                                },
                             },
                             "required": [
                                 "id",
@@ -272,6 +286,17 @@ def parse_note_response(
                 source_type=c.get("source_type", "transcript"),
                 source_id=c.get("source_id", ""),
                 source_quote=c.get("source_quote", ""),
+                # GS-6: extra anchors for a synthesized claim. Tolerant of
+                # missing/empty entries (a model that omits source_id in an
+                # extra anchor shouldn't crash parsing — drop those).
+                additional_sources=[
+                    {
+                        "source_id": s.get("source_id", ""),
+                        "source_quote": s.get("source_quote", ""),
+                    }
+                    for s in c.get("additional_sources", [])
+                    if isinstance(s, dict) and s.get("source_id")
+                ],
             )
             for i, c in enumerate(raw_section.get("claims", []))
         ]
