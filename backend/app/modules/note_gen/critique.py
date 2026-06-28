@@ -92,8 +92,18 @@ def _build_critique_prompt(note: Note, transcript: Transcript) -> str:
             note_dump.append("  (no claims)")
         for claim in section.claims:
             anchor_ok = claim.source_id in valid_segment_ids
+            meta = f"src={claim.source_id} valid={anchor_ok}"
+            # GS-8 (#552): a SYNTHESIZED claim may cite extra anchors
+            # (additional_sources). Surface them + their validity so the critic
+            # drops a claim whose extra anchor is fabricated (not a real
+            # segment) — grounding must hold for EVERY cited source, not just
+            # the primary.
+            extra_ids = [s.source_id for s in claim.additional_sources]
+            if extra_ids:
+                extras_ok = all(sid in valid_segment_ids for sid in extra_ids)
+                meta += f" extra_srcs={extra_ids} extra_valid={extras_ok}"
             note_dump.append(
-                f"  - {claim.id} [src={claim.source_id} valid={anchor_ok}]: "
+                f"  - {claim.id} [{meta}]: "
                 f'"{claim.text}"  '
                 f'(source_quote: "{claim.source_quote or ""}")'
             )
