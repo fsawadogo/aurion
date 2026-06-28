@@ -543,6 +543,8 @@
     "sectionCardsHint": "These four cards appear under the SOAP note inside the iOS app. Each one is post-pilot scaffolding — leave hidden until the matching backend goes live. Changes apply within ~30 seconds across every iPhone.",
     "aiPrompts": "AI Prompts (web)",
     "aiPromptsHint": "Admin controls for the AI Prompts experience — Prompt Studio and what clinicians see. Toggle here; access stays role-gated. Changes apply within ~30 seconds.",
+    "groundedSynthesis": "Grounded Synthesis (v3.2)",
+    "groundedSynthesisHint": "Lets the note synthesize a cited Assessment & Plan from the captured findings instead of describe-only. OFF by default — keep it off until clinical + regulatory sign-off (#551). Even when on, every statement must cite its source. Changes apply within ~30 seconds.",
     "flags": {
       "orders_card_enabled": {
         "name": "Orders",
@@ -567,6 +569,10 @@
       "clinician_prompts_note_only": {
         "name": "Clinician note-only prompts",
         "description": "Clinicians see only the Note-generation prompt on their AI Prompts page; vision, extraction, and preview prompts are hidden. Support roles always see all."
+      },
+      "grounded_synthesis_enabled": {
+        "name": "Grounded synthesis",
+        "description": "Generate a synthesized, fully-cited Assessment & Plan (every statement traceable to its source) instead of describe-only. Leave OFF until clinical + regulatory sign-off."
       }
     }
   },

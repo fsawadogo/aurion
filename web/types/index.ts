@@ -438,6 +438,9 @@ export interface FeatureFlags {
   video_import_enabled: boolean;
   video_import_drop_zero_face_frames: boolean;
   specialty_style_in_prompt_enabled: boolean;
+  // v3.2 Grounded Synthesis Mode (#552) — gates cited A&P synthesis. Dark/OFF
+  // until clinical + regulatory sign-off (#551).
+  grounded_synthesis_enabled: boolean;
   // Web-portal workspace tool — gates the Prompt Studio admin surface.
   prompt_studio_enabled: boolean;
   // Prompt Studio role allowlist. Server-authoritative (AppConfig-only, not a
