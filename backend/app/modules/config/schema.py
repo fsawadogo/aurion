@@ -244,6 +244,16 @@ class FeatureFlagsConfig(BaseModel):
     # AppConfig (or POST /admin/feature-flags) without a redeploy. When OFF
     # the Stage 1 user prompt is byte-identical to the pre-feature build.
     specialty_style_in_prompt_enabled: bool = False
+    # ── Grounded Synthesis Mode (v3.2, #552) ──────────────────────────────
+    # Master gate for moving from descriptive-only output to GROUNDED
+    # synthesis of the Assessment & Plan — synthesis allowed iff every
+    # statement cites its source segment(s). Ships DARK and stays OFF until
+    # clinical + regulatory sign-off (#551, GS-9). When OFF, the Stage 1
+    # prompt, the safety validator anchors, and the specialty style guidance
+    # all stay in their descriptive form (byte-identical to pre-v3.2). This
+    # flag is the single switch the later GS slices (GS-1/3/4) read; adding it
+    # here changes NO behaviour on its own.
+    grounded_synthesis_enabled: bool = False
     # ── Prompt Studio (create & share, #524) ──────────────────────────────
     # Master gate for the admin Prompt Studio (/api/v1/admin/prompt-studio):
     # authoring + publishing global prompts. Ships DARK — every Studio route

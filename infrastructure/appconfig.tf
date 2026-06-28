@@ -240,6 +240,12 @@ resource "aws_appconfig_configuration_profile" "main" {
             # additionalProperties = false — the backend Pydantic schema
             # defaults it false (specialty layer stays dark until enabled).
             specialty_style_in_prompt_enabled = { type = "boolean" }
+            # Grounded Synthesis Mode (v3.2, #552). MUST be here — the backend
+            # dumps the full FeatureFlagsConfig on every save and
+            # additionalProperties = false rejects unknown keys (cf. #530). The
+            # backend Pydantic schema defaults it false (mode stays dark until
+            # GS-9 sign-off).
+            grounded_synthesis_enabled = { type = "boolean" }
             # On-device visual measurement gate (#63). Had drifted out of this
             # validator — with additionalProperties = false that rejected EVERY
             # feature-flags hosted-version write (the backend publishes the full
