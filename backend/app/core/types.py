@@ -61,6 +61,21 @@ class Template(BaseModel):
 
 # ── Note Types ─────────────────────────────────────────────────────────────
 
+class ClaimSource(BaseModel):
+    """One additional grounding anchor for a claim (#552, GS-6).
+
+    A descriptive claim cites a single source via ``source_id`` /
+    ``source_quote`` on ``NoteClaim``. A SYNTHESIZED Assessment & Plan claim
+    (Grounded Synthesis Mode) may rest on several findings — the extra anchors
+    live in ``NoteClaim.additional_sources``. Each is a real source anchor, so
+    synthesis stays fully traceable. Empty ``source_id`` is rejected, same as
+    the primary anchor.
+    """
+
+    source_id: str = Field(..., min_length=1, description="Non-empty source anchor id")
+    source_quote: str = ""
+
+
 class NoteClaim(BaseModel):
     """A single factual claim in a note section.
 
@@ -84,8 +99,20 @@ class NoteClaim(BaseModel):
     ]
     source_id: str = Field(..., min_length=1, description="Non-empty source anchor id")
     source_quote: str = ""
+    # Extra grounding anchors for a SYNTHESIZED claim (#552, GS-6). Empty for
+    # every descriptive claim (back-compat); populated only when a grounded
+    # A&P statement rests on several findings. The primary source_id above
+    # stays required, so a claim is never anchorless.
+    additional_sources: list[ClaimSource] = Field(default_factory=list)
     physician_edited: bool = False
     original_text: Optional[str] = None
+
+    @property
+    def all_source_ids(self) -> list[str]:
+        """Primary anchor + every additional anchor, in order. Lets the
+        grounding gates (critique, traceability metrics) treat a synthesized
+        multi-source claim uniformly."""
+        return [self.source_id, *(s.source_id for s in self.additional_sources)]
 
 
 class NoteSection(BaseModel):
