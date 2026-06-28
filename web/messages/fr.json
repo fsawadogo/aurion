@@ -543,6 +543,8 @@
     "sectionCardsHint": "Ces quatre fiches apparaissent sous la note SOAP dans l’application iOS. Chacune est une fonctionnalité post-pilote — gardez-la masquée tant que le backend correspondant n’est pas en service. Les changements sont appliqués dans ~30 secondes sur tous les iPhones.",
     "aiPrompts": "Invites IA (web)",
     "aiPromptsHint": "Contrôles d’administration de l’expérience des invites IA — Studio d’invites et ce que voient les cliniciens. Activez ici ; l’accès reste limité par rôle. Les changements sont appliqués dans ~30 secondes.",
+    "groundedSynthesis": "Synthèse fondée (v3.2)",
+    "groundedSynthesisHint": "Permet à la note de synthétiser une évaluation et un plan cités à partir des éléments captés, au lieu d’une simple description. DÉSACTIVÉ par défaut — à laisser désactivé jusqu’à l’approbation clinique et réglementaire (#551). Même activé, chaque énoncé doit citer sa source. Les changements sont appliqués dans ~30 secondes.",
     "flags": {
       "orders_card_enabled": {
         "name": "Ordonnances",
@@ -567,6 +569,10 @@
       "clinician_prompts_note_only": {
         "name": "Invites de génération de note uniquement",
         "description": "Les cliniciens ne voient que l’invite de génération de note sur leur page Invites IA ; les invites de vision, d’extraction et d’aperçu sont masquées. Les rôles de support voient tout."
+      },
+      "grounded_synthesis_enabled": {
+        "name": "Synthèse fondée",
+        "description": "Générer une évaluation et un plan synthétisés et entièrement cités (chaque énoncé traçable à sa source) au lieu d’une simple description. À laisser DÉSACTIVÉ jusqu’à l’approbation clinique et réglementaire."
       }
     }
   },

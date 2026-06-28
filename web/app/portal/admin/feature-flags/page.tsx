@@ -53,6 +53,11 @@ const FLAG_GROUPS = [
     hintKey: "aiPromptsHint",
     flags: ["prompt_studio_enabled", "clinician_prompts_note_only"],
   },
+  {
+    titleKey: "groundedSynthesis",
+    hintKey: "groundedSynthesisHint",
+    flags: ["grounded_synthesis_enabled"],
+  },
 ] as const satisfies readonly {
   titleKey: string;
   hintKey: string;
