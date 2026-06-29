@@ -109,7 +109,7 @@
   },
 
   "loops": {
-    "bug-hunt":        { "enabled": true, "autonomy": "low-risk",    "schedule": "0 7 * * 1,4",  "needs_loop": { "repeats": true, "auto_reject": true,  "end_to_end": true,  "objective": true  } },
+    "bug-hunt":        { "enabled": true, "autonomy": "low-risk",    "schedule": "0 19 * * *",   "needs_loop": { "repeats": true, "auto_reject": true,  "end_to_end": true,  "objective": true  } },
     "pr-review":       { "enabled": true, "autonomy": "propose-only", "schedule": "0 */6 * * *",  "needs_loop": { "repeats": true, "auto_reject": false, "end_to_end": false, "objective": false } },
     "core-quality":    { "enabled": true, "autonomy": "propose-only", "schedule": "0 6 * * *",    "needs_loop": { "repeats": true, "auto_reject": true,  "end_to_end": true,  "objective": true  } },
     "security-audit":  { "enabled": true, "autonomy": "propose-only", "schedule": "0 5 * * 1",    "needs_loop": { "repeats": true, "auto_reject": true,  "end_to_end": false, "objective": true  } },
