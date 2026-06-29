@@ -482,6 +482,140 @@ class TestOpenAIFrameJsonResilience:
         assert any("provider=openai" in r.getMessage() for r in warnings)
 
 
+# ── OpenAI — caption_frame malformed-envelope resilience ──────────────────
+
+
+class TestOpenAIFrameEnvelopeResilience:
+    """A separate defect from JSON-content truncation: the response
+    *envelope* itself can be malformed (missing/empty "choices", missing
+    "message"/"content"). The unguarded `data["choices"][0]["message"]
+    ["content"]` access would raise KeyError/IndexError/TypeError, which
+    escapes `except httpx.HTTPError` and breaks the registry fallback
+    chain (which only catches ProviderError). These cases lock that the
+    extraction raises ProviderError('openai', ...) instead.
+    """
+
+    @pytest.mark.parametrize(
+        "malformed_body",
+        [
+            {},  # no "choices" key at all -> KeyError
+            {"choices": []},  # empty list -> IndexError
+            {"choices": [{}]},  # missing "message" -> KeyError
+            {"choices": [{"message": {}}]},  # missing "content" -> KeyError
+            {"choices": [{"message": None}]},  # message not subscriptable -> TypeError
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_caption_frame_raises_provider_error_on_malformed_envelope(
+        self,
+        frame: MaskedFrame,
+        anchor: TranscriptSegment,
+        malformed_body: dict[str, Any],
+    ) -> None:
+        """HTTP 200 with a malformed envelope raises
+        ProviderError('openai', ...) — NOT KeyError/IndexError/TypeError —
+        so the registry's fallback chain can trip."""
+        ok_response = _mock_httpx_response(status_code=200, json_body=malformed_body)
+
+        async def fake_post(*args, **kwargs):
+            return ok_response
+
+        with patch(
+            "app.modules.providers.vision.openai.load_frame_image_base64",
+            return_value="fakebase64",
+        ), patch(
+            "app.modules.providers.vision.openai.httpx.AsyncClient"
+        ) as mock_client_cls, patch(
+            "app.modules.providers.vision.openai._OPENAI_API_KEY",
+            "sk-test-key",
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            with pytest.raises(ProviderError) as exc_info:
+                await OpenAIVisionProvider().caption_frame(frame, anchor)
+
+        assert exc_info.value.provider == "openai"
+
+    @pytest.mark.asyncio
+    async def test_caption_clip_raises_provider_error_on_malformed_envelope(
+        self, clip: MaskedClip, anchor: TranscriptSegment
+    ) -> None:
+        """The clip path degrades to a midpoint still and routes through
+        caption_frame, so a malformed envelope there must also surface as
+        ProviderError('openai', ...) for the fallback chain."""
+        ok_response = _mock_httpx_response(status_code=200, json_body={"choices": []})
+
+        async def fake_post(*args, **kwargs):
+            return ok_response
+
+        synthetic_frame = MaskedFrame(
+            frame_id="seg_001_still",
+            session_id="11111111-1111-1111-1111-111111111111",
+            timestamp_ms=clip.timestamp_ms + clip.duration_ms // 2,
+            s3_key="frames/sess-abc/seg_001_still.jpg",
+            masking_confirmed=True,
+        )
+
+        async def fake_extract(*args, **kwargs):
+            return synthetic_frame
+
+        with patch(
+            "app.modules.providers.vision.openai.extract_midpoint_still",
+            side_effect=fake_extract,
+        ), patch(
+            "app.modules.providers.vision.openai.load_frame_image_base64",
+            return_value="fakebase64",
+        ), patch(
+            "app.modules.providers.vision.openai.httpx.AsyncClient"
+        ) as mock_client_cls, patch(
+            "app.modules.providers.vision.openai._OPENAI_API_KEY",
+            "sk-test-key",
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            with pytest.raises(ProviderError) as exc_info:
+                await OpenAIVisionProvider().caption_clip(clip, anchor)
+
+        assert exc_info.value.provider == "openai"
+
+    @pytest.mark.asyncio
+    async def test_malformed_envelope_error_chained_for_debug(
+        self, frame: MaskedFrame, anchor: TranscriptSegment
+    ) -> None:
+        """The original KeyError/IndexError/TypeError is chained via
+        `raise ... from` so operators can debug the original shape."""
+        ok_response = _mock_httpx_response(status_code=200, json_body={"choices": []})
+
+        async def fake_post(*args, **kwargs):
+            return ok_response
+
+        with patch(
+            "app.modules.providers.vision.openai.load_frame_image_base64",
+            return_value="fakebase64",
+        ), patch(
+            "app.modules.providers.vision.openai.httpx.AsyncClient"
+        ) as mock_client_cls, patch(
+            "app.modules.providers.vision.openai._OPENAI_API_KEY",
+            "sk-test-key",
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            try:
+                await OpenAIVisionProvider().caption_frame(frame, anchor)
+                pytest.fail("Expected ProviderError")
+            except ProviderError as exc:
+                assert isinstance(exc.__cause__, (KeyError, IndexError, TypeError)), (
+                    f"Expected envelope error chained via raise...from; "
+                    f"got cause={exc.__cause__!r}"
+                )
+
+
 # ── Anthropic — caption_frame text-fallback JSON parse failure ────────────
 
 

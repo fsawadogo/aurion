@@ -100,9 +100,19 @@ class OpenAIVisionProvider(VisionProvider):
                 )
                 response.raise_for_status()
                 data = response.json()
-                content = parse_caption_json(
-                    "openai", data["choices"][0]["message"]["content"]
-                )
+                # Guard the envelope extraction: a malformed envelope
+                # (missing/empty "choices", missing "message"/"content")
+                # would otherwise raise KeyError/IndexError/TypeError,
+                # escaping `except httpx.HTTPError` and breaking the
+                # registry's fallback chain (which only catches
+                # ProviderError). Chain the original for debugging.
+                try:
+                    raw_content = data["choices"][0]["message"]["content"]
+                except (KeyError, IndexError, TypeError) as e:
+                    raise ProviderError(
+                        "openai", f"Vision captioning failed: malformed response envelope: {e}", e
+                    ) from e
+                content = parse_caption_json("openai", raw_content)
                 return build_frame_caption(frame, anchor, content, "openai")
 
         except httpx.HTTPError as e:
