@@ -20,7 +20,7 @@ import logging
 import os
 import tempfile
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException
@@ -493,6 +493,63 @@ def _status_response(session, job) -> VideoImportStatusResponse:
 # ── Background orchestrator ───────────────────────────────────────────────
 
 
+def _read_file_bytes(path: str) -> bytes:
+    """Read a file fully into memory — run via ``asyncio.to_thread``.
+
+    The extracted WAV can be tens of MB for a long encounter; a synchronous
+    read would block the event loop for the read duration, so the caller
+    offloads it to a worker thread (same rationale as the S3 download).
+    """
+    with open(path, "rb") as fh:
+        return fh.read()
+
+
+async def _download_to_path(client: Any, key: str, dest_path: str) -> None:
+    """Download an S3 object to local disk OFF the event loop.
+
+    boto3's ``download_file`` is synchronous; calling it directly on the API
+    event loop blocks every concurrent request (e.g. the status poll) for the
+    whole transfer — for a large encounter video that's seconds, long enough for
+    the ALB to return a gateway 502 (no CORS headers → the browser mislabels it
+    a CORS failure) and, under sustained load, for the container health check to
+    fail and ECS to recycle the task. ``asyncio.to_thread`` keeps the loop
+    responsive while the transfer runs in a worker thread.
+    """
+    await asyncio.to_thread(client.download_file, VIDEO_IMPORTS_BUCKET, key, dest_path)
+
+
+def _mask_and_store_frame(
+    s3: Any, session_id: uuid.UUID, ts_ms: int, jpg_bytes: bytes, drop_zero_face: bool
+):
+    """Mask one frame and, on success, store it to S3 — a single blocking unit.
+
+    OpenCV masking is CPU-bound and ``s3.put_object`` is synchronous boto3; both
+    run together in a worker thread (the caller wraps this in
+    ``asyncio.to_thread``) so neither blocks the event loop. Returns the
+    ``mask_frame`` result so the caller emits the (async) audit on the loop.
+    Fail-closed is preserved: a non-success result skips the store entirely, so
+    an unmasked frame is never written.
+    """
+    result = mask_frame(jpg_bytes, drop_zero_face=drop_zero_face)
+    if result.status == "success" and result.image_bytes is not None:
+        # Server-issued masking proof — asserts the success invariant before the
+        # masked frame is stored (P0-02), same contract as the iOS frame path.
+        MaskingProof(
+            frame_type="video",
+            masking_status="success",
+            faces_detected=result.faces_detected,
+            phi_regions_redacted=0,
+        )
+        # Store under the SAME key shape the vision pipeline already reads.
+        s3.put_object(
+            Bucket=FRAMES_BUCKET,
+            Key=f"frames/{session_id}/{ts_ms}.jpg",
+            Body=result.image_bytes,
+            ContentType="image/jpeg",
+        )
+    return result
+
+
 async def _extract_and_mask_frames(
     db: AsyncSession, session_id: uuid.UUID, video_path: str
 ) -> tuple[int, int, int]:
@@ -538,24 +595,12 @@ async def _extract_and_mask_frames(
     masked = 0
     dropped = 0
     for ts_ms, jpg_bytes in frames:
-        result = mask_frame(jpg_bytes, drop_zero_face=drop_zero)
+        # Mask + store off the event loop (OpenCV is CPU-bound, put_object is
+        # sync boto3); the audit stays async on the loop.
+        result = await asyncio.to_thread(
+            _mask_and_store_frame, s3, session_id, ts_ms, jpg_bytes, drop_zero
+        )
         if result.status == "success" and result.image_bytes is not None:
-            # Server-issued masking proof — same contract the iOS frame path
-            # validates (P0-02). Constructing it asserts the success invariant
-            # before the masked frame is stored.
-            MaskingProof(
-                frame_type="video",
-                masking_status="success",
-                faces_detected=result.faces_detected,
-                phi_regions_redacted=0,
-            )
-            # Store under the SAME key shape the vision pipeline already reads.
-            s3.put_object(
-                Bucket=FRAMES_BUCKET,
-                Key=f"frames/{session_id}/{ts_ms}.jpg",
-                Body=result.image_bytes,
-                ContentType="image/jpeg",
-            )
             await write_audit(
                 session_id,
                 AuditEventType.SERVER_MASKING_APPLIED,
@@ -678,12 +723,12 @@ async def _run_video_import_in_background(
                 video_path = os.path.join(tmp, "in.mp4")
                 wav_path = os.path.join(tmp, "audio.wav")
                 client = get_s3_client()
-                client.download_file(VIDEO_IMPORTS_BUCKET, raw_key, video_path)
+                await _download_to_path(client, raw_key, video_path)
 
-                # 1. Extract audio → shared Stage 1 pipeline.
+                # 1. Extract audio → shared Stage 1 pipeline. The read runs off
+                #    the loop too — the extracted WAV can be tens of MB.
                 await extract_audio(video_path, wav_path)
-                with open(wav_path, "rb") as fh:
-                    audio_bytes = fh.read()
+                audio_bytes = await asyncio.to_thread(_read_file_bytes, wav_path)
 
                 # Drive the state machine through the normal consent hard-gate:
                 # CONSENT_PENDING(consent_confirmed) → RECORDING → PROCESSING_STAGE1.
@@ -769,3 +814,35 @@ async def _run_video_import_in_background(
                 message="Video import job failed",
                 metadata={"session_id": str(session_id), "reason": reason},
             )
+
+
+async def recover_stuck_imports_on_startup() -> int:
+    """Reap import jobs orphaned by a worker recycle — called once on startup.
+
+    The orchestrator is a fire-and-forget ``asyncio.create_task``; a container
+    recycle kills it before its in-process ``except → mark_failed`` runs, leaving
+    the job stranded ``running`` (the portal shows "Extracting audio" forever).
+    This owns its own DB session (the lifespan runs before requests are served),
+    delegates the budget-gated job-state change to ``jobs.recover_orphaned_jobs``,
+    and emits the matching ``VIDEO_IMPORT_FAILED`` audit per reaped session — the
+    same event the orchestrator + per-poll watchdog write, so a stranded import
+    never lacks an audit-log entry (CLAUDE.md). Best-effort: any failure here is
+    logged and swallowed so recovery never blocks startup. Returns the count.
+    """
+    try:
+        async with async_session_factory() as db:
+            reaped = await jobs.recover_orphaned_jobs(db)
+            for session_id in reaped:
+                await write_audit(
+                    session_id,
+                    AuditEventType.VIDEO_IMPORT_FAILED,
+                    reason="startup recovery: import did not complete before a worker restart",
+                )
+        if reaped:
+            logger.warning(
+                "Startup recovery failed %d orphaned video-import job(s)", len(reaped)
+            )
+        return len(reaped)
+    except Exception:  # noqa: BLE001 — recovery must never block startup
+        logger.exception("Video-import startup recovery failed")
+        return 0

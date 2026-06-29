@@ -147,3 +147,28 @@ async def fail_if_stale(db: AsyncSession, job: VideoImportJobModel) -> bool:
         "minutes and was marked failed. Re-run the import to try again.",
     )
     return True
+
+
+async def recover_orphaned_jobs(db: AsyncSession) -> list[uuid.UUID]:
+    """Reap video-import jobs stranded ``running`` past the budget (startup sweep).
+
+    A container recycle kills the fire-and-forget orchestrator task before its
+    in-process ``except → mark_failed`` runs, stranding the row in ``running``.
+    Called once on startup so such a job is failed (and becomes re-runnable via
+    ``/process``) without waiting for a status poll — complementing the per-poll
+    watchdog (:func:`fail_if_stale`) for the case where the poll itself can't
+    reach a healthy worker. Budget-gated via :func:`fail_if_stale`, so a job
+    legitimately running on another live replica (< budget) is left untouched.
+
+    Audit-free by design (mirrors :func:`fail_if_stale`): returns the session
+    ids of the jobs it failed so the API-layer caller emits the matching
+    ``VIDEO_IMPORT_FAILED`` audit.
+    """
+    result = await db.execute(
+        select(VideoImportJobModel).where(VideoImportJobModel.status == "running")
+    )
+    reaped: list[uuid.UUID] = []
+    for job in result.scalars().all():
+        if await fail_if_stale(db, job):
+            reaped.append(job.session_id)
+    return reaped
