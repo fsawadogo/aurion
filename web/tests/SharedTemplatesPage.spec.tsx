@@ -8,6 +8,7 @@ vi.mock("@/lib/api", () => ({
   humanizeError: (_e: unknown, fallback: string) => fallback,
   listSharedTemplates: vi.fn(),
   createSharedTemplate: vi.fn(),
+  updateSharedTemplate: vi.fn(),
   deleteSharedTemplate: vi.fn(),
 }));
 
@@ -15,6 +16,7 @@ import {
   createSharedTemplate,
   deleteSharedTemplate,
   listSharedTemplates,
+  updateSharedTemplate,
 } from "@/lib/api";
 
 const TPL = {
@@ -28,7 +30,15 @@ const TPL = {
     key: "org_ll",
     display_name: "Org Lower Limb",
     version: "1.0",
-    sections: [],
+    sections: [
+      {
+        id: "cc",
+        title: "CC",
+        required: true,
+        description: "",
+        visual_trigger_keywords: [],
+      },
+    ],
   },
   created_at: "2026-06-26T00:00:00Z",
   updated_at: "2026-06-26T00:00:00Z",
@@ -37,6 +47,7 @@ const TPL = {
 beforeEach(() => {
   vi.mocked(listSharedTemplates).mockResolvedValue([TPL]);
   vi.mocked(createSharedTemplate).mockReset().mockResolvedValue(TPL);
+  vi.mocked(updateSharedTemplate).mockReset().mockResolvedValue(TPL);
   vi.mocked(deleteSharedTemplate).mockReset().mockResolvedValue(undefined);
 });
 
@@ -73,6 +84,30 @@ describe("SharedTemplatesPage", () => {
     const body = vi.mocked(createSharedTemplate).mock.calls[0][0];
     expect(body.key).toBe("org_ll");
     expect(body.display_name).toBe("Org LL");
+  });
+
+  it("edits a shared template through the prefilled editor", async () => {
+    const user = userEvent.setup();
+    render(withIntl(<SharedTemplatesPage />));
+    await waitFor(() =>
+      expect(screen.getByTestId("edit-shared-st1")).toBeInTheDocument(),
+    );
+
+    await user.click(screen.getByTestId("edit-shared-st1"));
+    // Editor opens prefilled with the template's current values.
+    const nameInput = screen.getByDisplayValue("Org Lower Limb") as HTMLInputElement;
+    await user.clear(nameInput);
+    await user.type(nameInput, "Org LL v2");
+
+    await user.click(screen.getByTestId("save-shared-template"));
+
+    await waitFor(() => expect(updateSharedTemplate).toHaveBeenCalledTimes(1));
+    const [id, body] = vi.mocked(updateSharedTemplate).mock.calls[0];
+    expect(id).toBe("st1");
+    expect(body.display_name).toBe("Org LL v2");
+    expect(body.key).toBe("org_ll");
+    // Edit must not create a new template.
+    expect(createSharedTemplate).not.toHaveBeenCalled();
   });
 
   it("deletes a shared template", async () => {

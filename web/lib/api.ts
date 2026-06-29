@@ -699,6 +699,17 @@ export async function createSharedTemplate(
   return res.json();
 }
 
+export async function updateSharedTemplate(
+  id: string,
+  template: TemplateDefinition,
+): Promise<CustomTemplate> {
+  const res = await fetchWithAuth(`/api/v1/admin/shared-templates/${id}`, {
+    method: "PUT",
+    body: JSON.stringify({ template }),
+  });
+  return res.json();
+}
+
 export async function deleteSharedTemplate(id: string): Promise<void> {
   await fetchWithAuth(`/api/v1/admin/shared-templates/${id}`, {
     method: "DELETE",

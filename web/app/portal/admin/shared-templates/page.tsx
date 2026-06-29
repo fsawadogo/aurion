@@ -1,16 +1,16 @@
 "use client";
 
 /**
- * /portal/admin/shared-templates — admin org/shared templates (tpl-04).
+ * /portal/admin/shared-templates — admin org/shared templates (tpl-04, tpl-07).
  *
- * Prompt-Studio-style admin surface: author a note template (structure + AI
- * instructions, via the shared TemplateSectionEditor) and share it to every
+ * Prompt-Studio-style admin surface: author OR edit a note template (structure +
+ * AI instructions, via the shared TemplateSectionEditor) and share it to every
  * clinician. Shared templates appear read-only in each clinician's Templates
  * library + the upload/visit pickers and drive note generation when picked.
  * ADMIN-only (the nav link + the backend /admin/shared-templates are gated).
  */
 
-import { LayoutTemplate, Plus, Trash2 } from "lucide-react";
+import { LayoutTemplate, Pencil, Plus, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
 import Badge from "@/components/ui/Badge";
@@ -28,8 +28,27 @@ import {
   deleteSharedTemplate,
   humanizeError,
   listSharedTemplates,
+  updateSharedTemplate,
 } from "@/lib/api";
 import type { CustomTemplate, TemplateDefinition } from "@/types";
+
+/** Coerce a stored template into a fully-shaped editor draft — defensive against
+ *  older rows missing optional section fields so the editor never crashes. */
+function toDraft(tpl: TemplateDefinition): TemplateDefinition {
+  return {
+    key: tpl.key,
+    display_name: tpl.display_name,
+    version: tpl.version,
+    system_prompt: tpl.system_prompt ?? "",
+    sections: (tpl.sections ?? []).map((s) => ({
+      id: s.id,
+      title: s.title,
+      required: s.required ?? true,
+      description: s.description ?? "",
+      visual_trigger_keywords: s.visual_trigger_keywords ?? [],
+    })),
+  };
+}
 
 export default function SharedTemplatesPage() {
   const t = useTranslations("AdminSharedTemplates");
@@ -38,7 +57,9 @@ export default function SharedTemplatesPage() {
   const [items, setItems] = useState<CustomTemplate[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [creating, setCreating] = useState(false);
+  const [editorOpen, setEditorOpen] = useState(false);
+  // null = creating a new template; an id = editing that existing one.
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<TemplateDefinition>(() => blankTemplate());
   const [saving, setSaving] = useState(false);
 
@@ -60,12 +81,27 @@ export default function SharedTemplatesPage() {
 
   function startCreate() {
     setDraft(blankTemplate());
+    setEditingId(null);
     setError(null);
-    setCreating(true);
+    setEditorOpen(true);
+  }
+
+  function startEdit(tpl: CustomTemplate) {
+    setDraft(toDraft(tpl.template));
+    setEditingId(tpl.id);
+    setError(null);
+    setEditorOpen(true);
+  }
+
+  function closeEditor() {
+    setEditorOpen(false);
+    setEditingId(null);
   }
 
   async function onSave() {
-    const vk = validateTemplate(draft);
+    // Section length/count caps are create-time only — the backend skips them on
+    // update so a pre-cap template stays editable; mirror that here.
+    const vk = validateTemplate(draft, { enforceSectionCaps: editingId === null });
     if (vk) {
       setError(te(vk));
       return;
@@ -73,11 +109,16 @@ export default function SharedTemplatesPage() {
     setSaving(true);
     setError(null);
     try {
-      await createSharedTemplate(normalizeTemplate(draft));
-      setCreating(false);
+      const payload = normalizeTemplate(draft);
+      if (editingId) {
+        await updateSharedTemplate(editingId, payload);
+      } else {
+        await createSharedTemplate(payload);
+      }
+      closeEditor();
       await load();
     } catch (e) {
-      setError(humanizeError(e, t("saveError")));
+      setError(humanizeError(e, editingId ? t("editError") : t("saveError")));
     } finally {
       setSaving(false);
     }
@@ -100,7 +141,7 @@ export default function SharedTemplatesPage() {
         title={t("title")}
         description={t("description")}
         actions={
-          creating ? undefined : (
+          editorOpen ? undefined : (
             <Button onClick={startCreate} data-testid="new-shared-template">
               <Plus className="h-4 w-4 mr-1.5" aria-hidden="true" />
               {t("createButton")}
@@ -119,20 +160,18 @@ export default function SharedTemplatesPage() {
         </div>
       )}
 
-      {creating && (
+      {editorOpen && (
         <Card className="mb-5">
-          <p className="mb-4 text-aurion-callout text-navy-500">{t("createHint")}</p>
+          <p className="mb-4 text-aurion-callout text-navy-500">
+            {editingId ? t("editHint") : t("createHint")}
+          </p>
           <TemplateSectionEditor value={draft} onChange={setDraft} disabled={saving} />
           <div className="mt-4 flex items-center justify-end gap-2">
-            <Button
-              variant="ghost"
-              onClick={() => setCreating(false)}
-              disabled={saving}
-            >
+            <Button variant="ghost" onClick={closeEditor} disabled={saving}>
               {t("cancel")}
             </Button>
             <Button onClick={onSave} loading={saving} data-testid="save-shared-template">
-              {t("save")}
+              {editingId ? t("saveChanges") : t("save")}
             </Button>
           </div>
         </Card>
@@ -142,7 +181,7 @@ export default function SharedTemplatesPage() {
         <Card>
           <LoadingSkeleton lines={5} />
         </Card>
-      ) : items.length === 0 && !creating ? (
+      ) : items.length === 0 && !editorOpen ? (
         <Card>
           <div className="py-10 text-center" data-testid="shared-templates-empty">
             <LayoutTemplate
@@ -169,16 +208,28 @@ export default function SharedTemplatesPage() {
                       {tpl.key}
                     </code>
                   </div>
-                  <button
-                    type="button"
-                    onClick={() => void onDelete(tpl.id)}
-                    aria-label={t("delete")}
-                    title={t("delete")}
-                    data-testid={`delete-shared-${tpl.id}`}
-                    className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-aurion-xs text-navy-500 transition-colors hover:bg-canvas hover:text-red-600"
-                  >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                  <div className="flex shrink-0 items-center gap-0.5">
+                    <button
+                      type="button"
+                      onClick={() => startEdit(tpl)}
+                      aria-label={t("edit")}
+                      title={t("edit")}
+                      data-testid={`edit-shared-${tpl.id}`}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-aurion-xs text-navy-500 transition-colors hover:bg-canvas hover:text-navy-700"
+                    >
+                      <Pencil className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => void onDelete(tpl.id)}
+                      aria-label={t("delete")}
+                      title={t("delete")}
+                      data-testid={`delete-shared-${tpl.id}`}
+                      className="inline-flex h-8 w-8 items-center justify-center rounded-aurion-xs text-navy-500 transition-colors hover:bg-canvas hover:text-red-600"
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </button>
+                  </div>
                 </div>
               </Card>
             </li>

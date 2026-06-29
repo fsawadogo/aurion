@@ -47,12 +47,16 @@
     "description": "Créez un modèle de note et partagez-le avec tous les cliniciens. Les modèles partagés apparaissent dans leurs Modèles et sélecteurs, prêts à appliquer.",
     "createButton": "Nouveau modèle partagé",
     "createHint": "Construisez la structure de la note et, en option, ses instructions IA. Chaque clinicien pourra l’appliquer (en lecture seule).",
+    "editHint": "Mettez à jour la structure de la note et les instructions IA. Les changements s’appliquent à chaque clinicien qui utilise ce modèle.",
     "save": "Partager avec les cliniciens",
+    "saveChanges": "Enregistrer les modifications",
     "cancel": "Annuler",
+    "edit": "Modifier le modèle partagé",
     "delete": "Supprimer le modèle partagé",
     "empty": "Aucun modèle partagé — créez-en un pour le partager avec tous les cliniciens.",
     "loadError": "Impossible de charger les modèles partagés.",
     "saveError": "Impossible d’enregistrer le modèle partagé.",
+    "editError": "Impossible d’enregistrer les modifications.",
     "deleteError": "Impossible de supprimer le modèle partagé."
   },
   "Sidebar": {
