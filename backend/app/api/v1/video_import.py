@@ -20,7 +20,7 @@ import logging
 import os
 import tempfile
 import uuid
-from typing import Optional
+from typing import Any, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException
@@ -493,7 +493,18 @@ def _status_response(session, job) -> VideoImportStatusResponse:
 # ── Background orchestrator ───────────────────────────────────────────────
 
 
-async def _download_to_path(client, key: str, dest_path: str) -> None:
+def _read_file_bytes(path: str) -> bytes:
+    """Read a file fully into memory — run via ``asyncio.to_thread``.
+
+    The extracted WAV can be tens of MB for a long encounter; a synchronous
+    read would block the event loop for the read duration, so the caller
+    offloads it to a worker thread (same rationale as the S3 download).
+    """
+    with open(path, "rb") as fh:
+        return fh.read()
+
+
+async def _download_to_path(client: Any, key: str, dest_path: str) -> None:
     """Download an S3 object to local disk OFF the event loop.
 
     boto3's ``download_file`` is synchronous; calling it directly on the API
@@ -508,7 +519,7 @@ async def _download_to_path(client, key: str, dest_path: str) -> None:
 
 
 def _mask_and_store_frame(
-    s3, session_id: uuid.UUID, ts_ms: int, jpg_bytes: bytes, drop_zero_face: bool
+    s3: Any, session_id: uuid.UUID, ts_ms: int, jpg_bytes: bytes, drop_zero_face: bool
 ):
     """Mask one frame and, on success, store it to S3 — a single blocking unit.
 
@@ -714,10 +725,10 @@ async def _run_video_import_in_background(
                 client = get_s3_client()
                 await _download_to_path(client, raw_key, video_path)
 
-                # 1. Extract audio → shared Stage 1 pipeline.
+                # 1. Extract audio → shared Stage 1 pipeline. The read runs off
+                #    the loop too — the extracted WAV can be tens of MB.
                 await extract_audio(video_path, wav_path)
-                with open(wav_path, "rb") as fh:
-                    audio_bytes = fh.read()
+                audio_bytes = await asyncio.to_thread(_read_file_bytes, wav_path)
 
                 # Drive the state machine through the normal consent hard-gate:
                 # CONSENT_PENDING(consent_confirmed) → RECORDING → PROCESSING_STAGE1.
