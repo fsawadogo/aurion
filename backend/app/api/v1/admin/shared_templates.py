@@ -116,6 +116,44 @@ async def create_shared_template(
     return _to_response(row)
 
 
+@router.put("/shared-templates/{template_id}", response_model=SharedTemplateResponse)
+async def update_shared_template(
+    template_id: uuid.UUID,
+    body: SharedTemplateCreateRequest,
+    user: CurrentUser = Depends(require_role(_ROLE)),
+    db: AsyncSession = Depends(get_db),
+) -> SharedTemplateResponse:
+    """Edit a shared org template (tpl-07).
+
+    Fetches via ``get_shared`` so this path can only touch a shared row — never
+    a clinician's private template (404 otherwise). Reuses ``update_owned`` for
+    re-validation (incl. the descriptive-mode gate on AI instructions, tpl-01;
+    section caps skipped on update so a pre-cap template stays editable). 409 on
+    a duplicate key, 400 on schema / safety failure. Any ADMIN may edit a shared
+    template — it's org-wide content, not owner-scoped like personal templates.
+    """
+    row = await svc.get_shared(template_id, db)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Shared template not found")
+    try:
+        updated = await svc.update_owned(row, body.template, db)
+    except svc.CustomTemplateError as exc:
+        msg = str(exc)
+        raise HTTPException(
+            status_code=409 if "already exists" in msg else 400, detail=msg
+        ) from exc
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=str(updated.id),
+        event_type=AuditEventType.CUSTOM_TEMPLATE_UPDATED,
+        actor_id=str(user.user_id),
+        template_id=str(updated.id),
+        template_key=updated.key,
+    )
+    await db.commit()
+    return _to_response(updated)
+
+
 @router.delete(
     "/shared-templates/{template_id}", status_code=status.HTTP_204_NO_CONTENT
 )

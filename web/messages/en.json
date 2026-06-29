@@ -47,12 +47,16 @@
     "description": "Author a note template and share it with every clinician. Shared templates appear in their Templates and pickers, ready to apply.",
     "createButton": "New shared template",
     "createHint": "Build the note's structure and, optionally, its AI instructions. Every clinician will be able to apply it (read-only).",
+    "editHint": "Update the note's structure and AI instructions. Changes apply to every clinician using this template.",
     "save": "Share with clinicians",
+    "saveChanges": "Save changes",
     "cancel": "Cancel",
+    "edit": "Edit shared template",
     "delete": "Delete shared template",
     "empty": "No shared templates yet — create one to share with all clinicians.",
     "loadError": "Couldn't load shared templates.",
     "saveError": "Couldn't save the shared template.",
+    "editError": "Couldn't save changes.",
     "deleteError": "Couldn't delete the shared template."
   },
   "Sidebar": {
