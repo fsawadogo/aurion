@@ -23,6 +23,7 @@ from app.api.v1.video_import import (
     CreateVideoImportRequest,
     CreateVideoImportResponse,
     VideoImportStatusResponse,
+    _reap_stale_job,
     _require_enabled,
     _status_response,
     create_import_session,
@@ -89,4 +90,5 @@ async def admin_get_video_import_status(
     job = await jobs.get_job_for_session(db, session_id)
     if job is None:
         raise HTTPException(status_code=404, detail="No import job for session.")
+    await _reap_stale_job(db, job, session_id)
     return _status_response(session, job)

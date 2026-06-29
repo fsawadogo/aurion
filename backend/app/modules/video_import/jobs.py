@@ -9,6 +9,7 @@ the portal can poll progress and an operator can recover a stuck job.
 from __future__ import annotations
 
 import uuid
+from datetime import timezone
 from typing import Optional
 
 from sqlalchemy import select
@@ -108,3 +109,41 @@ async def mark_raw_video_purged(
     job.raw_video_purged_at = utcnow()
     await db.commit()
     return job
+
+
+# Lazy-watchdog budget. The orchestrator is a fire-and-forget
+# ``asyncio.create_task`` — if its worker recycles or a step (e.g. ffmpeg)
+# hangs, the task dies before its ``except → mark_failed`` and the row is
+# stranded in ``running``, so the portal poll spins forever. This budget is far
+# beyond the Stage 1 (<30s) + Stage 2 (<5min) SLAs (CLAUDE.md), so a healthy
+# run is never reaped.
+STALE_RUNNING_BUDGET_S = 900  # 15 minutes
+
+
+async def fail_if_stale(db: AsyncSession, job: VideoImportJobModel) -> bool:
+    """Fail a job stuck ``running`` past ``STALE_RUNNING_BUDGET_S``.
+
+    Called on every status poll so a stranded job (dead/hung orchestrator task)
+    surfaces as ``failed`` — which the portal already renders + which makes the
+    job re-runnable via ``/process`` — instead of an infinite spinner. Returns
+    True iff it transitioned the job. Idempotent: a no-op for any non-running
+    job, or one without ``started_at``. Compares tz-aware to guard against a
+    naive column value.
+    """
+    if job.status != "running" or job.started_at is None:
+        return False
+    now = utcnow()
+    started = job.started_at
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    if started.tzinfo is None:
+        started = started.replace(tzinfo=timezone.utc)
+    if (now - started).total_seconds() < STALE_RUNNING_BUDGET_S:
+        return False
+    await mark_failed(
+        db,
+        job,
+        f"Processing did not complete within {STALE_RUNNING_BUDGET_S // 60} "
+        "minutes and was marked failed. Re-run the import to try again.",
+    )
+    return True
