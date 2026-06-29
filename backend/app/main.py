@@ -29,6 +29,7 @@ from app.api.v1.profile import router as profile_router
 from app.api.v1.screen import router as screen_router
 from app.api.v1.sessions import router as sessions_router
 from app.api.v1.transcription import router as transcription_router
+from app.api.v1.video_import import recover_stuck_imports_on_startup
 from app.api.v1.video_import import router as video_import_router
 from app.api.v1.vision import router as vision_router
 from app.api.v1.websocket import router as ws_router
@@ -61,6 +62,9 @@ async def lifespan(app: FastAPI):
     # entrypoint before this code is reached.
     setup_logging()
     await seed_dev_users()
+    # Reap video-import jobs orphaned by a prior worker recycle (best-effort,
+    # budget-gated; never blocks startup). Complements the per-poll watchdog.
+    await recover_stuck_imports_on_startup()
     appconfig = get_appconfig_client()
     await appconfig.start_polling()
     await start_override_polling()
