@@ -19,7 +19,6 @@ from app.api.v1 import video_import as vi
 from app.core.audit_events import AuditEventType
 from app.core.types import Transcript, TranscriptSegment
 
-
 # ── _download_to_path: raw video download runs off the loop (AC-1) ───────────
 
 
