@@ -42,7 +42,7 @@ install_loop() {
   <key>WorkingDirectory</key><string>${REPO_ROOT}</string>
   <key>ProgramArguments</key><array>
     <string>/bin/bash</string><string>-lc</string>
-    <string>${CLAUDE_BIN} -p "Run the Autopilot '${lp}' loop per .claude/autopilot/loops/${lp}.md. Honor policy.json. Stop at the Loop spec STOP WHEN / caps / token budget." >> "${LOG_DIR}/${lp}.log" 2>&1</string>
+    <string>${CLAUDE_BIN} -p "Run the Autopilot '${lp}' loop per .claude/autopilot/loops/${lp}.md. Honor policy.json. Stop at the Loop spec STOP WHEN / caps / token budget." >> "${LOG_DIR}/${lp}.log" 2>&amp;1</string>
   </array>
   <key>StartCalendarInterval</key><dict><key>Hour</key><integer>7</integer><key>Minute</key><integer>0</integer></dict>
   <key>StandardErrorPath</key><string>${LOG_DIR}/${lp}.launchd.err</string>
