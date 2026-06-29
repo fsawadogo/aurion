@@ -1382,6 +1382,7 @@
       "tooLarge": "File is too large (max 2 GB).",
       "uploadFailed": "Upload failed. Please try again.",
       "processingFailed": "Processing failed. Please try again.",
+      "lostContact": "We lost contact with processing. Your note may still appear in My Notes — refresh or check there shortly.",
       "retry": "Try again"
     }
   }

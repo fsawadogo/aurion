@@ -325,6 +325,24 @@ async def start_processing(
     return _status_response(session, job)
 
 
+async def _reap_stale_job(db: AsyncSession, job, session_id: uuid.UUID) -> None:
+    """Lazy watchdog shared by both status routes (clinician + admin).
+
+    The orchestrator is a fire-and-forget ``asyncio.create_task`` — if its worker
+    recycles or a step hangs, the task dies before its ``except → mark_failed``
+    and the job is stranded ``running``, so the portal poll spins forever. On
+    each poll, fail a job that's been running past the budget so the UI surfaces
+    an error (and the job becomes re-runnable via ``/process``). Records
+    ``VIDEO_IMPORT_FAILED`` to mirror the orchestrator's own failure path.
+    """
+    if await jobs.fail_if_stale(db, job):
+        await write_audit(
+            session_id,
+            AuditEventType.VIDEO_IMPORT_FAILED,
+            reason="watchdog: import exceeded the processing time budget",
+        )
+
+
 @router.get("/{session_id}/status", response_model=VideoImportStatusResponse)
 async def get_video_import_status(
     session_id: uuid.UUID,
@@ -337,6 +355,7 @@ async def get_video_import_status(
     job = await jobs.get_job_for_session(db, session_id)
     if job is None:
         raise HTTPException(status_code=404, detail="No import job for session.")
+    await _reap_stale_job(db, job, session_id)
     return _status_response(session, job)
 
 

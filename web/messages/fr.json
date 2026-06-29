@@ -1382,6 +1382,7 @@
       "tooLarge": "Fichier trop volumineux (max 2 Go).",
       "uploadFailed": "Le téléversement a échoué. Veuillez réessayer.",
       "processingFailed": "Le traitement a échoué. Veuillez réessayer.",
+      "lostContact": "Nous avons perdu le contact avec le traitement. Votre note pourrait apparaître dans Mes notes — actualisez ou vérifiez sous peu.",
       "retry": "Réessayer"
     }
   }

@@ -31,6 +31,7 @@ import {
   startVideoImportMultipart,
   type VideoImportStatus,
 } from "@/lib/portal-api";
+import { shouldStopPolling } from "@/lib/poll";
 import type { CustomTemplate } from "@/types";
 
 const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
@@ -229,7 +230,7 @@ export default function VideoImportClient({
     return STAGES.indexOf("extractingAudio");
   }
 
-  async function poll(sessionId: string): Promise<void> {
+  async function poll(sessionId: string, errorCount = 0): Promise<void> {
     try {
       const s = await api.status(sessionId);
       if (s.status === "failed") {
@@ -243,9 +244,18 @@ export default function VideoImportClient({
         window.location.href = `${reviewBase}/${sessionId}`;
         return;
       }
+      // Success → reset the consecutive-error count (default arg).
       window.setTimeout(() => void poll(sessionId), POLL_MS);
     } catch {
-      window.setTimeout(() => void poll(sessionId), POLL_MS);
+      // Persistent failure (status endpoint unreachable / refresh failed) →
+      // stop instead of spinning forever; processing may still finish, so point
+      // the clinician at My Notes rather than showing a hard processing error.
+      if (shouldStopPolling(errorCount + 1)) {
+        setError(t("errors.lostContact"));
+        setPhase("error");
+        return;
+      }
+      window.setTimeout(() => void poll(sessionId, errorCount + 1), POLL_MS);
     }
   }
 
