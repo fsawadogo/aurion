@@ -112,3 +112,7 @@ credentials.json
 # Local secret hand-off — never commit (Resend API key)
 ResendAPIKey.txt
 *.apikey
+
+# Autopilot maintenance system — local state (findings ledger, run logs, digests)
+.claude/autopilot/state/
+~/aurion-autopilot-worktrees/

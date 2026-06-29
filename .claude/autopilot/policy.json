@@ -1,0 +1,121 @@
+{
+  "version": 1,
+  "_doc": "Autopilot — single source of truth. Read by ledger.py, every loop skill, and the workflows. Edit here, not in the loops.",
+
+  "repo": "fsawadogo/aurion",
+  "default_branch": "main",
+  "git_host": "github",
+
+  "autonomy_level": "low-risk",
+  "_autonomy_doc": "low-risk = auto-merge ONLY categories in auto_merge_categories, when green + non-protected + standards-clean. Everything else opens a PR labelled for review. propose-only = never merge. full = merge any green non-protected change. The protected_paths gate is ABSOLUTE at every level.",
+  "auto_merge_categories": ["docs", "deps", "tests"],
+
+  "protected_paths": [
+    "backend/app/modules/auth/**",
+    "backend/app/api/v1/auth.py",
+    "backend/app/api/v1/me_security.py",
+    "backend/app/modules/audit_log/**",
+    "backend/app/core/audit_events.py",
+    "backend/app/api/v1/screen.py",
+    "backend/app/api/v1/frames.py",
+    "backend/app/api/v1/clips.py",
+    "backend/app/api/v1/client_audit.py",
+    "ios/Aurion/Aurion/Masking/**",
+    "backend/app/modules/providers/**/shared.py",
+    "backend/app/modules/providers/**/reconcile.py",
+    "backend/app/modules/prompts/safety.py",
+    "backend/app/modules/note_gen/specialty_style.py",
+    "backend/app/modules/note_gen/critique.py",
+    "backend/app/modules/note_gen/few_shot.py",
+    "backend/app/modules/config/schema.py",
+    "backend/alembic/**",
+    "infrastructure/**",
+    ".github/workflows/**",
+    ".claude/autopilot/**",
+    "CLAUDE.md",
+    "AURION-CODING-WORKFLOW.md",
+    "**/*secret*",
+    "**/*credential*",
+    "**/.env*"
+  ],
+
+  "domain_sensitive_keywords": [
+    "phi", "consent", "descriptive mode", "grounded synthesis", "synthesis",
+    "audit log", "masking", "fail-closed", "secret", "credential", "diagnos",
+    "biometric", "voice embedding", "prompt", "appconfig", "feature_flags",
+    "model_versions", "purge", "erasure", "law 25", "hipaa"
+  ],
+
+  "labels": {
+    "umbrella": "autopilot",
+    "needs_human": "needs-human",
+    "by_loop": {
+      "bug-hunt": "autopilot:bug",
+      "pr-review": "autopilot:review",
+      "core-quality": "autopilot:quality",
+      "security-audit": "autopilot:security",
+      "dep-watch": "autopilot:deps",
+      "enhancement": "autopilot:enhancement",
+      "research-digest": "autopilot:research",
+      "digest": "autopilot:digest"
+    }
+  },
+
+  "models": {
+    "_doc": "Maker != checker, and DIFFERENT models. Cheap/fast finders keep cost down; strong+high-effort verifiers are where quality lives; fixers (code writers) stay strong.",
+    "finder":   { "model": "haiku",  "effort": "low" },
+    "verifier": { "model": "opus",   "effort": "high" },
+    "fixer":    { "model": "opus",   "effort": "medium" },
+    "judge":    { "model": "opus",   "effort": "high" }
+  },
+
+  "verify": {
+    "_doc": "Adversarial refute panel: each verifier DEFAULTS to 'not real' and must be convinced. A finding ships only with a confirm majority.",
+    "panel_size": 3,
+    "confirm_majority": 2,
+    "default_verdict": "not_real"
+  },
+
+  "caps": {
+    "max_findings_per_run": 8,
+    "max_prs_per_run": 3,
+    "iteration_cap": 5
+  },
+
+  "token_budget_per_run": 800000,
+  "min_accept_rate": 0.5,
+  "_min_accept_rate_doc": "A loop whose accepted/(accepted+rejected) falls below this over its trailing window costs more than it returns; the digest loop surfaces it and recommends throttle/tune.",
+
+  "worktree_isolation": true,
+  "worktree_root": "~/aurion-autopilot-worktrees",
+
+  "engineering_standards": ".claude/autopilot/ENGINEERING_STANDARDS.md",
+  "state_dir": ".claude/autopilot/state",
+
+  "commands": {
+    "backend_test": "cd backend && python3 -m pytest tests/unit -q",
+    "backend_lint": "cd backend && python3 -m ruff check .",
+    "backend_typecheck": "cd backend && pyright || true",
+    "ios_build_iphone": "xcodebuild -scheme Aurion -destination 'platform=iOS Simulator,name=iPhone 17' build",
+    "ios_build_ipad": "xcodebuild -scheme Aurion -destination 'platform=iOS Simulator,name=iPad Pro 11-inch (M4)' build",
+    "web_build": "cd web && npm run build",
+    "tf_validate": "cd infrastructure && terraform fmt -check && terraform validate"
+  },
+
+  "email": {
+    "channel": "resend",
+    "_doc": "Headless caveat: interactive-auth MCP email is absent in scheduled runs. The digest loop sends via the project's Resend integration (key in Secrets Manager); if unavailable it falls back to writing the digest into state_dir.",
+    "fallback": "state_dir"
+  },
+
+  "loops": {
+    "bug-hunt":        { "enabled": true, "autonomy": "low-risk",    "schedule": "0 7 * * 1,4",  "needs_loop": { "repeats": true, "auto_reject": true,  "end_to_end": true,  "objective": true  } },
+    "pr-review":       { "enabled": true, "autonomy": "propose-only", "schedule": "0 */6 * * *",  "needs_loop": { "repeats": true, "auto_reject": false, "end_to_end": false, "objective": false } },
+    "core-quality":    { "enabled": true, "autonomy": "propose-only", "schedule": "0 6 * * *",    "needs_loop": { "repeats": true, "auto_reject": true,  "end_to_end": true,  "objective": true  } },
+    "security-audit":  { "enabled": true, "autonomy": "propose-only", "schedule": "0 5 * * 1",    "needs_loop": { "repeats": true, "auto_reject": true,  "end_to_end": false, "objective": true  } },
+    "dep-watch":       { "enabled": true, "autonomy": "low-risk",     "schedule": "0 8 * * 1",    "needs_loop": { "repeats": true, "auto_reject": true,  "end_to_end": true,  "objective": true  } },
+    "enhancement":     { "enabled": true, "autonomy": "propose-only", "schedule": "0 9 * * 3",    "needs_loop": { "repeats": true, "auto_reject": false, "end_to_end": false, "objective": false } },
+    "research-digest": { "enabled": true, "autonomy": "propose-only", "schedule": "0 10 * * 1",   "needs_loop": { "repeats": true, "auto_reject": false, "end_to_end": false, "objective": false } },
+    "digest":          { "enabled": true, "autonomy": "propose-only", "schedule": "0 18 * * 1-5", "needs_loop": { "repeats": true, "auto_reject": true,  "end_to_end": true,  "objective": true  } }
+  }
+}
