@@ -31,6 +31,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1._helpers import get_owned_session_or_404, write_audit
 from app.api.v1.transcription import run_stage1
 from app.core.audit_events import AuditEventType
+from app.core.background import spawn_background_task
 from app.core.database import async_session_factory, get_db
 from app.core.models import TranscriptModel
 from app.core.s3 import (
@@ -316,12 +317,22 @@ async def start_processing(
             detail="Uploaded video not found — upload before processing.",
         )
 
+    # Mark running synchronously at dispatch, BEFORE the detached task starts:
+    # the job is `running` the moment /process returns, so a duplicate /process
+    # is rejected (409 above) and a dropped/dead task stays recoverable by the
+    # watchdog (#570) / startup sweep (#571) — both act only on `running` jobs.
+    await jobs.mark_running(db, job)
     await write_audit(
         session.id,
         AuditEventType.VIDEO_IMPORT_STARTED,
         actor_id=str(actor_id),
     )
-    asyncio.create_task(_run_video_import_in_background(session.id, job.id))
+    # Retain a strong reference so the GC can't collect the task before it runs.
+    # A bare ``asyncio.create_task`` is only weakly referenced by the loop and
+    # can be garbage-collected mid-flight → the import never executes.
+    spawn_background_task(
+        _run_video_import_in_background(session.id, job.id), name="video-import"
+    )
     return _status_response(session, job)
 
 
@@ -713,8 +724,9 @@ async def _run_video_import_in_background(
 
         raw_key = job.raw_video_s3_key
         try:
-            await jobs.mark_running(db, job)
-
+            # The job was already marked ``running`` synchronously by
+            # ``start_processing`` at dispatch (so a dropped task stays
+            # watchdog-recoverable); the orchestrator just proceeds.
             # The raw video stays on task-local disk through frame extraction
             # (which needs the transcript's trigger windows from run_stage1),
             # then the S3 copy is purged. The tmp dir is removed on block exit
