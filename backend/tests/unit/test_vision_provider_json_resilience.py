@@ -412,6 +412,101 @@ class TestGeminiFrameJsonResilience:
         assert exc_info.value.provider == "gemini"
 
 
+# ── Gemini — malformed response ENVELOPE (not inner JSON) ─────────────────
+
+
+class TestGeminiEnvelopeResilience:
+    """The inner-JSON tests above always feed a WELL-FORMED Gemini
+    envelope (candidates[0].content.parts[0].text). A separate defect is
+    a malformed ENVELOPE itself — missing/empty `candidates`, missing
+    `content`/`parts`, or empty `parts`. The raw
+    `data["candidates"][0]["content"]["parts"][0]["text"]` access raises
+    KeyError / IndexError / TypeError, which the surrounding
+    `except httpx.HTTPError` does NOT catch — so it escapes the provider
+    boundary and the registry fallback chain (ProviderError only) never
+    trips. These tests pin that every envelope shape raises ProviderError.
+    """
+
+    # (description, malformed envelope) — each must raise ProviderError.
+    _MALFORMED_ENVELOPES = [
+        ("empty_object", {}),
+        ("empty_candidates", {"candidates": []}),
+        ("missing_content", {"candidates": [{}]}),
+        ("missing_parts", {"candidates": [{"content": {}}]}),
+        ("empty_parts", {"candidates": [{"content": {"parts": []}}]}),
+        ("missing_text", {"candidates": [{"content": {"parts": [{}]}}]}),
+        ("candidates_not_list", {"candidates": None}),
+    ]
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "shape,body",
+        _MALFORMED_ENVELOPES,
+        ids=[c[0] for c in _MALFORMED_ENVELOPES],
+    )
+    async def test_caption_frame_raises_provider_error_on_malformed_envelope(
+        self, frame: MaskedFrame, anchor: TranscriptSegment, shape: str, body: dict
+    ) -> None:
+        ok_response = _mock_httpx_response(status_code=200, json_body=body)
+
+        async def fake_post(*args, **kwargs):
+            return ok_response
+
+        with patch(
+            "app.modules.providers.vision.gemini.load_frame_image_base64",
+            return_value="fakebase64",
+        ), patch(
+            "app.modules.providers.vision.gemini.httpx.AsyncClient"
+        ) as mock_client_cls, patch(
+            "app.modules.providers.vision.gemini._GOOGLE_AI_API_KEY",
+            "test-key",
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            with pytest.raises(ProviderError) as exc_info:
+                await GeminiVisionProvider().caption_frame(frame, anchor)
+
+        assert exc_info.value.provider == "gemini"
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "shape,body",
+        _MALFORMED_ENVELOPES,
+        ids=[c[0] for c in _MALFORMED_ENVELOPES],
+    )
+    async def test_caption_clip_raises_provider_error_on_malformed_envelope(
+        self, clip: MaskedClip, anchor: TranscriptSegment, shape: str, body: dict
+    ) -> None:
+        fake_s3 = MagicMock()
+        fake_s3.get_object.return_value = {
+            "Body": MagicMock(read=MagicMock(return_value=b"fake"))
+        }
+        ok_response = _mock_httpx_response(status_code=200, json_body=body)
+
+        async def fake_post(*args, **kwargs):
+            return ok_response
+
+        with patch(
+            "app.modules.providers.vision.gemini.get_s3_client",
+            return_value=fake_s3,
+        ), patch(
+            "app.modules.providers.vision.gemini.httpx.AsyncClient"
+        ) as mock_client_cls, patch(
+            "app.modules.providers.vision.gemini._GOOGLE_AI_API_KEY",
+            "test-key",
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            with pytest.raises(ProviderError) as exc_info:
+                await GeminiVisionProvider().caption_clip(clip, anchor)
+
+        assert exc_info.value.provider == "gemini"
+
+
 # ── OpenAI — caption_frame JSON parse failure ─────────────────────────────
 
 
