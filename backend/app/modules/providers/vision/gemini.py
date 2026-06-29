@@ -104,7 +104,12 @@ class GeminiVisionProvider(VisionProvider):
                 )
                 response.raise_for_status()
                 data = response.json()
-                text = data["candidates"][0]["content"]["parts"][0]["text"]
+                try:
+                    text = data["candidates"][0]["content"]["parts"][0]["text"]
+                except (KeyError, IndexError, TypeError) as e:
+                    raise ProviderError(
+                        "gemini", f"Vision captioning failed: malformed response envelope: {e}", e
+                    ) from e
                 content = parse_caption_json("gemini", text)
                 return build_frame_caption(frame, anchor, content, "gemini")
 
@@ -205,7 +210,12 @@ class GeminiVisionProvider(VisionProvider):
                 )
                 response.raise_for_status()
                 data = response.json()
-                text = data["candidates"][0]["content"]["parts"][0]["text"]
+                try:
+                    text = data["candidates"][0]["content"]["parts"][0]["text"]
+                except (KeyError, IndexError, TypeError) as e:
+                    raise ProviderError(
+                        "gemini", f"Clip captioning failed: malformed response envelope: {e}", e
+                    ) from e
                 content = parse_caption_json("gemini", text)
 
                 # Synthesise a `MaskedFrame`-shaped anchor for the caption
