@@ -41,6 +41,10 @@ SESSION_STATE_VALUES = (
     # Kept in lockstep with app.core.types.SessionState — see
     # tests/integration/test_migrations.py::test_baseline_enums_match_python_enums.
     "STAGE1_FAILED_NO_AUDIO",
+    # Added by migration 0043 (lane-backend/stage1-failed-enum). Generic Stage 1
+    # failure (provider parse error / rate limit / timeout) — distinct from the
+    # NO_AUDIO case (empty transcript, provider never called).
+    "STAGE1_FAILED",
 )
 
 
