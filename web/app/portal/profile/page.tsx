@@ -22,6 +22,7 @@ import {
   updateMyProfile,
 } from "@/lib/portal-api";
 import type { CustomTemplate, PhysicianProfile } from "@/types";
+import { sameContexts } from "./dirty";
 
 /**
  * Clinician profile — view + edit.
@@ -526,34 +527,5 @@ function sameStringArray(a: string[], b: string[]): boolean {
   const bs = [...b].sort();
   const as = [...a].sort();
   for (let i = 0; i < as.length; i++) if (as[i] !== bs[i]) return false;
-  return true;
-}
-
-/** Deep-compare two visit-type → context maps. Context order within a
- * visit type is significant (it's the render + save order), so we
- * compare positionally; only the key set is order-insensitive. */
-function sameContexts(
-  a: Record<string, PhysicianProfile["contexts_per_visit_type"][string]>,
-  b: Record<string, PhysicianProfile["contexts_per_visit_type"][string]>,
-): boolean {
-  const aKeys = Object.keys(a).sort();
-  const bKeys = Object.keys(b).sort();
-  if (aKeys.length !== bKeys.length) return false;
-  for (let i = 0; i < aKeys.length; i++) {
-    if (aKeys[i] !== bKeys[i]) return false;
-    const av = a[aKeys[i]];
-    const bv = b[bKeys[i]];
-    if (av.length !== bv.length) return false;
-    for (let j = 0; j < av.length; j++) {
-      if (
-        av[j].id !== bv[j].id ||
-        av[j].label !== bv[j].label ||
-        av[j].template_key !== bv[j].template_key ||
-        av[j].template_ref !== bv[j].template_ref
-      ) {
-        return false;
-      }
-    }
-  }
   return true;
 }

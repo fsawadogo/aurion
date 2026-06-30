@@ -65,6 +65,11 @@ export const BUILT_IN_TEMPLATE_KEYS = [
  * `_MAX_CONTEXTS_PER_VISIT_TYPE`. */
 export const MAX_CONTEXTS_PER_VISIT_TYPE = 30;
 
+/** Per-context description cap. Mirrors the backend `validate_user_text`
+ * ≤500-char limit on `VisitTypeContext.description` (#576). The server
+ * re-validates; this is just a kind client-side guardrail. */
+export const MAX_CONTEXT_DESCRIPTION_LEN = 500;
+
 /** Mint a well-formed `ctx_<8 hex>` id for a new row. Matches the
  * backend `_CONTEXT_ID_RE` so the server PRESERVES it on round-trip —
  * which keeps React keys stable across save/reload instead of churning
@@ -235,6 +240,7 @@ export default function VisitTypeContextsEditor({
         label: draft.trim(),
         template_key: null,
         template_ref: null,
+        description: null,
       },
     ]);
     setDraft("");
@@ -325,88 +331,101 @@ export default function VisitTypeContextsEditor({
                   )}
 
                   {contexts.map((ctx) => (
-                    <div
-                      key={ctx.id}
-                      className="flex flex-col gap-2 sm:flex-row sm:items-center"
-                    >
-                      <input
-                        type="text"
-                        value={ctx.label}
+                    <div key={ctx.id} className="space-y-2">
+                      <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                        <input
+                          type="text"
+                          value={ctx.label}
+                          onChange={(e) =>
+                            updateContext(vt, ctx.id, {
+                              label: e.target.value,
+                            })
+                          }
+                          aria-label={t("labelAria", {
+                            label: ctx.label,
+                          })}
+                          maxLength={MAX_CONSULTATION_TYPE_LEN + 1}
+                          className="form-input flex-1"
+                        />
+                        <select
+                          // A custom `template_ref` wins over a built-in
+                          // `template_key` for the displayed value — the two
+                          // are mutually exclusive, but reading both defends
+                          // against a half-applied row. "" = specialty default.
+                          value={ctx.template_ref ?? ctx.template_key ?? ""}
+                          onChange={(e) =>
+                            selectTemplate(vt, ctx.id, e.target.value)
+                          }
+                          aria-label={t("templateAria", {
+                            label: ctx.label,
+                          })}
+                          className="form-select sm:w-56"
+                        >
+                          <option value="">{t("defaultTemplate")}</option>
+                          {templateOptions.map((o) => (
+                            <option key={o.key} value={o.key}>
+                              {o.label}
+                            </option>
+                          ))}
+                          {customOptions.length > 0 && (
+                            <optgroup label={t("customGroup")}>
+                              {customOptions.map((o) => (
+                                <option key={o.id} value={o.id}>
+                                  {o.label}
+                                </option>
+                              ))}
+                            </optgroup>
+                          )}
+                          {ctx.template_ref !== null &&
+                            !customIdSet.has(ctx.template_ref) && (
+                              /* Stale ref: the bound custom template was
+                               * deleted (or the list failed to load). Render
+                               * a placeholder option whose value equals the
+                               * ref so the <select> stays on it instead of
+                               * silently snapping to the default — the
+                               * binding round-trips and the physician can
+                               * re-pick. Mirrors iOS I3 graceful display. */
+                              <option value={ctx.template_ref}>
+                                {t("customUnavailable")}
+                              </option>
+                            )}
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => removeContext(vt, ctx.id)}
+                          aria-label={t("delete", { label: ctx.label })}
+                          className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-red-50 hover:text-red-600"
+                        >
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            aria-hidden="true"
+                            className="h-4 w-4"
+                          >
+                            <path d="M18 6 6 18" />
+                            <path d="m6 6 12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                      <textarea
+                        value={ctx.description ?? ""}
                         onChange={(e) =>
                           updateContext(vt, ctx.id, {
-                            label: e.target.value,
+                            description:
+                              e.target.value === "" ? null : e.target.value,
                           })
                         }
-                        aria-label={t("labelAria", {
-                          label: ctx.label,
-                        })}
-                        maxLength={MAX_CONSULTATION_TYPE_LEN + 1}
-                        className="form-input flex-1"
+                        placeholder={t("descriptionPlaceholder")}
+                        aria-label={t("descriptionAria", { label: ctx.label })}
+                        maxLength={MAX_CONTEXT_DESCRIPTION_LEN}
+                        rows={2}
+                        className="form-input w-full text-sm resize-y"
                       />
-                      <select
-                        // A custom `template_ref` wins over a built-in
-                        // `template_key` for the displayed value — the two
-                        // are mutually exclusive, but reading both defends
-                        // against a half-applied row. "" = specialty default.
-                        value={ctx.template_ref ?? ctx.template_key ?? ""}
-                        onChange={(e) =>
-                          selectTemplate(vt, ctx.id, e.target.value)
-                        }
-                        aria-label={t("templateAria", {
-                          label: ctx.label,
-                        })}
-                        className="form-select sm:w-56"
-                      >
-                        <option value="">{t("defaultTemplate")}</option>
-                        {templateOptions.map((o) => (
-                          <option key={o.key} value={o.key}>
-                            {o.label}
-                          </option>
-                        ))}
-                        {customOptions.length > 0 && (
-                          <optgroup label={t("customGroup")}>
-                            {customOptions.map((o) => (
-                              <option key={o.id} value={o.id}>
-                                {o.label}
-                              </option>
-                            ))}
-                          </optgroup>
-                        )}
-                        {ctx.template_ref !== null &&
-                          !customIdSet.has(ctx.template_ref) && (
-                            /* Stale ref: the bound custom template was
-                             * deleted (or the list failed to load). Render
-                             * a placeholder option whose value equals the
-                             * ref so the <select> stays on it instead of
-                             * silently snapping to the default — the
-                             * binding round-trips and the physician can
-                             * re-pick. Mirrors iOS I3 graceful display. */
-                            <option value={ctx.template_ref}>
-                              {t("customUnavailable")}
-                            </option>
-                          )}
-                      </select>
-                      <button
-                        type="button"
-                        onClick={() => removeContext(vt, ctx.id)}
-                        aria-label={t("delete", { label: ctx.label })}
-                        className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-gray-500 hover:bg-red-50 hover:text-red-600"
-                      >
-                        <svg
-                          xmlns="http://www.w3.org/2000/svg"
-                          viewBox="0 0 24 24"
-                          fill="none"
-                          stroke="currentColor"
-                          strokeWidth="2"
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          aria-hidden="true"
-                          className="h-4 w-4"
-                        >
-                          <path d="M18 6 6 18" />
-                          <path d="m6 6 12 12" />
-                        </svg>
-                      </button>
                     </div>
                   ))}
 

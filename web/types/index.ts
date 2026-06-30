@@ -914,6 +914,10 @@ export interface VisitTypeContext {
   label: string;
   template_key: string | null;
   template_ref: string | null;
+  /** Optional free-text clinical note for the context (≤500 chars,
+   *  #576). The backend persists & returns it and iOS edits it; null or
+   *  omitted = none. Can be PHI — rides only the profile PUT body. */
+  description?: string | null;
 }
 
 export interface PhysicianProfile {
