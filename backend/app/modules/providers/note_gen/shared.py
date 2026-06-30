@@ -197,8 +197,20 @@ def build_user_prompt(
     default, and the only value passed while the flag is OFF) yields a
     byte-identical prompt to the pre-feature build.
     """
+    # Include the section `description` so the model receives the per-section
+    # field-level capture guidance (ROM in degrees, named special tests + side,
+    # imaging per view, plan sub-structure, etc.). Previously dropped — the
+    # guidance authored in the template JSON never reached the live prompt.
     sections_spec = json.dumps(
-        [{"id": s.id, "title": s.title, "required": s.required} for s in template.sections],
+        [
+            {
+                "id": s.id,
+                "title": s.title,
+                "required": s.required,
+                "description": s.description,
+            }
+            for s in template.sections
+        ],
         indent=2,
     )
     segments_text = "\n".join(
