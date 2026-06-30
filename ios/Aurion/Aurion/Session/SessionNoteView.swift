@@ -26,14 +26,19 @@ struct NoteDocumentBody: View {
     @ScaledMetric(relativeTo: .title2) private var sectionHeadingSize: CGFloat = 20
     @ScaledMetric(relativeTo: .body) private var emptySectionSize: CGFloat = 16
     @ScaledMetric(relativeTo: .body) private var claimBodySize: CGFloat = 17
+    @ScaledMetric(relativeTo: .title3) private var subHeadingSize: CGFloat = 17
 
     var body: some View {
         VStack(alignment: .leading, spacing: 28) {
-            // Title block — specialty (Notes-size title), then meta row.
+            // Masthead — gold eyebrow, specialty title, meta row, gold rule.
             VStack(alignment: .leading, spacing: 6) {
+                Text("AURION CLINICAL AI")
+                    .font(.system(size: forPDF ? 9 : 10, weight: .bold))
+                    .tracking(2)
+                    .foregroundColor(.aurionGold)
                 Text(specialtyTitle)
                     .font(.system(size: forPDF ? 32 : titleSize, weight: .bold))
-                    .foregroundColor(forPDF ? .black : .aurionTextPrimary)
+                    .foregroundColor(forPDF ? .aurionNavy : .aurionTextPrimary)
                 Text(dateString)
                     .font(.system(size: forPDF ? 15 : dateSize))
                     .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
@@ -70,11 +75,25 @@ struct NoteDocumentBody: View {
                 .font(.system(size: forPDF ? 12 : metaSize))
                 .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
                 .padding(.top, 4)
+
+                Rectangle()
+                    .fill(Color.aurionGold)
+                    .frame(height: 2)
+                    .padding(.top, 10)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
 
-            ForEach(note.sections, id: \.id) { section in
-                sectionView(section)
+            // SOAP-grouped body — Subjective / Objective / Assessment / Plan
+            // bands, each with its member sections beneath. Mirrors the
+            // backend DOCX export so screen, PDF, and DOCX read identically.
+            ForEach(soapGroups) { group in
+                VStack(alignment: .leading, spacing: 14) {
+                    groupHeader(letter: group.letter, label: group.label)
+                    ForEach(group.sections, id: \.id) { section in
+                        sectionView(section)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
 
             if !forPDF {
@@ -99,22 +118,91 @@ struct NoteDocumentBody: View {
         .background(forPDF ? Color.white : Color.clear)
     }
 
+    // SOAP grouping — buckets the note's sections into the four SOAP
+    // headers (order-preserving), routing any unknown section id by
+    // keyword and dropping empty groups. Matches the backend export.
+    private struct SOAPGroup: Identifiable {
+        let letter: String
+        let label: String
+        let sections: [NoteSectionResponse]
+        var id: String { letter }
+    }
+
+    private var soapGroups: [SOAPGroup] {
+        let mapping: [(String, String, [String])] = [
+            ("S", "SUBJECTIVE", ["chief_complaint", "hpi", "history",
+                                 "past_medical_history", "past_surgical_history",
+                                 "medications", "allergies"]),
+            ("O", "OBJECTIVE", ["vital_signs", "physical_exam", "wound_assessment",
+                                "functional_assessment", "imaging_review", "investigations"]),
+            ("A", "ASSESSMENT", ["assessment"]),
+            ("P", "PLAN", ["plan", "disposition"]),
+        ]
+        let byId = Dictionary(note.sections.map { ($0.id, $0) }, uniquingKeysWith: { first, _ in first })
+        var used = Set<String>()
+        var buckets: [[NoteSectionResponse]] = mapping.map { _ in [] }
+        for (i, entry) in mapping.enumerated() {
+            for sid in entry.2 {
+                if let s = byId[sid] {
+                    buckets[i].append(s)
+                    used.insert(sid)
+                }
+            }
+        }
+        for s in note.sections where !used.contains(s.id) {
+            let sid = s.id.lowercased()
+            let idx: Int
+            if sid.contains("assess") || sid.contains("impression") { idx = 2 }
+            else if sid.contains("plan") || sid.contains("dispo") || sid.contains("follow") { idx = 3 }
+            else if sid.contains("exam") || sid.contains("imag") || sid.contains("vital")
+                        || sid.contains("investig") || sid.contains("objective") { idx = 1 }
+            else { idx = 0 }
+            buckets[idx].append(s)
+        }
+        var result: [SOAPGroup] = []
+        for (i, entry) in mapping.enumerated() where !buckets[i].isEmpty {
+            result.append(SOAPGroup(letter: entry.0, label: entry.1, sections: buckets[i]))
+        }
+        return result
+    }
+
+    @ViewBuilder
+    private func groupHeader(letter: String, label: String) -> some View {
+        HStack(spacing: 10) {
+            Text(letter)
+                .font(.system(size: forPDF ? 14 : 16, weight: .heavy))
+                .foregroundColor(.white)
+                .frame(width: forPDF ? 26 : 30, height: forPDF ? 26 : 30)
+                .background(Color.aurionGold)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+            Text(label)
+                .font(.system(size: forPDF ? 18 : 21, weight: .bold))
+                .foregroundColor(forPDF ? .aurionNavy : .aurionTextPrimary)
+            Spacer(minLength: 0)
+        }
+    }
+
     @ViewBuilder
     private func sectionView(_ section: NoteSectionResponse) -> some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(section.title)
-                    .font(.system(size: forPDF ? 20 : sectionHeadingSize, weight: .semibold))
-                    .foregroundColor(forPDF ? .black : .aurionTextPrimary)
-                if !forPDF, section.status != "populated" {
-                    Text(statusLabel(section.status))
-                        .font(.system(size: 11, weight: .semibold))
-                        .foregroundColor(.aurionTextSecondary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
-                        .background(Color.aurionSurfaceAlt)
-                        .clipShape(Capsule())
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(section.title)
+                        .font(.system(size: forPDF ? 15 : subHeadingSize, weight: .semibold))
+                        .foregroundColor(forPDF ? .aurionNavy : .aurionTextPrimary)
+                    if !forPDF, section.status != "populated" {
+                        Text(statusLabel(section.status))
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundColor(.aurionTextSecondary)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 2)
+                            .background(Color.aurionSurfaceAlt)
+                            .clipShape(Capsule())
+                    }
                 }
+                Rectangle()
+                    .fill(Color.aurionGold.opacity(0.45))
+                    .frame(height: 1)
             }
 
             if section.claims.isEmpty {
