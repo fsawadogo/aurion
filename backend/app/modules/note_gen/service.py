@@ -303,6 +303,15 @@ def build_stage1_user_prompt(
 ) -> str:
     """Build the user prompt for Stage 1 note generation.
 
+    .. deprecated::
+        **NOT the live prompt builder.** The provider path builds the live
+        user prompt via :func:`app.modules.providers.note_gen.shared.build_user_prompt`
+        (and the specialty STYLE + few-shot prefix via
+        :func:`render_specialty_prefix`). This function is retained only because
+        unit tests exercise it; do NOT add prompt improvements here — edit
+        ``providers/note_gen/shared.build_user_prompt`` instead, or they will
+        not reach production.
+
     The system prompt is always NOTE_GENERATION_SYSTEM_PROMPT (set on the
     provider call). This function builds the user message containing the
     transcript content and the expected output schema.

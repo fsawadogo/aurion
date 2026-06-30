@@ -1,21 +1,49 @@
 {
   "key": "orthopedic_surgery",
   "display_name": "Orthopedic Surgery",
-  "version": "1.0",
+  "version": "1.1",
   "sections": [
     {
       "id": "chief_complaint",
       "title": "Chief Complaint",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Primary presenting complaint in the patient's own words"
+      "description": "Primary presenting complaint in the patient's own words, with laterality (right/left) and duration when stated."
     },
     {
       "id": "hpi",
       "title": "History of Present Illness",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Onset, duration, character, radiation, associated symptoms, timing, exacerbating/relieving factors, severity"
+      "description": "Onset, duration, character, location and laterality, radiation, severity, and timing; aggravating and relieving factors; associated symptoms (swelling, instability, giving way, mechanical locking, morning stiffness); current activity level; and management/treatment tried to date — each captured only as the patient or physician states it. Emit one claim per distinct element."
+    },
+    {
+      "id": "past_medical_history",
+      "title": "Past Medical History",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Relevant active or past medical conditions as stated (e.g. inflammatory arthritis, diabetes, perimenopause). Capture only what is mentioned; leave not_captured if none discussed."
+    },
+    {
+      "id": "past_surgical_history",
+      "title": "Past Surgical History",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Prior surgeries and relevant anaesthetic history as stated, with side/site and approximate timing where given. Leave not_captured if none discussed."
+    },
+    {
+      "id": "medications",
+      "title": "Medications",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Current medications with dose, route, and frequency exactly as stated (e.g. 'adalimumab 40 mg subcutaneous every 2 weeks'); include relevant PRN analgesics. Leave not_captured if none discussed."
+    },
+    {
+      "id": "allergies",
+      "title": "Allergies",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Stated drug or material allergies and the reaction when given. Leave not_captured if allergies are not addressed during the encounter."
     },
     {
       "id": "physical_exam",
@@ -28,9 +56,10 @@
         "Lachman", "McMurray", "Hawkins", "Neer", "empty can",
         "drawer", "anterior drawer", "apprehension", "Thessaly",
         "valgus stress", "varus stress", "goniometer", "instability",
+        "milking", "patellar grind", "patellar mobility",
         "looking here", "you can see"
       ],
-      "description": "Inspection, palpation, range of motion (active and passive, in degrees), strength on the 0-5 MRC scale, named special tests with result and side (Lachman, McMurray, Hawkins, Neer, drawer), neurovascular status — described only as the physician states them"
+      "description": "Document each manoeuvre as the physician performs it, leading with the structure or test name: general appearance; inspection (deformity, swelling); palpation (location, e.g. medial joint line); range of motion as degrees, active vs passive when distinguished; strength on the 0-5 MRC scale when graded (e.g. '4/5'); named special tests with result AND side (Lachman, McMurray, anterior drawer, Hawkins, Neer, patellar grind, milking test); and neurovascular status — each described only as the physician states it, with laterality wherever mentioned. One claim per distinct finding."
     },
     {
       "id": "imaging_review",
@@ -39,23 +68,24 @@
       "visual_trigger_keywords": [
         "X-ray", "x-ray", "radiograph", "MRI", "CT", "ultrasound",
         "looking at", "pulling up", "on the screen", "you can see here",
-        "this view", "AP view", "lateral view", "comparing"
+        "this view", "AP view", "lateral view", "sunrise", "Merchant",
+        "weight-bearing", "standing", "comparing"
       ],
-      "description": "Description of imaging findings as literally observed on screen — modality, laterality, findings described only"
+      "description": "Imaging findings as literally described on screen — state modality, laterality, and the specific projection/view for each finding (e.g. 'standing AP view', 'lateral projection', 'axial/sunrise (Merchant) view'). One claim per view or finding; findings described only, never interpreted beyond what the physician states."
     },
     {
       "id": "assessment",
       "title": "Assessment",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Working diagnosis as explicitly stated by the physician, verbatim. Do not add differentials the physician did not voice"
+      "description": "The physician's working assessment. When synthesis is permitted (grounded mode), present it as one claim per working diagnosis plus any contributing factors the physician relates, and ground each statement in the exam/imaging/history source(s) it rests on (cite multiple sources where relevant). Never state a diagnosis the cited findings do not support; never add a differential the physician did not voice."
     },
     {
       "id": "plan",
       "title": "Plan",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Treatment plan, investigations ordered, referrals, follow-up timeline as stated by the physician"
+      "description": "The plan as stated by the physician, with one claim per item grouped by: investigations ordered, referrals, treatment options discussed with their trade-offs/cost when mentioned, risks counselled, activity and lifestyle advice, and follow-up timing."
     }
   ]
 }

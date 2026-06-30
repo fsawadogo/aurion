@@ -1,27 +1,90 @@
 {
   "examples": [
     {
-      "description": "left knee — grounded assessment synthesized from a special test + MRI, each cited (Grounded Synthesis Mode, v3.2)",
+      "description": "left knee — full note: structured history, labelled exam manoeuvres, imaging per view, and an assessment + plan synthesized and cited from the captured findings (Grounded Synthesis Mode, v3.2)",
       "transcript": [
-        {"id": "seg_001", "start_ms": 0, "end_ms": 5000, "text": "Let's look at that left knee. I'm going to test the ligaments."},
-        {"id": "seg_002", "start_ms": 5000, "end_ms": 12000, "text": "Lachman is positive on the left with a soft endpoint, and the anterior drawer is positive too."},
-        {"id": "seg_003", "start_ms": 12000, "end_ms": 20000, "text": "The MRI of the left knee shows a complete tear of the anterior cruciate ligament."},
-        {"id": "seg_004", "start_ms": 20000, "end_ms": 28000, "text": "So we'll set you up with orthopedics for a reconstruction discussion, and start prehab physiotherapy in the meantime."}
+        {"id": "seg_001", "start_ms": 0, "end_ms": 5000, "text": "What brings you in today?"},
+        {"id": "seg_002", "start_ms": 5000, "end_ms": 13000, "text": "Left knee pain. It's been getting worse over the past two months."},
+        {"id": "seg_003", "start_ms": 13000, "end_ms": 24000, "text": "The pain is on the inner side of the knee, worse going up and down stairs and with squatting."},
+        {"id": "seg_004", "start_ms": 24000, "end_ms": 33000, "text": "I get some morning stiffness with a slight limp that settles, and the knee swells on and off."},
+        {"id": "seg_005", "start_ms": 33000, "end_ms": 42000, "text": "I'm very active — swimming three times a week, dancing, and weights."},
+        {"id": "seg_006", "start_ms": 42000, "end_ms": 52000, "text": "I take adalimumab 40 milligrams by injection every two weeks for Crohn's, and Tylenol or Advil as needed."},
+        {"id": "seg_007", "start_ms": 52000, "end_ms": 60000, "text": "Let me have a look. On inspection there's no gross deformity and no obvious swelling."},
+        {"id": "seg_008", "start_ms": 60000, "end_ms": 70000, "text": "Range of motion is full and passive on both knees, with pain only on the left."},
+        {"id": "seg_009", "start_ms": 70000, "end_ms": 80000, "text": "There's tenderness on palpation along the medial joint line of the left knee."},
+        {"id": "seg_010", "start_ms": 80000, "end_ms": 92000, "text": "McMurray is negative on the right and positive on the left. Lachman is negative and the ligaments are stable."},
+        {"id": "seg_011", "start_ms": 92000, "end_ms": 104000, "text": "On the standing AP view there's medial joint space narrowing of the left knee."},
+        {"id": "seg_012", "start_ms": 104000, "end_ms": 116000, "text": "On the sunrise view there's a small osteophyte under the patella on the left."},
+        {"id": "seg_013", "start_ms": 116000, "end_ms": 128000, "text": "I'll order an MRI of the left knee to look at the cartilage and the meniscus."},
+        {"id": "seg_014", "start_ms": 128000, "end_ms": 138000, "text": "I'll refer you to physiotherapy to strengthen the muscles around the knee."},
+        {"id": "seg_015", "start_ms": 138000, "end_ms": 152000, "text": "We can talk about a viscosupplementation injection, around four hundred and fifty dollars, which acts as a joint lubricant; the main risk is infection, roughly one in ten thousand."},
+        {"id": "seg_016", "start_ms": 152000, "end_ms": 162000, "text": "Keep active — no restriction on squats or lunges — and we'll reassess after the MRI."}
       ],
       "note": {
         "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_cc1", "text": "Left knee pain, worsening over the past two months.", "source_type": "transcript", "source_id": "seg_002", "source_quote": "Left knee pain. It's been getting worse over the past two months."}
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_h1", "text": "Pain located at the medial aspect of the left knee, aggravated by ascending and descending stairs and by squatting.", "source_type": "transcript", "source_id": "seg_003", "source_quote": "The pain is on the inner side of the knee, worse going up and down stairs and with squatting."},
+              {"id": "claim_h2", "text": "Morning stiffness with a slight limp that settles, and intermittent swelling of the knee.", "source_type": "transcript", "source_id": "seg_004", "source_quote": "I get some morning stiffness with a slight limp that settles, and the knee swells on and off."},
+              {"id": "claim_h3", "text": "Highly active — swimming three times a week, dancing, and resistance training.", "source_type": "transcript", "source_id": "seg_005", "source_quote": "I'm very active — swimming three times a week, dancing, and weights."}
+            ]
+          },
+          {
+            "id": "medications",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_m1", "text": "Adalimumab 40 mg subcutaneous injection every two weeks; Tylenol or Advil as needed.", "source_type": "transcript", "source_id": "seg_006", "source_quote": "I take adalimumab 40 milligrams by injection every two weeks for Crohn's, and Tylenol or Advil as needed."}
+            ]
+          },
+          {
+            "id": "physical_exam",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_e1", "text": "Inspection: no gross deformity and no obvious swelling.", "source_type": "transcript", "source_id": "seg_007", "source_quote": "On inspection there's no gross deformity and no obvious swelling."},
+              {"id": "claim_e2", "text": "Range of motion: full passive range of motion in both knees, with pain only on the left.", "source_type": "transcript", "source_id": "seg_008", "source_quote": "Range of motion is full and passive on both knees, with pain only on the left."},
+              {"id": "claim_e3", "text": "Palpation: tenderness along the medial joint line of the left knee.", "source_type": "transcript", "source_id": "seg_009", "source_quote": "There's tenderness on palpation along the medial joint line of the left knee."},
+              {"id": "claim_e4", "text": "Special tests: McMurray negative on the right and positive on the left; Lachman negative with stable ligaments.", "source_type": "transcript", "source_id": "seg_010", "source_quote": "McMurray is negative on the right and positive on the left. Lachman is negative and the ligaments are stable."}
+            ]
+          },
+          {
+            "id": "imaging_review",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_i1", "text": "Standing AP view: medial joint space narrowing of the left knee.", "source_type": "transcript", "source_id": "seg_011", "source_quote": "On the standing AP view there's medial joint space narrowing of the left knee."},
+              {"id": "claim_i2", "text": "Sunrise view: small osteophyte under the patella on the left.", "source_type": "transcript", "source_id": "seg_012", "source_quote": "On the sunrise view there's a small osteophyte under the patella on the left."}
+            ]
+          },
           {
             "id": "assessment",
             "status": "populated",
             "claims": [
               {
                 "id": "claim_a1",
-                "text": "Working assessment: complete tear of the left anterior cruciate ligament.",
+                "text": "Working assessment: early medial compartment osteoarthritis of the left knee — medial joint space narrowing on imaging with medial joint-line tenderness on examination.",
                 "source_type": "transcript",
-                "source_id": "seg_002",
-                "source_quote": "Lachman is positive on the left with a soft endpoint, and the anterior drawer is positive too.",
+                "source_id": "seg_011",
+                "source_quote": "On the standing AP view there's medial joint space narrowing of the left knee.",
                 "additional_sources": [
-                  {"source_id": "seg_003", "source_quote": "The MRI of the left knee shows a complete tear of the anterior cruciate ligament."}
+                  {"source_id": "seg_009", "source_quote": "There's tenderness on palpation along the medial joint line of the left knee."}
+                ]
+              },
+              {
+                "id": "claim_a2",
+                "text": "Patellofemoral involvement on the left — small retropatellar osteophyte on the sunrise view, with a positive McMurray on the left to be clarified on MRI.",
+                "source_type": "transcript",
+                "source_id": "seg_012",
+                "source_quote": "On the sunrise view there's a small osteophyte under the patella on the left.",
+                "additional_sources": [
+                  {"source_id": "seg_010", "source_quote": "McMurray is negative on the right and positive on the left. Lachman is negative and the ligaments are stable."}
                 ]
               }
             ]
@@ -30,13 +93,10 @@
             "id": "plan",
             "status": "populated",
             "claims": [
-              {
-                "id": "claim_p1",
-                "text": "Refer to orthopedics for ACL reconstruction discussion; begin prehabilitation physiotherapy in the interim.",
-                "source_type": "transcript",
-                "source_id": "seg_004",
-                "source_quote": "we'll set you up with orthopedics for a reconstruction discussion, and start prehab physiotherapy in the meantime."
-              }
+              {"id": "claim_p1", "text": "Investigations: MRI of the left knee to assess cartilage and meniscus.", "source_type": "transcript", "source_id": "seg_013", "source_quote": "I'll order an MRI of the left knee to look at the cartilage and the meniscus."},
+              {"id": "claim_p2", "text": "Referrals: physiotherapy to strengthen the musculature around the knee.", "source_type": "transcript", "source_id": "seg_014", "source_quote": "I'll refer you to physiotherapy to strengthen the muscles around the knee."},
+              {"id": "claim_p3", "text": "Options discussed: viscosupplementation injection (~$450) as a joint lubricant; risk of infection counselled at approximately 1 in 10,000.", "source_type": "transcript", "source_id": "seg_015", "source_quote": "We can talk about a viscosupplementation injection, around four hundred and fifty dollars, which acts as a joint lubricant; the main risk is infection, roughly one in ten thousand."},
+              {"id": "claim_p4", "text": "Activity and follow-up: remain active with no restriction on squats or lunges; reassess after the MRI.", "source_type": "transcript", "source_id": "seg_016", "source_quote": "Keep active — no restriction on squats or lunges — and we'll reassess after the MRI."}
             ]
           }
         ]
