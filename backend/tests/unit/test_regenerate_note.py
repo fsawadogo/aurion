@@ -1,0 +1,146 @@
+"""Unit tests for per-user prompt-testing gate + regenerate-note (#590).
+
+Covers the role-agnostic, owner-scoped ``POST /sessions/{id}/regenerate-note``:
+the ``prompt_testing_enabled`` gate (403 when off), the missing-transcript 404,
+and the happy path — reuse the STORED transcript (no re-transcribe) + honour a
+template override + return the new note version. Plus the admin response
+mapping carries the new flag.
+"""
+
+from __future__ import annotations
+
+import uuid
+from types import SimpleNamespace
+from unittest.mock import AsyncMock, MagicMock, patch
+
+import pytest
+from fastapi import HTTPException
+
+from app.api.v1.admin._shared import user_to_response
+from app.api.v1.sessions import (
+    RegenerateNoteRequest,
+    RegenerateNoteResponse,
+    regenerate_note,
+)
+from app.core.types import Note, Transcript, UserRole
+
+# ── Helpers ─────────────────────────────────────────────────────────────────
+
+
+def _user_row(prompt_testing_enabled: bool) -> SimpleNamespace:
+    return SimpleNamespace(prompt_testing_enabled=prompt_testing_enabled)
+
+
+def _transcript_row(session_id: uuid.UUID) -> SimpleNamespace:
+    t = Transcript(session_id=str(session_id), provider_used="whisper", segments=[])
+    return SimpleNamespace(transcript_json=t.model_dump_json())
+
+
+def _session(session_id: uuid.UUID) -> SimpleNamespace:
+    return SimpleNamespace(id=session_id, specialty="orthopedic_surgery")
+
+
+def _caller() -> SimpleNamespace:
+    return SimpleNamespace(user_id=uuid.uuid4(), role=None, email="x@x.com")
+
+
+def _db(*, user_row, transcript_row) -> AsyncMock:
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=user_row)  # UserModel lookup = the gate
+    result = MagicMock()
+    result.scalar_one_or_none.return_value = transcript_row
+    db.execute = AsyncMock(return_value=result)
+    db.commit = AsyncMock()
+    return db
+
+
+# ── The gate ────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_regenerate_denied_when_flag_off():
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(False), transcript_row=_transcript_row(sid))
+    with patch(
+        "app.api.v1.sessions.get_owned_session_or_404",
+        AsyncMock(return_value=_session(sid)),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
+    assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_regenerate_404_when_no_transcript():
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=None)
+    with patch(
+        "app.api.v1.sessions.get_owned_session_or_404",
+        AsyncMock(return_value=_session(sid)),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
+    assert exc.value.status_code == 404
+
+
+# ── Happy path ──────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_regenerate_reuses_stored_transcript_and_returns_new_version():
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    note = Note(
+        session_id=str(sid),
+        stage=1,
+        version=3,
+        provider_used="anthropic",
+        specialty="orthopedic_surgery",
+        completeness_score=0.82,
+    )
+    gen = AsyncMock(return_value=note)
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        resp = await regenerate_note(
+            sid,
+            RegenerateNoteRequest(template_key="musculoskeletal"),
+            _caller(),
+            db,
+        )
+
+    assert isinstance(resp, RegenerateNoteResponse)
+    assert resp.version == 3
+    assert resp.stage == 1
+    assert resp.provider_used == "anthropic"
+    # Honoured the template override and reused the STORED transcript (the route
+    # never calls a transcription pipeline — it passes the parsed Transcript).
+    kwargs = gen.call_args.kwargs
+    assert kwargs["template_key"] == "musculoskeletal"
+    assert isinstance(kwargs["transcript"], Transcript)
+    db.commit.assert_awaited_once()
+
+
+# ── Admin response mapping ──────────────────────────────────────────────────
+
+
+def test_user_to_response_carries_prompt_testing_enabled():
+    row = SimpleNamespace(
+        id=uuid.uuid4(),
+        email="a@b.com",
+        full_name="A",
+        role=UserRole.CLINICIAN,
+        is_active=True,
+        voice_enrolled=False,
+        mfa_required=False,
+        mfa_enrolled_at=None,
+        created_at=None,
+        last_login_at=None,
+        prompt_testing_enabled=True,
+    )
+    resp = user_to_response(row)
+    assert resp.prompt_testing_enabled is True

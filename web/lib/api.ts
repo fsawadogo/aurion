@@ -41,6 +41,7 @@ import type {
   UpdateFeatureFlagsResponse,
   UpdateUserPayload,
   User,
+  RegenerateNoteResult,
 } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
@@ -467,6 +468,22 @@ export async function deactivateUser(userId: string): Promise<void> {
   await fetchWithAuth(`/api/v1/admin/users/${userId}/deactivate`, {
     method: "POST",
   });
+}
+
+/** Re-run note generation on an already-uploaded encounter with a different
+ * template/prompt (#590). No re-upload / re-transcribe — the backend reuses
+ * the stored transcript. Gated server-side by the caller's
+ * `prompt_testing_enabled` flag (403 otherwise) and owner-scoped to their own
+ * session; returns the newly-generated note version. */
+export async function regenerateNote(
+  sessionId: string,
+  payload: { template_key?: string; custom_template_id?: string } = {},
+): Promise<RegenerateNoteResult> {
+  const res = await fetchWithAuth(
+    `/api/v1/sessions/${sessionId}/regenerate-note`,
+    { method: "POST", body: JSON.stringify(payload) },
+  );
+  return res.json();
 }
 
 /* ─── Audit Log ──────────────────────────────────────────────────────────── */

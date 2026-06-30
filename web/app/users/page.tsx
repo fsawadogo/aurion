@@ -144,6 +144,21 @@ export default function UsersPage() {
     }
   }
 
+  // #590 — grant/revoke the per-user prompt-testing capability (re-run notes
+  // with a different template on own uploads). Orthogonal to role; the backend
+  // gates the regenerate endpoint on this flag.
+  async function handleSetPromptTestingEnabled(
+    userId: string,
+    enabled: boolean,
+  ) {
+    try {
+      await updateUser(userId, { prompt_testing_enabled: enabled });
+      await fetchUsers();
+    } catch (err) {
+      setError(humanizeError(err, "Failed to update user"));
+    }
+  }
+
   return (
     <>
       <Header
@@ -280,6 +295,31 @@ export default function UsersPage() {
                           }
                         >
                           {user.mfa_required ? "MFA: required" : "MFA: optional"}
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            handleSetPromptTestingEnabled(
+                              user.id,
+                              !user.prompt_testing_enabled,
+                            )
+                          }
+                          data-testid={`prompt-testing-toggle-${user.id}`}
+                          className={
+                            user.prompt_testing_enabled
+                              ? "text-gold-700 hover:bg-gold-50"
+                              : "text-gray-500 hover:bg-gray-50"
+                          }
+                          title={
+                            user.prompt_testing_enabled
+                              ? "Prompt testing on — user can re-run notes with a different template"
+                              : "Prompt testing off — click to grant"
+                          }
+                        >
+                          {user.prompt_testing_enabled
+                            ? "Prompt testing: on"
+                            : "Prompt testing: off"}
                         </Button>
                         {user.is_active ? (
                           <Button

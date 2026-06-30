@@ -32,6 +32,7 @@ function user(over: Record<string, unknown> = {}) {
     voice_enrolled: false,
     mfa_required: false,
     mfa_enrolled: false,
+    prompt_testing_enabled: false,
     created_at: new Date().toISOString(),
     last_login_at: null,
     ...over,
@@ -66,6 +67,46 @@ describe("UsersPage — Require MFA toggle (#397)", () => {
     fireEvent.click(screen.getByTestId("mfa-toggle-u-1"));
     await waitFor(() =>
       expect(updateUser).toHaveBeenCalledWith("u-1", { mfa_required: false }),
+    );
+  });
+});
+
+describe("UsersPage — Prompt testing toggle (#590)", () => {
+  it("shows the current state and grants it on", async () => {
+    render(withIntl(<UsersPage />));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("prompt-testing-toggle-u-1"),
+      ).toBeInTheDocument(),
+    );
+    const toggle = screen.getByTestId("prompt-testing-toggle-u-1");
+    expect(toggle).toHaveTextContent("Prompt testing: off");
+
+    fireEvent.click(toggle);
+    await waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith("u-1", {
+        prompt_testing_enabled: true,
+      }),
+    );
+  });
+
+  it("revokes it when already on", async () => {
+    vi.mocked(getUsers).mockResolvedValue([
+      user({ prompt_testing_enabled: true }),
+    ] as never);
+    render(withIntl(<UsersPage />));
+
+    await waitFor(() =>
+      expect(
+        screen.getByTestId("prompt-testing-toggle-u-1"),
+      ).toHaveTextContent("Prompt testing: on"),
+    );
+    fireEvent.click(screen.getByTestId("prompt-testing-toggle-u-1"));
+    await waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith("u-1", {
+        prompt_testing_enabled: false,
+      }),
     );
   });
 });
