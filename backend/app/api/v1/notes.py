@@ -19,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import get_owned_session_or_404, write_audit
 from app.core.audit_events import AuditEventType
+from app.core.background import spawn_background_task
 from app.core.database import async_session_factory, get_db
 from app.core.models import TranscriptModel
 from app.core.s3 import (
@@ -337,15 +338,15 @@ async def approve_stage1_note(
     # session; the row in `stage2_jobs` lets iOS poll status and lets the
     # dashboard show progress without holding open the original request.
     #
-    # The `create_task` is intentionally fire-and-forget: if the FastAPI
-    # process shuts down mid-job the task is dropped, which is acceptable
-    # because Stage 1 is already approved and the job row stays at
-    # `running` — an operator (or a recovery sweep) can re-enqueue if
-    # needed. Stage 2 is best-effort; iOS can fall back to the Stage 1
-    # note in the meantime.
     job = await create_job(session_id, db)
     await write_audit(session_id, AuditEventType.STAGE2_STARTED, job_id=str(job.id))
-    asyncio.create_task(_run_stage2_in_background(session_id, job.id))
+    # Spawn with a retained strong reference so the GC can't drop the task
+    # before it runs — a bare ``asyncio.create_task`` is only weakly held by the
+    # loop and can be collected mid-flight (the video-import stall bug). A
+    # process shutdown mid-job is still an acceptable drop: the job stays
+    # `running` for a recovery sweep / re-enqueue, and iOS falls back to the
+    # Stage 1 note in the meantime.
+    spawn_background_task(_run_stage2_in_background(session_id, job.id), name="stage2")
 
     return NoteApprovalResponse(
         session_id=str(session_id),
