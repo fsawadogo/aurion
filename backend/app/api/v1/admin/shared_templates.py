@@ -31,7 +31,8 @@ from app.modules.custom_templates import service as svc
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
-_ROLE = UserRole.ADMIN
+# Shared Templates is elevatable curation (#578) — CLINICAL_ADMIN joins ADMIN.
+_ROLES = (UserRole.ADMIN, UserRole.CLINICAL_ADMIN)
 
 
 class SharedTemplateResponse(BaseModel):
@@ -71,7 +72,7 @@ def _to_response(row: Any) -> SharedTemplateResponse:
 
 @router.get("/shared-templates", response_model=list[SharedTemplateResponse])
 async def list_shared_templates(
-    _: CurrentUser = Depends(require_role(_ROLE)),
+    _: CurrentUser = Depends(require_role(*_ROLES)),
     db: AsyncSession = Depends(get_db),
 ) -> list[SharedTemplateResponse]:
     """List every shared org template (admin management view)."""
@@ -86,7 +87,7 @@ async def list_shared_templates(
 )
 async def create_shared_template(
     body: SharedTemplateCreateRequest,
-    user: CurrentUser = Depends(require_role(_ROLE)),
+    user: CurrentUser = Depends(require_role(*_ROLES)),
     db: AsyncSession = Depends(get_db),
 ) -> SharedTemplateResponse:
     """Author a shared org template (owned by the admin, ``is_shared=True``).
@@ -120,7 +121,7 @@ async def create_shared_template(
 async def update_shared_template(
     template_id: uuid.UUID,
     body: SharedTemplateCreateRequest,
-    user: CurrentUser = Depends(require_role(_ROLE)),
+    user: CurrentUser = Depends(require_role(*_ROLES)),
     db: AsyncSession = Depends(get_db),
 ) -> SharedTemplateResponse:
     """Edit a shared org template (tpl-07).
@@ -159,7 +160,7 @@ async def update_shared_template(
 )
 async def delete_shared_template(
     template_id: uuid.UUID,
-    user: CurrentUser = Depends(require_role(_ROLE)),
+    user: CurrentUser = Depends(require_role(*_ROLES)),
     db: AsyncSession = Depends(get_db),
 ) -> None:
     """Delete a shared org template. 404 if it isn't a shared row — so this

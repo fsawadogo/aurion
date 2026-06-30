@@ -358,7 +358,7 @@ def _resolve_role_from_groups(groups: list[str]) -> UserRole:
     Group names are matched case-insensitively. If the user belongs
     to multiple groups, the highest-privilege role wins.
 
-    Priority: ADMIN > COMPLIANCE_OFFICER > EVAL_TEAM > CLINICIAN
+    Priority: ADMIN > CLINICAL_ADMIN > COMPLIANCE_OFFICER > EVAL_TEAM > CLINICIAN
     """
     # Normalize group names to uppercase
     normalized = {g.upper() for g in groups}
@@ -366,6 +366,8 @@ def _resolve_role_from_groups(groups: list[str]) -> UserRole:
     # Check in priority order
     if "ADMIN" in normalized or "ADMINS" in normalized:
         return UserRole.ADMIN
+    if "CLINICAL_ADMIN" in normalized or "CLINICAL_ADMINS" in normalized:
+        return UserRole.CLINICAL_ADMIN
     if "COMPLIANCE_OFFICER" in normalized or "COMPLIANCE_OFFICERS" in normalized:
         return UserRole.COMPLIANCE_OFFICER
     if "EVAL_TEAM" in normalized or "EVAL" in normalized:

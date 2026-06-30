@@ -79,7 +79,9 @@ def _all_flags_response(**overrides) -> FeatureFlagsResponse:
         "video_import_drop_zero_face_frames": True,
         "specialty_style_in_prompt_enabled": False,
         "prompt_studio_enabled": False,
-        "prompt_studio_roles": ["ADMIN"],
+        # Mirrors the schema default (FeatureFlagsConfig.prompt_studio_roles),
+        # which now includes CLINICAL_ADMIN (#578) so the no-change baseline holds.
+        "prompt_studio_roles": ["ADMIN", "CLINICAL_ADMIN"],
         "clinician_prompts_note_only": False,
     }
     base.update(overrides)

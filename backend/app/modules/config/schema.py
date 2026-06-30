@@ -258,12 +258,14 @@ class FeatureFlagsConfig(BaseModel):
     # Master gate for the admin Prompt Studio (/api/v1/admin/prompt-studio):
     # authoring + publishing global prompts. Ships DARK — every Studio route
     # 403s while False. When ON, only roles in `prompt_studio_roles` (default
-    # ADMIN) may use it, so the surface widens to EVAL_TEAM / CLINICIAN later
-    # via AppConfig without a redeploy. Publishing is the consequential action
-    # (it moves the global default a clinician's note resolves to); authoring
-    # a draft is inert until published.
+    # ADMIN + CLINICAL_ADMIN, #578) may use it, so the surface widens to
+    # EVAL_TEAM / CLINICIAN later via AppConfig without a redeploy. Publishing
+    # is the consequential action (it moves the global default a clinician's
+    # note resolves to); authoring a draft is inert until published.
     prompt_studio_enabled: bool = False
-    prompt_studio_roles: list[str] = Field(default_factory=lambda: ["ADMIN"])
+    prompt_studio_roles: list[str] = Field(
+        default_factory=lambda: ["ADMIN", "CLINICAL_ADMIN"]
+    )
     # ── Clinician AI-Prompts scope (ps-fu5) ───────────────────────────────
     # When ON, the clinician AI Prompts page (GET /api/v1/me/prompts) shows
     # only the `note` category and hides vision / extraction / preview. Ships
