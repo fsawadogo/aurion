@@ -252,6 +252,40 @@ async def create_my_custom_template(
     return _to_custom_template_response(row)
 
 
+@router.post(
+    "/custom-templates/{template_id}/duplicate",
+    response_model=CustomTemplateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def duplicate_my_custom_template(
+    template_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> CustomTemplateResponse:
+    """Fork a Library template (the caller's own or a shared org template) into
+    the caller's My Templates as a new owned (``is_shared=False``) copy."""
+    try:
+        row = await custom_templates_service.duplicate_into_owner(
+            template_id, user.user_id, db
+        )
+    except custom_templates_service.CustomTemplateError as exc:
+        msg = str(exc)
+        status_code = 409 if "already exists" in msg else 400
+        raise HTTPException(status_code=status_code, detail=msg)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Template not found")
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=str(row.id),
+        event_type=AuditEventType.CUSTOM_TEMPLATE_CREATED,
+        actor_id=str(user.user_id),
+        template_id=str(row.id),
+        template_key=row.key,
+    )
+    await db.commit()
+    return _to_custom_template_response(row)
+
+
 @router.patch(
     "/custom-templates/{template_id}", response_model=CustomTemplateResponse
 )

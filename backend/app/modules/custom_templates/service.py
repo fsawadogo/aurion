@@ -317,6 +317,29 @@ async def create_for_owner(
     return row
 
 
+async def duplicate_into_owner(
+    source_id: uuid.UUID, owner_id: uuid.UUID, db: AsyncSession
+) -> Optional[CustomTemplateModel]:
+    """Fork a Library template into a NEW template owned by ``owner_id``.
+
+    The source may be the caller's own template OR a shared org template
+    (:func:`get_owned_or_shared`); a foreign *private* template is never
+    readable, so this returns None and the route 404s. The fork is always
+    personal (``is_shared=False``): it gets a per-owner-unique key
+    (``<key>-copy``, ``-copy-2`` …) and a ``"(copy)"`` display name, content
+    otherwise copied verbatim. Persisted via :func:`create_for_owner`, so the
+    fork passes the same schema + descriptive-mode validation as any new
+    template.
+    """
+    src = await get_owned_or_shared(source_id, owner_id, db)
+    if src is None:
+        return None
+    payload = json.loads(src.content)
+    payload["key"] = await _unique_copy_key(src.key, owner_id, db)
+    payload["display_name"] = _copy_display_name(src.display_name)
+    return await create_for_owner(owner_id, payload, db, is_shared=False)
+
+
 async def update_owned(
     row: CustomTemplateModel, payload: dict, db: AsyncSession
 ) -> CustomTemplateModel:
@@ -385,6 +408,32 @@ async def _find_by_owner_and_key(
     )
     result = await db.execute(stmt)
     return result.scalars().first()
+
+
+_COPY_SUFFIX = "-copy"
+
+
+def _copy_display_name(name: str) -> str:
+    """``"<name> (copy)"`` trimmed to the display-name column cap."""
+    suffix = " (copy)"
+    return f"{name[: _DISPLAY_NAME_MAX - len(suffix)]}{suffix}"
+
+
+async def _unique_copy_key(
+    base_key: str, owner_id: uuid.UUID, db: AsyncSession
+) -> str:
+    """A per-owner-unique fork key: ``<base>-copy``, ``<base>-copy-2`` …
+
+    Each candidate is trimmed so ``<base><suffix>`` fits the 50-char key column,
+    and checked against the owner's existing keys. Falls back to a random suffix
+    in the (practically impossible) event 999 copies all collide.
+    """
+    for n in range(1, 1000):
+        suffix = _COPY_SUFFIX if n == 1 else f"{_COPY_SUFFIX}-{n}"
+        candidate = f"{base_key[: _KEY_MAX - len(suffix)]}{suffix}"
+        if await _find_by_owner_and_key(owner_id, candidate, db) is None:
+            return candidate
+    return f"{base_key[: _KEY_MAX - 9]}-{uuid.uuid4().hex[:8]}"
 
 
 def template_to_dict(row: CustomTemplateModel) -> dict:
