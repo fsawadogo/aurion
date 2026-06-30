@@ -392,3 +392,31 @@ def require_role(*roles: UserRole):
         return user
 
     return _check
+
+
+async def require_prompt_testing(
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> CurrentUser:
+    """Gate an endpoint on the per-user ``prompt_testing_enabled`` capability
+    (#590) — admin-assignable, orthogonal to role. A granted clinician OR
+    eval/admin user may re-run note generation with a different template.
+
+    Ships dark: the flag defaults False, so the surface 403s until an ADMIN
+    grants it per user. The flag isn't carried on the token, so it's read live
+    from the DB each request via a single scoped SELECT (mirrors
+    ``_ensure_active``).
+    """
+    enabled = (
+        await db.execute(
+            select(UserModel.prompt_testing_enabled).where(
+                UserModel.id == user.user_id
+            )
+        )
+    ).scalar_one_or_none()
+    if not enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Prompt testing is not enabled for this user.",
+        )
+    return user

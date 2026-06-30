@@ -6,7 +6,6 @@ No business logic here -- routes call module service functions only.
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import uuid
 from typing import Callable, Literal, Optional
@@ -14,14 +13,16 @@ from typing import Callable, Literal, Optional
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1._helpers import get_owned_session_or_404, write_audit
+from app.api.v1._helpers import (
+    _load_transcript,
+    get_owned_session_or_404,
+    write_audit,
+)
 from app.core.audit_events import AuditEventType
 from app.core.background import spawn_background_task
 from app.core.database import async_session_factory, get_db
-from app.core.models import TranscriptModel
 from app.core.s3 import (
     AUDIO_BUCKET,
     DEFAULT_EVIDENCE_TTL_SECONDS,
@@ -875,23 +876,6 @@ def _summarize_conflicts(note) -> ConflictState:
         unresolved_section_ids=section_ids,
         unresolved_claim_ids=claim_ids,
     )
-
-
-async def _load_transcript(db: AsyncSession, session_id: uuid.UUID) -> Optional[Transcript]:
-    """Best-effort transcript fetch for citation expansion. Returns None if
-    the transcript hasn't been persisted yet (e.g. note exists but Stage 1
-    raced ahead of transcript storage in tests)."""
-    result = await db.execute(
-        select(TranscriptModel).where(TranscriptModel.session_id == session_id)
-    )
-    row = result.scalar_one_or_none()
-    if row is None:
-        return None
-    try:
-        return Transcript.model_validate(json.loads(row.transcript_json))
-    except (json.JSONDecodeError, ValueError) as exc:
-        logger.warning("Transcript JSON unparseable for session=%s: %s", session_id, exc)
-        return None
 
 
 def _build_citations(

@@ -8,21 +8,32 @@ abstraction, no DI ceremony.
 
 from __future__ import annotations
 
+import json
+import logging
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import HTTPException
 from pydantic import ValidationError
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_events import AuditEventType
-from app.core.models import SessionModel
-from app.core.types import ClipMaskingMetadata, MaskingProof, SessionState, UserRole
+from app.core.models import SessionModel, TranscriptModel
+from app.core.types import (
+    ClipMaskingMetadata,
+    MaskingProof,
+    SessionState,
+    Transcript,
+    UserRole,
+)
 from app.core.uuids import to_uuid
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser
 from app.modules.prompts import ValidationCode, ValidationResult
 from app.modules.session.service import get_session
+
+logger = logging.getLogger("aurion.api.helpers")
 
 # Roles that bypass row-level ownership checks. Compliance and admin both
 # need cross-clinician access — compliance for audit, admin for support.
@@ -154,6 +165,35 @@ def require_state(session: SessionModel, *allowed: SessionState) -> None:
                 f"Session must be in {labels} state, currently: {session.state.value}"
             ),
         )
+
+
+async def _load_transcript(
+    db: AsyncSession, session_id: uuid.UUID
+) -> Optional[Transcript]:
+    """Best-effort fetch + parse of a session's persisted transcript.
+
+    Returns ``None`` when the transcript hasn't been persisted yet, or when the
+    stored JSON is unparseable (logged) — callers map that to their own 404 /
+    skip. Shared by note-review citation expansion (notes.py) and the
+    regenerate-note path (sessions.py, #590); promoted here once it reached a
+    second caller (DRY, §6c).
+    """
+    row = (
+        await db.execute(
+            select(TranscriptModel).where(
+                TranscriptModel.session_id == session_id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        return None
+    try:
+        return Transcript.model_validate(json.loads(row.transcript_json))
+    except (json.JSONDecodeError, ValueError) as exc:
+        logger.warning(
+            "Transcript JSON unparseable for session=%s: %s", session_id, exc
+        )
+        return None
 
 
 def parse_masking_proof(
