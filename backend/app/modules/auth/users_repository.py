@@ -74,6 +74,7 @@ async def update_user(
     role: UserRole | None = None,
     is_active: bool | None = None,
     mfa_required: bool | None = None,
+    prompt_testing_enabled: bool | None = None,
 ) -> tuple[UserModel, dict[str, Any]] | None:
     """Apply a partial update and return ``(user, changes)``.
 
@@ -98,6 +99,15 @@ async def update_user(
     if mfa_required is not None and mfa_required != user.mfa_required:
         changes["mfa_required"] = {"previous": user.mfa_required, "new": mfa_required}
         user.mfa_required = mfa_required
+    if (
+        prompt_testing_enabled is not None
+        and prompt_testing_enabled != user.prompt_testing_enabled
+    ):
+        changes["prompt_testing_enabled"] = {
+            "previous": user.prompt_testing_enabled,
+            "new": prompt_testing_enabled,
+        }
+        user.prompt_testing_enabled = prompt_testing_enabled
 
     if changes:
         await db.flush()

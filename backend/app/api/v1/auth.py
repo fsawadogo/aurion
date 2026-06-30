@@ -229,6 +229,9 @@ class CurrentUserResponse(BaseModel):
     full_name: str
     role: str
     mfa_enrolled: bool = False
+    # #590 — lets the portal show the "regenerate with a different template"
+    # affordance only to granted users (the server still enforces the gate).
+    prompt_testing_enabled: bool = False
 
 
 # ── Constants ───────────────────────────────────────────────────────────────
@@ -744,6 +747,7 @@ async def me(
         full_name=user.full_name,
         role=user.role.value,
         mfa_enrolled=user.mfa_enrolled_at is not None,
+        prompt_testing_enabled=bool(user.prompt_testing_enabled),
     )
 
 

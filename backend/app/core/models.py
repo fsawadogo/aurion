@@ -85,6 +85,14 @@ class UserModel(Base):
     mfa_required: Mapped[bool] = mapped_column(
         Boolean, nullable=False, default=False, server_default="false"
     )
+    # Per-user prompt-testing capability (#590). When True, this user may
+    # re-run note generation on their OWN uploaded encounters with a different
+    # template/prompt (POST /sessions/{id}/regenerate-note). Admin-assignable,
+    # orthogonal to role. Ships dark: default False → flipping nobody changes
+    # nothing. Mirrors mfa_required's opt-in posture.
+    prompt_testing_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     mfa_secret_encrypted: Mapped[bytes | None] = mapped_column(
         LargeBinary, nullable=True
     )

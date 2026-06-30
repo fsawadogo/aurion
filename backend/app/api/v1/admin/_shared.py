@@ -33,6 +33,7 @@ class UserResponse(BaseModel):
     voice_enrolled: bool
     mfa_required: bool = False
     mfa_enrolled: bool = False
+    prompt_testing_enabled: bool = False
     created_at: str
     last_login_at: Optional[str] = None
 
@@ -50,6 +51,9 @@ class UpdateUserRequest(BaseModel):
     is_active: Optional[bool] = None
     # #397/OV-5 — require this user to use MFA (enroll before next login).
     mfa_required: Optional[bool] = None
+    # #590 — grant per-user prompt-testing (regenerate notes with a different
+    # template/prompt on own uploads). Admin-assignable, orthogonal to role.
+    prompt_testing_enabled: Optional[bool] = None
 
 
 # ── Audit schemas ──────────────────────────────────────────────────────────
@@ -433,6 +437,7 @@ def user_to_response(user: UserModel) -> UserResponse:
         voice_enrolled=user.voice_enrolled,
         mfa_required=bool(user.mfa_required),
         mfa_enrolled=user.mfa_enrolled_at is not None,
+        prompt_testing_enabled=bool(user.prompt_testing_enabled),
         created_at=user.created_at.isoformat() if user.created_at else "",
         last_login_at=user.last_login_at.isoformat() if user.last_login_at else None,
     )

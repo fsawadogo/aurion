@@ -24,9 +24,9 @@ from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.identifier_hash import hash_identifier
 from app.core.kms_encryption import decrypt_str, encrypt_str
-from app.core.models import Stage2JobModel
+from app.core.models import Stage2JobModel, TranscriptModel, UserModel
 from app.core.text_validation import validate_user_text
-from app.core.types import SessionState
+from app.core.types import SessionState, Transcript
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.config.appconfig_client import get_config
 from app.modules.config.schema import (
@@ -34,6 +34,10 @@ from app.modules.config.schema import (
     TranscriptionProviderKey,
     VisionProviderKey,
     VisualEvidenceMode,
+)
+from app.modules.note_gen.service import (
+    EmptyTranscriptError,
+    generate_stage1_note,
 )
 from app.modules.session.service import (
     ConsentRequiredError,
@@ -598,6 +602,116 @@ async def _do_transition(db, session, target_state: SessionState) -> SessionResp
 
     await write_audit(session.id, get_audit_event_for_state(target_state))
     return _to_response(session)
+
+
+# ── Regenerate note (#590) ─────────────────────────────────────────────────
+
+
+class RegenerateNoteRequest(BaseModel):
+    """Re-run Stage-1 note generation on the STORED transcript with a different
+    template/prompt (#590). At most one of ``template_key`` /
+    ``custom_template_id``; both omitted → the session's specialty default."""
+
+    template_key: Optional[str] = None
+    custom_template_id: Optional[uuid.UUID] = None
+
+
+class RegenerateNoteResponse(BaseModel):
+    version: int
+    stage: int
+    completeness_score: float
+    provider_used: str
+
+
+@router.post(
+    "/{session_id}/regenerate-note", response_model=RegenerateNoteResponse
+)
+async def regenerate_note(
+    session_id: uuid.UUID,
+    body: RegenerateNoteRequest,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RegenerateNoteResponse:
+    """Re-run Stage-1 note generation on an already-uploaded encounter with a
+    different template/prompt — no re-upload, no re-transcribe (#590).
+
+    Gated by the per-user ``prompt_testing_enabled`` flag (admin-assignable,
+    role-agnostic) and owner-scoped to the caller's own session. Reuses the
+    persisted transcript + ``generate_stage1_note`` (template resolution +
+    descriptive-mode prompt cascade + auto-versioning), so a re-run is a cheap
+    note-gen call on stored data — the expensive Whisper/vision extraction is
+    not repeated.
+    """
+    session = await get_owned_session_or_404(db, session_id, user)
+
+    # Per-user capability gate. CurrentUser carries only id/role/email from the
+    # token, so re-fetch the row to read the flag (mirrors the _ensure_active
+    # re-fetch). Role-agnostic: a granted clinician OR eval/admin uploader may
+    # re-run their OWN session.
+    user_row = await db.get(UserModel, user.user_id)
+    if user_row is None or not user_row.prompt_testing_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Prompt testing is not enabled for this user.",
+        )
+
+    # Own-scope a custom-template override (SECURITY). A caller may regenerate
+    # with their OWN custom template or a shared/Library one — never another
+    # clinician's private template. generate_stage1_note's resolver loads the
+    # template by id UNSCOPED, so access is gated HERE, mirroring
+    # resolve_context_template_key at session create. 404 (not 403) so the
+    # endpoint never confirms the existence of a template the caller can't use.
+    if body.custom_template_id is not None:
+        from app.modules.custom_templates.service import get_owned_or_shared
+
+        if (
+            await get_owned_or_shared(
+                body.custom_template_id, user.user_id, db
+            )
+            is None
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Custom template not found.",
+            )
+
+    # Reuse the persisted transcript — never re-transcribe.
+    transcript_row = (
+        await db.execute(
+            select(TranscriptModel).where(
+                TranscriptModel.session_id == session_id
+            )
+        )
+    ).scalar_one_or_none()
+    if transcript_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No transcript for this session yet.",
+        )
+    transcript = Transcript(**_json.loads(transcript_row.transcript_json))
+
+    try:
+        note = await generate_stage1_note(
+            transcript=transcript,
+            specialty=session.specialty,
+            session_id=str(session_id),
+            db=db,
+            template_key=body.template_key,
+            custom_template_id=body.custom_template_id,
+        )
+    except EmptyTranscriptError:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="The stored transcript is empty.",
+        )
+    await db.commit()
+
+    return RegenerateNoteResponse(
+        version=note.version,
+        stage=note.stage,
+        completeness_score=note.completeness_score,
+        provider_used=note.provider_used,
+    )
 
 
 async def _review_ready_session_ids(db: AsyncSession, sessions) -> set:

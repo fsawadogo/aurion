@@ -17,6 +17,8 @@ export interface User {
   full_name: string;
   role: UserRole;
   is_active: boolean;
+  // #590 — per-user prompt-testing capability (admin-assignable).
+  prompt_testing_enabled: boolean;
   voice_enrolled: boolean;
   mfa_required: boolean;
   mfa_enrolled: boolean;
@@ -36,6 +38,18 @@ export interface UpdateUserPayload {
   role?: UserRole;
   is_active?: boolean;
   mfa_required?: boolean;
+  // #590 — grant/revoke per-user prompt-testing (re-run notes with a different
+  // template on own uploads). Admin-assignable, orthogonal to role.
+  prompt_testing_enabled?: boolean;
+}
+
+/** Result of POST /sessions/{id}/regenerate-note (#590) — a new note version
+ * generated from the stored transcript with a different template/prompt. */
+export interface RegenerateNoteResult {
+  version: number;
+  stage: number;
+  completeness_score: number;
+  provider_used: string;
 }
 
 /* ─── Audit ──────────────────────────────────────────────────────────────── */
@@ -879,6 +893,10 @@ export interface CurrentUser {
   email: string;
   full_name: string;
   role: UserRole;
+  // #590 — gates the "regenerate with a different template" affordance in the
+  // portal (the server still enforces the capability). Optional for back-compat
+  // with any cached payload that predates the field.
+  prompt_testing_enabled?: boolean;
 }
 
 /* ─── Clinician Portal ───────────────────────────────────────────────────── */
