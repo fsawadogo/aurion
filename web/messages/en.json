@@ -41,6 +41,13 @@
       "submit": "Create"
     }
   },
+  "AdminLibrary": {
+    "eyebrow": "Admin",
+    "title": "Template Library",
+    "description": "Manage the built-in specialty templates and your organization's shared templates in one place.",
+    "builtinHeading": "Built-in templates",
+    "customHeading": "Organization templates"
+  },
   "AdminSharedTemplates": {
     "eyebrow": "Admin workspace",
     "title": "Shared templates",
@@ -78,12 +85,11 @@
       "myActivity": "My Activity",
       "aiPrompts": "AI Prompts",
       "promptStudio": "Prompt Studio",
-      "sharedTemplates": "Shared Templates",
+      "library": "Library",
       "featureFlags": "Feature Flags",
       "providers": "AI Providers",
       "capturedMedia": "Captured Media",
       "analytics": "Analytics",
-      "systemTemplates": "System Templates",
       "alerts": "Alerts",
       "complianceReports": "Compliance Reports",
       "uploadEncounter": "Upload Video",
