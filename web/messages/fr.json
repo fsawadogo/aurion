@@ -871,6 +871,8 @@
       "inputLabel": "Étiquette du contexte",
       "labelAria": "Étiquette du contexte « {label} »",
       "templateAria": "Gabarit du contexte « {label} »",
+      "descriptionPlaceholder": "Ajouter une note facultative pour ce contexte",
+      "descriptionAria": "Description du contexte « {label} »",
       "defaultTemplate": "Utiliser ma spécialité par défaut",
       "customGroup": "Gabarits personnalisés",
       "customUnavailable": "Gabarit personnalisé (indisponible)",

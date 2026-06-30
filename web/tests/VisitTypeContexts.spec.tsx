@@ -363,6 +363,62 @@ describe("VisitTypeContextsEditor — add / edit / delete", () => {
   });
 });
 
+/* ── Context description (#576) ───────────────────────────────────────── */
+
+describe("VisitTypeContextsEditor — context description", () => {
+  it("renders a description textarea prefilled from ctx.description", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{
+            new_patient: [
+              { ...ctx("Left knee"), description: "ACL tear follow-up" },
+            ],
+          }}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /new patient/i }));
+    expect(screen.getByDisplayValue("ACL tear follow-up")).toBeInTheDocument();
+  });
+
+  it("patches description on edit and stores null when cleared", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [ctx("Left knee")] }}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /new patient/i }));
+    const area = screen.getByLabelText(/description for context/i);
+    await user.type(area, "Post-op week 2");
+    await waitFor(() => {
+      expect(getState().new_patient[0].description).toBe("Post-op week 2");
+    });
+    await user.clear(area);
+    await waitFor(() => {
+      expect(getState().new_patient[0].description).toBeNull();
+    });
+  });
+
+  it("starts a newly-added context with a null description", async () => {
+    const user = userEvent.setup();
+    render(withIntl(<Harness visitTypes={["new_patient"]} initial={{}} />));
+    await user.click(screen.getByRole("button", { name: /new patient/i }));
+    await user.click(screen.getByRole("button", { name: /add context/i }));
+    await user.type(screen.getByLabelText(/context label/i), "Revision");
+    await user.click(screen.getByRole("button", { name: /^add$/i }));
+    await waitFor(() => {
+      expect(getState().new_patient[0].description).toBeNull();
+    });
+  });
+});
+
 /* ── Validation reuse ─────────────────────────────────────────────────── */
 
 describe("VisitTypeContextsEditor — validation gates", () => {

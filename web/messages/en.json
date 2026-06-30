@@ -871,6 +871,8 @@
       "inputLabel": "Context label",
       "labelAria": "Label for context \"{label}\"",
       "templateAria": "Template for context \"{label}\"",
+      "descriptionPlaceholder": "Add an optional note for this context",
+      "descriptionAria": "Description for context \"{label}\"",
       "defaultTemplate": "Use my specialty default",
       "customGroup": "Custom templates",
       "customUnavailable": "Custom template (unavailable)",
