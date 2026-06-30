@@ -655,6 +655,26 @@ async def regenerate_note(
             detail="Prompt testing is not enabled for this user.",
         )
 
+    # Own-scope a custom-template override (SECURITY). A caller may regenerate
+    # with their OWN custom template or a shared/Library one — never another
+    # clinician's private template. generate_stage1_note's resolver loads the
+    # template by id UNSCOPED, so access is gated HERE, mirroring
+    # resolve_context_template_key at session create. 404 (not 403) so the
+    # endpoint never confirms the existence of a template the caller can't use.
+    if body.custom_template_id is not None:
+        from app.modules.custom_templates.service import get_owned_or_shared
+
+        if (
+            await get_owned_or_shared(
+                body.custom_template_id, user.user_id, db
+            )
+            is None
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Custom template not found.",
+            )
+
     # Reuse the persisted transcript — never re-transcribe.
     transcript_row = (
         await db.execute(

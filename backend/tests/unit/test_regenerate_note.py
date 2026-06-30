@@ -144,3 +144,70 @@ def test_user_to_response_carries_prompt_testing_enabled():
     )
     resp = user_to_response(row)
     assert resp.prompt_testing_enabled is True
+
+
+# ── Custom-template override is own-scoped (SECURITY) ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_regenerate_rejects_non_owned_custom_template():
+    # A granted caller passing another clinician's PRIVATE template id must 404
+    # — get_owned_or_shared returns None for a template they neither own nor is
+    # shared. Guards against the cross-tenant template leak.
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch(
+            "app.modules.custom_templates.service.get_owned_or_shared",
+            AsyncMock(return_value=None),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", AsyncMock()) as gen,
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await regenerate_note(
+                sid,
+                RegenerateNoteRequest(custom_template_id=uuid.uuid4()),
+                _caller(),
+                db,
+            )
+    assert exc.value.status_code == 404
+    gen.assert_not_awaited()  # never reached note-gen with a foreign template
+
+
+@pytest.mark.asyncio
+async def test_regenerate_allows_owned_or_shared_custom_template():
+    sid = uuid.uuid4()
+    cid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    note = Note(
+        session_id=str(sid),
+        stage=1,
+        version=2,
+        provider_used="anthropic",
+        specialty="orthopedic_surgery",
+        completeness_score=0.5,
+    )
+    gen = AsyncMock(return_value=note)
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch(
+            "app.modules.custom_templates.service.get_owned_or_shared",
+            AsyncMock(return_value=SimpleNamespace(id=cid)),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        resp = await regenerate_note(
+            sid,
+            RegenerateNoteRequest(custom_template_id=cid),
+            _caller(),
+            db,
+        )
+    assert resp.version == 2
+    assert gen.call_args.kwargs["custom_template_id"] == cid
