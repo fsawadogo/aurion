@@ -22,7 +22,6 @@ struct NoteDocumentBody: View {
     // reader's text-size setting.
     @ScaledMetric(relativeTo: .largeTitle) private var titleSize: CGFloat = 32
     @ScaledMetric(relativeTo: .subheadline) private var dateSize: CGFloat = 15
-    @ScaledMetric(relativeTo: .caption) private var metaSize: CGFloat = 12
     @ScaledMetric(relativeTo: .title2) private var sectionHeadingSize: CGFloat = 20
     @ScaledMetric(relativeTo: .body) private var emptySectionSize: CGFloat = 16
     @ScaledMetric(relativeTo: .body) private var claimBodySize: CGFloat = 17
@@ -42,40 +41,10 @@ struct NoteDocumentBody: View {
                 Text(dateString)
                     .font(.system(size: forPDF ? 15 : dateSize))
                     .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
-                // PDF keeps a fixed single dotted line (print-clean — the
-                // export path never reflows). On screen the meta row falls
-                // back to a stacked layout when the dotted row would overflow
-                // at larger Dynamic Type (#271 DT).
-                Group {
-                    if forPDF {
-                        HStack(spacing: 12) {
-                            Text(L("noteDoc.percentComplete", Int(note.completenessScore * 100)))
-                            Text("·").foregroundColor(Color.black.opacity(0.4))
-                            Text("v\(note.version)")
-                            Text("·").foregroundColor(Color.black.opacity(0.4))
-                            Text(note.providerUsed)
-                        }
-                    } else {
-                        ViewThatFits(in: .horizontal) {
-                            HStack(spacing: 12) {
-                                Text(L("noteDoc.percentComplete", Int(note.completenessScore * 100)))
-                                Text("·").foregroundColor(Color.aurionTextSecondary.opacity(0.4))
-                                Text("v\(note.version)")
-                                Text("·").foregroundColor(Color.aurionTextSecondary.opacity(0.4))
-                                Text(note.providerUsed)
-                            }
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(L("noteDoc.percentComplete", Int(note.completenessScore * 100)))
-                                Text("v\(note.version)")
-                                Text(note.providerUsed)
-                            }
-                        }
-                    }
-                }
-                .font(.system(size: forPDF ? 12 : metaSize))
-                .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
-                .padding(.top, 4)
 
+                // Internal metadata (completeness / version / provider) is
+                // deliberately NOT shown — clinicians don't need it on the
+                // note; it lives in the audit log + pilot metrics instead.
                 Rectangle()
                     .fill(Color.aurionGold)
                     .frame(height: 2)
