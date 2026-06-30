@@ -319,6 +319,58 @@ def test_update_rejectsOverCap() -> None:
         )
 
 
+# ── UpdateProfileRequest: one default context per visit type (#577) ─────────
+
+
+def test_update_defaultsToNotDefault() -> None:
+    """``is_default`` is False when omitted (back-compat for old clients)."""
+    req = UpdateProfileRequest(
+        consultation_types=["new_patient"],
+        contexts_per_visit_type={"new_patient": [{"label": "LL"}]},
+    )
+    assert req.contexts_per_visit_type["new_patient"][0].is_default is False
+
+
+def test_update_acceptsSingleDefaultContext() -> None:
+    req = UpdateProfileRequest(
+        consultation_types=["new_patient"],
+        contexts_per_visit_type={
+            "new_patient": [
+                {"label": "LL", "is_default": True},
+                {"label": "Breast"},
+            ]
+        },
+    )
+    contexts = req.contexts_per_visit_type["new_patient"]
+    assert [c.is_default for c in contexts] == [True, False]
+
+
+def test_update_rejectsMultipleDefaultsInOneVisitType() -> None:
+    with pytest.raises(ValidationError):
+        UpdateProfileRequest(
+            consultation_types=["new_patient"],
+            contexts_per_visit_type={
+                "new_patient": [
+                    {"label": "LL", "is_default": True},
+                    {"label": "Breast", "is_default": True},
+                ]
+            },
+        )
+
+
+def test_update_allowsOneDefaultPerVisitTypeAcrossTypes() -> None:
+    """The cap is per visit type — each visit type may have its own default."""
+    req = UpdateProfileRequest(
+        consultation_types=["new_patient", "follow_up"],
+        contexts_per_visit_type={
+            "new_patient": [{"label": "LL", "is_default": True}],
+            "follow_up": [{"label": "Revision", "is_default": True}],
+        },
+    )
+    assert req.contexts_per_visit_type["new_patient"][0].is_default is True
+    assert req.contexts_per_visit_type["follow_up"][0].is_default is True
+
+
 def test_update_assignsAndKeepsIdsAcrossEdit() -> None:
     """First write mints an id; sending it back preserves it while a new
     sibling without an id gets its own."""

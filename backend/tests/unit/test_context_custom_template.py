@@ -105,6 +105,40 @@ async def test_owned_custom_ref_snapshots_custom_template_id(
 
 
 @pytest.mark.asyncio
+async def test_no_context_id_resolves_default_custom_ref(
+    monkeypatch, available_templates
+):
+    """#577: a DEFAULT context bound to a custom ref resolves the same way an
+    explicitly-chosen one does — owner-scoped, snapshots custom_template_id."""
+    custom_id = uuid.uuid4()
+    ref = str(custom_id)
+    default_ctx = {
+        "id": "ctx_bbbbbbbb",
+        "label": "Default",
+        "template_key": None,
+        "template_ref": ref,
+        "is_default": True,
+    }
+    db = _db_with_profile(_profile({"new_patient": [default_ctx]}))
+
+    get_owned_mock = AsyncMock(return_value=SimpleNamespace(id=custom_id))
+    monkeypatch.setattr(
+        "app.modules.custom_templates.service.get_owned_or_shared", get_owned_mock
+    )
+
+    clinician = uuid.uuid4()
+    key, cid, coerced = await resolve_context_template_key(
+        db, clinician, "new_patient", None  # no context_id → use the default
+    )
+
+    assert key is None
+    assert cid == custom_id
+    assert coerced is False
+    # Owner-scoped even on the default path.
+    assert get_owned_mock.await_args.args[1] == clinician
+
+
+@pytest.mark.asyncio
 async def test_custom_ref_lookup_is_scoped_to_caller(
     monkeypatch, available_templates
 ):

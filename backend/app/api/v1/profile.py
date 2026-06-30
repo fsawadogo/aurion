@@ -212,6 +212,12 @@ class VisitTypeContext(BaseModel):
     # can "understand the context as fully as possible". Prose, not a
     # label — validated WITHOUT the full-name / proper-noun heuristics.
     description: Optional[str] = None
+    # Per-visit-type default (#577). At most one context per visit type may
+    # set this; when a session is created with this visit type but NO chosen
+    # context, the default's template is resolved instead of the specialty
+    # default. The "<=1 per visit type" rule needs the sibling list in view,
+    # so it is enforced in `_validate_contexts_per_visit_type`, not here.
+    is_default: bool = False
 
     @model_validator(mode="after")
     def _validate(self) -> "VisitTypeContext":
@@ -430,6 +436,7 @@ class UpdateProfileRequest(BaseModel):
             removed or renamed) are PRUNED, not rejected, so a stale client
             map self-heals on the next write.
           * Per-visit-type soft cap of 30 contexts.
+          * At most one context per visit type flagged ``is_default`` (#577).
         """
         if v is None:
             return v
@@ -450,6 +457,14 @@ class UpdateProfileRequest(BaseModel):
                 raise ValueError(
                     f"max {_MAX_CONTEXTS_PER_VISIT_TYPE} contexts per "
                     "visit type"
+                )
+            # At most one default context per visit type (#577). The
+            # per-context validator can't see siblings, so the count rule
+            # lives here. Reject (not silently drop) so a confused client
+            # can't half-apply intent; value not echoed.
+            if sum(1 for c in contexts if c.is_default) > 1:
+                raise ValueError(
+                    "at most one default context per visit type"
                 )
             pruned[key] = contexts
         return pruned

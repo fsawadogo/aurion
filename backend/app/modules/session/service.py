@@ -138,11 +138,16 @@ async def resolve_context_template_key(
     longer resolves to an owned existing custom template (deleted /
     unowned / malformed) is COERCED to the specialty default
     (``(None, None)``) and flagged so the caller can write a count-only
-    audit note. Every "can't resolve" path — no ``context_id``, no
-    ``consultation_type``, no profile, the visit type absent from the
-    map, no matching context id, or a context that pinned nothing —
-    degrades silently to ``(None, None, False)``. This function never
-    raises.
+    audit note.
+
+    When ``context_id`` is omitted (#577), the chosen context is instead
+    the visit type's DEFAULT — the first one flagged ``is_default`` (PUT
+    enforces at most one default per visit type). With no default, the
+    visit type degrades to the specialty default. Every "can't resolve"
+    path — no ``consultation_type``, no profile, the visit type absent
+    from the map, no matching context id, no default when none was
+    chosen, or a context that pinned nothing — degrades silently to
+    ``(None, None, False)``. This function never raises.
 
     Returns ``(template_key, custom_template_id, coerced_stale)``:
       * ``template_key`` — a validated built-in key to snapshot, or
@@ -153,7 +158,7 @@ async def resolve_context_template_key(
       * ``coerced_stale`` — ``True`` only when a non-null pin (built-in
         key or custom ref) was dropped because it no longer resolves.
     """
-    if not context_id or not consultation_type:
+    if not consultation_type:
         return None, None, False
 
     result = await db.execute(
@@ -179,10 +184,20 @@ async def resolve_context_template_key(
         return None, None, False
 
     match: Optional[dict] = None
-    for ctx in contexts:
-        if isinstance(ctx, dict) and ctx.get("id") == context_id:
-            match = ctx
-            break
+    if context_id:
+        # Explicit context pick — match by id.
+        for ctx in contexts:
+            if isinstance(ctx, dict) and ctx.get("id") == context_id:
+                match = ctx
+                break
+    else:
+        # No explicit pick (#577) — fall back to the visit type's DEFAULT
+        # context, the first one flagged ``is_default``. PUT enforces at
+        # most one default per visit type; the first match is defensive.
+        for ctx in contexts:
+            if isinstance(ctx, dict) and ctx.get("is_default") is True:
+                match = ctx
+                break
     if match is None:
         return None, None, False
 
