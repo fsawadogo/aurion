@@ -103,6 +103,75 @@ async def extract_audio(video_path: str, out_wav_path: str) -> str:
     return out_wav_path
 
 
+# WAV header is a fixed 44 bytes for the canonical PCM layout extract_audio
+# writes; the rest is raw samples at the known rate/width.
+_WAV_HEADER_BYTES = 44
+
+
+def wav_duration_ms(wav_path: str) -> int:
+    """Duration of a 16 kHz mono signed-16-bit WAV, derived from file size.
+
+    Avoids an ffprobe shell-out: bytes are PCM samples at a known rate/width,
+    so duration = sample_bytes / (rate * channels * 2). Used to offset each
+    clip's frame-trigger windows onto the merged (concatenated) timeline.
+    """
+    try:
+        size = os.path.getsize(wav_path)
+    except OSError:
+        return 0
+    sample_bytes = max(0, size - _WAV_HEADER_BYTES)
+    bytes_per_ms = (_AUDIO_SAMPLE_RATE * _AUDIO_CHANNELS * 2) / 1000.0
+    if bytes_per_ms <= 0:
+        return 0
+    return int(sample_bytes / bytes_per_ms)
+
+
+async def concat_audio(wav_paths: list[str], out_wav_path: str) -> str:
+    """Concatenate WAV clips (in the given order) into one 16 kHz mono WAV.
+
+    Used for multi-clip imports: each clip's audio is extracted, then stitched
+    end-to-end here into a single continuous timeline that is transcribed once.
+    Re-encodes (not stream-copy) so mismatched headers across clips can't
+    corrupt the output. A single path is returned as-is for that clip.
+
+    Raises:
+        VideoExtractionError: ffmpeg failed / produced an empty file.
+    """
+    if not wav_paths:
+        raise VideoExtractionError("no_audio_to_concat")
+    if len(wav_paths) == 1:
+        return wav_paths[0]
+
+    # ffmpeg concat demuxer reads a list file of `file '<path>'` lines.
+    out_dir = os.path.dirname(out_wav_path) or "."
+    list_path = os.path.join(out_dir, "concat_list.txt")
+    with open(list_path, "w", encoding="utf-8") as fh:
+        for p in wav_paths:
+            # Single-quote-escape per the concat demuxer's quoting rules.
+            escaped = p.replace("'", "'\\''")
+            fh.write(f"file '{escaped}'\n")
+
+    await _run_ffmpeg(
+        [
+            "ffmpeg", "-nostdin", "-y",
+            "-f", "concat", "-safe", "0",
+            "-i", list_path,
+            "-acodec", "pcm_s16le",
+            "-ar", str(_AUDIO_SAMPLE_RATE),
+            "-ac", str(_AUDIO_CHANNELS),
+            out_wav_path,
+        ]
+    )
+    if not os.path.exists(out_wav_path) or os.path.getsize(out_wav_path) == 0:
+        raise VideoExtractionError("empty_concat_output")
+    logger.info(
+        "Audio concatenated: clips=%d bytes=%d",
+        len(wav_paths),
+        os.path.getsize(out_wav_path),
+    )
+    return out_wav_path
+
+
 async def extract_frame_at_ms(video_path: str, timestamp_ms: int) -> bytes:
     """Extract a single JPEG frame from ``video_path`` at ``timestamp_ms``.
 

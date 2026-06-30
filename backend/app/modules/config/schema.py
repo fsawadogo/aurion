@@ -185,6 +185,12 @@ class FeatureFlagsConfig(BaseModel):
     # with real PHI turns this on. Same opt-in posture as
     # `measurement_enabled`.
     video_import_enabled: bool = False
+    # Multi-clip import: allow several sequential clips of ONE encounter to be
+    # uploaded for a single session and merged (audio concatenated in order →
+    # one transcript → one note). Default OFF → the feature is invisible in the
+    # web + iOS UIs until enabled. Backend single-clip behaviour is unchanged
+    # when off / one clip.
+    multi_clip_import_enabled: bool = False
     # VID-04 — when a server-masked frame has ZERO detected faces, drop it
     # (default, conservative: a missed face must never be stored unblurred)
     # vs keep it re-encoded. Compliance may flip this to False once the

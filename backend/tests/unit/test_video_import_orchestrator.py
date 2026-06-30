@@ -37,6 +37,7 @@ def _job(auto_advance_stage2: bool = False) -> SimpleNamespace:
     return SimpleNamespace(
         id=uuid.uuid4(),
         raw_video_s3_key=f"video-imports/{uuid.uuid4()}/v.mp4",
+        raw_video_s3_keys=None,  # single-clip job → runner falls back to [raw_video_s3_key]
         raw_video_purged_at=None,
         status="running",
         auto_advance_stage2=auto_advance_stage2,
@@ -188,7 +189,7 @@ async def test_extract_and_mask_frames_drops_audit_failures() -> None:
                 faces_blurred=0, reason="no_face_detected")),
         ):
         extracted, masked, dropped = await vi._extract_and_mask_frames(
-            db, sid, "/tmp/v.mp4"
+            db, sid, [("/tmp/v.mp4", 0)]
         )
 
     assert (extracted, masked, dropped) == (3, 0, 3)
@@ -216,7 +217,7 @@ async def test_extract_and_mask_frames_stores_successes() -> None:
                 faces_blurred=1, reason=None)),
         ):
         extracted, masked, dropped = await vi._extract_and_mask_frames(
-            db, sid, "/tmp/v.mp4"
+            db, sid, [("/tmp/v.mp4", 0)]
         )
 
     assert (extracted, masked, dropped) == (1, 1, 0)
@@ -244,7 +245,7 @@ async def test_extract_and_mask_frames_no_triggers_is_noop() -> None:
 
     extract = AsyncMock()
     with patch.object(vi, "extract_frames_at_windows", extract):
-        assert await vi._extract_and_mask_frames(db, sid, "/tmp/v.mp4") == (0, 0, 0)
+        assert await vi._extract_and_mask_frames(db, sid, [("/tmp/v.mp4", 0)]) == (0, 0, 0)
     extract.assert_not_awaited()  # no triggers → ffmpeg never invoked
 
 

@@ -53,7 +53,12 @@ from app.modules.session.service import (
     transition_session,
 )
 from app.modules.video_import import jobs
-from app.modules.video_import.extraction import extract_audio, extract_frames_at_windows
+from app.modules.video_import.extraction import (
+    concat_audio,
+    extract_audio,
+    extract_frames_at_windows,
+    wav_duration_ms,
+)
 from app.modules.video_import.masking import mask_frame
 from app.modules.vision.service import get_frame_window_ms
 
@@ -94,13 +99,32 @@ class CreateVideoImportRequest(BaseModel):
     # preserved, just evidenced differently (CONSENT_ATTESTED audit).
     consent_attested: bool = False
     consent_method: str = "attested"
+    # Multi-clip import: the number of sequential clips that make up this one
+    # encounter. 1 = the classic single-clip import (response is byte-identical
+    # to before). >1 requires feature_flags.multi_clip_import_enabled; the
+    # response then carries an ordered `clips` list (one presigned PUT each),
+    # uploaded in order and concatenated into one note. Capped to keep a single
+    # encounter sane.
+    clip_count: int = Field(default=1, ge=1, le=20)
+
+
+class ClipUpload(BaseModel):
+    """One clip's ordered slot + presigned PUT URL (multi-clip import)."""
+
+    index: int
+    s3_key: str
+    upload_url: str
 
 
 class CreateVideoImportResponse(BaseModel):
     session_id: str
     job_id: str
+    # First clip's URL/key — kept for back-compat with the single-clip client.
     upload_url: str
     s3_key: str
+    # Present (and length == clip_count) for a multi-clip import; None for a
+    # single-clip import. Ordered; upload each clip to its slot in order.
+    clips: Optional[list[ClipUpload]] = None
 
 
 class VideoImportStatusResponse(BaseModel):
@@ -217,18 +241,50 @@ async def create_import_session(
         method=body.consent_method,
     )
 
+    def _presign(key: str) -> str:
+        return generate_presigned_evidence_url(
+            key,
+            ttl_seconds=_UPLOAD_URL_TTL_SECONDS,
+            bucket=VIDEO_IMPORTS_BUCKET,
+            client_method="put_object",
+        )
+
+    # Multi-clip import (flag-gated): N ordinal-named clips, one presigned PUT
+    # each, uploaded in order and concatenated into one note. Falls through to
+    # the single-clip path (byte-identical to before) when clip_count == 1.
+    multi_enabled = get_config().feature_flags.multi_clip_import_enabled
+    if body.clip_count > 1 and not multi_enabled:
+        raise HTTPException(status_code=400, detail="Multi-clip import is not enabled.")
+
+    if body.clip_count > 1:
+        keys = [
+            f"video-imports/{session.id}/{i:02d}-{uuid.uuid4()}.mp4"
+            for i in range(body.clip_count)
+        ]
+        clips = [
+            ClipUpload(index=i, s3_key=k, upload_url=_presign(k))
+            for i, k in enumerate(keys)
+        ]
+        job = await jobs.create_job(
+            db, session.id, raw_video_s3_key=keys[0],
+            raw_video_s3_keys=keys,
+            auto_advance_stage2=auto_advance_stage2,
+        )
+        return CreateVideoImportResponse(
+            session_id=str(session.id),
+            job_id=str(job.id),
+            upload_url=clips[0].upload_url,
+            s3_key=keys[0],
+            clips=clips,
+        )
+
     s3_key = f"video-imports/{session.id}/{uuid.uuid4()}.mp4"
     job = await jobs.create_job(
         db, session.id, raw_video_s3_key=s3_key,
         auto_advance_stage2=auto_advance_stage2,
     )
 
-    upload_url = generate_presigned_evidence_url(
-        s3_key,
-        ttl_seconds=_UPLOAD_URL_TTL_SECONDS,
-        bucket=VIDEO_IMPORTS_BUCKET,
-        client_method="put_object",
-    )
+    upload_url = _presign(s3_key)
 
     return CreateVideoImportResponse(
         session_id=str(session.id),
@@ -562,9 +618,16 @@ def _mask_and_store_frame(
 
 
 async def _extract_and_mask_frames(
-    db: AsyncSession, session_id: uuid.UUID, video_path: str
+    db: AsyncSession, session_id: uuid.UUID, clips: list[tuple[str, int]]
 ) -> tuple[int, int, int]:
     """Extract frames at the transcript's trigger windows + mask each.
+
+    ``clips`` is the ordered ``[(video_path, start_offset_ms), ...]`` list. For
+    a single-clip import it is ``[(path, 0)]`` and this behaves exactly as
+    before. For a multi-clip import each trigger window (on the merged timeline)
+    is routed to the clip that owns its start, extracted at the clip-local
+    offset, and the stored frame keeps its MERGED timestamp so it still aligns
+    with the transcript citations.
 
     Returns ``(frames_extracted, frames_masked, frames_dropped)``.
 
@@ -574,6 +637,8 @@ async def _extract_and_mask_frames(
     same call site (the success branch below). With the pilot's empty trigger
     lists this is a no-op (zero trigger segments → zero frames).
     """
+    if not clips:
+        return (0, 0, 0)
     row = (
         await db.execute(
             select(TranscriptModel).where(TranscriptModel.session_id == session_id)
@@ -599,7 +664,28 @@ async def _extract_and_mask_frames(
         for s in triggers
     ]
     fps = get_config().pipeline.video_import_fps
-    frames = await extract_frames_at_windows(video_path, windows, fps)
+
+    # Route each merged-timeline window to the clip that owns its start, then
+    # extract per clip (clip-local windows) and re-offset to the merged ts.
+    sorted_clips = sorted(clips, key=lambda c: c[1])
+    per_clip: dict[int, list[tuple[int, int]]] = {}
+    for start, end in windows:
+        owner = 0
+        for j, (_, off) in enumerate(sorted_clips):
+            if off <= max(start, 0):
+                owner = j
+            else:
+                break
+        offset = sorted_clips[owner][1]
+        per_clip.setdefault(owner, []).append(
+            (max(start - offset, 0), max(end - offset, 0))
+        )
+
+    frames: list[tuple[int, bytes]] = []
+    for owner, local_windows in per_clip.items():
+        path, offset = sorted_clips[owner]
+        local_frames = await extract_frames_at_windows(path, local_windows, fps)
+        frames.extend((local_ts + offset, jpg) for local_ts, jpg in local_frames)
 
     drop_zero = get_config().feature_flags.video_import_drop_zero_face_frames
     s3 = get_s3_client()
@@ -723,24 +809,41 @@ async def _run_video_import_in_background(
             return
 
         raw_key = job.raw_video_s3_key
+        # Ordered clip list — one entry for a single-clip import (legacy /
+        # raw_video_s3_keys NULL), N for a multi-clip import. Concatenated in
+        # THIS order into one audio timeline → one transcript → one note.
+        clip_keys = [k for k in (job.raw_video_s3_keys or [raw_key]) if k]
         try:
             # The job was already marked ``running`` synchronously by
             # ``start_processing`` at dispatch (so a dropped task stays
             # watchdog-recoverable); the orchestrator just proceeds.
-            # The raw video stays on task-local disk through frame extraction
+            # The raw clips stay on task-local disk through frame extraction
             # (which needs the transcript's trigger windows from run_stage1),
-            # then the S3 copy is purged. The tmp dir is removed on block exit
-            # regardless of outcome.
+            # then the S3 copies are purged. The tmp dir is removed on block
+            # exit regardless of outcome.
             with tempfile.TemporaryDirectory() as tmp:
-                video_path = os.path.join(tmp, "in.mp4")
-                wav_path = os.path.join(tmp, "audio.wav")
                 client = get_s3_client()
-                await _download_to_path(client, raw_key, video_path)
 
-                # 1. Extract audio → shared Stage 1 pipeline. The read runs off
-                #    the loop too — the extracted WAV can be tens of MB.
-                await extract_audio(video_path, wav_path)
-                audio_bytes = await asyncio.to_thread(_read_file_bytes, wav_path)
+                # 1. Download + extract audio for every clip (in order), then
+                #    concatenate into one continuous timeline. The read runs
+                #    off the loop — the combined WAV can be tens of MB.
+                wav_paths: list[str] = []
+                # (video_path, start_offset_ms) per clip, for frame extraction
+                # against the merged timeline.
+                clips_with_offset: list[tuple[str, int]] = []
+                cumulative_ms = 0
+                for i, key in enumerate(clip_keys):
+                    video_path = os.path.join(tmp, f"in_{i:02d}.mp4")
+                    wav_path = os.path.join(tmp, f"audio_{i:02d}.wav")
+                    await _download_to_path(client, key, video_path)
+                    await extract_audio(video_path, wav_path)
+                    wav_paths.append(wav_path)
+                    clips_with_offset.append((video_path, cumulative_ms))
+                    cumulative_ms += wav_duration_ms(wav_path)
+
+                combined_wav = os.path.join(tmp, "combined.wav")
+                merged = await concat_audio(wav_paths, combined_wav)
+                audio_bytes = await asyncio.to_thread(_read_file_bytes, merged)
 
                 # Drive the state machine through the normal consent hard-gate:
                 # CONSENT_PENDING(consent_confirmed) → RECORDING → PROCESSING_STAGE1.
@@ -759,17 +862,19 @@ async def _run_video_import_in_background(
                 # task ends and the note is silently lost.
                 await db.commit()
 
-                # 2. Extract + mask frames at the transcript's trigger windows.
+                # 2. Extract + mask frames at the transcript's trigger windows,
+                #    mapping each window onto the clip that owns it by offset.
                 #    VID-03: the masking stub drops every frame, so nothing is
                 #    written to S3 (frames-absent). VID-04 swaps in real masking
                 #    + S3 storage behind the same call.
                 extracted, masked, dropped = await _extract_and_mask_frames(
-                    db, session_id, video_path
+                    db, session_id, clips_with_offset
                 )
 
-            # 3. Purge the raw video (fail-closed: a purge failure aborts the
+            # 3. Purge every raw clip (fail-closed: a purge failure aborts the
             #    job rather than leaving unmasked video in S3).
-            await purge_raw_video(str(session_id), raw_key)
+            for key in clip_keys:
+                await purge_raw_video(str(session_id), key)
             await jobs.mark_raw_video_purged(db, job)
 
             # 4. Admin/eval bulk runs auto-advance Stage 2 so the full
@@ -802,14 +907,16 @@ async def _run_video_import_in_background(
                 "Video import failed: session=%s job=%s", session_id, job_id
             )
             reason = str(exc)[:200]
-            # Best-effort: never leave an unmasked raw video behind on failure.
-            if job.raw_video_purged_at is None and raw_key:
+            # Best-effort: never leave an unmasked raw clip behind on failure —
+            # purge EVERY clip of a multi-clip import.
+            if job.raw_video_purged_at is None and clip_keys:
                 try:
-                    await purge_raw_video(str(session_id), raw_key)
+                    for key in clip_keys:
+                        await purge_raw_video(str(session_id), key)
                     await jobs.mark_raw_video_purged(db, job)
                 except Exception:
                     logger.exception(
-                        "Failed to purge raw video after import failure: session=%s",
+                        "Failed to purge raw video(s) after import failure: session=%s",
                         session_id,
                     )
             try:

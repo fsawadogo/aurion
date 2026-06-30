@@ -109,7 +109,7 @@ async def test_extract_and_mask_frames_offloads_per_frame() -> None:
         vi.asyncio, "to_thread", AsyncMock(return_value=masked_result)
     ) as to_thread, patch.object(vi, "write_audit", AsyncMock()) as audit:
         extracted, masked, dropped = await vi._extract_and_mask_frames(
-            db, sid, "/tmp/x.mp4"
+            db, sid, [("/tmp/x.mp4", 0)]
         )
 
     assert (extracted, masked, dropped) == (1, 1, 0)

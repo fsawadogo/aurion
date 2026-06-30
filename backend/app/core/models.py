@@ -610,7 +610,15 @@ class VideoImportJobModel(Base):
         DateTime(timezone=True), nullable=True
     )
     # S3 key of the uploaded raw video (video-imports/{sid}/{uuid}.mp4).
+    # For a single-clip import this is the only key. For a multi-clip import
+    # it holds the FIRST clip (back-compat); the full ordered clip list lives
+    # in `raw_video_s3_keys`.
     raw_video_s3_key: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Ordered list of clip S3 keys for a multi-clip import (sequential parts of
+    # one encounter). NULL for legacy / single-clip jobs — processing falls
+    # back to `[raw_video_s3_key]`. Concatenated in THIS order into one audio
+    # timeline → one transcript → one note.
+    raw_video_s3_keys: Mapped[list | None] = mapped_column(JSONB, nullable=True)
     # Set once the raw video has been purged post-extraction — the audit
     # proof that no unmasked video lingers past processing.
     raw_video_purged_at: Mapped[datetime | None] = mapped_column(

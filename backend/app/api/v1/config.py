@@ -75,6 +75,10 @@ class FeatureFlagsResponse(BaseModel):
     # Ships dark; the instrument stays hidden until ADMIN flips this. iOS
     # defaults it False when absent, so older clients are unaffected.
     measurement_enabled: bool
+    # ── Multi-clip video import (sequential clips → one note) ────────────
+    # Gates visibility of the multi-clip upload UI in web + iOS. Ships dark;
+    # iOS defaults it False when absent so older clients are unaffected.
+    multi_clip_import_enabled: bool
 
 
 class ClientConfigResponse(BaseModel):
@@ -117,5 +121,6 @@ async def get_client_config(_: CurrentUser = Depends(get_current_user)):
             patient_summary_card_enabled=cfg.feature_flags.patient_summary_card_enabled,
             emr_writeback_card_enabled=cfg.feature_flags.emr_writeback_card_enabled,
             measurement_enabled=cfg.feature_flags.measurement_enabled,
+            multi_clip_import_enabled=cfg.feature_flags.multi_clip_import_enabled,
         ),
     )

@@ -24,12 +24,19 @@ async def create_job(
     session_id: uuid.UUID,
     raw_video_s3_key: str,
     auto_advance_stage2: bool = False,
+    raw_video_s3_keys: list[str] | None = None,
 ) -> VideoImportJobModel:
-    """Create a pending video-import job for a session."""
+    """Create a pending video-import job for a session.
+
+    ``raw_video_s3_keys`` carries the ordered clip list for a multi-clip
+    import; ``None`` keeps single-clip behaviour (processing falls back to
+    ``[raw_video_s3_key]``).
+    """
     job = VideoImportJobModel(
         session_id=session_id,
         status="pending",
         raw_video_s3_key=raw_video_s3_key,
+        raw_video_s3_keys=raw_video_s3_keys,
         auto_advance_stage2=auto_advance_stage2,
     )
     db.add(job)

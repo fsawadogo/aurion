@@ -233,6 +233,7 @@ resource "aws_appconfig_configuration_profile" "main" {
             # additionalProperties = false — the backend Pydantic schema
             # defaults both (video_import_enabled false, drop True).
             video_import_enabled               = { type = "boolean" }
+            multi_clip_import_enabled          = { type = "boolean" }
             video_import_drop_zero_face_frames = { type = "boolean" }
             # Specialty STYLE GUIDANCE layer in the live Stage 1 note prompt
             # (incl. per-physician guidance overrides). NOT in `required` so an
