@@ -135,3 +135,36 @@ async def test_duplicate_route_404_when_source_missing(monkeypatch) -> None:
     with pytest.raises(HTTPException) as ei:
         await me_mod.duplicate_my_custom_template(uuid.uuid4(), user, db)
     assert ei.value.status_code == 404
+
+
+# ── review fixes (#580) ──────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("bad", ["{not valid json", "null", "[1, 2, 3]", '"a string"'])
+async def test_duplicate_rejects_corrupt_source_content(monkeypatch, bad) -> None:
+    """A corrupt / non-object source content degrades to a clean CustomTemplateError
+    (→ 400), not an unhandled 500 — mirrors template_to_dict's tolerance."""
+    src = _src(content=bad)
+    monkeypatch.setattr(svc, "get_owned_or_shared", AsyncMock(return_value=src))
+    db = AsyncMock()
+    with pytest.raises(svc.CustomTemplateError, match="corrupt"):
+        await svc.duplicate_into_owner(src.id, uuid.uuid4(), db)
+
+
+@pytest.mark.asyncio
+async def test_duplicate_forks_over_cap_shared_template(monkeypatch) -> None:
+    """A mature shared template that exceeds the create-time section caps stays
+    forkable — caps are skipped on copy (same exemption as the update path)."""
+    big = _tmpl(sections=[{"id": f"s{i}", "title": "S"} for i in range(60)])
+    src = _src(content=json.dumps(big))
+    monkeypatch.setattr(svc, "get_owned_or_shared", AsyncMock(return_value=src))
+    monkeypatch.setattr(svc, "_find_by_owner_and_key", AsyncMock(return_value=None))
+    monkeypatch.setattr(svc, "_flush_mapping_unique", AsyncMock())
+    db = AsyncMock()
+    db.add = MagicMock()
+
+    row = await svc.duplicate_into_owner(src.id, uuid.uuid4(), db)
+
+    assert row is not None
+    assert len(json.loads(row.content)["sections"]) == 60

@@ -277,7 +277,12 @@ async def _flush_mapping_unique(db: AsyncSession, key: str) -> None:
 
 
 async def create_for_owner(
-    owner_id: uuid.UUID, payload: dict, db: AsyncSession, *, is_shared: bool = False
+    owner_id: uuid.UUID,
+    payload: dict,
+    db: AsyncSession,
+    *,
+    is_shared: bool = False,
+    check_section_caps: bool = True,
 ) -> CustomTemplateModel:
     """Validate `payload` against the Template schema and persist.
 
@@ -290,12 +295,17 @@ async def create_for_owner(
     read-only in every clinician's library + picker via
     ``list_for_owner(include_shared=True)`` and resolves at note generation via
     ``get_owned_or_shared``. Only the admin shared-templates surface passes True.
+
+    ``check_section_caps=False`` skips the create-time section length/count caps
+    — the fork path copies already-saved content, mirroring ``update_owned``'s
+    exemption so a mature (over-cap) source stays forkable. The DB-backed
+    key/display_name/version caps + the descriptive-mode gate still apply.
     """
     try:
         template = Template.model_validate(payload)
     except ValidationError as exc:
         raise CustomTemplateError(_schema_error_msg(exc)) from exc
-    _validate_custom_template_fields(template)
+    _validate_custom_template_fields(template, check_section_caps=check_section_caps)
 
     existing = await _find_by_owner_and_key(owner_id, template.key, db)
     if existing is not None:
@@ -334,10 +344,21 @@ async def duplicate_into_owner(
     src = await get_owned_or_shared(source_id, owner_id, db)
     if src is None:
         return None
-    payload = json.loads(src.content)
+    # Tolerate a corrupt source row (mirrors template_to_dict on every other
+    # read path) — degrade to a clean 400 instead of an unhandled 500.
+    payload = template_to_dict(src)
+    if not isinstance(payload, dict) or not payload:
+        raise CustomTemplateError("Source template content is corrupt")
     payload["key"] = await _unique_copy_key(src.key, owner_id, db)
     payload["display_name"] = _copy_display_name(src.display_name)
-    return await create_for_owner(owner_id, payload, db, is_shared=False)
+    # check_section_caps=False: a fork copies already-saved content, and a mature
+    # shared template can legitimately exceed the create-time section caps (the
+    # admin edit path uses update_owned, which exempts them), so re-checking
+    # would spuriously 400 the forks most worth making. DB-backed caps + the
+    # descriptive-mode gate still apply.
+    return await create_for_owner(
+        owner_id, payload, db, is_shared=False, check_section_caps=False
+    )
 
 
 async def update_owned(
