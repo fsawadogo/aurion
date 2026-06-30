@@ -1,0 +1,116 @@
+{
+  "examples": [
+    {
+      "description": "central chest pain — full ED note: chief complaint, structured HPI, allergies and medications, vital signs each with units, focused exam, investigations (ECG, troponin, chest X-ray), an assessment synthesized and cited from multiple captured findings, and a mandatory admit disposition with follow-up (Grounded Synthesis Mode, v3.2)",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 6000, "text": "What brought you to the emergency department today?"},
+        {"id": "seg_002", "start_ms": 6000, "end_ms": 16000, "text": "I've had crushing chest pain in the center of my chest for about two hours now."},
+        {"id": "seg_003", "start_ms": 16000, "end_ms": 28000, "text": "It started while I was resting, it radiates down my left arm, and it's about an eight out of ten. Nothing I do makes it better."},
+        {"id": "seg_004", "start_ms": 28000, "end_ms": 38000, "text": "I feel sweaty and a bit short of breath and nauseated with it. No fever and no cough."},
+        {"id": "seg_005", "start_ms": 38000, "end_ms": 48000, "text": "I have high blood pressure and type two diabetes, and I had a stent put in three years ago."},
+        {"id": "seg_006", "start_ms": 48000, "end_ms": 60000, "text": "I take aspirin 81 milligrams daily, metoprolol 50 milligrams daily, and metformin 1000 milligrams twice a day. My last dose was this morning."},
+        {"id": "seg_007", "start_ms": 60000, "end_ms": 68000, "text": "Any allergies? Yes, penicillin gives me a rash. Nothing else."},
+        {"id": "seg_008", "start_ms": 68000, "end_ms": 80000, "text": "Looking at the monitor, blood pressure is 158 over 94 millimeters of mercury, heart rate is 102 beats per minute."},
+        {"id": "seg_009", "start_ms": 80000, "end_ms": 92000, "text": "Respiratory rate is 22 breaths per minute, oxygen saturation is 94 percent on room air, and temperature is 37.1 degrees Celsius."},
+        {"id": "seg_010", "start_ms": 92000, "end_ms": 102000, "text": "On exam he's diaphoretic and uncomfortable. Heart sounds are regular with no murmur."},
+        {"id": "seg_011", "start_ms": 102000, "end_ms": 112000, "text": "On auscultation the chest is clear with good air entry bilaterally and no crackles. The abdomen is soft and non-tender."},
+        {"id": "seg_012", "start_ms": 112000, "end_ms": 124000, "text": "The ECG shows ST elevation of two millimeters in leads two, three, and AVF."},
+        {"id": "seg_013", "start_ms": 124000, "end_ms": 134000, "text": "The first troponin is back at 0.85 nanograms per milliliter, which is elevated."},
+        {"id": "seg_014", "start_ms": 134000, "end_ms": 144000, "text": "The chest X-ray shows no consolidation and no pneumothorax, with a normal cardiac silhouette."},
+        {"id": "seg_015", "start_ms": 144000, "end_ms": 158000, "text": "I'm activating the cath lab and admitting him to cardiology. I've given aspirin 325 milligrams chewed and started a heparin infusion at 0210."},
+        {"id": "seg_016", "start_ms": 158000, "end_ms": 170000, "text": "Cardiology will follow in the cath lab; family has been updated and he'll go directly for angiography."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_cc1", "text": "Central crushing chest pain for approximately two hours.", "source_type": "transcript", "source_id": "seg_002", "source_quote": "I've had crushing chest pain in the center of my chest for about two hours now."}
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_h1", "text": "Pain began at rest, radiates down the left arm, rated 8 out of 10, with nothing relieving it.", "source_type": "transcript", "source_id": "seg_003", "source_quote": "It started while I was resting, it radiates down my left arm, and it's about an eight out of ten. Nothing I do makes it better."},
+              {"id": "claim_h2", "text": "Associated diaphoresis, shortness of breath, and nausea; no fever and no cough.", "source_type": "transcript", "source_id": "seg_004", "source_quote": "I feel sweaty and a bit short of breath and nauseated with it. No fever and no cough."}
+            ]
+          },
+          {
+            "id": "past_medical_history",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_pmh1", "text": "Hypertension and type 2 diabetes; coronary stent placed three years ago.", "source_type": "transcript", "source_id": "seg_005", "source_quote": "I have high blood pressure and type two diabetes, and I had a stent put in three years ago."}
+            ]
+          },
+          {
+            "id": "medications",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_m1", "text": "Aspirin 81 mg daily, metoprolol 50 mg daily, and metformin 1000 mg twice daily; last dose taken this morning.", "source_type": "transcript", "source_id": "seg_006", "source_quote": "I take aspirin 81 milligrams daily, metoprolol 50 milligrams daily, and metformin 1000 milligrams twice a day. My last dose was this morning."}
+            ]
+          },
+          {
+            "id": "allergies",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_al1", "text": "Penicillin — rash; no other allergies.", "source_type": "transcript", "source_id": "seg_007", "source_quote": "Yes, penicillin gives me a rash. Nothing else."}
+            ]
+          },
+          {
+            "id": "vital_signs",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_v1", "text": "Blood pressure 158/94 mmHg; heart rate 102 bpm.", "source_type": "transcript", "source_id": "seg_008", "source_quote": "blood pressure is 158 over 94 millimeters of mercury, heart rate is 102 beats per minute."},
+              {"id": "claim_v2", "text": "Respiratory rate 22 breaths/min; SpO2 94% on room air; temperature 37.1 °C.", "source_type": "transcript", "source_id": "seg_009", "source_quote": "Respiratory rate is 22 breaths per minute, oxygen saturation is 94 percent on room air, and temperature is 37.1 degrees Celsius."}
+            ]
+          },
+          {
+            "id": "physical_exam",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_e1", "text": "General: diaphoretic and uncomfortable. Cardiovascular: regular heart sounds with no murmur.", "source_type": "transcript", "source_id": "seg_010", "source_quote": "On exam he's diaphoretic and uncomfortable. Heart sounds are regular with no murmur."},
+              {"id": "claim_e2", "text": "Respiratory: chest clear on auscultation with good air entry bilaterally and no crackles. Abdomen: soft and non-tender.", "source_type": "transcript", "source_id": "seg_011", "source_quote": "On auscultation the chest is clear with good air entry bilaterally and no crackles. The abdomen is soft and non-tender."}
+            ]
+          },
+          {
+            "id": "investigations",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_i1", "text": "ECG: ST elevation of 2 mm in leads II, III, and aVF.", "source_type": "transcript", "source_id": "seg_012", "source_quote": "The ECG shows ST elevation of two millimeters in leads two, three, and AVF."},
+              {"id": "claim_i2", "text": "Troponin: first value 0.85 ng/mL, elevated.", "source_type": "transcript", "source_id": "seg_013", "source_quote": "The first troponin is back at 0.85 nanograms per milliliter, which is elevated."},
+              {"id": "claim_i3", "text": "Chest X-ray: no consolidation, no pneumothorax, normal cardiac silhouette.", "source_type": "transcript", "source_id": "seg_014", "source_quote": "The chest X-ray shows no consolidation and no pneumothorax, with a normal cardiac silhouette."}
+            ]
+          },
+          {
+            "id": "assessment",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_a1",
+                "text": "Working assessment: acute inferior ST-elevation myocardial infarction — ST elevation in the inferior leads on ECG with an elevated troponin, in the setting of central chest pain at rest radiating to the left arm.",
+                "source_type": "transcript",
+                "source_id": "seg_012",
+                "source_quote": "The ECG shows ST elevation of two millimeters in leads two, three, and AVF.",
+                "additional_sources": [
+                  {"source_id": "seg_013", "source_quote": "The first troponin is back at 0.85 nanograms per milliliter, which is elevated."},
+                  {"source_id": "seg_003", "source_quote": "It started while I was resting, it radiates down my left arm, and it's about an eight out of ten. Nothing I do makes it better."}
+                ]
+              }
+            ]
+          },
+          {
+            "id": "disposition",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_d1", "text": "Disposition: cath lab activated; admit to cardiology.", "source_type": "transcript", "source_id": "seg_015", "source_quote": "I'm activating the cath lab and admitting him to cardiology."},
+              {"id": "claim_d2", "text": "Treatments given: aspirin 325 mg chewed and a heparin infusion started at 02:10.", "source_type": "transcript", "source_id": "seg_015", "source_quote": "I've given aspirin 325 milligrams chewed and started a heparin infusion at 0210."},
+              {"id": "claim_d3", "text": "Follow-up: cardiology to follow in the cath lab; patient to proceed directly for angiography; family updated.", "source_type": "transcript", "source_id": "seg_016", "source_quote": "Cardiology will follow in the cath lab; family has been updated and he'll go directly for angiography."}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -1,21 +1,42 @@
 {
   "key": "general",
   "display_name": "General",
-  "version": "1.0",
+  "version": "1.1",
   "sections": [
     {
       "id": "chief_complaint",
       "title": "Chief Complaint",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Primary presenting complaint in the patient's own words"
+      "description": "Primary presenting complaint in the patient's own words, with duration when stated. Keep to a single brief, objective phrase; capture laterality or site only when the patient states it."
     },
     {
       "id": "hpi",
       "title": "History of Present Illness",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Onset, duration, character, radiation, associated symptoms, timing, exacerbating/relieving factors, severity"
+      "description": "Onset, duration, character, location, radiation, severity (capture any numeric scale or descriptor as stated), and timing; aggravating and relieving factors; associated symptoms (fever, weight change, fatigue, etc.); and management or treatment tried to date — each captured only as the patient or physician states it. Favour brief, objective phrasing. Emit one claim per distinct element."
+    },
+    {
+      "id": "past_medical_history",
+      "title": "Past Medical History",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Relevant active or past medical conditions as stated (e.g. hypertension, type 2 diabetes, asthma), with duration or control where given. Capture only what is mentioned; leave not_captured if none discussed."
+    },
+    {
+      "id": "medications",
+      "title": "Medications",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Current medications with dose, route, and frequency exactly as stated (e.g. 'metformin 500 mg orally twice daily'); include relevant PRN or over-the-counter agents. Leave not_captured if none discussed."
+    },
+    {
+      "id": "allergies",
+      "title": "Allergies",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Stated drug, food, or material allergies and the reaction when given. Leave not_captured if allergies are not addressed during the encounter."
     },
     {
       "id": "physical_exam",
@@ -25,21 +46,21 @@
         "looking at", "you can see", "examination",
         "palpation", "inspection", "right here"
       ],
-      "description": "Objective, measurable physical findings as observed — vitals with units and exam findings; terse/telegraphic phrasing is appropriate"
+      "description": "Objective, measurable physical findings as observed. Capture vitals with units exactly as stated (e.g. blood pressure in mmHg, heart rate in bpm, temperature in degrees, oxygen saturation as a percentage); document inspection, palpation, auscultation, and any system-specific findings by region or organ system, leading with the structure examined. Terse, telegraphic, objective phrasing is appropriate; one claim per distinct finding, described only as the physician states it."
     },
     {
       "id": "assessment",
       "title": "Assessment",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Working diagnosis as explicitly stated by the physician, verbatim. Do not add interpretation the physician did not voice"
+      "description": "The physician's working assessment. When synthesis is permitted (grounded mode), present it as one claim per working problem plus any contributing factors the physician relates, and ground each statement in the history/exam/vitals source(s) it rests on (cite multiple sources where relevant). Never state an assessment the cited findings do not support; never add a problem the physician did not voice."
     },
     {
       "id": "plan",
       "title": "Plan",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Treatment plan, investigations ordered, referrals, follow-up timeline as stated by the physician"
+      "description": "The plan as stated by the physician, with one claim per item grouped by: investigations ordered, treatment started or adjusted (with dose/frequency where given), referrals, advice given, and follow-up timing."
     }
   ]
 }

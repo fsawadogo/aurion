@@ -1,21 +1,42 @@
 {
   "key": "emergency_medicine",
   "display_name": "Emergency Medicine",
-  "version": "1.0",
+  "version": "1.1",
   "sections": [
     {
       "id": "chief_complaint",
       "title": "Chief Complaint",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Primary presenting complaint in the patient's own words"
+      "description": "Primary presenting complaint in the patient's own words, with the stated duration and any triage acuity or mode of arrival (e.g. 'brought in by EMS', 'walked in') when mentioned. Capture only what is said."
     },
     {
       "id": "hpi",
       "title": "History of Present Illness",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Onset, duration, character, radiation, associated symptoms, timing, exacerbating/relieving factors, severity"
+      "description": "Onset and exact timing (e.g. 'started 2 hours ago', 'woke from sleep'), duration, character/quality, location and radiation, severity (including pain score out of 10 when stated), and the time course (constant, intermittent, worsening); aggravating and relieving factors; associated symptoms (chest pain, shortness of breath, nausea, vomiting, fever, syncope, focal weakness); pertinent negatives the physician voices; and any pre-hospital treatment given by EMS — each captured only as the patient or physician states it. Emit one claim per distinct element."
+    },
+    {
+      "id": "past_medical_history",
+      "title": "Past Medical History",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Relevant active or past medical conditions as stated (e.g. hypertension, diabetes, atrial fibrillation, prior MI, COPD), with prior surgeries or relevant procedures where mentioned. Capture only what is discussed; leave not_captured if none addressed."
+    },
+    {
+      "id": "medications",
+      "title": "Medications",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Current medications with dose, route, and frequency exactly as stated (e.g. 'apixaban 5 mg twice daily', 'metoprolol 50 mg daily'); flag anticoagulants, antiplatelets, and insulin when named, and note the time of the last dose if given. Especially important in the ED for interaction and reversal decisions. Leave not_captured if none discussed."
+    },
+    {
+      "id": "allergies",
+      "title": "Allergies",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Stated drug, food, or material allergies and the reaction type when given (e.g. 'penicillin — rash', 'no known drug allergies'). Critical in the ED before any medication is administered. Capture the explicit 'no known allergies' statement when voiced; leave not_captured only if allergies are never addressed."
     },
     {
       "id": "vital_signs",
@@ -26,7 +47,7 @@
         "oxygen saturation", "sat", "respiratory rate",
         "looking at the monitor", "on the screen"
       ],
-      "description": "Vital signs as observed on monitor or stated — capture each value with units: BP, HR, RR, temperature, SpO2 (and the O2 delivery, e.g. 'on room air')"
+      "description": "Lead with the vital signs as observed on the monitor or stated aloud — capture EACH value WITH ITS UNITS exactly as stated or shown: blood pressure (mmHg, systolic/diastolic), heart rate (bpm), respiratory rate (breaths/min), temperature (°C or °F with the route if given), and SpO2 (% with the O2 delivery, e.g. 'on room air' or '2 L nasal cannula'); include capillary glucose, pain score, and GCS when stated. Emit one claim per vital sign value and note serial/repeat readings with their times when given."
     },
     {
       "id": "physical_exam",
@@ -36,7 +57,7 @@
         "looking at", "you can see", "examination", "palpation",
         "auscultation", "percussion", "inspection"
       ],
-      "description": "Inspection, palpation, auscultation, percussion findings as observed during examination"
+      "description": "Document each finding as the physician examines, organised by system and leading with the region or manoeuvre: general appearance and level of distress; HEENT; cardiovascular (heart sounds, murmurs, peripheral pulses); respiratory (auscultation — air entry, crackles, wheeze; work of breathing); abdomen (inspection, palpation — tenderness with location, guarding, rebound, bowel sounds); extremities (swelling, deformity, perfusion); and a focused neurological exam (GCS, pupils, focal weakness, sensation) — each described only as the physician states it, with laterality wherever mentioned. One claim per distinct finding, including pertinent negatives the physician voices."
     },
     {
       "id": "investigations",
@@ -46,21 +67,21 @@
         "lab", "labs", "blood work", "results", "ECG", "EKG",
         "chest X-ray", "CT", "ultrasound", "looking at"
       ],
-      "description": "Lab results, ECG findings, imaging — as stated or shown on screen"
+      "description": "Capture results as they are stated or shown on screen, one claim per result: laboratory values with their units and any flag (e.g. 'troponin 0.45 ng/mL, elevated', 'lactate 3.2 mmol/L', 'WBC 14.5'); ECG findings exactly as read (rate, rhythm, ST changes with the leads named); and imaging findings stated by modality and view (e.g. 'chest X-ray — no consolidation', 'CT head — no acute haemorrhage'). Record only what is literally stated; never interpret beyond the physician's words. Mark results that are pending or awaited when noted."
     },
     {
       "id": "assessment",
       "title": "Assessment",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Working diagnosis as explicitly stated by the physician, verbatim. Do not add differentials the physician did not voice"
+      "description": "The physician's working assessment. When synthesis is permitted (grounded mode), present it as one claim per working diagnosis plus any contributing factors the physician relates, and ground each statement in the vital signs, exam, investigation, and history source(s) it rests on (cite multiple sources where relevant). Never state a diagnosis the cited findings do not support; never add a differential the physician did not voice."
     },
     {
       "id": "disposition",
       "title": "Disposition",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "MANDATORY — the disposition the physician states (admit / discharge / transfer / observation), with referrals and follow-up instructions. Source to a physician statement; never infer the disposition"
+      "description": "MANDATORY — the ED equivalent of the plan. Capture the disposition the physician states (admit / discharge / transfer / observation) as one claim, then one claim per follow-up element: admitting service or consulting specialty, treatments and medications ordered or administered (with the time when given), return precautions and discharge instructions, prescriptions, and follow-up timing/provider. Source every item to an explicit physician statement; never infer the disposition."
     }
   ]
 }

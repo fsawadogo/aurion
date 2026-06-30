@@ -1,21 +1,42 @@
 {
   "key": "plastic_surgery",
   "display_name": "Plastic Surgery",
-  "version": "1.0",
+  "version": "1.1",
   "sections": [
     {
       "id": "chief_complaint",
       "title": "Chief Complaint",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Primary presenting complaint in the patient's own words"
+      "description": "Primary presenting complaint in the patient's own words, with anatomical site and laterality (right/left) and duration when stated."
     },
     {
       "id": "hpi",
       "title": "History of Present Illness",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Onset, duration, character, radiation, associated symptoms, timing, exacerbating/relieving factors, severity"
+      "description": "Onset, duration, mechanism (surgical, traumatic, pressure, vascular), and progression of the wound or concern; character of any pain; associated symptoms (drainage, odour, fever, increasing redness, dehiscence); prior wound care and dressings tried; relevant context (prior reconstruction, flap/graft, radiation, smoking status, nutrition) — each captured only as the patient or physician states it. Emit one claim per distinct element."
+    },
+    {
+      "id": "past_medical_history",
+      "title": "Past Medical History",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Relevant active or past medical conditions affecting wound healing or perfusion as stated (e.g. diabetes, peripheral vascular disease, immunosuppression, prior radiation, smoking). Capture only what is mentioned; leave not_captured if none discussed."
+    },
+    {
+      "id": "medications",
+      "title": "Medications",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Current medications with dose, route, and frequency exactly as stated (e.g. 'cefalexin 500 mg by mouth four times daily', 'apixaban 5 mg twice daily'); include anticoagulants, antibiotics, immunosuppressants, and relevant PRN analgesics. Leave not_captured if none discussed."
+    },
+    {
+      "id": "allergies",
+      "title": "Allergies",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Stated drug or material allergies (including adhesives, latex, topical agents) and the reaction when given. Leave not_captured if allergies are not addressed during the encounter."
     },
     {
       "id": "wound_assessment",
@@ -30,7 +51,7 @@
         "maceration", "dehiscence", "serous", "serosanguineous", "purulent",
         "looking at", "right here", "this area"
       ],
-      "description": "Anatomical location; dimensions as length × width × depth in cm; wound-bed tissue types and proportions (granulation, slough, eschar, necrosis); exudate amount and character (serous/serosanguineous/purulent, colour, odour); wound edges (approximated, undermining, tunnelling); periwound skin; flap/graft viability (colour match, capillary refill, perfusion); signs of infection — described only as stated"
+      "description": "Document each finding as the physician states it, leading with the structure: anatomical location and laterality; dimensions as length × width × depth in cm (and undermining/tunnelling location and depth in cm with clock position when given); wound-bed tissue types with proportions (e.g. '80% granulation, 20% slough', eschar, necrosis); exudate amount and character (scant/moderate/heavy; serous/serosanguineous/purulent; colour; odour); wound edges (approximated, rolled, undermined, tunnelling); periwound skin (intact, erythema, induration, maceration, callus); flap or graft viability (colour match, capillary refill in seconds, perfusion, warmth, turgor, any congestion or pallor); and signs of infection — each described only as stated, never inferring healing trajectory or aetiology. One claim per distinct finding."
     },
     {
       "id": "imaging_review",
@@ -39,21 +60,21 @@
       "visual_trigger_keywords": [
         "X-ray", "MRI", "CT", "imaging", "looking at", "pulling up"
       ],
-      "description": "Description of imaging findings as literally observed on screen — modality, laterality, findings described only"
+      "description": "Imaging findings as literally described on screen — state modality, laterality, and the specific view/sequence for each finding. One claim per view or finding; findings described only, never interpreted beyond what the physician states. Leave not_captured if no imaging is reviewed."
     },
     {
       "id": "assessment",
       "title": "Assessment",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Working diagnosis as explicitly stated by the physician, verbatim. Do not add differentials the physician did not voice"
+      "description": "The physician's working assessment. When synthesis is permitted (grounded mode), present it as one claim per working assessment plus any contributing factors the physician relates, and ground each statement in the wound/exam/imaging/history source(s) it rests on (cite multiple sources where relevant). Never state an assessment the cited findings do not support; never add a differential or aetiology the physician did not voice."
     },
     {
       "id": "plan",
       "title": "Plan",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Treatment plan, investigations ordered, referrals, follow-up timeline as stated by the physician"
+      "description": "The plan as stated by the physician, with one claim per item grouped by: investigations ordered, referrals, dressing/treatment options discussed with their trade-offs/cost when mentioned, risks counselled, activity and wound-care advice, and follow-up timing."
     }
   ]
 }

@@ -1,0 +1,110 @@
+{
+  "examples": [
+    {
+      "description": "primary-care visit — full note: brief chief complaint, structured history, past medical history and medications, vitals with units and a focused exam, and an assessment + plan synthesized and cited from the captured findings (Grounded Synthesis Mode, v1.1)",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 5000, "text": "What brings you in today?"},
+        {"id": "seg_002", "start_ms": 5000, "end_ms": 13000, "text": "I've had a cough for about ten days now and it's not getting better."},
+        {"id": "seg_003", "start_ms": 13000, "end_ms": 25000, "text": "It started as a dry cough but now I'm bringing up some yellow phlegm, and it's worse at night."},
+        {"id": "seg_004", "start_ms": 25000, "end_ms": 35000, "text": "I had a fever the first few days, around thirty-eight and a half, but that's settled now. I still feel quite tired."},
+        {"id": "seg_005", "start_ms": 35000, "end_ms": 45000, "text": "I tried over-the-counter cough syrup and some Tylenol but it hasn't helped much."},
+        {"id": "seg_006", "start_ms": 45000, "end_ms": 54000, "text": "I have high blood pressure and I'm asthmatic — the asthma has been well controlled for years."},
+        {"id": "seg_007", "start_ms": 54000, "end_ms": 64000, "text": "I take ramipril 5 milligrams once a day, and I use my salbutamol inhaler as needed."},
+        {"id": "seg_008", "start_ms": 64000, "end_ms": 71000, "text": "Any allergies to medications? Yes, penicillin — it gives me a rash."},
+        {"id": "seg_009", "start_ms": 71000, "end_ms": 81000, "text": "Let me take your vitals. Blood pressure is 132 over 84, heart rate is 88, temperature 37.1."},
+        {"id": "seg_010", "start_ms": 81000, "end_ms": 89000, "text": "Oxygen saturation is 97 percent on room air, and your respiratory rate is 18."},
+        {"id": "seg_011", "start_ms": 89000, "end_ms": 100000, "text": "On listening to your chest, there are coarse crackles at the right base. The left side is clear."},
+        {"id": "seg_012", "start_ms": 100000, "end_ms": 109000, "text": "Your throat looks a little red but the tonsils are not enlarged, and there's no neck lymph node swelling."},
+        {"id": "seg_013", "start_ms": 109000, "end_ms": 120000, "text": "I'd like to get a chest X-ray to look at that right base, and a sputum sample."},
+        {"id": "seg_014", "start_ms": 120000, "end_ms": 132000, "text": "I'll start you on doxycycline 100 milligrams twice a day for seven days, since you're allergic to penicillin."},
+        {"id": "seg_015", "start_ms": 132000, "end_ms": 141000, "text": "Keep using your salbutamol as needed, stay well hydrated, and rest."},
+        {"id": "seg_016", "start_ms": 141000, "end_ms": 152000, "text": "Come back in one week, or sooner if you get short of breath or the fever returns."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_cc1", "text": "Cough for approximately ten days, not improving.", "source_type": "transcript", "source_id": "seg_002", "source_quote": "I've had a cough for about ten days now and it's not getting better."}
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_h1", "text": "Cough began dry, now productive of yellow sputum and worse at night.", "source_type": "transcript", "source_id": "seg_003", "source_quote": "It started as a dry cough but now I'm bringing up some yellow phlegm, and it's worse at night."},
+              {"id": "claim_h2", "text": "Fever to 38.5 in the first few days, now settled; ongoing fatigue.", "source_type": "transcript", "source_id": "seg_004", "source_quote": "I had a fever the first few days, around thirty-eight and a half, but that's settled now. I still feel quite tired."},
+              {"id": "claim_h3", "text": "Tried over-the-counter cough syrup and acetaminophen with little relief.", "source_type": "transcript", "source_id": "seg_005", "source_quote": "I tried over-the-counter cough syrup and some Tylenol but it hasn't helped much."}
+            ]
+          },
+          {
+            "id": "past_medical_history",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_pmh1", "text": "Hypertension; asthma, well controlled for years.", "source_type": "transcript", "source_id": "seg_006", "source_quote": "I have high blood pressure and I'm asthmatic — the asthma has been well controlled for years."}
+            ]
+          },
+          {
+            "id": "medications",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_m1", "text": "Ramipril 5 mg orally once daily; salbutamol inhaler as needed.", "source_type": "transcript", "source_id": "seg_007", "source_quote": "I take ramipril 5 milligrams once a day, and I use my salbutamol inhaler as needed."}
+            ]
+          },
+          {
+            "id": "allergies",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_al1", "text": "Penicillin — rash.", "source_type": "transcript", "source_id": "seg_008", "source_quote": "Yes, penicillin — it gives me a rash."}
+            ]
+          },
+          {
+            "id": "physical_exam",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_e1", "text": "Vitals: blood pressure 132/84 mmHg, heart rate 88 bpm, temperature 37.1.", "source_type": "transcript", "source_id": "seg_009", "source_quote": "Blood pressure is 132 over 84, heart rate is 88, temperature 37.1."},
+              {"id": "claim_e2", "text": "Oxygen saturation 97% on room air; respiratory rate 18.", "source_type": "transcript", "source_id": "seg_010", "source_quote": "Oxygen saturation is 97 percent on room air, and your respiratory rate is 18."},
+              {"id": "claim_e3", "text": "Chest auscultation: coarse crackles at the right base; left side clear.", "source_type": "transcript", "source_id": "seg_011", "source_quote": "On listening to your chest, there are coarse crackles at the right base. The left side is clear."},
+              {"id": "claim_e4", "text": "Throat mildly erythematous, tonsils not enlarged; no cervical lymphadenopathy.", "source_type": "transcript", "source_id": "seg_012", "source_quote": "Your throat looks a little red but the tonsils are not enlarged, and there's no neck lymph node swelling."}
+            ]
+          },
+          {
+            "id": "assessment",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_a1",
+                "text": "Working assessment: right basal lower respiratory tract infection — productive cough with prior fever, coarse crackles at the right base on auscultation.",
+                "source_type": "transcript",
+                "source_id": "seg_011",
+                "source_quote": "On listening to your chest, there are coarse crackles at the right base. The left side is clear.",
+                "additional_sources": [
+                  {"source_id": "seg_003", "source_quote": "It started as a dry cough but now I'm bringing up some yellow phlegm, and it's worse at night."},
+                  {"source_id": "seg_004", "source_quote": "I had a fever the first few days, around thirty-eight and a half, but that's settled now. I still feel quite tired."}
+                ]
+              },
+              {
+                "id": "claim_a2",
+                "text": "No respiratory distress at presentation — oxygen saturation 97% on room air with a respiratory rate of 18.",
+                "source_type": "transcript",
+                "source_id": "seg_010",
+                "source_quote": "Oxygen saturation is 97 percent on room air, and your respiratory rate is 18."
+              }
+            ]
+          },
+          {
+            "id": "plan",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_p1", "text": "Investigations: chest X-ray to assess the right base, and a sputum sample.", "source_type": "transcript", "source_id": "seg_013", "source_quote": "I'd like to get a chest X-ray to look at that right base, and a sputum sample."},
+              {"id": "claim_p2", "text": "Treatment: doxycycline 100 mg twice daily for seven days, given penicillin allergy.", "source_type": "transcript", "source_id": "seg_014", "source_quote": "I'll start you on doxycycline 100 milligrams twice a day for seven days, since you're allergic to penicillin."},
+              {"id": "claim_p3", "text": "Advice: continue salbutamol as needed, maintain hydration, and rest.", "source_type": "transcript", "source_id": "seg_015", "source_quote": "Keep using your salbutamol as needed, stay well hydrated, and rest."},
+              {"id": "claim_p4", "text": "Follow-up: review in one week, or sooner if shortness of breath develops or fever returns.", "source_type": "transcript", "source_id": "seg_016", "source_quote": "Come back in one week, or sooner if you get short of breath or the fever returns."}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}

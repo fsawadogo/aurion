@@ -1,43 +1,109 @@
 {
   "examples": [
     {
-      "description": "sacral wound — grounded assessment synthesized from wound-bed + exudate + periwound findings, each cited (Grounded Synthesis Mode, v3.2)",
+      "description": "right lower leg flap reconstruction follow-up — full note: structured history, medications, labelled wound and flap findings, and an assessment + plan synthesized and cited from the captured findings (Grounded Synthesis Mode, v3.2)",
       "transcript": [
-        {"id": "seg_001", "start_ms": 0, "end_ms": 6000, "text": "Let's examine the sacral wound. It measures four by two by half a centimetre."},
-        {"id": "seg_002", "start_ms": 6000, "end_ms": 14000, "text": "The wound bed is about eighty percent granulation with twenty percent slough. Scant serous exudate, no odour."},
-        {"id": "seg_003", "start_ms": 14000, "end_ms": 21000, "text": "Periwound skin is intact, no erythema or maceration."},
-        {"id": "seg_004", "start_ms": 21000, "end_ms": 29000, "text": "Continue the current foam dressing and reassess in one week."}
+        {"id": "seg_001", "start_ms": 0, "end_ms": 6000, "text": "What's bringing you back in today?"},
+        {"id": "seg_002", "start_ms": 6000, "end_ms": 14000, "text": "I'm here for the wound on my right lower leg. It's been draining and the dressing keeps soaking through."},
+        {"id": "seg_003", "start_ms": 14000, "end_ms": 26000, "text": "The wound started after my car accident three weeks ago. You did the flap reconstruction two weeks ago and it's been seeping more over the last few days."},
+        {"id": "seg_004", "start_ms": 26000, "end_ms": 36000, "text": "I have type two diabetes, and I smoke about half a pack a day."},
+        {"id": "seg_005", "start_ms": 36000, "end_ms": 47000, "text": "I'm taking metformin 500 milligrams twice daily and cefalexin 500 milligrams four times a day, plus Tylenol as needed for pain."},
+        {"id": "seg_006", "start_ms": 47000, "end_ms": 54000, "text": "Any allergies? Yes, penicillin gives me a rash."},
+        {"id": "seg_007", "start_ms": 54000, "end_ms": 64000, "text": "Let's take the dressing down and have a look at the right lower leg wound."},
+        {"id": "seg_008", "start_ms": 64000, "end_ms": 74000, "text": "The wound measures six by three by one centimetre over the anterior right lower leg."},
+        {"id": "seg_009", "start_ms": 74000, "end_ms": 86000, "text": "The wound bed is about seventy percent granulation and thirty percent slough, with no eschar."},
+        {"id": "seg_010", "start_ms": 86000, "end_ms": 97000, "text": "There's moderate serosanguineous exudate, no purulence and no odour today."},
+        {"id": "seg_011", "start_ms": 97000, "end_ms": 108000, "text": "There's about half a centimetre of undermining at the twelve o'clock position. The wound edges are approximated elsewhere."},
+        {"id": "seg_012", "start_ms": 108000, "end_ms": 120000, "text": "Periwound skin shows mild erythema extending roughly one centimetre, with some induration but no maceration."},
+        {"id": "seg_013", "start_ms": 120000, "end_ms": 133000, "text": "The flap itself is pink with a good colour match, capillary refill is brisk at about two seconds, and it's warm with no congestion or pallor."},
+        {"id": "seg_014", "start_ms": 133000, "end_ms": 143000, "text": "On the X-ray of the right tibia there's no cortical lucency or periosteal reaction at the wound site."},
+        {"id": "seg_015", "start_ms": 143000, "end_ms": 155000, "text": "I'll send a wound swab for culture and order a CBC and CRP today."},
+        {"id": "seg_016", "start_ms": 155000, "end_ms": 165000, "text": "I'll refer you to the wound care nurse for dressing changes, and to smoking cessation."},
+        {"id": "seg_017", "start_ms": 165000, "end_ms": 180000, "text": "We can switch to a silver foam dressing, about thirty dollars per change, which helps manage exudate and bacterial load; the trade-off is the cost over standard foam. Keep the leg elevated and avoid weight-bearing for now, and come back in three days."}
       ],
       "note": {
         "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_cc1", "text": "Draining wound of the right lower leg with dressing strikethrough.", "source_type": "transcript", "source_id": "seg_002", "source_quote": "I'm here for the wound on my right lower leg. It's been draining and the dressing keeps soaking through."}
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_h1", "text": "Wound originated after a motor vehicle accident three weeks ago; flap reconstruction performed two weeks ago, with increased seepage over the last few days.", "source_type": "transcript", "source_id": "seg_003", "source_quote": "The wound started after my car accident three weeks ago. You did the flap reconstruction two weeks ago and it's been seeping more over the last few days."}
+            ]
+          },
+          {
+            "id": "past_medical_history",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_pmh1", "text": "Type 2 diabetes; current smoker, approximately half a pack per day.", "source_type": "transcript", "source_id": "seg_004", "source_quote": "I have type two diabetes, and I smoke about half a pack a day."}
+            ]
+          },
+          {
+            "id": "medications",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_m1", "text": "Metformin 500 mg twice daily; cefalexin 500 mg four times daily; Tylenol as needed for pain.", "source_type": "transcript", "source_id": "seg_005", "source_quote": "I'm taking metformin 500 milligrams twice daily and cefalexin 500 milligrams four times a day, plus Tylenol as needed for pain."}
+            ]
+          },
+          {
+            "id": "allergies",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_al1", "text": "Penicillin — rash.", "source_type": "transcript", "source_id": "seg_006", "source_quote": "Yes, penicillin gives me a rash."}
+            ]
+          },
+          {
+            "id": "wound_assessment",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_w1", "text": "Location and dimensions: anterior right lower leg wound measuring 6 x 3 x 1 cm.", "source_type": "transcript", "source_id": "seg_008", "source_quote": "The wound measures six by three by one centimetre over the anterior right lower leg."},
+              {"id": "claim_w2", "text": "Wound bed: approximately 70% granulation and 30% slough, no eschar.", "source_type": "transcript", "source_id": "seg_009", "source_quote": "The wound bed is about seventy percent granulation and thirty percent slough, with no eschar."},
+              {"id": "claim_w3", "text": "Exudate: moderate serosanguineous exudate, no purulence and no odour.", "source_type": "transcript", "source_id": "seg_010", "source_quote": "There's moderate serosanguineous exudate, no purulence and no odour today."},
+              {"id": "claim_w4", "text": "Wound edges: approximately 0.5 cm of undermining at the 12 o'clock position; edges otherwise approximated.", "source_type": "transcript", "source_id": "seg_011", "source_quote": "There's about half a centimetre of undermining at the twelve o'clock position. The wound edges are approximated elsewhere."},
+              {"id": "claim_w5", "text": "Periwound skin: mild erythema extending approximately 1 cm with some induration, no maceration.", "source_type": "transcript", "source_id": "seg_012", "source_quote": "Periwound skin shows mild erythema extending roughly one centimetre, with some induration but no maceration."},
+              {"id": "claim_w6", "text": "Flap viability: pink with good colour match, brisk capillary refill at approximately 2 seconds, warm, no congestion or pallor.", "source_type": "transcript", "source_id": "seg_013", "source_quote": "The flap itself is pink with a good colour match, capillary refill is brisk at about two seconds, and it's warm with no congestion or pallor."}
+            ]
+          },
+          {
+            "id": "imaging_review",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_i1", "text": "X-ray of the right tibia: no cortical lucency or periosteal reaction at the wound site.", "source_type": "transcript", "source_id": "seg_014", "source_quote": "On the X-ray of the right tibia there's no cortical lucency or periosteal reaction at the wound site."}
+            ]
+          },
           {
             "id": "assessment",
             "status": "populated",
             "claims": [
               {
                 "id": "claim_a1",
-                "text": "Working assessment: clean, predominantly granulating sacral wound (4 x 2 x 0.5 cm) with minor slough, scant serous exudate, and intact periwound skin.",
+                "text": "Working assessment: predominantly granulating anterior right lower-leg wound (6 x 3 x 1 cm) with moderate serosanguineous exudate and localised periwound erythema and induration, with 0.5 cm of undermining at 12 o'clock.",
                 "source_type": "transcript",
-                "source_id": "seg_002",
-                "source_quote": "The wound bed is about eighty percent granulation with twenty percent slough. Scant serous exudate, no odour.",
+                "source_id": "seg_009",
+                "source_quote": "The wound bed is about seventy percent granulation and thirty percent slough, with no eschar.",
                 "additional_sources": [
-                  {"source_id": "seg_001", "source_quote": "It measures four by two by half a centimetre."},
-                  {"source_id": "seg_003", "source_quote": "Periwound skin is intact, no erythema or maceration."}
+                  {"source_id": "seg_010", "source_quote": "There's moderate serosanguineous exudate, no purulence and no odour today."},
+                  {"source_id": "seg_012", "source_quote": "Periwound skin shows mild erythema extending roughly one centimetre, with some induration but no maceration."},
+                  {"source_id": "seg_011", "source_quote": "There's about half a centimetre of undermining at the twelve o'clock position. The wound edges are approximated elsewhere."}
                 ]
-              }
+              },
+              {"id": "claim_a2", "text": "Working assessment: viable flap — pink with good colour match, brisk capillary refill, warm, no congestion or pallor.", "source_type": "transcript", "source_id": "seg_013", "source_quote": "The flap itself is pink with a good colour match, capillary refill is brisk at about two seconds, and it's warm with no congestion or pallor."}
             ]
           },
           {
             "id": "plan",
             "status": "populated",
             "claims": [
-              {
-                "id": "claim_p1",
-                "text": "Continue current foam dressing; reassess in one week.",
-                "source_type": "transcript",
-                "source_id": "seg_004",
-                "source_quote": "Continue the current foam dressing and reassess in one week."
-              }
+              {"id": "claim_p1", "text": "Investigations: wound swab for culture; CBC and CRP today.", "source_type": "transcript", "source_id": "seg_015", "source_quote": "I'll send a wound swab for culture and order a CBC and CRP today."},
+              {"id": "claim_p2", "text": "Referrals: wound care nurse for dressing changes; smoking cessation.", "source_type": "transcript", "source_id": "seg_016", "source_quote": "I'll refer you to the wound care nurse for dressing changes, and to smoking cessation."},
+              {"id": "claim_p3", "text": "Options discussed: switch to silver foam dressing (~$30 per change) to manage exudate and bacterial load; trade-off is added cost over standard foam.", "source_type": "transcript", "source_id": "seg_017", "source_quote": "We can switch to a silver foam dressing, about thirty dollars per change, which helps manage exudate and bacterial load; the trade-off is the cost over standard foam."},
+              {"id": "claim_p4", "text": "Activity and follow-up: elevate the leg, avoid weight-bearing for now, and return in three days.", "source_type": "transcript", "source_id": "seg_017", "source_quote": "Keep the leg elevated and avoid weight-bearing for now, and come back in three days."}
             ]
           }
         ]
