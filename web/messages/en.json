@@ -1019,7 +1019,8 @@
     "deleteAria": "Delete {name}",
     "myTemplatesHeading": "My Templates",
     "libraryHeading": "Library",
-    "myTemplatesEmpty": "No personal templates yet — build one, or save one from the Library below.",
+    "myTemplatesEmpty": "No personal templates yet.",
+    "browseLibrary": "Browse the Library",
     "libraryEmpty": "No shared templates available yet.",
     "saveToMine": "Save to My Templates",
     "duplicateError": "Couldn't copy the template."

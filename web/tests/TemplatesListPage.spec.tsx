@@ -5,12 +5,14 @@ import PortalTemplatesPage from "@/app/portal/templates/page";
 import { withIntl } from "./helpers/intl";
 
 /**
- * /portal/templates — ownership gating + delete confirmation modal.
+ * /portal/templates — tabbed split (My Templates / Library), ownership gating,
+ * and the delete confirmation modal.
  *
- * The list can include shared templates owned by others; Delete is owner-only
- * (the backend DELETE is owner-scoped → 404). Verifies the Delete control
- * shows for owned rows, is hidden for non-owned, and that deleting goes
- * through the house Modal rather than a native confirm().
+ * The list can include shared templates owned by others; the tabs are a disjoint
+ * split on `is_shared` and only the active tab's list is mounted. Delete is
+ * owner-only (the backend DELETE is owner-scoped → 404). These verify the tab
+ * separation, that Delete shows for owned rows only, the fork-to-mine flow, and
+ * that deleting goes through the house Modal rather than a native confirm().
  */
 
 vi.mock("@/lib/api", () => ({
@@ -71,12 +73,13 @@ beforeEach(() => {
 describe("PortalTemplatesPage — ownership gating + delete modal", () => {
   it("shows Delete only for owned rows", async () => {
     render(withIntl(<PortalTemplatesPage />));
-    // Wait until ownership has resolved and the owned row's Delete renders.
+    // My Templates is the default tab: the owned row's Delete renders.
     await waitFor(() =>
       expect(screen.getByLabelText("Delete My Template")).toBeTruthy(),
     );
+    // The shared (non-owned) row lives in the Library tab and has no Delete.
+    fireEvent.click(screen.getByTestId("templates-tab-library"));
     expect(screen.getByText("Shared Template")).toBeTruthy();
-    // The shared (non-owned) row has no Delete control.
     expect(screen.queryByLabelText("Delete Shared Template")).toBeNull();
   });
 
@@ -98,23 +101,23 @@ describe("PortalTemplatesPage — ownership gating + delete modal", () => {
   });
 });
 
-describe("PortalTemplatesPage — My Templates vs Library split + fork", () => {
-  it("splits rows into the two labelled sections by is_shared", async () => {
+describe("PortalTemplatesPage — tabbed My Templates / Library split + fork", () => {
+  it("separates owned and shared templates across the two tabs", async () => {
     render(withIntl(<PortalTemplatesPage />));
+    // My Templates tab (default): owned row has Open, and no fork control here.
     await waitFor(() =>
       expect(screen.getByLabelText("Delete My Template")).toBeTruthy(),
     );
-    // Both section headings render.
-    expect(
-      screen.getByRole("heading", { name: "My Templates" }),
-    ).toBeTruthy();
-    expect(screen.getByRole("heading", { name: "Library" })).toBeTruthy();
-    // Owned row keeps Open + Delete; shared row gets neither, only the fork
-    // button. The owned row's Open is an anchor (label "Open").
     expect(screen.getAllByText("Open").length).toBe(1);
+    expect(
+      screen.queryByRole("button", { name: "Save to My Templates" }),
+    ).toBeNull();
+    // Library tab: shared row has the fork button, and no Open control.
+    fireEvent.click(screen.getByTestId("templates-tab-library"));
     expect(
       screen.getByRole("button", { name: "Save to My Templates" }),
     ).toBeTruthy();
+    expect(screen.queryByText("Open")).toBeNull();
   });
 
   it("forks a Library row and the copy lands under My Templates", async () => {
@@ -133,15 +136,17 @@ describe("PortalTemplatesPage — My Templates vs Library split + fork", () => {
       ] as never);
 
     render(withIntl(<PortalTemplatesPage />));
-    const forkBtn = await screen.findByRole("button", {
-      name: "Save to My Templates",
-    });
-    fireEvent.click(forkBtn);
+    // Fork happens from the Library tab.
+    fireEvent.click(await screen.findByTestId("templates-tab-library"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save to My Templates" }),
+    );
 
     await waitFor(() =>
       expect(duplicateMyCustomTemplate).toHaveBeenCalledWith("theirs"),
     );
-    // The reload ran and the fork now shows as an owned row (has Delete).
+    // Back on My Templates, the fork now shows as an owned row (has Delete).
+    fireEvent.click(screen.getByTestId("templates-tab-mine"));
     await waitFor(() =>
       expect(
         screen.getByLabelText("Delete Shared Template (copy)"),
@@ -155,10 +160,10 @@ describe("PortalTemplatesPage — My Templates vs Library split + fork", () => {
       new Error("boom"),
     );
     render(withIntl(<PortalTemplatesPage />));
-    const forkBtn = await screen.findByRole("button", {
-      name: "Save to My Templates",
-    });
-    fireEvent.click(forkBtn);
+    fireEvent.click(await screen.findByTestId("templates-tab-library"));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Save to My Templates" }),
+    );
     await waitFor(() =>
       expect(screen.getByText("Couldn't copy the template.")).toBeTruthy(),
     );

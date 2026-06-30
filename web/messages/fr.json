@@ -1019,7 +1019,8 @@
     "deleteAria": "Supprimer {name}",
     "myTemplatesHeading": "Mes modèles",
     "libraryHeading": "Bibliothèque",
-    "myTemplatesEmpty": "Aucun modèle personnel pour l’instant — créez-en un, ou enregistrez-en un depuis la Bibliothèque ci-dessous.",
+    "myTemplatesEmpty": "Aucun modèle personnel pour l’instant.",
+    "browseLibrary": "Parcourir la Bibliothèque",
     "libraryEmpty": "Aucun modèle partagé disponible pour l’instant.",
     "saveToMine": "Enregistrer dans Mes modèles",
     "duplicateError": "Impossible de copier le modèle."

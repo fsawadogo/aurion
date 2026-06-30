@@ -21,7 +21,7 @@ import { formatRelative } from "@/lib/session-format";
 import type { CustomTemplate } from "@/types";
 
 /**
- * /portal/templates — the clinician's templates, split into two sections:
+ * /portal/templates — the clinician's templates, split across two tabs:
  *
  *   • My Templates — the clinician's own (is_shared=false): editable + deletable.
  *   • Library      — shared org templates (is_shared=true): read-only here, each
@@ -29,12 +29,17 @@ import type { CustomTemplate } from "@/types";
  *                    copy (POST /me/custom-templates/{id}/duplicate).
  *
  * `listMyCustomTemplates` returns the union of the caller's own private rows and
- * shared rows, so the two sections are a disjoint split on `is_shared`.
+ * shared rows; the tabs are a disjoint split on `is_shared`. Only the active
+ * tab's list is mounted, so the clinician's own templates are never buried under
+ * a growing org Library (and vice-versa). A count badge on each tab signals
+ * what's in the other tab without a click.
  *
  * Built-in specialty templates aren't shown here — they live in the backend's
  * file-based loader (admin "System Templates"); folding them into this Library
  * is a follow-up (#579).
  */
+type TemplatesTab = "mine" | "library";
+
 export default function PortalTemplatesPage() {
   const t = useTranslations("TemplatesList");
   const router = useRouter();
@@ -44,6 +49,7 @@ export default function PortalTemplatesPage() {
   const [uploading, setUploading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [tab, setTab] = useState<TemplatesTab>("mine");
   // Current user id for ownership gating of the delete control (a row the caller
   // doesn't own would 404 server-side). Null until resolved; on getMe failure we
   // fall back to showing it and let the owner-scoped backend enforce.
@@ -92,7 +98,7 @@ export default function PortalTemplatesPage() {
     try {
       await duplicateMyCustomTemplate(tpl.id);
       // The fork is owned (is_shared=false) + newest, so it lands at the top of
-      // My Templates after the reload.
+      // the My Templates tab after the reload; that tab's count badge ticks up.
       await load();
     } catch (e) {
       setError(humanizeError(e, t("duplicateError")));
@@ -124,8 +130,6 @@ export default function PortalTemplatesPage() {
 
   const rowClass =
     "group flex items-center gap-3 py-3 -mx-2 px-2 rounded-aurion-md hover:bg-canvas/40 transition-colors duration-short";
-  const headingClass =
-    "mb-2 text-aurion-caption font-semibold uppercase tracking-wide text-navy-500";
 
   const rowMeta = (tpl: CustomTemplate) => (
     <>
@@ -150,6 +154,11 @@ export default function PortalTemplatesPage() {
       </div>
     </>
   );
+
+  const tabs = [
+    { id: "mine" as const, label: t("myTemplatesHeading"), count: mine.length },
+    { id: "library" as const, label: t("libraryHeading"), count: library.length },
+  ];
 
   return (
     <div className="aurion-page-padded aurion-container-narrow">
@@ -198,87 +207,135 @@ export default function PortalTemplatesPage() {
         </div>
       )}
 
+      {/* Tabs: My Templates ↔ Library — a disjoint split on is_shared. */}
+      <div
+        className="mb-5 inline-flex rounded-aurion-md border border-hairline bg-white p-0.5"
+        role="tablist"
+        aria-label={t("title")}
+      >
+        {tabs.map(({ id, label, count }) => {
+          const active = tab === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={active}
+              onClick={() => setTab(id)}
+              data-testid={`templates-tab-${id}`}
+              className={
+                "flex items-center gap-2 rounded-aurion-sm px-3 py-1.5 text-aurion-callout font-medium transition-colors " +
+                (active
+                  ? "bg-navy-50 text-navy-800"
+                  : "text-navy-400 hover:text-navy-700")
+              }
+            >
+              {label}
+              {!loading && (
+                <span
+                  className={
+                    "rounded-full px-1.5 text-[11px] tabular-nums " +
+                    (active
+                      ? "bg-navy-100 text-navy-700"
+                      : "bg-gray-100 text-navy-400")
+                  }
+                >
+                  {count}
+                </span>
+              )}
+            </button>
+          );
+        })}
+      </div>
+
       <Card>
         {loading ? (
           <LoadingSkeleton lines={6} />
-        ) : (
-          <div className="space-y-6">
-            <section>
-              <h2 className={headingClass}>{t("myTemplatesHeading")}</h2>
-              {mine.length === 0 ? (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-gold-50 text-gold-600">
-                    <MessagesSquare className="h-6 w-6" />
-                  </div>
-                  <p className="aurion-callout font-medium text-navy-700">
-                    {t("myTemplatesEmpty")}
-                  </p>
+        ) : tab === "mine" ? (
+          <div role="tabpanel" aria-label={t("myTemplatesHeading")}>
+            {mine.length === 0 ? (
+              <div className="flex flex-col items-center justify-center py-10 text-center">
+                <div className="mb-3 inline-flex h-12 w-12 items-center justify-center rounded-full bg-gold-50 text-gold-600">
+                  <MessagesSquare className="h-6 w-6" />
+                </div>
+                <p className="aurion-callout font-medium text-navy-700">
+                  {t("myTemplatesEmpty")}
+                </p>
+                <div className="mt-4 flex items-center gap-4">
                   <Link href="/portal/templates/new">
-                    <Button variant="primary" size="sm" className="mt-4">
+                    <Button variant="primary" size="sm">
                       {t("startBuilding")}
                     </Button>
                   </Link>
+                  {library.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setTab("library")}
+                      className="text-aurion-callout font-medium text-navy-500 hover:text-navy-800 transition-colors duration-short"
+                    >
+                      {t("browseLibrary")}
+                    </button>
+                  )}
                 </div>
-              ) : (
-                <ul className="divide-y divide-hairline">
-                  {mine.map((tpl) => (
-                    <li key={tpl.id} className={rowClass}>
-                      {rowMeta(tpl)}
-                      <div className="flex items-center gap-1 shrink-0">
-                        {/* Plain anchor for dynamic `/portal/templates/[id]` —
-                            Next `<Link>` collapses the URL under static export. */}
-                        <a
-                          href={`/portal/templates/${tpl.id}`}
-                          className="inline-flex items-center gap-1 rounded-aurion-xs px-2 py-1 text-aurion-caption font-medium text-navy-600 hover:bg-canvas hover:text-navy-800 transition-colors duration-short"
-                        >
-                          <SquarePen className="h-4 w-4" />
-                          {t("open")}
-                        </a>
-                        {meResolved && (meId === null || tpl.owner_id === meId) && (
-                          <button
-                            type="button"
-                            onClick={() => setPendingDelete(tpl)}
-                            className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 transition-colors duration-short"
-                            disabled={deletingId === tpl.id}
-                            aria-label={t("deleteAria", { name: tpl.display_name })}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        )}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
-
-            <section>
-              <h2 className={headingClass}>{t("libraryHeading")}</h2>
-              {library.length === 0 ? (
-                <p className="py-4 text-aurion-caption text-navy-500">
-                  {t("libraryEmpty")}
-                </p>
-              ) : (
-                <ul className="divide-y divide-hairline">
-                  {library.map((tpl) => (
-                    <li key={tpl.id} className={rowClass}>
-                      {rowMeta(tpl)}
-                      <Button
-                        variant="secondary"
-                        size="sm"
-                        className="shrink-0"
-                        loading={duplicatingId === tpl.id}
-                        disabled={!!duplicatingId}
-                        onClick={() => void onDuplicate(tpl)}
+              </div>
+            ) : (
+              <ul className="divide-y divide-hairline">
+                {mine.map((tpl) => (
+                  <li key={tpl.id} className={rowClass}>
+                    {rowMeta(tpl)}
+                    <div className="flex items-center gap-1 shrink-0">
+                      {/* Plain anchor for dynamic `/portal/templates/[id]` —
+                          Next `<Link>` collapses the URL under static export. */}
+                      <a
+                        href={`/portal/templates/${tpl.id}`}
+                        className="inline-flex items-center gap-1 rounded-aurion-xs px-2 py-1 text-aurion-caption font-medium text-navy-600 hover:bg-canvas hover:text-navy-800 transition-colors duration-short"
                       >
-                        <Copy className="h-4 w-4 mr-1" />
-                        {t("saveToMine")}
-                      </Button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </section>
+                        <SquarePen className="h-4 w-4" />
+                        {t("open")}
+                      </a>
+                      {meResolved && (meId === null || tpl.owner_id === meId) && (
+                        <button
+                          type="button"
+                          onClick={() => setPendingDelete(tpl)}
+                          className="inline-flex items-center justify-center rounded-aurion-xs p-1.5 text-navy-400 hover:bg-red-50 hover:text-red-600 disabled:opacity-50 transition-colors duration-short"
+                          disabled={deletingId === tpl.id}
+                          aria-label={t("deleteAria", { name: tpl.display_name })}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      )}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ) : (
+          <div role="tabpanel" aria-label={t("libraryHeading")}>
+            {library.length === 0 ? (
+              <p className="py-8 text-center text-aurion-caption text-navy-500">
+                {t("libraryEmpty")}
+              </p>
+            ) : (
+              <ul className="divide-y divide-hairline">
+                {library.map((tpl) => (
+                  <li key={tpl.id} className={rowClass}>
+                    {rowMeta(tpl)}
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      className="shrink-0"
+                      loading={duplicatingId === tpl.id}
+                      disabled={!!duplicatingId}
+                      onClick={() => void onDuplicate(tpl)}
+                    >
+                      <Copy className="h-4 w-4 mr-1" />
+                      {t("saveToMine")}
+                    </Button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         )}
       </Card>
