@@ -181,19 +181,33 @@ async def test_null_template_key_falls_back(available_templates):
 
 
 @pytest.mark.asyncio
-async def test_no_context_id_short_circuits_without_db():
-    """No ``context_id`` → specialty default, and the profile is never
-    even queried (old-client path stays cheap)."""
-    db = AsyncMock()
-    db.execute = AsyncMock(side_effect=AssertionError("must not query"))
+async def test_no_context_id_no_default_falls_back(available_templates):
+    """No ``context_id`` + a visit type whose contexts have no ``is_default``
+    → specialty default. #577 changed the old short-circuit: the profile IS
+    now queried (to look for a default), so this falls back AFTER a lookup
+    rather than before one."""
+    profile = _profile(
+        {
+            "new_patient": [
+                {
+                    "id": "ctx_aaaaaaaa",
+                    "label": "LL",
+                    "template_key": "musculoskeletal",
+                    "template_ref": None,
+                }
+            ]
+        }
+    )
+    db = _db_with_profile(profile)
 
     key, custom_id, coerced = await resolve_context_template_key(
         db, uuid.uuid4(), "new_patient", None
     )
 
     assert key is None
+    assert custom_id is None
     assert coerced is False
-    db.execute.assert_not_called()
+    db.execute.assert_called_once()
 
 
 @pytest.mark.asyncio
@@ -269,6 +283,136 @@ async def test_corrupt_contexts_json_falls_back(available_templates):
     )
 
     assert key is None
+    assert coerced is False
+
+
+# ── #577: visit-type default context (context_id omitted) ────────────────────
+
+
+@pytest.mark.asyncio
+async def test_no_context_id_resolves_default_built_in(available_templates):
+    """No ``context_id`` → the visit type's ``is_default`` context resolves,
+    snapshotting its built-in template_key."""
+    profile = _profile(
+        {
+            "new_patient": [
+                {
+                    "id": "ctx_aaaaaaaa",
+                    "label": "LL",
+                    "template_key": None,
+                    "template_ref": None,
+                },
+                {
+                    "id": "ctx_bbbbbbbb",
+                    "label": "Default",
+                    "template_key": "musculoskeletal",
+                    "template_ref": None,
+                    "is_default": True,
+                },
+            ]
+        }
+    )
+    db = _db_with_profile(profile)
+
+    key, custom_id, coerced = await resolve_context_template_key(
+        db, uuid.uuid4(), "new_patient", None
+    )
+
+    assert key == "musculoskeletal"
+    assert custom_id is None
+    assert coerced is False
+
+
+@pytest.mark.asyncio
+async def test_explicit_context_id_ignores_default(available_templates):
+    """An explicit ``context_id`` resolves THAT context even when a sibling
+    in the same visit type is flagged default."""
+    profile = _profile(
+        {
+            "new_patient": [
+                {
+                    "id": "ctx_aaaaaaaa",
+                    "label": "Chosen",
+                    "template_key": "orthopedic_surgery",
+                    "template_ref": None,
+                },
+                {
+                    "id": "ctx_bbbbbbbb",
+                    "label": "Default",
+                    "template_key": "musculoskeletal",
+                    "template_ref": None,
+                    "is_default": True,
+                },
+            ]
+        }
+    )
+    db = _db_with_profile(profile)
+
+    key, custom_id, coerced = await resolve_context_template_key(
+        db, uuid.uuid4(), "new_patient", "ctx_aaaaaaaa"
+    )
+
+    assert key == "orthopedic_surgery"
+    assert custom_id is None
+    assert coerced is False
+
+
+@pytest.mark.asyncio
+async def test_no_context_id_stale_default_coerces(available_templates):
+    """A default context pinned to a no-longer-available built-in coerces to
+    the specialty default and flags ``coerced_stale`` — identical to an
+    explicit stale pin."""
+    profile = _profile(
+        {
+            "new_patient": [
+                {
+                    "id": "ctx_bbbbbbbb",
+                    "label": "Default",
+                    "template_key": "cardiology",  # not in _AVAILABLE
+                    "template_ref": None,
+                    "is_default": True,
+                }
+            ]
+        }
+    )
+    db = _db_with_profile(profile)
+
+    key, custom_id, coerced = await resolve_context_template_key(
+        db, uuid.uuid4(), "new_patient", None
+    )
+
+    assert key is None
+    assert custom_id is None
+    assert coerced is True
+
+
+@pytest.mark.asyncio
+async def test_no_context_id_default_pinned_nothing_falls_back(
+    available_templates,
+):
+    """A default context that pins neither key nor ref → specialty default,
+    no coercion."""
+    profile = _profile(
+        {
+            "new_patient": [
+                {
+                    "id": "ctx_bbbbbbbb",
+                    "label": "Default",
+                    "template_key": None,
+                    "template_ref": None,
+                    "is_default": True,
+                }
+            ]
+        }
+    )
+    db = _db_with_profile(profile)
+
+    key, custom_id, coerced = await resolve_context_template_key(
+        db, uuid.uuid4(), "new_patient", None
+    )
+
+    assert key is None
+    assert custom_id is None
     assert coerced is False
 
 
