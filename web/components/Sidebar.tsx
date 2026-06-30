@@ -21,7 +21,6 @@ import {
   Search,
   ShieldCheck,
   Sparkles,
-  Share2,
   Users,
   X,
   Zap,
@@ -74,15 +73,16 @@ const navigation: {
   // Adoption & ROI analytics (#71). ADMIN + EVAL_TEAM — matches the backend
   // require_role on /admin/analytics/adoption (same gate as pilot metrics).
   { tKey: "analytics", href: "/portal/admin/analytics", icon: TrendingUp, roles: ["ADMIN", "EVAL_TEAM"] },
-  // Built-in specialty template management (#72). ADMIN + COMPLIANCE_OFFICER +
-  // CLINICAL_ADMIN (#578) — matches the backend _ROLES on /admin/templates.
+  // Unified template Library (#579): built-in (admin override, keyed) + org-
+  // custom shared templates in one admin view. ADMIN + COMPLIANCE_OFFICER +
+  // CLINICAL_ADMIN (#578) — the union of the former System/Shared gates, which
+  // mirror the backend _ROLES on /admin/templates + /admin/shared-templates.
   // Distinct from the clinician-facing /portal/templates (per-physician custom).
-  { tKey: "systemTemplates", href: "/portal/admin/templates", icon: LayoutGrid, roles: ["ADMIN", "COMPLIANCE_OFFICER", "CLINICAL_ADMIN"] },
+  { tKey: "library", href: "/portal/admin/library", icon: LayoutGrid, roles: ["ADMIN", "COMPLIANCE_OFFICER", "CLINICAL_ADMIN"] },
   // Prompt Studio (create & share, #524). ADMIN + CLINICAL_ADMIN (#578) —
   // matches the backend prompt_studio_roles default; the page is also
   // flag-gated (prompt_studio_enabled) and shows a "not enabled" state when off.
   { tKey: "promptStudio", href: "/portal/admin/prompt-studio", icon: Sparkles, roles: ["ADMIN", "CLINICAL_ADMIN"] },
-  { tKey: "sharedTemplates", href: "/portal/admin/shared-templates", icon: Share2, roles: ["ADMIN", "CLINICAL_ADMIN"] },
   // Operational alerts (#76). ADMIN + COMPLIANCE_OFFICER — matches the
   // backend gate on /admin/alerts (list + acknowledge).
   { tKey: "alerts", href: "/portal/admin/alerts", icon: Bell, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },

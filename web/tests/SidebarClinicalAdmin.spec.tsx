@@ -7,8 +7,8 @@ import { withIntl } from "./helpers/intl";
 /**
  * Sidebar — CLINICAL_ADMIN nav surface (#578).
  *
- * The elevatable super-user sees the curation items (System Templates, Shared
- * Templates, Prompt Studio) but NOT the infra/security items (Feature Flags,
+ * The elevatable super-user sees the curation items (the unified Library —
+ * #579 — and Prompt Studio) but NOT the infra/security items (Feature Flags,
  * AI Providers, Config, Users) — mirroring the backend require_role sets.
  *
  * `getMe` / profile / portal-flags are mocked so the sidebar resolves a user
@@ -55,9 +55,8 @@ describe("Sidebar — CLINICAL_ADMIN nav surface (#578)", () => {
   it("surfaces the elevatable curation items", async () => {
     render(withIntl(<Sidebar />));
     await waitFor(() =>
-      expect(screen.getAllByText("System Templates").length).toBeGreaterThan(0),
+      expect(screen.getAllByText("Library").length).toBeGreaterThan(0),
     );
-    expect(screen.getAllByText("Shared Templates").length).toBeGreaterThan(0);
     expect(screen.getAllByText("Prompt Studio").length).toBeGreaterThan(0);
   });
 
@@ -66,7 +65,7 @@ describe("Sidebar — CLINICAL_ADMIN nav surface (#578)", () => {
     // Wait until the nav has resolved (a curation item is present) before
     // asserting absence, so we're not just racing an empty initial render.
     await waitFor(() =>
-      expect(screen.getAllByText("System Templates").length).toBeGreaterThan(0),
+      expect(screen.getAllByText("Library").length).toBeGreaterThan(0),
     );
     expect(screen.queryByText("Feature Flags")).toBeNull();
     expect(screen.queryByText("AI Providers")).toBeNull();

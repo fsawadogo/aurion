@@ -41,6 +41,13 @@
       "submit": "Créer"
     }
   },
+  "AdminLibrary": {
+    "eyebrow": "Admin",
+    "title": "Bibliothèque de modèles",
+    "description": "Gérez les modèles de spécialité intégrés et les modèles partagés de votre organisation au même endroit.",
+    "builtinHeading": "Modèles intégrés",
+    "customHeading": "Modèles de l'organisation"
+  },
   "AdminSharedTemplates": {
     "eyebrow": "Espace admin",
     "title": "Modèles partagés",
@@ -78,12 +85,11 @@
       "myActivity": "Mon activité",
       "aiPrompts": "Invites IA",
       "promptStudio": "Studio d'invites",
-      "sharedTemplates": "Modèles partagés",
+      "library": "Bibliothèque",
       "featureFlags": "Indicateurs",
       "providers": "Fournisseurs IA",
       "capturedMedia": "Médias capturés",
       "analytics": "Analytique",
-      "systemTemplates": "Modèles système",
       "alerts": "Alertes",
       "complianceReports": "Rapports de conformité",
       "uploadEncounter": "Téléverser une vidéo",
