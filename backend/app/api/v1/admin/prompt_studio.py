@@ -64,9 +64,10 @@ async def require_prompt_studio(
 
     Ships dark — ``feature_flags.prompt_studio_enabled`` defaults False, so the
     whole surface 403s until an operator flips it. ``prompt_studio_roles``
-    (default ``["ADMIN"]``) lets the surface widen to EVAL_TEAM / CLINICIAN
-    later via AppConfig without a redeploy. 403 (not 404) so the failure is
-    legible to the portal, which hides the nav on the same signal.
+    (default ``["ADMIN", "CLINICAL_ADMIN"]``, #578) lets the surface widen to
+    EVAL_TEAM / CLINICIAN later via AppConfig without a redeploy. The empty/None
+    fallback below stays ADMIN-only (the conservative choice). 403 (not 404) so
+    the failure is legible to the portal, which hides the nav on the same signal.
     """
     flags = get_config().feature_flags
     if not flags.prompt_studio_enabled:
