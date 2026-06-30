@@ -1004,13 +1004,17 @@
     "deleteTitle": "Delete template",
     "deleteCancel": "Cancel",
     "deleteConfirmButton": "Delete",
-    "emptyTitle": "No custom templates yet. Build one in a few minutes with the conversational builder.",
     "startBuilding": "Start building",
-    "sharedBadge": "Shared",
     "sectionCount": "{count, plural, one {# section} other {# sections}}",
     "metadata": "v{version} · {sections} · updated {updated}",
     "open": "Open",
-    "deleteAria": "Delete {name}"
+    "deleteAria": "Delete {name}",
+    "myTemplatesHeading": "My Templates",
+    "libraryHeading": "Library",
+    "myTemplatesEmpty": "No personal templates yet — build one, or save one from the Library below.",
+    "libraryEmpty": "No shared templates available yet.",
+    "saveToMine": "Save to My Templates",
+    "duplicateError": "Couldn't copy the template."
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Templates",

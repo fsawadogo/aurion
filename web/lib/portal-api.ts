@@ -136,6 +136,18 @@ export async function deleteMyCustomTemplate(templateId: string): Promise<void> 
   });
 }
 
+/** Fork a Library template (a shared org template, or the caller's own) into a
+ * NEW owned "My Templates" copy. Returns the new (is_shared=false) template. */
+export async function duplicateMyCustomTemplate(
+  templateId: string,
+): Promise<CustomTemplate> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/custom-templates/${templateId}/duplicate`,
+    { method: "POST" },
+  );
+  return r.json();
+}
+
 export async function uploadTemplateDocument(
   file: File,
 ): Promise<TemplateAuthoringSession> {

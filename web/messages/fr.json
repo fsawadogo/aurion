@@ -1004,13 +1004,17 @@
     "deleteTitle": "Supprimer le modèle",
     "deleteCancel": "Annuler",
     "deleteConfirmButton": "Supprimer",
-    "emptyTitle": "Aucun modèle personnalisé pour l’instant. Construisez-en un en quelques minutes avec le concepteur conversationnel.",
     "startBuilding": "Commencer",
-    "sharedBadge": "Partagé",
     "sectionCount": "{count, plural, one {# section} other {# sections}}",
     "metadata": "v{version} · {sections} · mis à jour {updated}",
     "open": "Ouvrir",
-    "deleteAria": "Supprimer {name}"
+    "deleteAria": "Supprimer {name}",
+    "myTemplatesHeading": "Mes modèles",
+    "libraryHeading": "Bibliothèque",
+    "myTemplatesEmpty": "Aucun modèle personnel pour l’instant — créez-en un, ou enregistrez-en un depuis la Bibliothèque ci-dessous.",
+    "libraryEmpty": "Aucun modèle partagé disponible pour l’instant.",
+    "saveToMine": "Enregistrer dans Mes modèles",
+    "duplicateError": "Impossible de copier le modèle."
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Modèles",
