@@ -419,6 +419,11 @@ class UserRole(str, Enum):
     EVAL_TEAM = "EVAL_TEAM"
     COMPLIANCE_OFFICER = "COMPLIANCE_OFFICER"
     ADMIN = "ADMIN"
+    # Elevatable super-user (#578): curates the template Library + publishes
+    # prompts, but is NOT granted infra/security/regulatory surfaces (Feature
+    # Flags, AI Providers, Config, Users, PHI, Audit). require_role is an
+    # OR-set with no hierarchy, so this is added explicitly only where elevated.
+    CLINICAL_ADMIN = "CLINICAL_ADMIN"
 
 
 class PublicationScope(str, Enum):

@@ -38,7 +38,9 @@ from app.modules.prompts.safety import ValidationCode, validate_user_prompt
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-_ROLES = (UserRole.ADMIN, UserRole.COMPLIANCE_OFFICER)
+# System Templates is elevatable curation (#578) — CLINICAL_ADMIN joins
+# ADMIN + COMPLIANCE_OFFICER here, but NOT on infra/security endpoints.
+_ROLES = (UserRole.ADMIN, UserRole.COMPLIANCE_OFFICER, UserRole.CLINICAL_ADMIN)
 
 
 class TemplateSummaryResponse(BaseModel):

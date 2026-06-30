@@ -25,7 +25,15 @@ branch_labels = None
 depends_on = None
 
 
-USER_ROLE_VALUES = ("CLINICIAN", "EVAL_TEAM", "COMPLIANCE_OFFICER", "ADMIN")
+USER_ROLE_VALUES = (
+    "CLINICIAN",
+    "EVAL_TEAM",
+    "COMPLIANCE_OFFICER",
+    "ADMIN",
+    # CLINICAL_ADMIN (#578) — in the baseline so a fresh DB creates the enum
+    # complete; migration 0044 ADD VALUE IF NOT EXISTS covers existing DBs.
+    "CLINICAL_ADMIN",
+)
 SESSION_STATE_VALUES = (
     "IDLE",
     "CONSENT_PENDING",
