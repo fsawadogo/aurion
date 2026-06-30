@@ -1,21 +1,42 @@
 {
   "key": "musculoskeletal",
   "display_name": "Musculoskeletal / Sports Medicine",
-  "version": "1.0",
+  "version": "1.1",
   "sections": [
     {
       "id": "chief_complaint",
       "title": "Chief Complaint",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Primary presenting complaint in the patient's own words"
+      "description": "Primary presenting complaint in the patient's own words, with laterality (right/left), the affected joint or region, and duration when stated."
     },
     {
       "id": "hpi",
       "title": "History of Present Illness",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Onset, duration, character, radiation, associated symptoms, timing, exacerbating/relieving factors, severity"
+      "description": "Onset and mechanism of injury (acute/insidious, contact/non-contact, the specific movement or load involved), duration, character, location and laterality, radiation, severity, and timing; aggravating and relieving factors (loading, rest, specific activities or sports); associated symptoms (swelling, instability, giving way, mechanical locking, clicking, morning stiffness, paraesthesia); current activity and training level; and management/treatment tried to date (rest, bracing, physiotherapy, analgesia) — each captured only as the patient or physician states it. Emit one claim per distinct element."
+    },
+    {
+      "id": "past_medical_history",
+      "title": "Past Medical History",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Relevant active or past medical conditions as stated (e.g. inflammatory arthritis, diabetes, prior injuries to the same region, osteoporosis). Capture only what is mentioned; leave not_captured if none discussed."
+    },
+    {
+      "id": "medications",
+      "title": "Medications",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Current medications with dose, route, and frequency exactly as stated (e.g. 'naproxen 500 mg orally twice daily'); include relevant PRN analgesics and any disease-modifying agents. Leave not_captured if none discussed."
+    },
+    {
+      "id": "allergies",
+      "title": "Allergies",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "Stated drug or material allergies and the reaction when given. Leave not_captured if allergies are not addressed during the encounter."
     },
     {
       "id": "functional_assessment",
@@ -27,7 +48,7 @@
         "balance", "proprioception", "functional test",
         "watching you walk", "watching here"
       ],
-      "description": "Functional movement as described — gait (antalgic, normal, side of limp), weight-bearing and loading tolerance, sport- or activity-specific movements, pain at rest vs with loading, activities of daily living"
+      "description": "Functional movement as the physician observes and the patient describes it — gait (antalgic vs normal, and the side of any limp), weight-bearing and loading tolerance (full, partial, unable), activity- or sport-specific movements (squat depth, single-leg stance, hop/step-down, jogging), pain at rest versus with loading, and impact on activities of daily living — each captured only as stated, with laterality where mentioned. One claim per distinct functional finding."
     },
     {
       "id": "physical_exam",
@@ -39,7 +60,7 @@
         "Lachman", "McMurray", "drawer", "apprehension",
         "looking here", "you can see"
       ],
-      "description": "Inspection, palpation, range of motion (in degrees), strength on the 0-5 MRC scale, named special tests with result and side (e.g. 'McMurray positive on the right'), neurovascular status — described only as stated"
+      "description": "Document each manoeuvre as the physician performs it, leading with the structure or test name: inspection (deformity, swelling, effusion, atrophy); palpation (specific location, e.g. medial joint line, lateral epicondyle); range of motion stated as degrees, active versus passive when distinguished; strength on the 0-5 MRC scale when graded (e.g. '4/5'); named special tests with result AND side (Lachman, McMurray, anterior/posterior drawer, apprehension, Hawkins, Neer, Thessaly); and neurovascular status — each described only as the physician states it, with laterality wherever mentioned. One claim per distinct finding."
     },
     {
       "id": "imaging_review",
@@ -48,21 +69,21 @@
       "visual_trigger_keywords": [
         "X-ray", "MRI", "ultrasound", "looking at", "pulling up"
       ],
-      "description": "Description of imaging findings as literally observed on screen — modality, laterality, findings described only"
+      "description": "Imaging findings as literally described on screen — state modality (X-ray, MRI, ultrasound), laterality, and the specific projection/view or sequence for each finding (e.g. 'weight-bearing AP view', 'T2 sagittal sequence', 'longitudinal ultrasound'). One claim per view or finding; findings described only, never interpreted beyond what the physician states."
     },
     {
       "id": "assessment",
       "title": "Assessment",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Working diagnosis as explicitly stated by the physician, verbatim. Do not add differentials the physician did not voice"
+      "description": "The physician's working assessment. When synthesis is permitted (grounded mode), present it as one claim per working diagnosis plus any contributing factors the physician relates, and ground each statement in the functional/exam/imaging/history source(s) it rests on (cite multiple sources where relevant). Never state a diagnosis the cited findings do not support; never add a differential the physician did not voice."
     },
     {
       "id": "plan",
       "title": "Plan",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Treatment plan, investigations ordered, referrals, follow-up timeline as stated by the physician"
+      "description": "The plan as stated by the physician, with one claim per item grouped by: investigations ordered, referrals, treatment options discussed with their trade-offs/cost when mentioned, risks counselled, activity and rehabilitation/load-management advice, and follow-up timing."
     }
   ]
 }

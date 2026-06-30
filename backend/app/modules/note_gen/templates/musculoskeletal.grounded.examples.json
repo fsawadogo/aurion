@@ -1,0 +1,117 @@
+{
+  "examples": [
+    {
+      "description": "right ankle — full musculoskeletal/sports-medicine note: structured history and medications, observed gait and loading, labelled exam manoeuvres, imaging per view, and an assessment + plan synthesized and cited from the captured findings (Grounded Synthesis Mode, v3.2)",
+      "transcript": [
+        {"id": "seg_001", "start_ms": 0, "end_ms": 5000, "text": "What brings you in today?"},
+        {"id": "seg_002", "start_ms": 5000, "end_ms": 14000, "text": "Right ankle pain. I rolled it playing soccer about three weeks ago and it hasn't settled."},
+        {"id": "seg_003", "start_ms": 14000, "end_ms": 26000, "text": "I came down on it awkwardly after a jump, no contact, and the foot turned inwards. The pain is on the outside of the ankle."},
+        {"id": "seg_004", "start_ms": 26000, "end_ms": 37000, "text": "It swelled up that night, and it still feels like it gives way on uneven ground. There's no locking."},
+        {"id": "seg_005", "start_ms": 37000, "end_ms": 47000, "text": "I usually run about thirty kilometres a week and play soccer twice a week, but I've stopped both since the injury."},
+        {"id": "seg_006", "start_ms": 47000, "end_ms": 57000, "text": "I've been resting it, icing, and using an elastic ankle brace, and I take naproxen 500 milligrams twice a day with food."},
+        {"id": "seg_007", "start_ms": 57000, "end_ms": 66000, "text": "Let me watch you walk. There's an antalgic gait with reduced time on the right foot."},
+        {"id": "seg_008", "start_ms": 66000, "end_ms": 76000, "text": "You're weight-bearing but you can't do a single-leg heel raise on the right, and a single-leg stance on the right is unsteady."},
+        {"id": "seg_009", "start_ms": 76000, "end_ms": 85000, "text": "On inspection there's swelling over the lateral malleolus on the right with some bruising, no deformity."},
+        {"id": "seg_010", "start_ms": 85000, "end_ms": 95000, "text": "There's tenderness on palpation over the anterior talofibular ligament on the right ankle."},
+        {"id": "seg_011", "start_ms": 95000, "end_ms": 107000, "text": "Range of motion: dorsiflexion is reduced to about 10 degrees on the right compared with 20 on the left, plantarflexion is full."},
+        {"id": "seg_012", "start_ms": 107000, "end_ms": 119000, "text": "The anterior drawer test is positive on the right and negative on the left, with an increased talar tilt on the right."},
+        {"id": "seg_013", "start_ms": 119000, "end_ms": 131000, "text": "On the weight-bearing AP and mortise views of the right ankle the bony structures are intact with no fracture and a normal mortise."},
+        {"id": "seg_014", "start_ms": 131000, "end_ms": 143000, "text": "On longitudinal ultrasound there's thickening and irregularity of the anterior talofibular ligament on the right with a small amount of surrounding fluid."},
+        {"id": "seg_015", "start_ms": 143000, "end_ms": 154000, "text": "I'll order an MRI of the right ankle to look at the lateral ligaments and the cartilage."},
+        {"id": "seg_016", "start_ms": 154000, "end_ms": 164000, "text": "I'll refer you to physiotherapy for a proprioception and peroneal strengthening program."},
+        {"id": "seg_017", "start_ms": 164000, "end_ms": 176000, "text": "Keep using the brace for now, hold off on running and soccer, and we'll reassess in four weeks after the MRI."}
+      ],
+      "note": {
+        "sections": [
+          {
+            "id": "chief_complaint",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_cc1", "text": "Right ankle pain following an inversion injury playing soccer approximately three weeks ago, not yet settled.", "source_type": "transcript", "source_id": "seg_002", "source_quote": "Right ankle pain. I rolled it playing soccer about three weeks ago and it hasn't settled."}
+            ]
+          },
+          {
+            "id": "hpi",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_h1", "text": "Non-contact inversion mechanism after landing from a jump, with pain at the lateral aspect of the right ankle.", "source_type": "transcript", "source_id": "seg_003", "source_quote": "I came down on it awkwardly after a jump, no contact, and the foot turned inwards. The pain is on the outside of the ankle."},
+              {"id": "claim_h2", "text": "Immediate swelling on the night of injury, ongoing sensation of giving way on uneven ground, and no mechanical locking.", "source_type": "transcript", "source_id": "seg_004", "source_quote": "It swelled up that night, and it still feels like it gives way on uneven ground. There's no locking."},
+              {"id": "claim_h3", "text": "Usual activity of running approximately 30 km per week and soccer twice weekly, both stopped since the injury.", "source_type": "transcript", "source_id": "seg_005", "source_quote": "I usually run about thirty kilometres a week and play soccer twice a week, but I've stopped both since the injury."},
+              {"id": "claim_h4", "text": "Management tried to date: rest, icing, and an elastic ankle brace.", "source_type": "transcript", "source_id": "seg_006", "source_quote": "I've been resting it, icing, and using an elastic ankle brace, and I take naproxen 500 milligrams twice a day with food."}
+            ]
+          },
+          {
+            "id": "medications",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_m1", "text": "Naproxen 500 mg orally twice daily with food.", "source_type": "transcript", "source_id": "seg_006", "source_quote": "I take naproxen 500 milligrams twice a day with food."}
+            ]
+          },
+          {
+            "id": "functional_assessment",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_f1", "text": "Antalgic gait with reduced stance time on the right foot.", "source_type": "transcript", "source_id": "seg_007", "source_quote": "There's an antalgic gait with reduced time on the right foot."},
+              {"id": "claim_f2", "text": "Weight-bearing but unable to perform a single-leg heel raise on the right, with an unsteady single-leg stance on the right.", "source_type": "transcript", "source_id": "seg_008", "source_quote": "You're weight-bearing but you can't do a single-leg heel raise on the right, and a single-leg stance on the right is unsteady."}
+            ]
+          },
+          {
+            "id": "physical_exam",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_e1", "text": "Inspection: swelling over the right lateral malleolus with bruising, no deformity.", "source_type": "transcript", "source_id": "seg_009", "source_quote": "On inspection there's swelling over the lateral malleolus on the right with some bruising, no deformity."},
+              {"id": "claim_e2", "text": "Palpation: tenderness over the anterior talofibular ligament of the right ankle.", "source_type": "transcript", "source_id": "seg_010", "source_quote": "There's tenderness on palpation over the anterior talofibular ligament on the right ankle."},
+              {"id": "claim_e3", "text": "Range of motion: right ankle dorsiflexion reduced to approximately 10 degrees versus 20 degrees on the left; plantarflexion full.", "source_type": "transcript", "source_id": "seg_011", "source_quote": "dorsiflexion is reduced to about 10 degrees on the right compared with 20 on the left, plantarflexion is full."},
+              {"id": "claim_e4", "text": "Special tests: anterior drawer positive on the right and negative on the left, with increased talar tilt on the right.", "source_type": "transcript", "source_id": "seg_012", "source_quote": "The anterior drawer test is positive on the right and negative on the left, with an increased talar tilt on the right."}
+            ]
+          },
+          {
+            "id": "imaging_review",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_i1", "text": "Weight-bearing AP and mortise views of the right ankle: bony structures intact, no fracture, normal mortise.", "source_type": "transcript", "source_id": "seg_013", "source_quote": "On the weight-bearing AP and mortise views of the right ankle the bony structures are intact with no fracture and a normal mortise."},
+              {"id": "claim_i2", "text": "Longitudinal ultrasound of the right ankle: thickening and irregularity of the anterior talofibular ligament with a small amount of surrounding fluid.", "source_type": "transcript", "source_id": "seg_014", "source_quote": "On longitudinal ultrasound there's thickening and irregularity of the anterior talofibular ligament on the right with a small amount of surrounding fluid."}
+            ]
+          },
+          {
+            "id": "assessment",
+            "status": "populated",
+            "claims": [
+              {
+                "id": "claim_a1",
+                "text": "Working assessment: right anterior talofibular ligament injury with lateral ankle instability — positive anterior drawer and increased talar tilt on the right, anterior talofibular ligament tenderness, and ultrasound thickening of the same ligament.",
+                "source_type": "transcript",
+                "source_id": "seg_012",
+                "source_quote": "The anterior drawer test is positive on the right and negative on the left, with an increased talar tilt on the right.",
+                "additional_sources": [
+                  {"source_id": "seg_010", "source_quote": "There's tenderness on palpation over the anterior talofibular ligament on the right ankle."},
+                  {"source_id": "seg_014", "source_quote": "On longitudinal ultrasound there's thickening and irregularity of the anterior talofibular ligament on the right with a small amount of surrounding fluid."}
+                ]
+              },
+              {
+                "id": "claim_a2",
+                "text": "Functional deficit on the right — antalgic gait, inability to perform a single-leg heel raise, and reduced dorsiflexion to approximately 10 degrees.",
+                "source_type": "transcript",
+                "source_id": "seg_008",
+                "source_quote": "you can't do a single-leg heel raise on the right, and a single-leg stance on the right is unsteady.",
+                "additional_sources": [
+                  {"source_id": "seg_007", "source_quote": "There's an antalgic gait with reduced time on the right foot."},
+                  {"source_id": "seg_011", "source_quote": "dorsiflexion is reduced to about 10 degrees on the right compared with 20 on the left, plantarflexion is full."}
+                ]
+              }
+            ]
+          },
+          {
+            "id": "plan",
+            "status": "populated",
+            "claims": [
+              {"id": "claim_p1", "text": "Investigations: MRI of the right ankle to assess the lateral ligaments and cartilage.", "source_type": "transcript", "source_id": "seg_015", "source_quote": "I'll order an MRI of the right ankle to look at the lateral ligaments and the cartilage."},
+              {"id": "claim_p2", "text": "Referrals: physiotherapy for a proprioception and peroneal strengthening program.", "source_type": "transcript", "source_id": "seg_016", "source_quote": "I'll refer you to physiotherapy for a proprioception and peroneal strengthening program."},
+              {"id": "claim_p3", "text": "Activity and follow-up: continue the brace, withhold running and soccer for now, and reassess in four weeks after the MRI.", "source_type": "transcript", "source_id": "seg_017", "source_quote": "Keep using the brace for now, hold off on running and soccer, and we'll reassess in four weeks after the MRI."}
+            ]
+          }
+        ]
+      }
+    }
+  ]
+}
