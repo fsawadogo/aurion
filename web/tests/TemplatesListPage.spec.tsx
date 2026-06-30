@@ -20,6 +20,7 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/lib/portal-api", () => ({
   listMyCustomTemplates: vi.fn(),
   deleteMyCustomTemplate: vi.fn(),
+  duplicateMyCustomTemplate: vi.fn(),
   uploadTemplateDocument: vi.fn(),
 }));
 vi.mock("@/lib/session-format", () => ({ formatRelative: () => "today" }));
@@ -32,6 +33,7 @@ import { getMe } from "@/lib/api";
 import {
   listMyCustomTemplates,
   deleteMyCustomTemplate,
+  duplicateMyCustomTemplate,
 } from "@/lib/portal-api";
 
 function tpl(id: string, name: string, ownerId: string, shared = false) {
@@ -61,6 +63,9 @@ beforeEach(() => {
     tpl("theirs", "Shared Template", "other", true),
   ] as never);
   vi.mocked(deleteMyCustomTemplate).mockResolvedValue(undefined as never);
+  vi.mocked(duplicateMyCustomTemplate).mockResolvedValue(
+    tpl("mine-copy", "Shared Template (copy)", "me") as never,
+  );
 });
 
 describe("PortalTemplatesPage — ownership gating + delete modal", () => {
@@ -89,6 +94,73 @@ describe("PortalTemplatesPage — ownership gating + delete modal", () => {
     fireEvent.click(confirmBtn);
     await waitFor(() =>
       expect(deleteMyCustomTemplate).toHaveBeenCalledWith("mine"),
+    );
+  });
+});
+
+describe("PortalTemplatesPage — My Templates vs Library split + fork", () => {
+  it("splits rows into the two labelled sections by is_shared", async () => {
+    render(withIntl(<PortalTemplatesPage />));
+    await waitFor(() =>
+      expect(screen.getByLabelText("Delete My Template")).toBeTruthy(),
+    );
+    // Both section headings render.
+    expect(
+      screen.getByRole("heading", { name: "My Templates" }),
+    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "Library" })).toBeTruthy();
+    // Owned row keeps Open + Delete; shared row gets neither, only the fork
+    // button. The owned row's Open is an anchor (label "Open").
+    expect(screen.getAllByText("Open").length).toBe(1);
+    expect(
+      screen.getByRole("button", { name: "Save to My Templates" }),
+    ).toBeTruthy();
+  });
+
+  it("forks a Library row and the copy lands under My Templates", async () => {
+    // First load: one owned + one shared. After the fork, the reload returns
+    // the owned copy too (is_shared=false → owned → has a Delete control).
+    vi.mocked(listMyCustomTemplates)
+      .mockReset()
+      .mockResolvedValueOnce([
+        tpl("mine", "My Template", "me"),
+        tpl("theirs", "Shared Template", "other", true),
+      ] as never)
+      .mockResolvedValueOnce([
+        tpl("mine", "My Template", "me"),
+        tpl("mine-copy", "Shared Template (copy)", "me"),
+        tpl("theirs", "Shared Template", "other", true),
+      ] as never);
+
+    render(withIntl(<PortalTemplatesPage />));
+    const forkBtn = await screen.findByRole("button", {
+      name: "Save to My Templates",
+    });
+    fireEvent.click(forkBtn);
+
+    await waitFor(() =>
+      expect(duplicateMyCustomTemplate).toHaveBeenCalledWith("theirs"),
+    );
+    // The reload ran and the fork now shows as an owned row (has Delete).
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText("Delete Shared Template (copy)"),
+      ).toBeTruthy(),
+    );
+    expect(listMyCustomTemplates).toHaveBeenCalledTimes(2);
+  });
+
+  it("surfaces a friendly error when the fork fails", async () => {
+    vi.mocked(duplicateMyCustomTemplate).mockRejectedValueOnce(
+      new Error("boom"),
+    );
+    render(withIntl(<PortalTemplatesPage />));
+    const forkBtn = await screen.findByRole("button", {
+      name: "Save to My Templates",
+    });
+    fireEvent.click(forkBtn);
+    await waitFor(() =>
+      expect(screen.getByText("Couldn't copy the template.")).toBeTruthy(),
     );
   });
 });
