@@ -66,7 +66,7 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
         model = get_config().model_versions.gemini or _MODEL
 
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                     params={"key": _GOOGLE_AI_API_KEY},
@@ -102,7 +102,7 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
 
         except httpx.HTTPError as e:
             logger.error("Gemini note gen failed: session=%s error=%s", transcript.session_id, str(e))
-            raise ProviderError("gemini", f"Note generation failed: {e}", e)
+            raise ProviderError("gemini", f"Note generation failed: {type(e).__name__}: {e}", e)
         except (json.JSONDecodeError, KeyError, IndexError) as e:
             logger.error("Gemini response parse failed: session=%s error=%s", transcript.session_id, str(e))
             raise ProviderError("gemini", f"Response parse failed: {e}", e)
