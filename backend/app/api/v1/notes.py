@@ -34,11 +34,13 @@ from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.config.appconfig_client import get_config
 from app.modules.note_gen.service import (
+    UnresolvedConflictError,
     approve_note,
     edit_note,
     get_latest_note,
     get_note_by_stage,
     is_note_approved,
+    is_unresolved_conflict_claim,
     resolve_conflict,
 )
 from app.modules.session.service import (
@@ -311,6 +313,13 @@ async def approve_stage1_note(
 
     try:
         approved_note = await approve_note(str(session_id), db)
+    except UnresolvedConflictError as exc:
+        # Service-layer defense-in-depth (#606) — the route pre-checks
+        # conflicts, but the service enforces the invariant too.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -485,6 +494,13 @@ async def approve_final_note(
 
     try:
         approved_note = await approve_note(str(session_id), db)
+    except UnresolvedConflictError as exc:
+        # Service-layer defense-in-depth (#606) — the route pre-checks
+        # conflicts, but the service enforces the invariant too.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        )
     except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -850,14 +866,10 @@ def _check_unresolved_conflicts(note) -> None:
 
 
 def _is_unresolved_conflict(claim) -> bool:
-    """A vision conflict claim that hasn't been resolved by an edit. Once
-    a physician edits a conflict claim it flips to `physician_edited=True`
-    and is considered resolved."""
-    return (
-        claim.source_type == "visual"
-        and claim.id.startswith("conflict_")
-        and not claim.physician_edited
-    )
+    """Thin alias for the note_gen service predicate — the single source of
+    truth for "what is an open conflict". Kept so the summary helper below
+    reads naturally; the rule itself lives with the domain in note_gen."""
+    return is_unresolved_conflict_claim(claim)
 
 
 def _summarize_conflicts(note) -> ConflictState:
