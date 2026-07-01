@@ -25,16 +25,17 @@ from app.api.v1.websocket import notify_stage1_delivered
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import PilotMetricsModel, TranscriptModel
-from app.core.types import SessionState
+from app.core.types import SessionState, Transcript
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.config.appconfig_client import get_config
 from app.modules.note_gen.service import EmptyTranscriptError, generate_stage1_note
 from app.modules.phi_audit.service import scan_transcript_for_phi
 from app.modules.session.service import (
     InvalidTransitionError,
     transition_session,
 )
-from app.modules.transcription.service import transcribe_audio
+from app.modules.transcription.service import merge_transcripts, transcribe_audio
 from app.modules.transcription.trigger_classifier import classify_triggers
 
 logger = logging.getLogger("aurion.api.transcription")
@@ -306,6 +307,124 @@ async def submit_transcription(
             )
             for s in transcript.segments
         ],
+    )
+
+
+# ── Resume recording (append a follow-up clip → merge → regenerate) ────────
+
+
+class AppendRecordingResponse(BaseModel):
+    version: int
+    stage: int
+    completeness_score: float
+    provider_used: str
+    added_segments: int
+    total_segments: int
+
+
+@router.post("/{session_id}/append", response_model=AppendRecordingResponse)
+async def append_recording(
+    session_id: uuid.UUID,
+    audio_file: UploadFile = File(...),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> AppendRecordingResponse:
+    """Resume-recording (note-Options phase 4): transcribe a follow-up clip,
+    MERGE it onto the stored transcript, and regenerate the note covering both
+    — no re-record of the first clip, no state-machine change.
+
+    Deliberately bypasses ``run_stage1`` / the PROCESSING_STAGE1 gate: the
+    merge is in-memory and we reuse the regenerate pattern (no state
+    precondition), so an AWAITING_REVIEW / REVIEW_COMPLETE encounter can gain a
+    second clip without a back-edge to RECORDING. Owner-scoped; gated on
+    ``note_options_enabled``. Consent is already satisfied on the row.
+    """
+    session = await get_owned_session_or_404(db, session_id, user)
+
+    if not get_config().feature_flags.note_options_enabled:
+        raise HTTPException(
+            status_code=403, detail="Resume recording is not enabled."
+        )
+
+    # Need an existing transcript to append onto.
+    row = (
+        await db.execute(
+            select(TranscriptModel).where(
+                TranscriptModel.session_id == session_id
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(
+            status_code=404,
+            detail="No transcript for this session to append to.",
+        )
+    existing = Transcript(**json.loads(row.transcript_json))
+
+    # Transcribe the NEW clip ONLY — never re-transcribe clip 1.
+    audio_bytes = await audio_file.read()
+    addition = await transcribe_audio(audio_bytes, str(session_id))
+    if not addition.segments:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "reason": "empty_addition",
+                "message": "The follow-up recording had no speech to add.",
+            },
+        )
+
+    # Merge in memory (offset + renumber), re-flag triggers, persist once.
+    merged = merge_transcripts(existing, addition)
+    merged = await classify_triggers(merged)
+    row.provider_used = merged.provider_used
+    row.transcript_json = merged.model_dump_json()
+    await db.flush()
+
+    # Participant snapshot (mirror run_stage1's attribution wiring).
+    participants: list[dict] = []
+    raw_participants = getattr(session, "participants_json", None)
+    if raw_participants:
+        try:
+            decoded = json.loads(raw_participants)
+            if isinstance(decoded, list):
+                participants = decoded
+        except (TypeError, ValueError):
+            pass
+
+    try:
+        note = await generate_stage1_note(
+            transcript=merged,
+            specialty=session.specialty,
+            session_id=str(session_id),
+            db=db,
+            output_language=session.output_language,
+            template_key=getattr(session, "template_key", None),
+            custom_template_id=getattr(session, "custom_template_id", None),
+            participants=participants,
+            encounter_context=session.encounter_context,
+        )
+    except EmptyTranscriptError:
+        raise HTTPException(
+            status_code=422, detail="The merged transcript is empty."
+        )
+
+    await write_audit(
+        session_id,
+        AuditEventType.RECORDING_APPENDED,
+        actor_id=str(user.user_id),
+        version=note.version,
+        provider_used=note.provider_used,
+        added_segments=len(addition.segments),
+    )
+    await db.commit()
+
+    return AppendRecordingResponse(
+        version=note.version,
+        stage=note.stage,
+        completeness_score=note.completeness_score,
+        provider_used=note.provider_used,
+        added_segments=len(addition.segments),
+        total_segments=len(merged.segments),
     )
 
 
