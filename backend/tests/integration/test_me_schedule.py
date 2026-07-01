@@ -195,8 +195,9 @@ async def test_create_then_list_roundtrips_decrypted_identifier(
     assert body["note"] == "pre-op consult"
 
     # Column holds ciphertext, never the plaintext.
-    from app.core.models import ScheduleEntryModel
     from sqlalchemy import select
+
+    from app.core.models import ScheduleEntryModel
 
     row = (
         await db_session.execute(

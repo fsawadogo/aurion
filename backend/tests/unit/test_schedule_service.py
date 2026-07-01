@@ -18,7 +18,6 @@ from app.core.audit_events import ALLOWED_AUDIT_KWARGS, AuditEventType
 from app.core.models import ScheduleEntryModel
 from app.modules.schedule import service as sched
 
-
 # ── Patient identifier gate (PHI foot-guns) ───────────────────────────────
 
 
