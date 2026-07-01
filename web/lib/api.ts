@@ -17,6 +17,7 @@ import type {
   MetricFilters,
   MetricTimeseriesFilters,
   MetricTimeseriesResponse,
+  OrgVisitTypeTemplate,
   PaginatedResponse,
   PilotMetric,
   ProviderConfig,
@@ -694,6 +695,41 @@ export async function putAdminTemplate(
 /** Delete the override — the template reverts to its disk default. */
 export async function revertAdminTemplate(key: string): Promise<void> {
   await fetchWithAuth(`/api/v1/admin/templates/${key}`, { method: "DELETE" });
+}
+
+/* ─── Org visit-type → template defaults (admin, visit-type map PR1/PR2) ──────
+ * The org-default layer resolved between a clinician's own visit-type default
+ * and the specialty default. Admin-gated GET/PUT/DELETE. */
+
+export async function listOrgVisitTypeTemplates(): Promise<
+  OrgVisitTypeTemplate[]
+> {
+  const res = await fetchWithAuth("/api/v1/admin/visit-type-templates");
+  const data = await res.json();
+  return data.items as OrgVisitTypeTemplate[];
+}
+
+/** Set the org default for a visit type. Exactly one of `template_key` (a
+ * built-in) / `custom_template_id` (a SHARED template) — the server enforces. */
+export async function setOrgVisitTypeTemplate(
+  visitType: string,
+  body: { template_key?: string; custom_template_id?: string },
+): Promise<OrgVisitTypeTemplate> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/visit-type-templates/${encodeURIComponent(visitType)}`,
+    { method: "PUT", body: JSON.stringify(body) },
+  );
+  return res.json();
+}
+
+/** Clear the org default for a visit type (reverts to the specialty default). */
+export async function clearOrgVisitTypeTemplate(
+  visitType: string,
+): Promise<void> {
+  await fetchWithAuth(
+    `/api/v1/admin/visit-type-templates/${encodeURIComponent(visitType)}`,
+    { method: "DELETE" },
+  );
 }
 
 /* ─── Shared / org templates (admin, tpl-04) ─────────────────────────────────

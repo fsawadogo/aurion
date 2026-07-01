@@ -1029,7 +1029,18 @@
     "browseLibrary": "Parcourir la Bibliothèque",
     "libraryEmpty": "Aucun modèle partagé disponible pour l’instant.",
     "saveToMine": "Enregistrer dans Mes modèles",
-    "duplicateError": "Impossible de copier le modèle."
+    "duplicateError": "Impossible de copier le modèle.",
+    "visitsHeading": "Types de visite",
+    "visitsAdminHint": "Définissez le modèle par défaut de l’organisation pour chaque type de visite. Les cliniciens en héritent sauf s’ils définissent le leur dans Mon profil.",
+    "visitsClinicianNote": "Les valeurs par défaut par type de visite sont définies par votre administrateur.",
+    "visitsGoToProfile": "Définissez le vôtre dans Mon profil →",
+    "visitsSpecialtyDefault": "Modèle par défaut de la spécialité",
+    "visitsBuiltinGroup": "Modèles intégrés",
+    "visitsSharedGroup": "Modèles partagés",
+    "visitsEmpty": "Aucun type de visite configuré — ajoutez-les dans Mon profil.",
+    "visitsSelectAria": "Modèle par défaut pour {visit}",
+    "visitsLoadError": "Échec du chargement des types de visite.",
+    "visitsSaveError": "Impossible d’enregistrer la valeur par défaut."
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Modèles",
