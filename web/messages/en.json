@@ -1353,7 +1353,8 @@
     "description": "Upload a recorded encounter and Aurion will process it through the same AI pipeline as a live session, then produce a note for you to review.",
     "dropzone": {
       "prompt": "Drop your video here or click to select",
-      "accepted": "MP4, MOV or WebM · up to 2 GB"
+      "accepted": "MP4, MOV or WebM · up to 2 GB",
+      "promptMulti": "Drop your clips here or click to select several"
     },
     "form": {
       "title": "Encounter details",
@@ -1397,6 +1398,13 @@
       "processingFailed": "Processing failed. Please try again.",
       "lostContact": "We lost contact with processing. Your note may still appear in My Notes — refresh or check there shortly.",
       "retry": "Try again"
+    },
+    "clips": {
+      "title": "Encounter clips",
+      "hint": "Clips are stitched together, in the order below, into a single note. Reorder or remove clips before uploading.",
+      "moveUp": "Move clip up",
+      "moveDown": "Move clip down",
+      "remove": "Remove clip"
     }
   }
 }
