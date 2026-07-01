@@ -327,8 +327,8 @@ async def submit_eval_score(
     clinician_name = names[str(session.clinician_id)]
 
     return EvalSessionResponse(
-        id=f"eval_{session_id[:8]}",
-        session_id=session_id,
+        id=f"eval_{str(session_id)[:8]}",
+        session_id=str(session_id),
         clinician_name=clinician_name,
         specialty=session.specialty,
         transcript_masked=True,
@@ -407,8 +407,8 @@ async def assign_eval_session(
     note_version = latest_note.version if latest_note else 0
 
     return EvalSessionResponse(
-        id=f"eval_{session_id[:8]}",
-        session_id=session_id,
+        id=f"eval_{str(session_id)[:8]}",
+        session_id=str(session_id),
         clinician_name=clinician_name,
         specialty=session.specialty,
         transcript_masked=True,
@@ -455,8 +455,8 @@ async def unassign_eval_session(
     note_version = latest_note.version if latest_note else 0
 
     return EvalSessionResponse(
-        id=f"eval_{session_id[:8]}",
-        session_id=session_id,
+        id=f"eval_{str(session_id)[:8]}",
+        session_id=str(session_id),
         clinician_name=clinician_name,
         specialty=session.specialty,
         transcript_masked=True,

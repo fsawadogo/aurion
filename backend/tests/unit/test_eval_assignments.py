@@ -257,3 +257,97 @@ def test_assignment_endpoints_registered() -> None:
     assert ("/admin/eval/sessions/{session_id}/assign", ("POST",)) in paths
     assert ("/admin/eval/sessions/{session_id}/assign", ("DELETE",)) in paths
     assert ("/admin/eval/assignees", ("GET",)) in paths
+
+
+# ── Handler-level response construction (regression: UUID path param) ───────
+
+
+def _patch_handler_collaborators(monkeypatch, *, assignee_role=UserRole.EVAL_TEAM):
+    """Stub the async collaborators the assign/unassign handlers call so the
+    handler runs end-to-end against a UUID path param. Returns the session id."""
+    from app.api.v1.admin import eval as eval_mod
+
+    sid = uuid.uuid4()
+    clinician_id = uuid.uuid4()
+
+    session = MagicMock()
+    session.clinician_id = clinician_id
+    session.specialty = "orthopedic_surgery"
+    session.created_at = utcnow()
+
+    assignee = MagicMock()
+    assignee.id = uuid.uuid4()
+    assignee.email = "uzziel.tamon@aurionclinical.com"
+    assignee.role = assignee_role
+
+    monkeypatch.setattr(
+        eval_mod, "get_session_or_404", AsyncMock(return_value=session)
+    )
+    monkeypatch.setattr(
+        eval_mod, "resolve_clinician_names",
+        AsyncMock(return_value={str(clinician_id): "Dr. Test"}),
+    )
+    monkeypatch.setattr(eval_mod, "write_audit", AsyncMock())
+    monkeypatch.setattr(
+        eval_mod.users_repo, "get_by_email", AsyncMock(return_value=assignee)
+    )
+    monkeypatch.setattr(
+        eval_mod.eval_repo, "upsert_assignment",
+        AsyncMock(return_value=_make_assignment(session_id=sid)),
+    )
+    monkeypatch.setattr(
+        eval_mod.eval_repo, "delete_assignment", AsyncMock(return_value=True)
+    )
+    monkeypatch.setattr(
+        eval_mod.eval_repo, "get_assignment",
+        AsyncMock(return_value=_make_assignment(session_id=sid)),
+    )
+    monkeypatch.setattr(
+        eval_mod.eval_repo, "get_score", AsyncMock(return_value=None)
+    )
+    monkeypatch.setattr(
+        eval_mod.note_repo, "get_latest_version", AsyncMock(return_value=None)
+    )
+    return sid, assignee.email
+
+
+@pytest.mark.asyncio
+async def test_assign_handler_builds_response_from_uuid_path_param(monkeypatch) -> None:
+    """Regression: the path param is a `uuid.UUID`, and the response builder
+    formatted `id=f"eval_{session_id[:8]}"` — subscripting a UUID raised
+    TypeError → 500 on every assign. The id/session_id must serialise from
+    `str(session_id)`."""
+    from app.api.v1.admin._shared import EvalAssignmentRequest
+    from app.api.v1.admin.eval import assign_eval_session
+
+    sid, assignee_email = _patch_handler_collaborators(monkeypatch)
+    user = MagicMock(user_id=uuid.uuid4(), email="admin@aurionclinical.com")
+
+    resp = await assign_eval_session(
+        session_id=sid,
+        body=EvalAssignmentRequest(assignee_email=assignee_email),
+        user=user,
+        db=MagicMock(),
+    )
+
+    assert resp.id == f"eval_{str(sid)[:8]}"
+    assert resp.session_id == str(sid)
+    assert resp.assigned_to == assignee_email
+
+
+@pytest.mark.asyncio
+async def test_unassign_handler_builds_response_from_uuid_path_param(monkeypatch) -> None:
+    """Same UUID-subscript regression on the DELETE (unassign) path."""
+    from app.api.v1.admin.eval import unassign_eval_session
+
+    sid, _ = _patch_handler_collaborators(monkeypatch)
+    user = MagicMock(user_id=uuid.uuid4(), email="admin@aurionclinical.com")
+
+    resp = await unassign_eval_session(
+        session_id=sid,
+        user=user,
+        db=MagicMock(),
+    )
+
+    assert resp.id == f"eval_{str(sid)[:8]}"
+    assert resp.session_id == str(sid)
