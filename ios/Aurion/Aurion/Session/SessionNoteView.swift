@@ -344,6 +344,9 @@ struct SessionNoteView: View {
     /// also covered liposuction), then regenerate focused on it.
     @State private var showContextEditor = false
     @State private var contextDraft = ""
+    /// Phase 3 add-ons tray.
+    @State private var showPatientSummarySheet = false
+    @State private var showSurgeryQuoteSheet = false
     @State private var isRegenerating = false
     @State private var regenerateError: String?
     /// Brief success toast after a regenerate lands the new note version.
@@ -516,6 +519,18 @@ struct SessionNoteView: View {
                         } label: {
                             Label(L("noteOptions.changeContext"), systemImage: "text.bubble")
                         }
+                        Section(L("noteOptions.addOns")) {
+                            Button {
+                                showPatientSummarySheet = true
+                            } label: {
+                                Label(L("noteOptions.patientSummary"), systemImage: "person.text.rectangle")
+                            }
+                            Button {
+                                showSurgeryQuoteSheet = true
+                            } label: {
+                                Label(L("noteOptions.surgeryQuote"), systemImage: "dollarsign.square")
+                            }
+                        }
                     } label: {
                         if isRegenerating {
                             ProgressView()
@@ -603,6 +618,35 @@ struct SessionNoteView: View {
                 },
                 onCancel: { showContextEditor = false }
             )
+        }
+        // Add-ons: surgery quote (generate → edit → export PDF).
+        .sheet(isPresented: $showSurgeryQuoteSheet) {
+            SurgeryQuoteView(
+                sessionId: session.id,
+                sessionState: session.state,
+                onClose: { showSurgeryQuoteSheet = false }
+            )
+        }
+        // Add-ons: patient after-visit summary — reuse the existing card in a
+        // sheet (it owns its own generate / edit / share flow + approval gate).
+        .sheet(isPresented: $showPatientSummarySheet) {
+            NavigationStack {
+                ScrollView {
+                    PatientSummaryCard(
+                        sessionId: session.id,
+                        sessionState: session.state
+                    )
+                    .padding(AurionSpacing.lg)
+                }
+                .background(Color.aurionBackground.ignoresSafeArea())
+                .navigationTitle(L("noteOptions.patientSummary"))
+                .navigationBarTitleDisplayMode(.inline)
+                .toolbar {
+                    ToolbarItem(placement: .cancellationAction) {
+                        Button(L("common.close")) { showPatientSummarySheet = false }
+                    }
+                }
+            }
         }
         // Regenerate-failure alert.
         .alert(
