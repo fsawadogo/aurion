@@ -1040,7 +1040,8 @@
     "visitsEmpty": "No visit types configured yet — add them in My Profile.",
     "visitsSelectAria": "Default template for {visit}",
     "visitsLoadError": "Failed to load visit types.",
-    "visitsSaveError": "Couldn't save the default."
+    "visitsSaveError": "Couldn't save the default.",
+    "visitsRetry": "Retry"
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Templates",

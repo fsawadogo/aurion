@@ -54,7 +54,8 @@ export default function VisitTypesTab() {
   const t = useTranslations("TemplatesList");
   const tTpl = useTranslations("Profile.contexts.templates");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
   const [isAdmin, setIsAdmin] = useState(false);
   const [visitTypes, setVisitTypes] = useState<string[]>([]);
   const [orgByVt, setOrgByVt] = useState<Record<string, OrgVisitTypeTemplate>>(
@@ -65,27 +66,28 @@ export default function VisitTypesTab() {
 
   const load = useCallback(async () => {
     setLoading(true);
-    setError(null);
+    setLoadError(null);
     try {
-      const [me, profile, customs] = await Promise.all([
-        getMe(),
-        getMyProfile(),
-        listMyCustomTemplates(),
-      ]);
+      // Resolve the role first: a non-admin only sees the read-only note, so we
+      // skip the rest (and never call the admin-gated org endpoint for them).
+      const me = await getMe();
       const admin = ADMIN_ROLES.has(me.role as string);
       setIsAdmin(admin);
+      if (!admin) return;
+      const [profile, customs, rows] = await Promise.all([
+        getMyProfile(),
+        listMyCustomTemplates(),
+        listOrgVisitTypeTemplates(),
+      ]);
       setVisitTypes(profile.consultation_types ?? []);
       // An org default may only pin a SHARED template (the backend rejects a
       // private one) — so the picker offers built-ins + shared templates only.
       setShared(customs.filter((c) => c.is_shared));
-      if (admin) {
-        const rows = await listOrgVisitTypeTemplates();
-        const map: Record<string, OrgVisitTypeTemplate> = {};
-        for (const r of rows) map[r.visit_type] = r;
-        setOrgByVt(map);
-      }
+      const map: Record<string, OrgVisitTypeTemplate> = {};
+      for (const r of rows) map[r.visit_type] = r;
+      setOrgByVt(map);
     } catch (e) {
-      setError(humanizeError(e, t("visitsLoadError")));
+      setLoadError(humanizeError(e, t("visitsLoadError")));
     } finally {
       setLoading(false);
     }
@@ -97,7 +99,7 @@ export default function VisitTypesTab() {
 
   async function onChange(vt: string, value: string) {
     setSavingVt(vt);
-    setError(null);
+    setSaveError(null);
     try {
       if (value === "") {
         await clearOrgVisitTypeTemplate(vt);
@@ -119,13 +121,30 @@ export default function VisitTypesTab() {
         setOrgByVt((prev) => ({ ...prev, [vt]: saved }));
       }
     } catch (e) {
-      setError(humanizeError(e, t("visitsSaveError")));
+      setSaveError(humanizeError(e, t("visitsSaveError")));
     } finally {
       setSavingVt(null);
     }
   }
 
   if (loading) return <LoadingSkeleton lines={5} />;
+
+  if (loadError) {
+    return (
+      <div className="py-4">
+        <div className="mb-3 rounded-aurion-md bg-red-50 border border-red-200 px-4 py-3 text-aurion-callout text-red-700">
+          {loadError}
+        </div>
+        <button
+          type="button"
+          onClick={() => void load()}
+          className="text-aurion-callout font-medium text-navy-500 hover:text-navy-800 transition-colors duration-short"
+        >
+          {t("visitsRetry")}
+        </button>
+      </div>
+    );
+  }
 
   if (!isAdmin) {
     return (
@@ -145,9 +164,9 @@ export default function VisitTypesTab() {
 
   return (
     <div>
-      {error && (
+      {saveError && (
         <div className="mb-4 rounded-aurion-md bg-red-50 border border-red-200 px-4 py-3 text-aurion-callout text-red-700">
-          {error}
+          {saveError}
         </div>
       )}
       <p className="mb-4 text-aurion-caption text-navy-500">

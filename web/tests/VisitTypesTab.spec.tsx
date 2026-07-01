@@ -30,6 +30,7 @@ vi.mock("@/components/portal/VisitTypeContextsEditor", () => ({
 }));
 
 import {
+  clearOrgVisitTypeTemplate,
   getMe,
   listOrgVisitTypeTemplates,
   setOrgVisitTypeTemplate,
@@ -102,5 +103,29 @@ describe("VisitTypesTab", () => {
     );
     expect(listOrgVisitTypeTemplates).not.toHaveBeenCalled();
     expect(screen.queryByTestId("visit-type-template-follow_up")).toBeNull();
+  });
+
+  it("admin: selecting the specialty default clears the org default", async () => {
+    vi.mocked(getMe).mockResolvedValue({ role: "ADMIN" } as never);
+    render(withIntl(<VisitTypesTab />));
+    const sel = await screen.findByTestId("visit-type-template-follow_up");
+
+    fireEvent.change(sel, { target: { value: "" } });
+    await waitFor(() =>
+      expect(clearOrgVisitTypeTemplate).toHaveBeenCalledWith("follow_up"),
+    );
+  });
+
+  it("shows a retryable error (not the clinician note) when the load fails", async () => {
+    vi.mocked(getMe).mockResolvedValue({ role: "ADMIN" } as never);
+    vi.mocked(getMyProfile).mockRejectedValueOnce(new Error("boom"));
+    render(withIntl(<VisitTypesTab />));
+
+    await waitFor(() =>
+      expect(screen.getByText("Failed to load visit types.")).toBeTruthy(),
+    );
+    expect(
+      screen.queryByText("Org visit-type defaults are set by your admin."),
+    ).toBeNull();
   });
 });

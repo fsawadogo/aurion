@@ -1040,7 +1040,8 @@
     "visitsEmpty": "Aucun type de visite configuré — ajoutez-les dans Mon profil.",
     "visitsSelectAria": "Modèle par défaut pour {visit}",
     "visitsLoadError": "Échec du chargement des types de visite.",
-    "visitsSaveError": "Impossible d’enregistrer la valeur par défaut."
+    "visitsSaveError": "Impossible d’enregistrer la valeur par défaut.",
+    "visitsRetry": "Réessayer"
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Modèles",
