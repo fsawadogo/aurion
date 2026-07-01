@@ -179,3 +179,60 @@ output "secret_arn_resend_api_key" {
   description = "ARN of the Resend API key secret"
   value       = aws_secretsmanager_secret.resend_api_key.arn
 }
+
+# -----------------------------------------------------------------------------
+# JWT signing key — backend-issued HS256 access/refresh tokens (auth)
+# -----------------------------------------------------------------------------
+# Backs `app/modules/auth/jwt_tokens.py`, which reads the key from the
+# AUTH_JWT_SIGNING_KEY env var (injected by the ECS task def — see ecs.tf).
+# CRITICAL: without this secret the code falls back to
+# `secrets.token_urlsafe(64)` — a NEW random key per process. That silently
+# breaks auth in two ways:
+#   1. Every task restart / deploy invalidates all issued tokens → everyone
+#      is logged out on each deploy.
+#   2. During a rolling deploy (2 tasks briefly overlapping) a token minted
+#      by one task is rejected by the other → intermittent 401 on /auth/me,
+#      /auth/refresh, and every authed route while both surfaces "sign in".
+# A single stable key shared by every task fixes both.
+#
+# Same discipline as the keys above: the value is NOT in Terraform state.
+# The placeholder seeds a fresh account; the operator rotates the real key in
+# AFTER apply, then forces a new deployment so the task picks it up:
+#
+#   aws secretsmanager put-secret-value \
+#     --secret-id aurion/$ENV/jwt-signing-key \
+#     --secret-string "$(openssl rand -base64 64 | tr -d '\n')"
+#   aws ecs update-service --cluster aurion-$ENV --service aurion-api-$ENV \
+#     --force-new-deployment
+#
+# Rotating the key later is a deliberate "log everyone out" action (all
+# outstanding tokens become invalid) — expected, low-impact for the pilot.
+
+resource "aws_secretsmanager_secret" "jwt_signing_key" {
+  name        = "aurion/${var.environment}/jwt-signing-key"
+  description = "HS256 signing key for backend-issued auth access/refresh tokens (app/modules/auth/jwt_tokens.py). Opaque random string, >= 64 bytes."
+  kms_key_id  = aws_kms_key.main.id
+
+  recovery_window_in_days = var.environment == "prod" ? 30 : 7
+
+  tags = {
+    Name        = "aurion-jwt-signing-key-${var.environment}"
+    Environment = var.environment
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "jwt_signing_key" {
+  secret_id     = aws_secretsmanager_secret.jwt_signing_key.id
+  secret_string = "PLACEHOLDER - rotate via 'openssl rand -base64 64 | aws secretsmanager put-secret-value' then force a new ECS deployment"
+
+  lifecycle {
+    # The real key is rotated in via CLI after apply; Terraform must not
+    # clobber it on subsequent applies — same pattern as the keys above.
+    ignore_changes = [secret_string]
+  }
+}
+
+output "secret_arn_jwt_signing_key" {
+  description = "ARN of the JWT signing key secret"
+  value       = aws_secretsmanager_secret.jwt_signing_key.arn
+}
