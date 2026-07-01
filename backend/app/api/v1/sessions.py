@@ -619,6 +619,12 @@ class RegenerateNoteRequest(BaseModel):
     template_key: Optional[str] = None
     custom_template_id: Optional[uuid.UUID] = None
     output_language: Optional[str] = None
+    # Change/add the encounter context (the note-Options "change context"
+    # action — e.g. the visit expanded from "breast aug" to also cover
+    # liposuction). When present it is persisted to the session and used to
+    # focus the regenerated note. Empty string clears it. Omitted → the
+    # session's stored context is reused unchanged.
+    encounter_context: Optional[str] = None
 
 
 class RegenerateNoteResponse(BaseModel):
@@ -704,6 +710,13 @@ async def regenerate_note(
         )
     transcript = Transcript(**_json.loads(transcript_row.transcript_json))
 
+    # Persist a changed encounter context so it (a) focuses this regenerate and
+    # (b) sticks for any future re-run. Empty string clears it. `None` (omitted)
+    # leaves the stored value untouched. Committed alongside the note below.
+    if body.encounter_context is not None:
+        stripped = body.encounter_context.strip()
+        session.encounter_context = stripped or None
+
     try:
         note = await generate_stage1_note(
             transcript=transcript,
@@ -713,6 +726,7 @@ async def regenerate_note(
             template_key=body.template_key,
             custom_template_id=body.custom_template_id,
             output_language=body.output_language or session.output_language,
+            encounter_context=session.encounter_context,
         )
     except EmptyTranscriptError:
         raise HTTPException(

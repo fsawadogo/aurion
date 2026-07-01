@@ -815,6 +815,7 @@ async def generate_stage1_note(
     template_key: Optional[str] = None,
     custom_template_id: Optional[uuid.UUID] = None,
     participants: Optional[list[dict]] = None,
+    encounter_context: Optional[str] = None,
 ) -> Note:
     """Generate a Stage 1 note from a transcript.
 
@@ -945,6 +946,7 @@ async def generate_stage1_note(
             prior_context_text=prior_context_text or None,
             participants=participants or None,
             specialty_prefix=specialty_prefix,
+            encounter_context=encounter_context or None,
         )
         await _record_provider_usage(
             db=db,
