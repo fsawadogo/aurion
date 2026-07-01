@@ -40,5 +40,8 @@ descriptive/thinning override text. #622. Context: `memory/grounded-scribe-gap-m
 1. `cd backend && python -m pytest tests/unit/test_scribe2_grounded_voice.py -q`
 2. Regression: `python -m pytest tests/unit/test_grounding_validator.py tests/unit/test_grounded_synthesis_prompt.py tests/unit/test_grounded_specialty_style.py tests/unit/test_specialty_guidance.py tests/unit/test_prompt_assembly_safety.py -q`
 
+## Review outcome (#629) — banlist dropped
+The adversarial review of #629 showed the descriptive/thinning **banlist is the wrong tool**: as case-insensitive substrings it false-matches legitimate grounded prompts (grounding caveats say "do not synthesize beyond the sources", "documentation only where evidence exists", "cite a few claims per finding", …), and it also leaks into `validate_specialty_guidance`. The real guarantee is scribe-1's always-on grounded boundary (`compose_system_prompt`), which an override cannot strip and which the banlist could neither improve nor robustly enforce (trivially evadable). **Decision: drop the banlist additions entirely** and keep scribe-2 as the mandate only. The mandate wording was also strengthened (synthesis is the default; declining is a narrow exception, not a co-equal branch — review finding #9). Net PR = the grounded prompt Rule 2 edit + tests; `safety.py` is unchanged.
+
 ## Security implications
 - Sanctioned Grounded Synthesis Mode path, flag-gated (default OFF → byte-identical; GS-9 gates flip-on). Mandating synthesis stays within the grounding floor (every clause cited; anti-over-reach on thin encounters). Banlist additions only tighten what a grounded override may contain. No PHI; no consent/masking/audit path touched.

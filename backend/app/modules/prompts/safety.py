@@ -182,25 +182,6 @@ GROUNDED_BANNED_PHRASES: Final[tuple[str, ...]] = (
     "you do not need to cite",
     "no need to cite",
     "do not cite",
-    # Descriptive/thinning directives (scribe-2 #622): reject overrides that
-    # would steer grounded synthesis BACK to descriptive-only or thin output.
-    # Every entry is a MULTI-WORD directive that only a suppressive prompt
-    # writes; each was verified to NOT appear in NOTE_GEN_GROUNDED_SYSTEM_PROMPT
-    # or the grounded specialty style, so a legitimate grounded prompt still
-    # passes. (Bare words like "interpret"/"summarize"/"diagnose" are NOT banned
-    # — a grounded prompt legitimately says "interpret the cited findings".)
-    "do not synthesize",
-    "no synthesis",
-    "do not diagnose",
-    "do not produce an assessment",
-    "do not provide an assessment",
-    "omit the assessment",
-    "skip the assessment",
-    "descriptive mode only",
-    "documentation only",
-    "summarize to a handful",
-    "a few claims",
-    "limit yourself to a few",
 )
 
 GROUNDED_ANCHORS_REQUIRED: Final[tuple[tuple[str, ...], ...]] = (
