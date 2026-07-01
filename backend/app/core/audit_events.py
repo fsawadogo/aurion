@@ -58,6 +58,8 @@ class AuditEventType(StrEnum):
     CUSTOM_TEMPLATE_DELETED = "custom_template_deleted"
     PATIENT_SUMMARY_GENERATED = "patient_summary_generated"
     PATIENT_SUMMARY_EDITED = "patient_summary_edited"
+    SURGERY_QUOTE_GENERATED = "surgery_quote_generated"
+    SURGERY_QUOTE_EDITED = "surgery_quote_edited"
     ORDERS_EXTRACTED = "orders_extracted"
     ORDER_CONFIRMED = "order_confirmed"
     ORDER_EDITED = "order_edited"
@@ -489,6 +491,15 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
         {"actor_id", "version", "provider_used"}
     ),
     AuditEventType.PATIENT_SUMMARY_EDITED: frozenset(
+        {"actor_id", "version"}
+    ),
+    # Surgery quote lifecycle — never carry the line items / fees / notes
+    # (procedures + prices are PHI-adjacent and would be permanent in the
+    # audit log). version + provider_used are the meaningful fields.
+    AuditEventType.SURGERY_QUOTE_GENERATED: frozenset(
+        {"actor_id", "version", "provider_used"}
+    ),
+    AuditEventType.SURGERY_QUOTE_EDITED: frozenset(
         {"actor_id", "version"}
     ),
     # Orders extraction + lifecycle. The `details` JSON is PHI-adjacent

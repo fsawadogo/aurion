@@ -28,6 +28,9 @@ from app.modules.patient_summary.system_prompt import (
 )
 from app.modules.providers.note_gen.shared import NOTE_GEN_SYSTEM_PROMPT
 from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT
+from app.modules.surgery_quote.system_prompt import (
+    SYSTEM_PROMPT as SURGERY_QUOTE_SYSTEM_PROMPT,
+)
 from app.modules.vision.reconcile import RECONCILE_SYSTEM_PROMPT
 
 PromptCategory = Literal["note", "vision", "extraction", "preview"]
@@ -189,6 +192,26 @@ PROMPTS: Final[dict[str, PromptDefinition]] = {
             "already record."
         ),
         system_prompt=PATIENT_SUMMARY_SYSTEM_PROMPT,
+    ),
+    "surgery_quote": PromptDefinition(
+        id="surgery_quote",
+        name="Surgery quote",
+        purpose=(
+            "Extracts the procedures the approved note records as "
+            "discussed into editable quote line items (no prices — the "
+            "physician fills the fees)."
+        ),
+        category="extraction",
+        runs_when=(
+            "After you approve the final note, when you request a "
+            "surgical cost quote for the patient."
+        ),
+        provider_field="note_generation",
+        schema_note=(
+            "Output: a JSON array of {procedure, description}. No fees, "
+            "no procedures the note doesn't record."
+        ),
+        system_prompt=SURGERY_QUOTE_SYSTEM_PROMPT,
     ),
     "orders_extraction": PromptDefinition(
         id="orders_extraction",
