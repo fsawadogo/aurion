@@ -60,6 +60,7 @@ class AuditEventType(StrEnum):
     PATIENT_SUMMARY_EDITED = "patient_summary_edited"
     SURGERY_QUOTE_GENERATED = "surgery_quote_generated"
     SURGERY_QUOTE_EDITED = "surgery_quote_edited"
+    RECORDING_APPENDED = "recording_appended"
     ORDERS_EXTRACTED = "orders_extracted"
     ORDER_CONFIRMED = "order_confirmed"
     ORDER_EDITED = "order_edited"
@@ -501,6 +502,11 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.SURGERY_QUOTE_EDITED: frozenset(
         {"actor_id", "version"}
+    ),
+    # Resume-recording: a follow-up clip merged into an existing encounter,
+    # then the note regenerated. Carries counts only — never transcript text.
+    AuditEventType.RECORDING_APPENDED: frozenset(
+        {"actor_id", "version", "provider_used", "added_segments"}
     ),
     # Orders extraction + lifecycle. The `details` JSON is PHI-adjacent
     # (drug, dose, body part, indication) — never carried into the

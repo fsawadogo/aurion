@@ -46,6 +46,7 @@ EXPECTED_VALUES: dict[str, str] = {
     "PATIENT_SUMMARY_EDITED": "patient_summary_edited",
     "SURGERY_QUOTE_GENERATED": "surgery_quote_generated",
     "SURGERY_QUOTE_EDITED": "surgery_quote_edited",
+    "RECORDING_APPENDED": "recording_appended",
     "ORDERS_EXTRACTED": "orders_extracted",
     "ORDER_CONFIRMED": "order_confirmed",
     "ORDER_EDITED": "order_edited",

@@ -147,6 +147,39 @@ async def upload_audio_to_s3(
         raise ProviderError("s3", f"Audio upload failed: {e}", e)
 
 
+def merge_transcripts(existing: Transcript, addition: Transcript) -> Transcript:
+    """Merge a follow-up clip's transcript onto an existing one (resume-
+    recording / note-Options phase 4).
+
+    Clip-1 segments are preserved verbatim. Clip-2 segments are (a) time-
+    offset past clip-1's last ``end_ms`` so the two timelines don't overlap,
+    and (b) renumbered to CONTINUE the ``seg_NNN`` sequence so ids never
+    collide (both clips otherwise start at ``seg_001``). The merged transcript
+    is a single contiguous ``seg_001…seg_M`` timeline the note regenerates
+    against. Pure + in-memory — the caller persists the result once.
+    """
+    base = list(existing.segments)
+    offset_ms = base[-1].end_ms if base else 0
+    next_index = len(base)  # clip-1 is seg_001..seg_{len}; continue from +1
+    appended: list[TranscriptSegment] = []
+    for seg in addition.segments:
+        next_index += 1
+        appended.append(
+            seg.model_copy(
+                update={
+                    "id": f"seg_{next_index:03d}",
+                    "start_ms": seg.start_ms + offset_ms,
+                    "end_ms": seg.end_ms + offset_ms,
+                }
+            )
+        )
+    return Transcript(
+        session_id=existing.session_id,
+        provider_used=existing.provider_used,
+        segments=base + appended,
+    )
+
+
 async def transcribe_audio(
     audio_bytes: bytes,
     session_id: str | uuid.UUID,
