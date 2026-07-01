@@ -908,6 +908,12 @@
 "noteDoc.status.pending" = "En attente";
 "noteDoc.status.empty" = "Vide";
 "noteDoc.status.failed" = "\U00C9chec";
+"noteDoc.metaDate" = "Date";
+"noteDoc.metaPatient" = "\U00C2ge / sexe du patient";
+"noteDoc.metaEncounter" = "Type de consultation";
+"noteDoc.metaNotDocumented" = "Non document\U00E9";
+"noteDoc.encounterInPerson" = "Consultation en personne";
+"noteDoc.encounterDictation" = "Dict\U00E9e";
 
 /* ── Note de session ──────────────────────────────────── */
 "sessionNote.noNote" = "Aucune note disponible";
@@ -920,6 +926,10 @@
 "sessionNote.exportFormatTitle" = "Exporter la note en";
 "sessionNote.exportPDF" = "PDF";
 "sessionNote.exportDOCX" = "Document Word";
+"sessionNote.ageSexTitle" = "\U00C2ge / sexe du patient";
+"sessionNote.ageSexMessage" = "Facultatif — appara\U00EEt dans l\U2019en-t\U00EAte du document. Laissez vide pour afficher « Non document\U00E9 ».";
+"sessionNote.ageSexPlaceholder" = "p. ex. femme de 46 ans";
+"sessionNote.ageSexExport" = "Exporter";
 
 /* ── Verrouillage de l\U2019application ─────────────────── */
 "profile.sectionSecurity" = "S\U00E9curit\U00E9";

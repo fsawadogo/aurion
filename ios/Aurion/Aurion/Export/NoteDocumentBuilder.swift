@@ -37,8 +37,20 @@ enum NoteDocumentBuilder {
     /// Build a minimal DOCX. Word/Pages/Google Docs all open the output;
     /// the rendering is plain (default font, no styles) but the audit
     /// trail and content are correct, which is what the pilot needs.
-    static func makeDocx(_ note: NoteResponse, sessionId: String) throws -> Data {
-        let documentXML = buildDocumentXML(note: note, sessionId: sessionId)
+    static func makeDocx(
+        _ note: NoteResponse,
+        sessionId: String,
+        dateString: String = "",
+        patientAgeSex: String = "",
+        encounterType: String = ""
+    ) throws -> Data {
+        let documentXML = buildDocumentXML(
+            note: note,
+            sessionId: sessionId,
+            dateString: dateString,
+            patientAgeSex: patientAgeSex,
+            encounterType: encounterType
+        )
         let entries: [(String, Data)] = [
             ("[Content_Types].xml", Data(Self.contentTypesXML.utf8)),
             ("_rels/.rels", Data(Self.rootRelsXML.utf8)),
@@ -86,15 +98,28 @@ enum NoteDocumentBuilder {
     private static let inkHex = "1A1F29"
     private static let whiteHex = "FFFFFF"
 
-    private static func buildDocumentXML(note: NoteResponse, sessionId: String) -> String {
+    private static func buildDocumentXML(
+        note: NoteResponse,
+        sessionId: String,
+        dateString: String,
+        patientAgeSex: String,
+        encounterType: String
+    ) -> String {
         var body = ""
 
-        // ── Masthead: gold eyebrow, navy title, meta, gold rule ──────────
+        // ── Masthead: gold eyebrow, navy title, meta strip, gold rule ────
         body += para("AURION CLINICAL AI", bold: true, size: 16, color: goldHex, after: 0)
-        body += para(specialtyTitle(note.specialty), bold: true, size: 44, color: navyHex, after: 20)
-        // Internal metadata (completeness / version / provider) intentionally
-        // omitted — clinicians don't need it; it lives in the audit log.
-        body += para("", border: goldHex, after: 160)  // gold rule
+        body += para(specialtyTitle(note.specialty), bold: true, size: 44, color: navyHex, after: 60)
+        // Encounter metadata strip — Date · Patient Age/Sex · Encounter Type.
+        // Mirrors the reference letterhead + the iOS PDF/screen header band.
+        // Internal metadata (completeness / version / provider) stays omitted
+        // — it lives in the audit log, not on the clinician-facing note.
+        body += metaTable(
+            dateString: dateString,
+            patientAgeSex: patientAgeSex,
+            encounterType: encounterType
+        )
+        body += para("", border: goldHex, before: 80, after: 160)  // gold rule
 
         // ── SOAP-grouped body ────────────────────────────────────────────
         for group in soapGroups(note.sections) {
@@ -159,6 +184,62 @@ enum NoteDocumentBuilder {
         if let color = color { rPr += "<w:color w:val=\"\(color)\"/>" }
         rPr += "<w:sz w:val=\"\(size)\"/></w:rPr>"
         return "<w:p>\(pPr)<w:r>\(rPr)<w:t xml:space=\"preserve\">\(xmlEscape(text))</w:t></w:r></w:p>"
+    }
+
+    // Light-navy tint for the metadata band — matches the iOS PDF strip.
+    private static let metaStripHex = "EAF2FB"
+
+    /// The Date · Patient Age/Sex · Encounter Type band, as a borderless
+    /// full-width 3-cell table with light-navy shading. A Word table needs
+    /// no styles part — tblPr/tblGrid/tr/tc are valid standalone.
+    private static func metaTable(
+        dateString: String,
+        patientAgeSex: String,
+        encounterType: String
+    ) -> String {
+        let notDoc = "Not documented"
+        let dateVal = dateString.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? notDoc : dateString
+        let patientVal = patientAgeSex.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? notDoc : patientAgeSex
+        let encounterVal = encounterType.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? notDoc : encounterType
+        let cells = metaCell(label: "Date", value: dateVal)
+            + metaCell(label: "Patient Age / Sex", value: patientVal)
+            + metaCell(label: "Encounter Type", value: encounterVal)
+        return """
+            <w:tbl>\
+            <w:tblPr>\
+            <w:tblW w:w="5000" w:type="pct"/>\
+            <w:tblBorders>\
+            <w:top w:val="none" w:sz="0" w:space="0" w:color="auto"/>\
+            <w:left w:val="none" w:sz="0" w:space="0" w:color="auto"/>\
+            <w:bottom w:val="none" w:sz="0" w:space="0" w:color="auto"/>\
+            <w:right w:val="none" w:sz="0" w:space="0" w:color="auto"/>\
+            <w:insideH w:val="none" w:sz="0" w:space="0" w:color="auto"/>\
+            <w:insideV w:val="none" w:sz="0" w:space="0" w:color="auto"/>\
+            </w:tblBorders>\
+            </w:tblPr>\
+            <w:tblGrid><w:gridCol w:w="3120"/><w:gridCol w:w="3120"/><w:gridCol w:w="3120"/></w:tblGrid>\
+            <w:tr>\(cells)</w:tr>\
+            </w:tbl>
+            """
+    }
+
+    /// One shaded table cell: a small uppercase gray label over a navy value.
+    private static func metaCell(label: String, value: String) -> String {
+        let labelPara = para(label.uppercased(), bold: true, size: 15, color: grayHex, after: 20)
+        let valuePara = para(value, bold: true, size: 20, color: navyHex, after: 0)
+        return """
+            <w:tc>\
+            <w:tcPr>\
+            <w:tcW w:w="1666" w:type="pct"/>\
+            <w:shd w:val="clear" w:color="auto" w:fill="\(metaStripHex)"/>\
+            <w:tcMar>\
+            <w:top w:w="90" w:type="dxa"/><w:left w:w="130" w:type="dxa"/>\
+            <w:bottom w:w="90" w:type="dxa"/><w:right w:w="130" w:type="dxa"/>\
+            </w:tcMar>\
+            </w:tcPr>\
+            \(labelPara)\(valuePara)\
+            </w:tc>
+            """
     }
 
     /// Pretty specialty title for the masthead (mirrors the backend export).

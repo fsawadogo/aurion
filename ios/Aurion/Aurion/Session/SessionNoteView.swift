@@ -14,6 +14,13 @@ struct NoteDocumentBody: View {
     let note: NoteResponse
     let specialtyTitle: String
     let dateString: String
+    /// Clinician-entered at export time — Aurion captures no structured
+    /// patient demographics, so this is optional. Blank renders as a neutral
+    /// "Not documented" rather than fabricating an age/sex.
+    let patientAgeSex: String
+    /// Human-readable encounter type (e.g. "In-person consultation"),
+    /// resolved from the session's `encounter_type` by the caller.
+    let encounterType: String
     let forPDF: Bool
 
     // On-screen reading text scales with Dynamic Type so physicians can size
@@ -38,13 +45,18 @@ struct NoteDocumentBody: View {
                 Text(specialtyTitle)
                     .font(.system(size: forPDF ? 32 : titleSize, weight: .bold))
                     .foregroundColor(forPDF ? .aurionNavy : .aurionTextPrimary)
-                Text(dateString)
-                    .font(.system(size: forPDF ? 15 : dateSize))
-                    .foregroundColor(forPDF ? Color.black.opacity(0.55) : .aurionTextSecondary)
+                // Encounter metadata strip — Date · Patient Age/Sex ·
+                // Encounter Type. Mirrors the reference SOAP letterhead so
+                // screen, PDF, and DOCX all carry the same header band.
+                //
+                // Internal metadata (completeness / version / provider) stays
+                // deliberately OFF the note — it lives in the audit log +
+                // pilot metrics. Patient age/sex is clinician-entered at
+                // export (no structured demographics are captured); blank
+                // shows "Not documented" rather than an invented value.
+                metadataStrip
+                    .padding(.top, 4)
 
-                // Internal metadata (completeness / version / provider) is
-                // deliberately NOT shown — clinicians don't need it on the
-                // note; it lives in the audit log + pilot metrics instead.
                 Rectangle()
                     .fill(Color.aurionGold)
                     .frame(height: 2)
@@ -95,6 +107,54 @@ struct NoteDocumentBody: View {
         let label: String
         let sections: [NoteSectionResponse]
         var id: String { letter }
+    }
+
+    // MARK: - Encounter metadata strip
+
+    /// Very light navy tint — reads as a document letterhead band on the
+    /// white PDF page and as a subtle card on the on-screen note.
+    private var metaStripFill: Color {
+        forPDF
+            ? Color(red: 0.925, green: 0.949, blue: 0.984)
+            : Color.aurionNavy.opacity(0.06)
+    }
+
+    /// Three-column band: Date · Patient Age/Sex · Encounter Type.
+    private var metadataStrip: some View {
+        HStack(alignment: .top, spacing: 12) {
+            metaCell(label: L("noteDoc.metaDate"), value: dateString)
+            metaCell(
+                label: L("noteDoc.metaPatient"),
+                value: patientAgeSex.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                    ? L("noteDoc.metaNotDocumented")
+                    : patientAgeSex
+            )
+            metaCell(
+                label: L("noteDoc.metaEncounter"),
+                value: encounterType.isEmpty ? L("noteDoc.metaNotDocumented") : encounterType
+            )
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, forPDF ? 10 : 12)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(
+            RoundedRectangle(cornerRadius: 8, style: .continuous).fill(metaStripFill)
+        )
+    }
+
+    private func metaCell(label: String, value: String) -> some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(label.uppercased())
+                .font(.system(size: forPDF ? 8.5 : 9, weight: .bold))
+                .tracking(0.6)
+                .foregroundColor(forPDF ? Color.black.opacity(0.45) : .aurionTextSecondary)
+                .fixedSize(horizontal: false, vertical: true)
+            Text(value)
+                .font(.system(size: forPDF ? 12.5 : 14, weight: .semibold))
+                .foregroundColor(forPDF ? .aurionNavy : .aurionTextPrimary)
+                .fixedSize(horizontal: false, vertical: true)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 
     private var soapGroups: [SOAPGroup] {
@@ -265,6 +325,16 @@ struct SessionNoteView: View {
     /// note is loaded, so it needs its own alert that sits OVER the
     /// document rather than a subtitle that never shows.
     @State private var exportError: String?
+    /// Clinician-entered patient age/sex for the document header. Aurion
+    /// captures no structured demographics, so this is typed at export time
+    /// (the age/sex prompt below) and remembered for the session. Blank
+    /// renders as "Not documented" — never fabricated.
+    @State private var patientAgeSex: String = ""
+    /// The format the physician picked, held while the age/sex prompt is up
+    /// so tapping "Export" resumes with the right renderer.
+    @State private var pendingExportFormat: SharedExportFormat?
+    /// Drives the age/sex capture alert shown between format pick and render.
+    @State private var showAgeSexPrompt = false
     /// Clamps the note's reading column to a comfortable measure on
     /// iPad. Without this the SOAP section paragraphs run edge-to-edge
     /// at ~1000pt — too wide for sustained reading per HIG.
@@ -383,8 +453,26 @@ struct SessionNoteView: View {
             isPresented: $showExportPicker,
             titleVisibility: .visible
         ) {
-            Button(L("sessionNote.exportPDF")) { exportNote(as: .pdf) }
-            Button(L("sessionNote.exportDOCX")) { exportNote(as: .docx) }
+            Button(L("sessionNote.exportPDF")) { promptAgeSexThenExport(.pdf) }
+            Button(L("sessionNote.exportDOCX")) { promptAgeSexThenExport(.docx) }
+        }
+        // Optional patient age/sex capture — appears in the document header
+        // strip. Aurion holds no structured demographics, so the physician
+        // types it here; leaving it blank shows "Not documented". iOS 16's
+        // `.alert` supports an inline TextField.
+        .alert(
+            L("sessionNote.ageSexTitle"),
+            isPresented: $showAgeSexPrompt
+        ) {
+            TextField(L("sessionNote.ageSexPlaceholder"), text: $patientAgeSex)
+                .textInputAutocapitalization(.none)
+            Button(L("sessionNote.ageSexExport")) {
+                if let format = pendingExportFormat { exportNote(as: format) }
+                pendingExportFormat = nil
+            }
+            Button(L("common.cancel"), role: .cancel) { pendingExportFormat = nil }
+        } message: {
+            Text(L("sessionNote.ageSexMessage"))
         }
         .sheet(isPresented: $showShareSheet) {
             if let url = exportFileURL {
@@ -443,6 +531,8 @@ struct SessionNoteView: View {
                     note: note,
                     specialtyTitle: displaySpecialty,
                     dateString: displayDate,
+                    patientAgeSex: patientAgeSex,
+                    encounterType: displayEncounterType,
                     forPDF: false
                 )
 
@@ -547,6 +637,29 @@ struct SessionNoteView: View {
             return display.string(from: date)
         }
         return session.createdAt
+    }
+
+    /// Human-readable encounter type for the document header, resolved from
+    /// the session's `encounter_type` code. Unknown codes titlecase cleanly
+    /// (e.g. "follow_up" → "Follow Up") so new values never render raw.
+    private var displayEncounterType: String {
+        switch session.encounterType {
+        case "doctor_patient": return L("noteDoc.encounterInPerson")
+        case "dictation":      return L("noteDoc.encounterDictation")
+        default:
+            return session.encounterType
+                .replacingOccurrences(of: "_", with: " ")
+                .capitalized
+        }
+    }
+
+    /// Hold the chosen format and surface the age/sex prompt; the alert's
+    /// Export button resumes `exportNote(as:)`. The field is pre-filled with
+    /// whatever was typed earlier this session so re-exports don't re-ask
+    /// from scratch.
+    private func promptAgeSexThenExport(_ format: SharedExportFormat) {
+        pendingExportFormat = format
+        showAgeSexPrompt = true
     }
 
     private func sectionStatusBadge(_ status: String) -> some View {
@@ -708,12 +821,17 @@ struct SessionNoteView: View {
                         try NotePDFRenderer.render(
                             note: note,
                             specialtyTitle: displaySpecialty,
-                            dateString: displayDate
+                            dateString: displayDate,
+                            patientAgeSex: patientAgeSex,
+                            encounterType: displayEncounterType
                         )
                     }
                 case .docx:
                     data = try NoteDocumentBuilder.makeDocx(
-                        note, sessionId: note.sessionId
+                        note, sessionId: note.sessionId,
+                        dateString: displayDate,
+                        patientAgeSex: patientAgeSex,
+                        encounterType: displayEncounterType
                     )
                 }
 
