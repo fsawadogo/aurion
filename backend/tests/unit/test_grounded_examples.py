@@ -42,16 +42,20 @@ def test_off_excludes_grounded(monkeypatch):
         assert not any(_is_grounded(e) for e in examples)
 
 
-def test_on_appends_grounded_for_pilot(monkeypatch):
+def test_on_uses_grounded_only_for_pilot(monkeypatch):
+    # With grounded ON, the grounded full-note example REPLACES the descriptive
+    # set (it teaches the descriptive sections + synthesized A&P on its own).
+    # One rich example instead of three trims the prompt / cost / over-generation.
     monkeypatch.setattr(few_shot, "get_config", lambda: _cfg(True))
     for k in PILOT:
         examples = get_few_shot_examples(k)
-        grounded = [e for e in examples if _is_grounded(e)]
-        assert len(grounded) >= 1
+        assert examples, f"{k} should have a grounded example when ON"
+        # Grounded-only — no descriptive examples appended.
+        assert all(_is_grounded(e) for e in examples)
         # the synthesized assessment claim cites >1 source (additional_sources)
         claims = [
             c
-            for e in grounded
+            for e in examples
             for s in e["note"]["sections"]
             for c in s["claims"]
         ]
