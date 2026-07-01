@@ -1029,7 +1029,19 @@
     "browseLibrary": "Browse the Library",
     "libraryEmpty": "No shared templates available yet.",
     "saveToMine": "Save to My Templates",
-    "duplicateError": "Couldn't copy the template."
+    "duplicateError": "Couldn't copy the template.",
+    "visitsHeading": "Visit Types",
+    "visitsAdminHint": "Set the org-wide default template for each visit type. Clinicians inherit it unless they set their own in My Profile.",
+    "visitsClinicianNote": "Org visit-type defaults are set by your admin.",
+    "visitsGoToProfile": "Set your own in My Profile →",
+    "visitsSpecialtyDefault": "Specialty default",
+    "visitsBuiltinGroup": "Built-in templates",
+    "visitsSharedGroup": "Shared templates",
+    "visitsEmpty": "No visit types configured yet — add them in My Profile.",
+    "visitsSelectAria": "Default template for {visit}",
+    "visitsLoadError": "Failed to load visit types.",
+    "visitsSaveError": "Couldn't save the default.",
+    "visitsRetry": "Retry"
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Templates",

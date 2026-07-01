@@ -900,6 +900,16 @@ export interface CurrentUser {
   prompt_testing_enabled?: boolean;
 }
 
+/** Org-wide default template for a visit type (admin-set). Mirrors
+ * `backend.app.api.v1.admin.visit_type_templates.OrgVisitTypeTemplateResponse`.
+ * At most one of `template_key` / `custom_template_id` is non-null. */
+export interface OrgVisitTypeTemplate {
+  visit_type: string;
+  template_key: string | null;
+  custom_template_id: string | null;
+  updated_at: string | null;
+}
+
 /* ─── Clinician Portal ───────────────────────────────────────────────────── */
 
 /** Mirrors `backend.app.api.v1.profile.PhysicianProfileResponse`.

@@ -11,6 +11,7 @@ import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import Modal from "@/components/ui/Modal";
 import PageHeader from "@/components/portal/PageHeader";
+import VisitTypesTab from "@/components/portal/VisitTypesTab";
 import {
   deleteMyCustomTemplate,
   duplicateMyCustomTemplate,
@@ -38,7 +39,7 @@ import type { CustomTemplate } from "@/types";
  * file-based loader (admin "System Templates"); folding them into this Library
  * is a follow-up (#579).
  */
-type TemplatesTab = "mine" | "library";
+type TemplatesTab = "mine" | "library" | "visits";
 
 export default function PortalTemplatesPage() {
   const t = useTranslations("TemplatesList");
@@ -155,9 +156,10 @@ export default function PortalTemplatesPage() {
     </>
   );
 
-  const tabs = [
-    { id: "mine" as const, label: t("myTemplatesHeading"), count: mine.length },
-    { id: "library" as const, label: t("libraryHeading"), count: library.length },
+  const tabs: { id: TemplatesTab; label: string; count?: number }[] = [
+    { id: "mine", label: t("myTemplatesHeading"), count: mine.length },
+    { id: "library", label: t("libraryHeading"), count: library.length },
+    { id: "visits", label: t("visitsHeading") },
   ];
 
   return (
@@ -231,7 +233,7 @@ export default function PortalTemplatesPage() {
               }
             >
               {label}
-              {!loading && (
+              {!loading && count !== undefined && (
                 <span
                   className={
                     "rounded-full px-1.5 text-[11px] tabular-nums " +
@@ -249,7 +251,9 @@ export default function PortalTemplatesPage() {
       </div>
 
       <Card>
-        {loading ? (
+        {tab === "visits" ? (
+          <VisitTypesTab />
+        ) : loading ? (
           <LoadingSkeleton lines={6} />
         ) : tab === "mine" ? (
           <div role="tabpanel" aria-label={t("myTemplatesHeading")}>
