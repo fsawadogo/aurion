@@ -94,7 +94,8 @@
       "alerts": "Alerts",
       "complianceReports": "Compliance Reports",
       "uploadEncounter": "Upload Video",
-      "evalUpload": "Eval Upload"
+      "evalUpload": "Eval Upload",
+      "patientChart": "Patient Chart"
     },
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",
@@ -448,6 +449,36 @@
       "emptyHint": "Sessions you record against this chart number, MRN, or RAMQ will appear here."
     },
     "loadFailed": "Couldn't load encounters for this patient.",
+    "retry": "Retry"
+  },
+  "AdminPatientChart": {
+    "eyebrow": "Patient chart",
+    "title": "Patient chart",
+    "searchTitle": "Patient chart",
+    "searchSubtitle": "Look up every encounter recorded for one patient across all clinicians.",
+    "searchLabel": "Patient identifier",
+    "searchPlaceholder": "Chart number, MRN, or RAMQ…",
+    "searchAction": "Open chart",
+    "searchHint": "The identifier is matched exactly and is never logged. Only encounters tagged with this identifier are shown.",
+    "backToSearch": "Patient chart",
+    "refresh": "Refresh",
+    "subtitle": {
+      "summary": "{count, plural, one {# encounter} other {# encounters}} across all clinicians",
+      "none": "No encounters recorded yet for this identifier."
+    },
+    "encounters": {
+      "title": "All encounters",
+      "empty": "No encounters for this identifier yet",
+      "emptyHint": "Encounters any clinician records against this chart number, MRN, or RAMQ will appear here."
+    },
+    "validate": "Validate",
+    "validating": "Validating…",
+    "validatedBadge": "Validated",
+    "validateConflict": "Resolve the visual conflicts on this note before validating.",
+    "validateFailed": "Couldn't validate this note.",
+    "notEnabledTitle": "Patient chart is not enabled",
+    "notEnabledBody": "The cross-clinician patient chart ships off until compliance sign-off. An administrator can enable it on the Feature Flags page.",
+    "loadFailed": "Couldn't load this patient's chart.",
     "retry": "Retry"
   },
   "AIPrompts": {

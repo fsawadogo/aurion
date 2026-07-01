@@ -264,6 +264,14 @@ resource "aws_appconfig_configuration_profile" "main" {
             # an older hosted document without the key still validates — the
             # backend Pydantic schema defaults it false (all categories shown).
             clinician_prompts_note_only = { type = "boolean" }
+            # Cross-clinician Patient Chart (#604). Master gate for the
+            # elevated-role aggregated patient view + supervisory validate.
+            # NOT in `required` so an older hosted document without the key
+            # still validates under additionalProperties = false — the backend
+            # Pydantic schema defaults it false (feature stays dark). MUST be
+            # here (additionalProperties = false) or the portal Feature Flags
+            # save is rejected by AWS (the backend dumps the full config).
+            cross_clinician_chart_enabled = { type = "boolean" }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in

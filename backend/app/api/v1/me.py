@@ -110,6 +110,10 @@ class PortalFeatureFlagsResponse(BaseModel):
     # Multi-clip import: gates the multi-file upload UI on the video-import
     # page. Defaulted so an older portal build reading this can't break.
     multi_clip_import_enabled: bool = False
+    # Cross-clinician Patient Chart (#604): gates the elevated-role patient
+    # chart nav entry + page. Defaulted OFF so an older portal build can't
+    # break and the surface stays hidden until compliance enables it.
+    cross_clinician_chart_enabled: bool = False
 
 
 @router.get("/feature-flags", response_model=PortalFeatureFlagsResponse)
@@ -121,6 +125,7 @@ async def get_portal_feature_flags(
     return PortalFeatureFlagsResponse(
         video_import_enabled=flags.video_import_enabled,
         multi_clip_import_enabled=flags.multi_clip_import_enabled,
+        cross_clinician_chart_enabled=flags.cross_clinician_chart_enabled,
     )
 
 

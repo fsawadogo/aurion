@@ -13,6 +13,7 @@ import {
   Film,
   Flag,
   FlaskConical,
+  HeartPulse,
   Layers,
   LayoutGrid,
   LogOut,
@@ -84,6 +85,11 @@ const navigation: {
   // matches the backend prompt_studio_roles default; the page is also
   // flag-gated (prompt_studio_enabled) and shows a "not enabled" state when off.
   { tKey: "promptStudio", href: "/portal/admin/prompt-studio", icon: Sparkles, roles: ["ADMIN", "CLINICAL_ADMIN"] },
+  // Cross-clinician Patient Chart (#604). CLINICAL_ADMIN + ADMIN — matches the
+  // backend _CHART_ROLES on /admin/patients/*. Also flag-gated
+  // (cross_clinician_chart_enabled): hidden until the backend confirms it's on
+  // (see the feature-flag gate below), so no dead link while the feature is dark.
+  { tKey: "patientChart", href: "/portal/admin/patients", icon: HeartPulse, roles: ["ADMIN", "CLINICAL_ADMIN"] },
   // Operational alerts (#76). ADMIN + COMPLIANCE_OFFICER — matches the
   // backend gate on /admin/alerts (list + acknowledge).
   { tKey: "alerts", href: "/portal/admin/alerts", icon: Bell, roles: ["ADMIN", "COMPLIANCE_OFFICER"] },
@@ -134,6 +140,10 @@ export default function Sidebar() {
   const [videoImportEnabled, setVideoImportEnabled] = useState<boolean | null>(
     null,
   );
+  // null = unknown (loading); gates the Patient Chart nav entry (#604).
+  const [patientChartEnabled, setPatientChartEnabled] = useState<
+    boolean | null
+  >(null);
 
   // Desktop collapsed state — persists to localStorage so the choice
   // survives reloads. Initialized to false on the server to avoid
@@ -168,10 +178,14 @@ export default function Sidebar() {
     let cancelled = false;
     getPortalFeatureFlags()
       .then((f) => {
-        if (!cancelled) setVideoImportEnabled(f.video_import_enabled);
+        if (cancelled) return;
+        setVideoImportEnabled(f.video_import_enabled);
+        setPatientChartEnabled(f.cross_clinician_chart_enabled);
       })
       .catch(() => {
-        if (!cancelled) setVideoImportEnabled(false);
+        if (cancelled) return;
+        setVideoImportEnabled(false);
+        setPatientChartEnabled(false);
       });
     return () => {
       cancelled = true;
@@ -264,6 +278,12 @@ export default function Sidebar() {
         .filter(
           (item) =>
             !UPLOAD_KEYS.includes(item.tKey) || videoImportEnabled === true,
+        )
+        // Patient Chart (#604) — hidden until the backend confirms the flag is
+        // on (default-hidden while loading so no dead link flashes).
+        .filter(
+          (item) =>
+            item.tKey !== "patientChart" || patientChartEnabled === true,
         )
     : [];
   const initial = user?.full_name?.[0]?.toUpperCase() ?? user?.email?.[0]?.toUpperCase() ?? "?";
