@@ -72,6 +72,7 @@
     "signOut": "Se déconnecter",
     "nav": {
       "dashboard": "Tableau de bord",
+      "schedule": "Horaire",
       "sessions": "Sessions",
       "auditLog": "Journal d’audit",
       "phiMasking": "Masquage RPS",
@@ -721,6 +722,50 @@
     "emergency_medicine": "Médecine d’urgence",
     "general": "Général",
     "all": "Toutes les spécialités"
+  },
+  "Schedule": {
+    "eyebrow": "Portail du clinicien",
+    "title": "Horaire",
+    "description": "Mettez en file les patients que vous prévoyez voir, avec une heure facultative et une note brève. Faites passer chacun de planifié → en cours → terminé au fil de la clinique.",
+    "newEntry": "Ajouter un patient",
+    "loadError": "Échec du chargement de votre horaire.",
+    "deleteError": "Échec du retrait.",
+    "deleteConfirm": "Retirer « {patient} » de votre horaire? Cette action est irréversible (le journal d’audit en garde une trace).",
+    "emptyTitle": "Votre horaire est vide. Ajoutez les patients que vous prévoyez voir pour organiser votre clinique.",
+    "addFirst": "Ajouter votre premier patient",
+    "editAria": "Modifier",
+    "deleteAria": "Retirer",
+    "filterAria": "Filtrer par statut",
+    "filterAll": "Tous",
+    "status": {
+      "scheduled": "Planifié",
+      "in_progress": "En cours",
+      "completed": "Terminé",
+      "cancelled": "Annulé"
+    },
+    "statusChangeAria": "Changer le statut",
+    "statusChangePrompt": "Passer à…",
+    "statusUpdateError": "Impossible de mettre à jour le statut.",
+    "editor": {
+      "newTitle": "Ajouter un patient",
+      "editTitle": "Modifier l’entrée",
+      "closeAria": "Fermer",
+      "identifierLabel": "Identifiant du patient",
+      "identifierPlaceholder": "NDD ou identifiant de consultation",
+      "identifierAria": "Identifiant du patient",
+      "identifierHint": "Utilisez l’identifiant clinique (NDD / identifiant de consultation) — pas le nom du patient. Il est chiffré et ne vous est réaffiché qu’à vous.",
+      "identifierLocked": "L’identifiant du patient ne peut pas être modifié après la création d’une entrée.",
+      "slotLabel": "Heure (facultatif)",
+      "slotAria": "Heure planifiée",
+      "slotHint": "Une heure facultative. Il n’y a ni calendrier ni détection de double réservation — c’est seulement pour votre ordre de lecture.",
+      "noteLabel": "Note (facultatif)",
+      "notePlaceholder": "p. ex. suivi, consultation préopératoire…",
+      "noteAria": "Note",
+      "noteHint": "Court texte libre. Maximum 500 caractères. Exclu du journal d’audit.",
+      "cancel": "Annuler",
+      "save": "Enregistrer",
+      "saveError": "Échec de l’enregistrement"
+    }
   },
   "Macros": {
     "eyebrow": "Portail du clinicien",

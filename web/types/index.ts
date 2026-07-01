@@ -165,6 +165,45 @@ export interface PhysicianMacroUpdate {
   clear_specialty?: boolean;
 }
 
+/* ─── Clinician schedule (#603) ──────────────────────────────────────────── */
+
+export type ScheduleEntryStatus =
+  | "scheduled"
+  | "in_progress"
+  | "completed"
+  | "cancelled";
+
+/** One patient the clinician has queued onto their personal schedule.
+ * Owner-scoped server-side; the client never sees another clinician's
+ * entries. `patient_identifier` is decrypted for the owning clinician. */
+export interface ScheduleEntry {
+  id: string;
+  patient_identifier: string;
+  status: ScheduleEntryStatus;
+  /** Optional slot time (ISO 8601). No calendar/conflict logic. */
+  scheduled_for?: string | null;
+  note?: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface ScheduleEntryCreate {
+  patient_identifier: string;
+  scheduled_for?: string | null;
+  note?: string | null;
+}
+
+export interface ScheduleEntryUpdate {
+  status?: ScheduleEntryStatus;
+  scheduled_for?: string | null;
+  note?: string | null;
+  /** Blank the slot time (null already means 'no change' in patch
+   * semantics). */
+  clear_scheduled_for?: boolean;
+  /** Blank the note. */
+  clear_note?: boolean;
+}
+
 /** Plain-language after-visit summary for the patient. Generated
  * from the approved note by the LLM; physician can edit. */
 export interface PatientSummary {

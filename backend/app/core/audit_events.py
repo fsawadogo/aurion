@@ -238,6 +238,18 @@ class AuditEventType(StrEnum):
     # (labels) take.
     PROFILE_CONTEXTS_UPDATED = "profile_contexts_updated"
 
+    # ── Clinician schedule (#603) ─────────────────────────────────────────
+    # A clinician added / re-statused / removed a patient on their personal
+    # schedule. Provenance only: actor UUID + the entry's own row id (+ the
+    # bounded status enum on a status change). The patient identifier and
+    # the free-text note are NEVER carried into the immutable trail — same
+    # count/provenance-only posture MACRO_* and EXTERNAL_REFERENCE_ID_SET
+    # take. The row's existence is the audit signal that the schedule
+    # changed, not who-is-which-patient.
+    SCHEDULE_ENTRY_ADDED = "schedule_entry_added"
+    SCHEDULE_ENTRY_STATUS_CHANGED = "schedule_entry_status_changed"
+    SCHEDULE_ENTRY_REMOVED = "schedule_entry_removed"
+
     # ── Admin ────────────────────────────────────────────────────────────
     USER_CREATED = "user_created"
     USER_UPDATED = "user_updated"
@@ -814,6 +826,15 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
             "custom_templates_detached",
         }
     ),
+    # Clinician schedule (#603) — provenance only. NEVER the patient
+    # identifier or the free-text note. ``actor_id`` is the clinician UUID;
+    # ``entry_id`` is the schedule_entries row id; ``status`` (on the
+    # status-change event only) is the bounded lifecycle enum string.
+    AuditEventType.SCHEDULE_ENTRY_ADDED: frozenset({"actor_id", "entry_id"}),
+    AuditEventType.SCHEDULE_ENTRY_STATUS_CHANGED: frozenset(
+        {"actor_id", "entry_id", "status"}
+    ),
+    AuditEventType.SCHEDULE_ENTRY_REMOVED: frozenset({"actor_id", "entry_id"}),
     # Admin
     AuditEventType.USER_CREATED: frozenset(
         {"target_user_id", "target_email", "target_role", "created_by"}

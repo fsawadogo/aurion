@@ -125,6 +125,10 @@ EXPECTED_VALUES: dict[str, str] = {
     # Profile (#313, B1) — visit-type → context → template map edit
     # (aggregate count deltas only, never labels/keys/ids/template names)
     "PROFILE_CONTEXTS_UPDATED": "profile_contexts_updated",
+    # Clinician schedule (#603)
+    "SCHEDULE_ENTRY_ADDED": "schedule_entry_added",
+    "SCHEDULE_ENTRY_STATUS_CHANGED": "schedule_entry_status_changed",
+    "SCHEDULE_ENTRY_REMOVED": "schedule_entry_removed",
     # Admin
     "USER_CREATED": "user_created",
     "USER_UPDATED": "user_updated",
