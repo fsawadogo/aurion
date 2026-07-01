@@ -211,7 +211,10 @@ export default function VisitTypesTab() {
       <select
         className="rounded-aurion-md border border-hairline bg-white px-3 py-2 text-aurion-callout text-navy-800 focus:outline-none focus:ring-2 focus:ring-gold-300/40 disabled:opacity-50"
         value={value}
-        disabled={savingVt === vt}
+        // Disable ALL selects while any save is in flight. The clinician path
+        // PUTs the full contexts map, so a concurrent edit built from stale
+        // state would clobber the in-flight one; serialising avoids that.
+        disabled={savingVt !== null}
         onChange={(e) => onChange(vt, e.target.value)}
         data-testid={`visit-type-template-${vt}`}
         aria-label={t("visitsSelectAria", { visit: visitTypeLabel(vt) })}
