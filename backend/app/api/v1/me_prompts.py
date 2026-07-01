@@ -68,13 +68,13 @@ from app.modules.note_gen.specialty_style import get_specialty_style
 from app.modules.prompts import (
     PROMPTS,
     PromptDefinition,
-    select_active_prompt,
     validate_specialty_guidance,
     validate_user_prompt,
 )
 from app.modules.prompts.assembly import (
     PublishedPromptMeta,
     get_active_publications_for,
+    resolve_base_system_prompt,
 )
 
 logger = logging.getLogger("aurion.api.me_prompts")
@@ -294,9 +294,15 @@ def _serialize(
         active_prompt = publication.text
         active_source: Literal["override", "published", "default"] = "published"
     else:
-        # Personal override (verbatim) or the registry default — the
-        # publication-free projection.
-        active_prompt = select_active_prompt(prompt.id, user_prompt_text)
+        # Personal override (verbatim) or the registry default. The default is
+        # GROUNDED-aware (resolve_base_system_prompt) so the transparency page
+        # shows the boundary that actually runs when Grounded Synthesis Mode is
+        # on — not the raw descriptive registry text (scribe-1).
+        active_prompt = (
+            user_prompt_text
+            if user_prompt_text is not None
+            else resolve_base_system_prompt(prompt.id)
+        )
         active_source = "override" if user_prompt_text is not None else "default"
     return PromptResponse(
         id=prompt.id,
@@ -305,7 +311,7 @@ def _serialize(
         category=prompt.category,
         runs_when=prompt.runs_when,
         provider_field=prompt.provider_field,
-        system_prompt=prompt.system_prompt,
+        system_prompt=resolve_base_system_prompt(prompt.id),
         system_prompt_is_fallback=True,
         schema_note=prompt.schema_note,
         user_prompt_text=user_prompt_text,

@@ -75,6 +75,64 @@ def resolve_base_system_prompt(prompt_id: str) -> str:
     return base
 
 
+# ── scribe-1: Grounded Synthesis is a MODE, not just a fallback default ──────
+#
+# When note generation runs in Grounded Synthesis Mode the grounded system
+# prompt is a NON-NEGOTIABLE safety boundary: it is always the system prompt,
+# and any author override (personal / template / published) is layered on top
+# as an ADDITIVE style block — never a replacement. This stops a descriptive
+# override from silently stripping the grounding contract (pre-scribe-1 any
+# override REPLACED the base, so the flag was a fallback, not a mode). Every
+# OTHER case — all non-note_generation prompts, and note_generation with the
+# flag OFF — keeps the original REPLACEMENT semantics, byte-identical.
+
+_ADDITIVE_STYLE_HEADER = (
+    "\n\n---\n"
+    "ADDITIONAL STYLE & STRUCTURE INSTRUCTIONS (author-supplied). These refine "
+    "wording, section layout, and emphasis ONLY. They do NOT override the rules "
+    "above: continue to synthesize a clinically useful Assessment & Plan and "
+    "ground every statement in a cited source.\n"
+)
+
+
+def _grounded_note_gen(prompt_id: str) -> bool:
+    """True only for note generation in Grounded Synthesis Mode — the single
+    case with additive (boundary-always-on) prompt composition."""
+    return (
+        prompt_id == "note_generation"
+        and get_config().feature_flags.grounded_synthesis_enabled
+    )
+
+
+def _compose_system_prompt(
+    prompt_id: str,
+    user_prompt: Optional[str],
+    template_prompt: Optional[str],
+    published: Optional[str],
+) -> str:
+    """Resolve the final system prompt from the override cascade.
+
+    Grounded Synthesis Mode (note_generation + flag ON): the grounded boundary
+    is ALWAYS the base; the most-specific override (personal → template →
+    published) is APPENDED as a style layer, never substituted.
+
+    Otherwise: REPLACEMENT semantics, byte-identical to pre-scribe-1 — the most
+    specific override wins outright (``published is not None`` preserved so an
+    empty published string still counts), else the registry base.
+    """
+    if _grounded_note_gen(prompt_id):
+        base = resolve_base_system_prompt(prompt_id)
+        override = user_prompt or template_prompt or published
+        return base + _ADDITIVE_STYLE_HEADER + override if override else base
+    if user_prompt:
+        return user_prompt
+    if template_prompt:
+        return template_prompt
+    if published is not None:
+        return published
+    return resolve_base_system_prompt(prompt_id)
+
+
 async def _get_user_prompt(
     db: AsyncSession,
     owner_id: uuid.UUID,
@@ -319,7 +377,10 @@ async def assemble_prompt(
 ) -> str:
     """Return the prompt text to send to the LLM for ``owner_id``.
 
-    Resolution order (most specific first), all REPLACEMENT (no append):
+    Resolution order (most specific first). In Grounded Synthesis Mode
+    (``note_generation`` + ``grounded_synthesis_enabled``) the grounded base is
+    ALWAYS present and the winning override below is APPENDED as a style layer
+    (scribe-1); in every other case the winning override REPLACES the base:
       1. The clinician's own saved user prompt for ``(owner_id, prompt_id)``
          → returned alone. Unchanged from Phase B.
       2. ``template_prompt`` — note-gen instructions carried by the template the
@@ -355,14 +416,14 @@ async def assemble_prompt(
         # prompt can never blank out the descriptive-mode base prompt.
         template_prompt = None
     user_prompt = await _get_user_prompt(db, owner_id, prompt_id)
-    if user_prompt:
-        return user_prompt
-    if template_prompt:
-        return template_prompt
-    published = await _get_published_prompt(db, owner_id, prompt_id)
-    if published is not None:
-        return published
-    return resolve_base_system_prompt(prompt_id)
+    # Fetch the publication only when neither a personal nor a template override
+    # is present — both the replacement and additive paths resolve the same
+    # precedence (personal → template → published), so this preserves the prior
+    # lazy-fetch pattern (no extra query when a higher-precedence override wins).
+    published: Optional[str] = None
+    if not user_prompt and not template_prompt:
+        published = await _get_published_prompt(db, owner_id, prompt_id)
+    return _compose_system_prompt(prompt_id, user_prompt, template_prompt, published)
 
 
 async def assemble_prompt_for_session(
@@ -406,13 +467,13 @@ async def assemble_prompt_for_session(
             else uuid.UUID(str(session_id))
         )
     except (ValueError, AttributeError):
-        return template_prompt or resolve_base_system_prompt(prompt_id)
+        return _compose_system_prompt(prompt_id, None, template_prompt, None)
     result = await db.execute(
         select(SessionModel.clinician_id).where(SessionModel.id == sid)
     )
     clinician_id = result.scalar_one_or_none()
     if clinician_id is None:
-        return template_prompt or PROMPTS[prompt_id].system_prompt
+        return _compose_system_prompt(prompt_id, None, template_prompt, None)
     return await assemble_prompt(
         prompt_id, clinician_id, db, template_prompt=template_prompt
     )
