@@ -658,6 +658,15 @@ resource "aws_ecs_task_definition" "api" {
           name      = "RESEND_API_KEY"
           valueFrom = aws_secretsmanager_secret.resend_api_key.arn
         },
+        # JWT signing key — HS256 auth access/refresh tokens (see secrets.tf).
+        # WITHOUT this, jwt_tokens.py falls back to a per-process random key,
+        # so every deploy logs everyone out and overlapping tasks reject each
+        # other's tokens (intermittent 401). This wire makes the key stable
+        # and shared across all tasks. Placeholder until rotated in.
+        {
+          name      = "AUTH_JWT_SIGNING_KEY"
+          valueFrom = aws_secretsmanager_secret.jwt_signing_key.arn
+        },
       ]
 
       logConfiguration = {
