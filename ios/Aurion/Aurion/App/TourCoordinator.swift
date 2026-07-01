@@ -58,11 +58,11 @@ final class TourCoordinator: ObservableObject {
             titleKey: "tour.start.title",
             messageKey: "tour.start.body"
         ),
-        TourStep(
-            anchor: .recentSessions,
-            titleKey: "tour.review.title",
-            messageKey: "tour.review.body"
-        ),
+        // The "review your notes" step previously spotlighted the Home
+        // Recent-Sessions list. Home is now Quick Start only (recent + resume
+        // moved to the Sessions tab), so the step is dropped rather than
+        // pointed at a section that no longer exists. The tab-bar step below
+        // still introduces the Sessions tab where review/resume now live.
         TourStep(
             anchor: nil,
             titleKey: "tour.explore.title",

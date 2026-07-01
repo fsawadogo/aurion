@@ -126,23 +126,15 @@ struct PhysicianProfileSetupView: View {
         if trimmed.contains("@") {
             return L("setup.visit.custom.error.email")
         }
-        // Two-token proper-noun shape — catches "Jane Doe" / "Marie
-        // Gdalevitch" without rejecting legitimate clinician shorthand
-        // like "LL fu" / "Breast visit". Mirrors the backend
-        // `_looks_like_proper_noun_pair` heuristic exactly.
-        let tokens = trimmed.split(whereSeparator: \.isWhitespace)
-        if tokens.count >= 2,
-           tokens.allSatisfy({ tok in
-               guard let first = tok.first, first.isUppercase else {
-                   return false
-               }
-               return tok.allSatisfy { c in
-                   c.isLetter || c == "'" || c == "-" || c == "\u{2019}"
-               }
-           })
-        {
-            return L("setup.visit.custom.error.name")
-        }
+        // Proper-noun / "looks like a full name" heuristic REMOVED (pilot
+        // "don't restrict" feedback). Full descriptive Title-Case labels like
+        // "Limb Lengthening Cosmetic" or "Breast Reconstruction" are the point
+        // — the clinician needs to give the AI the context "as full as
+        // possible", and these are reusable clinical descriptors in the
+        // physician's own profile, not per-patient identifiers. Mirrors the
+        // backend flip (`_validate_consultation_type(check_proper_noun=False)`).
+        // The SSN / email / length gates above still reject a real identifier.
+        //
         // De-dup against existing customs + defaults.
         if existing.contains(trimmed)
             || Self.defaultVisitTypeKeys.contains(trimmed)

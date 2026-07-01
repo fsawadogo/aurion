@@ -128,13 +128,6 @@ struct DashboardView: View {
         }
     }
 
-    /// Sessions on the backend still in an active capture state. Surfaced at
-    /// the top of the dashboard with a Resume CTA so the physician can hop
-    /// straight back into `CaptureView` after backgrounding the app.
-    private var resumableSessions: [SessionResponse] {
-        recentSessions.filter { $0.state == "RECORDING" || $0.state == "PAUSED" }
-    }
-
     private var quickStartCards: [(specialty: String, type: String, label: String, icon: String)] {
         Self.quickStartCards(for: appState.physicianProfile)
     }
@@ -187,26 +180,28 @@ struct DashboardView: View {
             ScrollView {
                 VStack(spacing: 20) {
                     OfflineStatusBanner()
-                    // Single source of truth for session errors. Previously
-                    // rendered in BOTH resumableSection and quickStartSection,
-                    // so one failure surfaced two identical banners. Hoisted
-                    // here so it shows exactly once regardless of which
-                    // section triggered it.
+                    // Single source of truth for session errors — hoisted here
+                    // so a failure surfaces exactly one banner regardless of
+                    // which section triggered it.
                     if let err = sessionManager.error {
                         ErrorBanner(err, onDismiss: { sessionManager.error = nil })
                     }
                     greetingHeader
                         .tourAnchor(.greeting)
                         .id(TourAnchor.greeting)
-                    if !resumableSessions.isEmpty { resumableSection }
+                    // Home is Quick Start only. An interrupted recording is
+                    // resumed from the Sessions tab (SessionsInboxView already
+                    // renders RECORDING/PAUSED with a Resume action), and the
+                    // "Recent" list lives there too — so neither belongs on
+                    // Home. Pending-review + Stage 2-in-progress stay: they're
+                    // transient "needs your attention" prompts, not history,
+                    // and only render when non-empty (so a clean Home is just
+                    // Quick Start).
                     if !stage2InProgressSessions.isEmpty { stage2InProgressSection }
                     if !pendingReviewSessions.isEmpty { pendingReviewSection }
                     quickStartSection
                         .tourAnchor(.startSession)
                         .id(TourAnchor.startSession)
-                    recentSessionsSection
-                        .tourAnchor(.recentSessions)
-                        .id(TourAnchor.recentSessions)
                 }
                 .aurionScreenEdge()
                 .padding(.top, 8)
@@ -329,67 +324,17 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Continue Recording (active session — RECORDING / PAUSED)
-
-    /// Gold-accent card surfaced when a session is still mid-capture on the
-    /// backend. Common path: physician started recording, backgrounded the
-    /// app, came back — iOS lost the capture sources but the server row is
-    /// still PAUSED/RECORDING. Tap loads it into `SessionManager` and
-    /// `ContentView` routes back to `CaptureView`.
-    private var resumableSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: L("dashboard.continueRecording"))
-            ForEach(resumableSessions, id: \.id) { session in
-                Button {
-                    AurionHaptics.impact(.light)
-                    Task { await sessionManager.adoptSession(session) }
-                } label: {
-                    AurionCard(padding: 16, accent: true) {
-                        HStack(spacing: 12) {
-                            AurionIconBubble(symbol: "record.circle", tint: .aurionGold, size: 36)
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(localizedSpecialty(session.specialty))
-                                    .aurionFont(16, weight: .semibold, relativeTo: .body)
-                                    .foregroundColor(.aurionTextPrimary)
-                                Text(session.state == "PAUSED"
-                                     ? L("dashboard.pausedAgo", formatRelativeTime(session.updatedAt))
-                                     : L("dashboard.recordingAgo", formatRelativeTime(session.updatedAt)))
-                                    .aurionFont(13, relativeTo: .footnote)
-                                    .foregroundColor(.aurionTextSecondary)
-                            }
-                            Spacer()
-                            Text(L("sessions.resume"))
-                                .aurionFont(13, weight: .semibold, relativeTo: .footnote)
-                                // Brand-navy on gold pill — fixed in both modes.
-                                .foregroundColor(.aurionNavy)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 6)
-                                .background(Color.aurionGold)
-                                .clipShape(Capsule())
-                        }
-                        // Without this, the Spacer area between the label
-                        // stack and the Resume pill swallows taps — the
-                        // user sees the visual but the Button never fires.
-                        .contentShape(Rectangle())
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
     // MARK: - Pending Review (gold-accent card)
     //
-    // Marie bug-bash (2026-06-05): this section previously used the SAME
-    // "Resume" pill label as `resumableSection` above, even though the
+    // Marie bug-bash (2026-06-05): this section once used the SAME
+    // "Resume" pill label as the (now-removed) resume card, even though the
     // tap action is completely different — pending-review navigates to
     // `SessionNoteView` (a note-review screen), not back into recording.
     // Marie tapped this card expecting to resume her paused encounter
     // and landed on a blank review screen ("No content captured" per
     // section, because her earlier audio-upload bug had stranded
-    // sessions in AWAITING_REVIEW with no note). Pill is now labelled
-    // "Review" (`sessions.review`) so the two cards are visually
-    // distinct from each other at the glance.
+    // sessions in AWAITING_REVIEW with no note). Pill is labelled
+    // "Review" (`sessions.review`) so its action is unambiguous.
     private var pendingReviewSection: some View {
         VStack(alignment: .leading, spacing: 8) {
             SectionHeader(title: L("dashboard.pendingReview"))
@@ -540,128 +485,6 @@ struct DashboardView: View {
         }
         .accessibilityLabel(L("dashboard.quickStart"))
         .accessibilityHint(L("common.loading"))
-    }
-
-    // MARK: - Recent Sessions (compact list inside one card)
-
-    private var recentSessionsSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: L("dashboard.recentSessions")) {
-                Button {
-                    AurionHaptics.impact(.light)
-                    AppNavigation.shared.requestTab(.sessions)
-                } label: {
-                    Text(L("dashboard.seeAll"))
-                        .aurionFont(13, weight: .semibold, relativeTo: .footnote)
-                        .foregroundColor(.aurionGold)
-                }
-                .buttonStyle(.plain)
-                // Same Spacer-swallows-taps gotcha as the Resume button —
-                // the SectionHeader's trailing slot lives next to a layout
-                // Spacer; without contentShape the gold text reads but
-                // doesn't tap.
-                .contentShape(Rectangle())
-            }
-
-            if isLoadingSessions {
-                HStack { Spacer(); ProgressView(); Spacer() }
-                    .padding(.vertical, AurionSpacing.lg)
-            } else if recentSessions.isEmpty {
-                EmptyStateView(
-                    icon: "waveform.path.ecg",
-                    title: L("dashboard.noSessions"),
-                    subtitle: L("dashboard.noSessionsSub")
-                )
-            } else {
-                AurionCard(padding: 0) {
-                    VStack(spacing: 0) {
-                        ForEach(Array(recentSessions.prefix(3).enumerated()), id: \.element.id) { index, session in
-                            // The row reads as a tappable card but did nothing
-                            // on tap. Mirror `pendingReviewSection` — route the
-                            // tap into the session's note via NavigationLink
-                            // inside the dashboard's own NavigationStack.
-                            NavigationLink(destination: SessionNoteView(session: session)) {
-                                recentSessionRow(session: session)
-                            }
-                            .buttonStyle(.plain)
-                            if index < min(recentSessions.count, 3) - 1 {
-                                Rectangle().fill(Color.aurionBorder).frame(height: 1).padding(.leading, 60)
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    @ViewBuilder
-    private func recentSessionRow(session: SessionResponse) -> some View {
-        let icon: String = {
-            switch session.specialty {
-            case "plastic_surgery": return "heart"
-            case "orthopedic_surgery": return "figure.walk"
-            case "musculoskeletal": return "figure.run"
-            case "emergency_medicine": return "cross.case"
-            default: return "stethoscope"
-            }
-        }()
-
-        let iconBubble = ZStack {
-            RoundedRectangle(cornerRadius: 9)
-                .fill(Color.aurionSurfaceAlt)
-                .frame(width: 32, height: 32)
-            Image(systemName: icon)
-                .aurionFont(14, relativeTo: .subheadline)
-                .foregroundColor(.aurionTextSecondary)
-        }
-
-        // At accessibility sizes the title is allowed to wrap; otherwise it
-        // stays a single line beside the trailing pill (#271 DT).
-        let titleStack = VStack(alignment: .leading, spacing: 2) {
-            Text(localizedSpecialty(session.specialty))
-                .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
-                .foregroundColor(.aurionTextPrimary)
-                .lineLimit(dynamicTypeSize.isAccessibilitySize ? nil : 1)
-                .fixedSize(horizontal: false, vertical: dynamicTypeSize.isAccessibilitySize)
-            Text(formatRelativeTime(session.createdAt))
-                .aurionFont(12, relativeTo: .caption)
-                .foregroundColor(.aurionTextSecondary)
-                .lineLimit(1)
-        }
-
-        let pill = AurionStatusPill(
-            kind: sessionStateKind(session.displayState),
-            labelOverride: sessionStateLabel(session.displayState)
-        )
-
-        Group {
-            if dynamicTypeSize.isAccessibilitySize {
-                // The title + pill can't coexist on one line at AX sizes —
-                // the pill would crush the title to an ellipsis. Drop it
-                // below the title/time stack so both read in full (#271 DT).
-                HStack(alignment: .top, spacing: 12) {
-                    iconBubble
-                    VStack(alignment: .leading, spacing: 8) {
-                        titleStack
-                        pill
-                    }
-                    Spacer(minLength: 0)
-                }
-            } else {
-                HStack(spacing: 12) {
-                    iconBubble
-                    titleStack
-                    Spacer()
-                    pill
-                }
-            }
-        }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        // The Spacer between the label stack and the status pill otherwise
-        // swallows taps; make the whole padded row the hit target so the
-        // wrapping NavigationLink fires anywhere on the row.
-        .contentShape(Rectangle())
     }
 
     // MARK: - Encounter Type Sheet (screen 4)

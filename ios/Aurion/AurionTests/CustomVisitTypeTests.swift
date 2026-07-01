@@ -89,12 +89,17 @@ struct CustomVisitTypeTests {
         #expect(result != nil)
     }
 
-    @Test func twoTokenFullName_isRejected() {
-        let result = PhysicianProfileSetupView.validateCustomVisitType(
-            "Marie Gdalevitch",
-            existing: []
-        )
-        #expect(result != nil)
+    @Test func fullWordTitleCaseLabels_passGate() {
+        // Pilot "don't restrict" feedback: the proper-noun / full-name
+        // heuristic is REMOVED. Full descriptive Title-Case labels — the
+        // whole point of a custom context — now pass. Mirrors the backend
+        // flip (`_validate_consultation_type(check_proper_noun=False)`).
+        for label in ["Limb Lengthening Cosmetic", "Breast Reconstruction", "Marie Gdalevitch"] {
+            #expect(
+                PhysicianProfileSetupView.validateCustomVisitType(label, existing: []) == nil,
+                "\(label) should be allowed (no proper-noun restriction)"
+            )
+        }
     }
 
     @Test func tooLong_isRejected() {
@@ -248,8 +253,8 @@ struct CustomVisitTypeTests {
 
     @Test func contextLabel_reusesVisitTypeValidator() {
         // Context labels run the SAME format gate as custom visit-type
-        // labels: shorthand passes, PHI shapes / over-long are rejected,
-        // and `reject_full_name` is OFF for multi-word shorthand.
+        // labels: shorthand + full descriptive Title-Case phrases pass; only
+        // PHI shapes (SSN / email) and over-long / duplicate are rejected.
         #expect(
             PhysicianProfileSetupView.validateCustomVisitType("LL", existing: [])
                 == nil
@@ -262,10 +267,11 @@ struct CustomVisitTypeTests {
             PhysicianProfileSetupView.validateCustomVisitType("Breast", existing: [])
                 == nil
         )
+        // Full-word Title-Case labels now PASS (proper-noun gate removed).
         #expect(
             PhysicianProfileSetupView.validateCustomVisitType(
                 "Marie Gdalevitch", existing: []
-            ) != nil
+            ) == nil
         )
         #expect(
             PhysicianProfileSetupView.validateCustomVisitType(
