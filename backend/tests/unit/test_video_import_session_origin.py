@@ -42,8 +42,12 @@ async def test_portal_feature_flags_reads_config() -> None:
     from app.api.v1 import me
 
     cfg = SimpleNamespace(
-        feature_flags=SimpleNamespace(video_import_enabled=True)
+        feature_flags=SimpleNamespace(
+            video_import_enabled=True,
+            multi_clip_import_enabled=True,
+        )
     )
     with patch.object(me, "get_config", return_value=cfg):
         resp = await me.get_portal_feature_flags(_user=SimpleNamespace())
     assert resp.video_import_enabled is True
+    assert resp.multi_clip_import_enabled is True
