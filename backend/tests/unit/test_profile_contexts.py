@@ -130,6 +130,47 @@ def test_visitTypeContext_rejectsBlankLabel() -> None:
         VisitTypeContext(label="   ")
 
 
+# ── _validate_consultation_type default: proper-noun gate OFF ("don't restrict")
+
+
+@pytest.mark.parametrize(
+    "label",
+    [
+        "Limb Lengthening Cosmetic",  # 3 Title-Case descriptive words
+        "Breast Reconstruction",
+        "Marie Gdalevitch",  # proper-noun shape — now allowed by default
+    ],
+)
+def test_validate_consultation_type_allows_full_words_by_default(label: str) -> None:
+    """Pilot "don't restrict" feedback: the shared consultation-type/label
+    validator no longer trips the proper-noun heuristic by default, so full
+    descriptive multi-word labels round-trip. Guards the flipped default of
+    ``_validate_consultation_type(check_proper_noun=False)`` in the unit suite
+    (CI runs only tests/unit/)."""
+    from app.api.v1.profile import _validate_consultation_type
+
+    assert _validate_consultation_type(label) == label
+
+
+@pytest.mark.parametrize("bad", ["123456789", "123-45-6789", "perry@clinic.lan"])
+def test_validate_consultation_type_still_rejects_identifiers(bad: str) -> None:
+    """SSN / email gates stay ON — only the proper-noun heuristic is relaxed."""
+    from app.api.v1.profile import _validate_consultation_type
+
+    with pytest.raises(ValueError) as exc:
+        _validate_consultation_type(bad)
+    assert bad not in str(exc.value)
+
+
+def test_validate_consultation_type_opt_in_proper_noun_still_rejects() -> None:
+    """The heuristic is retained behind the explicit opt-in flag for any
+    future genuinely-per-patient caller."""
+    from app.api.v1.profile import _validate_consultation_type
+
+    with pytest.raises(ValueError):
+        _validate_consultation_type("Marie Gdalevitch", check_proper_noun=True)
+
+
 # ── VisitTypeContext: free-text description (#313 follow-up) ───────────────
 
 

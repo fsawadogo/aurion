@@ -95,7 +95,7 @@ def _assign_context_id(existing: Optional[str]) -> str:
 
 
 def _validate_consultation_type(
-    value: str, *, check_proper_noun: bool = True
+    value: str, *, check_proper_noun: bool = False
 ) -> str:
     """Validate one custom consultation-type label.
 
@@ -105,17 +105,19 @@ def _validate_consultation_type(
     the error.
 
     Posture: SSN / email / 60-char cap gates are always on. The full-name
-    gate is OFF here — Dr. Marie's "LL new pt" / "LL fu" and Dr. Perry's
-    "Breast visit" are multi-word labels by design and the patient-
-    identifier-style full-name heuristic would reject them.
+    gate is OFF — the clinician must be able to name a visit type or
+    context with full descriptive words ("Limb Lengthening Cosmetic",
+    "Breast Reconstruction") so the AI gets the context "as full as
+    possible". The SSN / email / length gates still reject an actual
+    identifier.
 
-    ``check_proper_noun`` (default True) gates the residual "two
-    capitalized word tokens" pattern (e.g. "Jane Doe"). It is turned OFF
-    for *context* labels (#313 follow-up): a context is a reusable
-    clinical sub-mode shared across patients ("Limb Length Discrepancy",
-    "Breast Reconstruction"), not a per-patient field, so a legitimate
-    Title-Case clinical phrase must be allowed. The SSN / email / length
-    gates still apply, so an actual identifier is still rejected.
+    ``check_proper_noun`` (default False as of the pilot "don't restrict"
+    feedback) gates the residual "two capitalized word tokens" pattern
+    (e.g. "Jane Doe"). It is OFF for both visit-type AND context labels —
+    a Title-Case clinical phrase is legitimate shorthand, not a patient
+    identifier, and rejecting it was friction with no PHI upside. The
+    parameter is retained so a future caller can re-enable the heuristic
+    for a genuinely per-patient field without reworking the gate.
     """
     stripped = value.strip()
     if not stripped:

@@ -117,6 +117,32 @@ async def test_acceptsCustomTypes(
     ]
 
 
+@pytest.mark.parametrize(
+    "label",
+    [
+        "Limb Lengthening Cosmetic",  # 3 Title-Case descriptive words
+        "Breast Reconstruction",
+        "Marie Gdalevitch",  # no longer rejected — proper-noun gate is OFF
+    ],
+)
+async def test_acceptsFullWordCustomTypes(
+    app_client, db_session, mock_audit_log, label
+) -> None:
+    """Pilot "don't restrict" feedback: full descriptive multi-word,
+    Title-Case labels persist round-trip. The proper-noun / full-name
+    heuristic is OFF; only SSN / email / length still gate."""
+    _user_id, email = await seed_user(db_session)
+    access = await _login(app_client, email)
+
+    response = await app_client.put(
+        "/api/v1/profile",
+        headers={"Authorization": f"Bearer {access}"},
+        json={"consultation_types": ["new_patient", label]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["consultation_types"] == ["new_patient", label]
+
+
 async def test_stripsWhitespaceAndDedupes(
     app_client, db_session, mock_audit_log
 ) -> None:
@@ -173,15 +199,19 @@ async def test_rejectsTooLongType(
         ("123456789", "SSN"),
         ("123-45-6789", "SSN"),
         ("perry@clinic.lan", "email"),
-        ("Marie Gdalevitch", "full name"),
     ],
 )
 async def test_rejectsPHIShapedTypes(
     app_client, db_session, mock_audit_log, bad_value, expected_phrase
 ) -> None:
-    """AC-4 — SSN / email / full-name shapes are rejected at the
-    Pydantic boundary, and the rejected value never echoes in the
-    response body (``hide_input_in_errors=True``)."""
+    """AC-4 — SSN / email shapes are rejected at the Pydantic boundary,
+    and the rejected value never echoes in the response body
+    (``hide_input_in_errors=True``).
+
+    The proper-noun / full-name heuristic is intentionally OFF now (pilot
+    "don't restrict" feedback) — a Title-Case label like "Marie
+    Gdalevitch" is no longer rejected; see
+    ``test_acceptsFullWordCustomTypes``. SSN / email / length still gate."""
     _user_id, email = await seed_user(db_session)
     access = await _login(app_client, email)
 
