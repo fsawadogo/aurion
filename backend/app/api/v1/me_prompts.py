@@ -73,6 +73,7 @@ from app.modules.prompts import (
 )
 from app.modules.prompts.assembly import (
     PublishedPromptMeta,
+    compose_system_prompt,
     get_active_publications_for,
     resolve_base_system_prompt,
 )
@@ -288,22 +289,30 @@ def _serialize(
     project the freshly-saved (or just-cleared) row through it too, so all
     three endpoints return byte-identical shapes.
     """
-    if user_prompt_text is None and publication is not None:
-        # No personal override, but an admin published a prompt for this
-        # clinician's cohort — that published text is what note-gen uses.
-        active_prompt = publication.text
-        active_source: Literal["override", "published", "default"] = "published"
+    # Source label follows the raw cascade: personal → published → default.
+    active_source: Literal["override", "published", "default"]
+    if user_prompt_text is not None:
+        active_source = "override"
+    elif publication is not None:
+        active_source = "published"
     else:
-        # Personal override (verbatim) or the registry default. The default is
-        # GROUNDED-aware (resolve_base_system_prompt) so the transparency page
-        # shows the boundary that actually runs when Grounded Synthesis Mode is
-        # on — not the raw descriptive registry text (scribe-1).
-        active_prompt = (
-            user_prompt_text
-            if user_prompt_text is not None
-            else resolve_base_system_prompt(prompt.id)
-        )
-        active_source = "override" if user_prompt_text is not None else "default"
+        active_source = "default"
+    # ``active_prompt`` is the EXACT text the LLM receives — composed by the SAME
+    # function as the live note-gen cascade, so under Grounded Synthesis Mode it
+    # includes the grounded boundary + additive override for EVERY source
+    # (override / published / default). This keeps the transparency page from
+    # ever diverging from what note generation sends (scribe-1 review fix).
+    published_text = (
+        publication.text
+        if (user_prompt_text is None and publication is not None)
+        else None
+    )
+    active_prompt = compose_system_prompt(
+        prompt.id,
+        user_prompt=user_prompt_text,
+        template_prompt=None,
+        published=published_text,
+    )
     return PromptResponse(
         id=prompt.id,
         name=prompt.name,
