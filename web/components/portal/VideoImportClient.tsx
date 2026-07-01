@@ -218,7 +218,10 @@ export default function VideoImportClient({
   // no per-clip presign fan-out). Best-effort: a fetch failure leaves the
   // classic single-file UI in place.
   useEffect(() => {
-    if (surface !== "clinician") return;
+    // Fetch on BOTH surfaces — /me/feature-flags is available to any role, and
+    // the admin/eval upload page (/portal/admin/upload) must support multi-clip
+    // too. (The earlier `surface !== "clinician"` guard silently disabled the
+    // multi-file UI for admins, who land on the admin surface via the sidebar.)
     let alive = true;
     getPortalFeatureFlags()
       .then((flags) => {
@@ -228,7 +231,7 @@ export default function VideoImportClient({
     return () => {
       alive = false;
     };
-  }, [surface]);
+  }, []);
 
   /** Validate one candidate file; returns it when acceptable, else sets the
    *  matching error and returns null. */
