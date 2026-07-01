@@ -83,11 +83,17 @@ def _load_examples_file(filename: str) -> list[dict]:
 def get_few_shot_examples(specialty_key: str) -> list[dict]:
     """Few-shot examples for ``specialty_key``. Empty list if none exist.
 
-    Grounded Synthesis Mode (#552, GS-2): when
-    ``feature_flags.grounded_synthesis_enabled`` is ON, the grounded examples
-    (``{key}.grounded.examples.json``) — which model cited A&P SYNTHESIS — are
-    appended to the descriptive set. OFF (the default) returns only the
-    descriptive examples, byte-identical to pre-v3.2.
+    Grounded Synthesis Mode (#552): when
+    ``feature_flags.grounded_synthesis_enabled`` is ON, the grounded example
+    (``{key}.grounded.examples.json``) is used ALONE and REPLACES the
+    descriptive set. It is a FULL note — descriptive history/exam/imaging
+    sections PLUS a synthesized, cited Assessment & Plan — so it teaches
+    everything the descriptive pair did and the grounded synthesis on top. Using
+    one rich example instead of three roughly thirds the few-shot payload,
+    trims cost, and reduces the model's tendency to over-generate (which had
+    pushed Stage 1 toward the note-gen timeout). Falls back to the descriptive
+    set if no grounded example exists for the specialty. OFF (the default)
+    returns only the descriptive examples, byte-identical to pre-v3.2.
     """
     descriptive = _load_examples_file(f"{specialty_key}.examples.json")
     if not get_config().feature_flags.grounded_synthesis_enabled:
@@ -95,7 +101,7 @@ def get_few_shot_examples(specialty_key: str) -> list[dict]:
         # to pre-v3.2 (the OFF path must not change existing behaviour).
         return descriptive
     grounded = _load_examples_file(f"{specialty_key}.grounded.examples.json")
-    return descriptive + grounded if grounded else descriptive
+    return grounded if grounded else descriptive
 
 
 def render_examples_block(examples: list[dict]) -> str:
