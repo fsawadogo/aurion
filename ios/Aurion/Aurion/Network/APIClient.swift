@@ -105,12 +105,16 @@ final class APIClient: Sendable {
         sessionId: String,
         templateKey: String? = nil,
         customTemplateId: String? = nil,
-        outputLanguage: String? = nil
+        outputLanguage: String? = nil,
+        encounterContext: String? = nil
     ) async throws -> RegenerateNoteResult {
         var body: [String: Any] = [:]
         if let templateKey { body["template_key"] = templateKey }
         if let customTemplateId { body["custom_template_id"] = customTemplateId }
         if let outputLanguage { body["output_language"] = outputLanguage }
+        // Sent even when empty so the server can CLEAR the context; nil (unset)
+        // leaves the stored context untouched.
+        if let encounterContext { body["encounter_context"] = encounterContext }
         return try await post(
             path: "/sessions/\(sessionId)/regenerate-note", body: body
         )

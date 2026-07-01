@@ -952,6 +952,10 @@
 "noteOptions.regenerating" = "Regenerating note\U2026";
 "noteOptions.regenerated" = "Note regenerated";
 "noteOptions.failedShort" = "Couldn\U2019t regenerate";
+"noteOptions.changeContext" = "Change context";
+"noteOptions.contextHint" = "Add or update what this encounter covered. The note regenerates focused on it \U2014 this is framing, not a recorded finding.";
+"noteOptions.contextPlaceholder" = "e.g. Breast augmentation consult; patient also asked about liposuction";
+"noteOptions.regenerateAction" = "Regenerate";
 
 /* ── App Lock (security) ──────────────────────────────── */
 "profile.sectionSecurity" = "Security";
