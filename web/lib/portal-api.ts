@@ -32,6 +32,10 @@ import type {
   PhysicianMacroUpdate,
   PhysicianProfile,
   PhysicianProfileUpdate,
+  ScheduleEntry,
+  ScheduleEntryCreate,
+  ScheduleEntryStatus,
+  ScheduleEntryUpdate,
   Session as SessionRow,
   Stage2Status,
   TemplateAuthoringSession,
@@ -519,6 +523,41 @@ export async function updateMyMacro(
 
 export async function deleteMyMacro(macroId: string): Promise<void> {
   await fetchWithAuth(`/api/v1/me/macros/${macroId}`, { method: "DELETE" });
+}
+
+/* ─── Schedule (per-clinician patient schedule, #603) ─────────────────────── */
+
+export async function listMySchedule(
+  status?: ScheduleEntryStatus,
+): Promise<ScheduleEntry[]> {
+  const q = status ? `?status=${encodeURIComponent(status)}` : "";
+  const r = await fetchWithAuth(`/api/v1/me/schedule${q}`);
+  return r.json();
+}
+
+export async function addMyScheduleEntry(
+  body: ScheduleEntryCreate,
+): Promise<ScheduleEntry> {
+  const r = await fetchWithAuth("/api/v1/me/schedule", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+export async function updateMyScheduleEntry(
+  entryId: string,
+  body: ScheduleEntryUpdate,
+): Promise<ScheduleEntry> {
+  const r = await fetchWithAuth(`/api/v1/me/schedule/${entryId}`, {
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+  return r.json();
+}
+
+export async function removeMyScheduleEntry(entryId: string): Promise<void> {
+  await fetchWithAuth(`/api/v1/me/schedule/${entryId}`, { method: "DELETE" });
 }
 
 /* ─── Bulk export ────────────────────────────────────────────────────────── */

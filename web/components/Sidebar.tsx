@@ -3,6 +3,7 @@
 import {
   Activity,
   BarChart3,
+  CalendarDays,
   ChevronLeft,
   ChevronRight,
   CircleUser,
@@ -106,6 +107,7 @@ const navigation: {
   // activity aren't an admin surface. Admins get their account essentials
   // (locale, theme, sign out) from the sidebar footer instead.
   { tKey: "dashboard",  href: "/portal/dashboard",  icon: BarChart3, roles: ["CLINICIAN"] },
+  { tKey: "schedule",   href: "/portal/schedule",   icon: CalendarDays, roles: ["CLINICIAN"] },
   { tKey: "myNotes",    href: "/portal/notes",      icon: FileText,  roles: ["CLINICIAN"] },
   { tKey: "uploadEncounter", href: "/portal/upload", icon: UploadCloud, roles: ["CLINICIAN"] },
   { tKey: "templates",  href: "/portal/templates",  icon: LayoutGrid, roles: ["CLINICIAN"] },

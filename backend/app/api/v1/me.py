@@ -22,11 +22,12 @@ import io
 import logging
 import uuid
 import zipfile
+from datetime import datetime
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile, status
 from fastapi.responses import StreamingResponse
-from pydantic import BaseModel, Field, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -60,6 +61,7 @@ from app.modules.macros import service as macros_service
 from app.modules.note_gen.service import get_latest_note, is_note_approved
 from app.modules.orders import service as orders_service
 from app.modules.patient_summary import service as patient_summary_service
+from app.modules.schedule import service as schedule_service
 from app.modules.template_authoring import service as template_authoring_service
 
 logger = logging.getLogger("aurion.api.me")
@@ -1125,6 +1127,173 @@ async def delete_my_macro(
         actor_id=str(user.user_id),
         macro_id=macro_id_str,
         shortcut=shortcut,
+    )
+    await db.commit()
+
+
+# ── /me/schedule — per-clinician patient schedule (#603) ──────────────────
+
+
+class ScheduleEntryResponse(BaseModel):
+    id: str
+    # Decrypted for the owning clinician only — this router is CLINICIAN-
+    # scoped and every row is fetched under `clinician_id == user.user_id`.
+    patient_identifier: str
+    status: str
+    scheduled_for: Optional[str] = None
+    note: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class ScheduleEntryCreateRequest(BaseModel):
+    # `hide_input_in_errors` keeps a rejected identifier value out of any
+    # 422 body / Sentry breadcrumb (the value is itself PHI). Format is
+    # gated in the service (`validate_patient_identifier`) so the rule has
+    # a single source of truth and stays unit-testable.
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    patient_identifier: str = Field(..., min_length=1)
+    scheduled_for: Optional[datetime] = None
+    note: Optional[str] = None
+
+
+class ScheduleEntryUpdateRequest(BaseModel):
+    """Partial update. Each field is optional; only set fields are touched.
+    `clear_scheduled_for` / `clear_note` blank the column (you can't use
+    `null` to mean that — null already means no-change)."""
+
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    status: Optional[str] = None
+    scheduled_for: Optional[datetime] = None
+    note: Optional[str] = None
+    clear_scheduled_for: bool = False
+    clear_note: bool = False
+
+
+def _to_schedule_response(row) -> ScheduleEntryResponse:
+    return ScheduleEntryResponse(
+        id=str(row.id),
+        patient_identifier=schedule_service.decrypt_identifier(row),
+        status=row.status,
+        scheduled_for=row.scheduled_for.isoformat() if row.scheduled_for else None,
+        note=row.note,
+        created_at=row.created_at.isoformat(),
+        updated_at=row.updated_at.isoformat(),
+    )
+
+
+@router.get("/schedule", response_model=list[ScheduleEntryResponse])
+async def list_my_schedule(
+    status_filter: Optional[str] = Query(None, alias="status"),
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> list[ScheduleEntryResponse]:
+    try:
+        rows = await schedule_service.list_for_owner(
+            user.user_id, db, status_filter=status_filter
+        )
+    except schedule_service.ScheduleError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    return [_to_schedule_response(r) for r in rows]
+
+
+@router.post(
+    "/schedule",
+    response_model=ScheduleEntryResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_my_schedule_entry(
+    body: ScheduleEntryCreateRequest,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> ScheduleEntryResponse:
+    try:
+        row = await schedule_service.create_for_owner(
+            user.user_id,
+            body.patient_identifier,
+            db,
+            scheduled_for=body.scheduled_for,
+            note=body.note,
+        )
+    except schedule_service.ScheduleIdentifierError as exc:
+        # Reason-only; the rejected identifier value is never echoed.
+        raise HTTPException(status_code=422, detail=str(exc))
+    except schedule_service.ScheduleError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    entry_id = str(row.id)
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=entry_id,
+        event_type=AuditEventType.SCHEDULE_ENTRY_ADDED,
+        actor_id=str(user.user_id),
+        entry_id=entry_id,
+    )
+    await db.commit()
+    return _to_schedule_response(row)
+
+
+@router.patch("/schedule/{entry_id}", response_model=ScheduleEntryResponse)
+async def update_my_schedule_entry(
+    entry_id: uuid.UUID,
+    body: ScheduleEntryUpdateRequest,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> ScheduleEntryResponse:
+    row = await schedule_service.get_owned(entry_id, user.user_id, db)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Schedule entry not found")
+    status_changed = body.status is not None and body.status != row.status
+    try:
+        row = await schedule_service.update_owned(
+            row,
+            db,
+            status=body.status,
+            scheduled_for=body.scheduled_for,
+            note=body.note,
+            clear_scheduled_for=body.clear_scheduled_for,
+            clear_note=body.clear_note,
+        )
+    except schedule_service.ScheduleError as exc:
+        msg = str(exc)
+        status_code = 409 if "cannot change status" in msg else 400
+        raise HTTPException(status_code=status_code, detail=msg)
+
+    if status_changed:
+        audit = get_audit_log_service()
+        await audit.write_event(
+            session_id=str(row.id),
+            event_type=AuditEventType.SCHEDULE_ENTRY_STATUS_CHANGED,
+            actor_id=str(user.user_id),
+            entry_id=str(row.id),
+            status=row.status,
+        )
+    await db.commit()
+    return _to_schedule_response(row)
+
+
+@router.delete(
+    "/schedule/{entry_id}", status_code=status.HTTP_204_NO_CONTENT
+)
+async def delete_my_schedule_entry(
+    entry_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    row = await schedule_service.get_owned(entry_id, user.user_id, db)
+    if row is None:
+        raise HTTPException(status_code=404, detail="Schedule entry not found")
+    entry_id_str = str(row.id)
+    await schedule_service.delete_owned(row, db)
+
+    audit = get_audit_log_service()
+    await audit.write_event(
+        session_id=entry_id_str,
+        event_type=AuditEventType.SCHEDULE_ENTRY_REMOVED,
+        actor_id=str(user.user_id),
+        entry_id=entry_id_str,
     )
     await db.commit()
 

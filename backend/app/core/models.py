@@ -1002,6 +1002,65 @@ class PhysicianMacroModel(Base):
     )
 
 
+class ScheduleEntryModel(Base):
+    """A patient the clinician has queued onto their personal schedule.
+
+    Owner-scoped like macros (every query filters on ``clinician_id``).
+    Operational, not clinical: it holds who the clinician plans to see,
+    an optional slot time, an optional short note, and a lifecycle
+    status. It is NOT a calendar/booking system — ``scheduled_for`` is a
+    single optional timestamp with no conflict detection or recurrence.
+
+    PHI posture mirrors ``SessionModel``: the patient identifier is
+    stored KMS-encrypted (``patient_identifier_encrypted``) plus a
+    deterministic HMAC (``patient_identifier_hash``) for indexed lookup.
+    The plaintext identifier never lands in a column, a log, or an audit
+    row; it is decrypted only in the owning clinician's API response.
+    ``note`` is PHI-adjacent free text — encrypted at rest via the RDS
+    volume, never logged, never audited.
+    """
+
+    __tablename__ = "schedule_entries"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    clinician_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    # PHI — same KMS-encrypted + HMAC-hashed pair as SessionModel. Reading
+    # the row alone never yields plaintext; decryption goes through
+    # app.core.kms_encryption.decrypt_str.
+    patient_identifier_encrypted: Mapped[bytes] = mapped_column(
+        LargeBinary, nullable=False
+    )
+    patient_identifier_hash: Mapped[bytes] = mapped_column(
+        LargeBinary, nullable=False, index=True
+    )
+    # Lifecycle status. Stored as a plain string (like `specialty` on
+    # macros) with service-layer validation of the allowed set + legal
+    # transitions, rather than a native PG enum type — keeps the migration
+    # additive and the value set easy to evolve.
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="scheduled"
+    )
+    scheduled_for: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    note: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class PatientSummaryModel(Base):
     """Plain-language after-visit summary derived from an approved note.
 

@@ -72,6 +72,7 @@
     "signOut": "Sign out",
     "nav": {
       "dashboard": "Dashboard",
+      "schedule": "Schedule",
       "sessions": "Sessions",
       "auditLog": "Audit Log",
       "phiMasking": "PHI Masking",
@@ -715,6 +716,50 @@
     "emergency_medicine": "Emergency Medicine",
     "general": "General",
     "all": "All specialties"
+  },
+  "Schedule": {
+    "eyebrow": "Clinician portal",
+    "title": "Schedule",
+    "description": "Queue the patients you plan to see, with an optional time and a short note. Move each through scheduled → in progress → completed as your clinic runs.",
+    "newEntry": "Add patient",
+    "loadError": "Failed to load your schedule.",
+    "deleteError": "Remove failed.",
+    "deleteConfirm": "Remove \"{patient}\" from your schedule? This can't be undone (the audit log keeps a record).",
+    "emptyTitle": "Your schedule is empty. Add the patients you plan to see to keep your clinic organized.",
+    "addFirst": "Add your first patient",
+    "editAria": "Edit",
+    "deleteAria": "Remove",
+    "filterAria": "Filter by status",
+    "filterAll": "All",
+    "status": {
+      "scheduled": "Scheduled",
+      "in_progress": "In progress",
+      "completed": "Completed",
+      "cancelled": "Cancelled"
+    },
+    "statusChangeAria": "Change status",
+    "statusChangePrompt": "Move to…",
+    "statusUpdateError": "Couldn't update status.",
+    "editor": {
+      "newTitle": "Add patient",
+      "editTitle": "Edit entry",
+      "closeAria": "Close",
+      "identifierLabel": "Patient identifier",
+      "identifierPlaceholder": "MRN or encounter id",
+      "identifierAria": "Patient identifier",
+      "identifierHint": "Use the clinic identifier (MRN / encounter id) — not the patient's name. It is encrypted and only ever shown back to you.",
+      "identifierLocked": "The patient identifier can't be changed after an entry is created.",
+      "slotLabel": "Time (optional)",
+      "slotAria": "Scheduled time",
+      "slotHint": "An optional slot time. There's no calendar or double-booking check — it's just for your reading order.",
+      "noteLabel": "Note (optional)",
+      "notePlaceholder": "e.g. follow-up, pre-op consult…",
+      "noteAria": "Note",
+      "noteHint": "Short free text. Max 500 characters. Kept out of the audit log.",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saveError": "Save failed"
+    }
   },
   "Macros": {
     "eyebrow": "Clinician portal",
