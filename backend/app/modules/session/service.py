@@ -111,6 +111,90 @@ async def resolve_context_template_key(
     consultation_type: Optional[str],
     context_id: Optional[str],
 ) -> tuple[Optional[str], Optional[uuid.UUID], bool]:
+    """Resolve the Stage-1 template SNAPSHOT for a session.
+
+    Precedence, first hit wins (#314 / #318 / #577 / visit-type map):
+      1. the chosen context's pin — built-in ``template_key`` or custom
+         ``template_ref`` (``_resolve_clinician_context_template``);
+      2. the visit type's clinician DEFAULT context (``is_default``, #577) —
+         also ``_resolve_clinician_context_template``;
+      3. the ORG default for the visit type (admin-set map,
+         ``_resolve_org_default_template``);
+      4. the session ``specialty`` default — ``(None, None)``.
+
+    Returns ``(template_key, custom_template_id, coerced_stale)``; at most one of
+    ``template_key`` / ``custom_template_id`` is non-None. Never raises — every
+    "can't resolve" path degrades to the specialty default. ``coerced_stale``
+    flags that a clinician pin was dropped because it no longer resolves (for a
+    count-only audit note), whether or not the org default then filled in.
+    """
+    tk, ctid, coerced = await _resolve_clinician_context_template(
+        db, clinician_id, consultation_type, context_id
+    )
+    if tk is not None or ctid is not None:
+        return tk, ctid, coerced
+    # Clinician layer produced no template -> org default (needs the visit type).
+    if consultation_type:
+        org_tk, org_ctid = await _resolve_org_default_template(
+            db, consultation_type
+        )
+        if org_tk is not None or org_ctid is not None:
+            return org_tk, org_ctid, coerced
+    # Nothing pinned anywhere -> specialty default (byte-for-byte back-compat).
+    return None, None, coerced
+
+
+async def _resolve_org_default_template(
+    db: AsyncSession, consultation_type: str
+) -> tuple[Optional[str], Optional[uuid.UUID]]:
+    """The org-wide default template for ``consultation_type``, re-validated.
+
+    Mirrors the clinician-pin validation: a built-in ``template_key`` must still
+    be an available template; a ``custom_template_id`` must still resolve to a
+    SHARED (org-usable) custom template. Anything stale degrades to
+    ``(None, None)`` so the caller falls through to the specialty default. Never
+    raises.
+    """
+    from app.modules.note_gen.org_visit_type_templates import get_org_default
+
+    row = await get_org_default(db, consultation_type)
+    if row is None:
+        return None, None
+
+    if row.template_key:
+        from app.modules.note_gen.service import list_available_templates
+
+        if row.template_key in list_available_templates():
+            return row.template_key, None
+        logger.info(
+            "Org default template_key for visit_type=%s coerced to specialty "
+            "default (no longer an available template)",
+            consultation_type,
+        )
+        return None, None
+
+    if row.custom_template_id:
+        from app.modules.custom_templates.service import get_shared
+
+        shared = await get_shared(row.custom_template_id, db)
+        if shared is not None:
+            return None, shared.id
+        logger.info(
+            "Org default custom_template_id for visit_type=%s coerced to "
+            "specialty default (no longer a shared template)",
+            consultation_type,
+        )
+        return None, None
+
+    return None, None
+
+
+async def _resolve_clinician_context_template(
+    db: AsyncSession,
+    clinician_id: uuid.UUID,
+    consultation_type: Optional[str],
+    context_id: Optional[str],
+) -> tuple[Optional[str], Optional[uuid.UUID], bool]:
     """Resolve the Stage-1 template SNAPSHOT for a chosen context (#314 / #318).
 
     Given the calling clinician + the visit type (``consultation_type``)

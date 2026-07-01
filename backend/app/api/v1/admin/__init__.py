@@ -29,6 +29,7 @@ from app.api.v1.admin import (
     templates,
     users,
     video_import,
+    visit_type_templates,
 )
 
 router = APIRouter()
@@ -50,3 +51,4 @@ router.include_router(analytics.router)
 router.include_router(video_import.router)
 router.include_router(prompt_studio.router)
 router.include_router(shared_templates.router)
+router.include_router(visit_type_templates.router)

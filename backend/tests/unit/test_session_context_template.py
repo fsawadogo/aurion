@@ -63,6 +63,20 @@ def available_templates(monkeypatch):
     return _AVAILABLE
 
 
+@pytest.fixture(autouse=True)
+def _no_org_default(monkeypatch):
+    """Isolate these tests to the clinician layer. ``resolve_context_template_key``
+    now consults an org-wide visit-type default when the clinician resolves
+    nothing; with no org row set that layer is a no-op, so we stub it to
+    ``(None, None)`` here (its own behaviour is covered by
+    ``test_org_visit_type_templates.py``) and every fallback path lands on the
+    specialty default exactly as before."""
+    monkeypatch.setattr(
+        "app.modules.session.service._resolve_org_default_template",
+        AsyncMock(return_value=(None, None)),
+    )
+
+
 # ── resolve_context_template_key — resolution order + snapshot ───────────────
 
 
