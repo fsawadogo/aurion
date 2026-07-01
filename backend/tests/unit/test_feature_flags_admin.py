@@ -76,6 +76,7 @@ def _all_flags_response(**overrides) -> FeatureFlagsResponse:
         "media_review_retention_enabled": False,
         "measurement_enabled": False,
         "video_import_enabled": False,
+        "multi_clip_import_enabled": False,
         "video_import_drop_zero_face_frames": True,
         "specialty_style_in_prompt_enabled": False,
         "prompt_studio_enabled": False,

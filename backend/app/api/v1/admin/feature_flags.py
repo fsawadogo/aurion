@@ -85,6 +85,9 @@ class FeatureFlagsResponse(BaseModel):
     media_review_retention_enabled: bool
     measurement_enabled: bool
     video_import_enabled: bool
+    # Defaulted (like grounded_synthesis_enabled) so a save from a portal build
+    # that predates this field can't 422 — resolves to the safe OFF value.
+    multi_clip_import_enabled: bool = False
     video_import_drop_zero_face_frames: bool
     specialty_style_in_prompt_enabled: bool
     # Grounded Synthesis Mode (v3.2, #552). Defaulted here (unlike the other,
@@ -186,6 +189,7 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         ),
         measurement_enabled=cfg_feature_flags.measurement_enabled,
         video_import_enabled=cfg_feature_flags.video_import_enabled,
+        multi_clip_import_enabled=cfg_feature_flags.multi_clip_import_enabled,
         video_import_drop_zero_face_frames=(
             cfg_feature_flags.video_import_drop_zero_face_frames
         ),
