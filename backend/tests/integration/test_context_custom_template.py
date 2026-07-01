@@ -109,6 +109,38 @@ async def test_putAcceptsOwnedCustomRef(
     assert row["template_key"] is None
 
 
+async def test_putAcceptsSharedCustomRef(
+    app_client, db_session, mock_audit_log
+) -> None:
+    """A clinician may pin a SHARED org/Library template they don't own — that's
+    the Library's purpose, and it mirrors the note-gen resolve path
+    (get_owned_or_shared). A non-owned PRIVATE ref stays rejected (test above)."""
+    user_id, email = await seed_user(db_session)
+    shared = await custom_templates_service.create_for_owner(
+        uuid.uuid4(),
+        _template_payload("shared_org_ref"),
+        db_session,
+        is_shared=True,
+    )
+    await db_session.flush()
+    shared_ref = str(shared.id)
+    access = await _login(app_client, email)
+
+    response = await app_client.put(
+        "/api/v1/profile",
+        headers={"Authorization": f"Bearer {access}"},
+        json={
+            "contexts_per_visit_type": {
+                "new_patient": [{"label": "LL", "template_ref": shared_ref}]
+            }
+        },
+    )
+    assert response.status_code == 200, response.text
+    row = response.json()["contexts_per_visit_type"]["new_patient"][0]
+    assert row["template_ref"] == shared_ref
+    assert row["template_key"] is None
+
+
 # ── get_owned_or_shared: owned OR shared, never another's private (tpl-04) ────
 
 
