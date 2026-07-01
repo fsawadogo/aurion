@@ -15,7 +15,7 @@ Last seeded: 2026-05-14. Last updated: 2026-07-01 (added Cohort 5 — Grounded A
 ### Cohort 5 — Grounded AI Scribe (CURRENT PRIORITY) — see memory/grounded-scribe-gap-map.md; epic #626
 Goal: create template → map to visit type → pick visit type → record → **polished grounded (non-descriptive) note**. Ordered top-to-bottom = work order. #621/#622 change the AI-output boundary → sanctioned Grounded Synthesis path, dark behind `grounded_synthesis_enabled` + GS-9 sign-off (#551).
 - [ ] #620 scribe-0 · Retire descriptive note-gen publication + de-conflict export disclaimers — 1d — lane: backend (+iOS disclaimer) — no blockers — NOTE: operational half (un-publish in Prompt Studio) is a human/portal action, not a loop task
-- [ ] #621 scribe-1 · Grounded Synthesis as a true mode (boundary always-on + additive overrides + missing-clinician + transparency + parse-time source_id) — 3d — lane: backend — no blockers
+- [x] #621 scribe-1 · Grounded Synthesis as a true mode (boundary always-on + additive overrides + missing-clinician + transparency) — MERGED 2026-07-01 (PR #627 + review-fix #628); parse-time source_id moved to #624
 - [ ] #622 scribe-2 · Grounded-voice hardening (grounded specialty prefix, mandate synthesis, descriptive/thinning banlist) — 3d — lane: backend — depends on #621
 - [ ] #624 scribe-4 · Note completeness + grounding integrity (stop_reason truncation, max_tokens, non-optional quote-support) — 3d — lane: backend — depends on #621
 - [ ] #625 scribe-5 · Grounded scribe render/export (selectable text, hide citations for prod, attestation, A&P layout) — 8d — lane: ios (+web/backend export) — depends on #620
