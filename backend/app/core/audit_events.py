@@ -148,6 +148,13 @@ class AuditEventType(StrEnum):
     # kwargs (never the context id, template name, or visit-type label).
     SESSION_TEMPLATE_KEY_COERCED = "session_template_key_coerced"
     CONFLICT_RESOLVED = "conflict_resolved"
+    # Supervisory sign-off of ANOTHER clinician's note from the cross-clinician
+    # Patient Chart (#604). Distinct from FULL_NOTE_DELIVERED (the owning
+    # clinician approving their own): this records an elevated
+    # CLINICAL_ADMIN/ADMIN validating on behalf of the author, so the trail
+    # keeps both the actor and the target clinician. PHI-free — UUIDs + the
+    # approved version int only, never note content or the patient identifier.
+    NOTE_VALIDATED = "note_validated"
 
     # ── Frames / masking ─────────────────────────────────────────────────
     FRAME_UPLOADED = "frame_uploaded"
@@ -613,6 +620,9 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.NOTE_VERSION_CREATED: frozenset({"version", "sections_edited"}),
     AuditEventType.TEMPLATE_CHANGED: frozenset({"new_specialty"}),
     # Count-only — no kwargs (never the context id / template / label).
+    AuditEventType.NOTE_VALIDATED: frozenset(
+        {"actor_id", "target_clinician_id", "version"}
+    ),
     AuditEventType.SESSION_TEMPLATE_KEY_COERCED: frozenset(),
     AuditEventType.CONFLICT_RESOLVED: frozenset({"claim_id", "action", "new_version"}),
     # Frames / masking

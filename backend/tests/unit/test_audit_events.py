@@ -86,6 +86,8 @@ EXPECTED_VALUES: dict[str, str] = {
     # specialty default (#314, B2). Count-only audit row.
     "SESSION_TEMPLATE_KEY_COERCED": "session_template_key_coerced",
     "CONFLICT_RESOLVED": "conflict_resolved",
+    # Supervisory sign-off from the cross-clinician Patient Chart (#604).
+    "NOTE_VALIDATED": "note_validated",
     # Frames / masking
     "FRAME_UPLOADED": "frame_uploaded",
     "SCREEN_FRAME_PROCESSED": "screen_frame_processed",

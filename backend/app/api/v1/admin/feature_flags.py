@@ -99,6 +99,11 @@ class FeatureFlagsResponse(BaseModel):
     prompt_studio_enabled: bool
     prompt_studio_roles: list[str]
     clinician_prompts_note_only: bool
+    # Cross-clinician Patient Chart (#604). Defaulted (like
+    # grounded_synthesis_enabled) so a save from a portal build that predates
+    # this field can't 422 — and while the feature is dark, a missing field
+    # resolves to the safe OFF value.
+    cross_clinician_chart_enabled: bool = False
 
 
 class UpdateFeatureFlagsResponse(BaseModel):
@@ -201,6 +206,9 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         # Copy the list so the response never aliases the live config's.
         prompt_studio_roles=list(cfg_feature_flags.prompt_studio_roles),
         clinician_prompts_note_only=cfg_feature_flags.clinician_prompts_note_only,
+        cross_clinician_chart_enabled=(
+            cfg_feature_flags.cross_clinician_chart_enabled
+        ),
     )
 
 

@@ -282,6 +282,14 @@ class FeatureFlagsConfig(BaseModel):
     # (ADMIN / EVAL_TEAM / COMPLIANCE_OFFICER) always see the full catalog for
     # transparency. Display scope only — never changes what a prompt resolves to.
     clinician_prompts_note_only: bool = False
+    # ── Cross-clinician Patient Chart (#604) ──────────────────────────────
+    # Master gate for the elevated-role Patient Chart: the aggregated
+    # "every encounter for this patient, across all staff" view + the
+    # supervisory note-validate action, both CLINICAL_ADMIN/ADMIN only.
+    # Ships DARK — every /admin/patients/* route 404s while False, so no
+    # cross-clinician PHI is reachable until compliance flips it. Same
+    # opt-in posture as `video_import_enabled` / `grounded_synthesis_enabled`.
+    cross_clinician_chart_enabled: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────

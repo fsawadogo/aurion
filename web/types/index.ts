@@ -136,6 +136,22 @@ export interface PatientSessionMatch {
   created_at: string;
 }
 
+/** One encounter row from GET /api/v1/admin/patients/{identifier}/encounters —
+ * the cross-clinician Patient Chart (#604). Like PatientSessionMatch but
+ * spans all staff, so it carries clinician attribution + note status for the
+ * supervisory validate action. Elevated-role + flag-gated. */
+export interface AdminPatientEncounter {
+  session_id: string;
+  clinician_id: string;
+  clinician_name: string;
+  specialty: string;
+  state: SessionState;
+  created_at: string;
+  note_version: number;
+  note_stage: number;
+  is_approved: boolean;
+}
+
 /** Per-physician text shortcut → expansion. Typing the shortcut (e.g.
  * "/ros-cv") in a note edit field expands to the body. Owner-scoped
  * server-side; the client never sees another clinician's macros. */

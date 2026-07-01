@@ -21,6 +21,7 @@ from app.api.v1.admin import (
     feature_flags,
     media,
     metrics,
+    patient_chart,
     probe,
     prompt_studio,
     providers,
@@ -50,5 +51,6 @@ router.include_router(media.router)
 router.include_router(analytics.router)
 router.include_router(video_import.router)
 router.include_router(prompt_studio.router)
+router.include_router(patient_chart.router)
 router.include_router(shared_templates.router)
 router.include_router(visit_type_templates.router)

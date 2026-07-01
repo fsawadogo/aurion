@@ -94,7 +94,8 @@
       "alerts": "Alertes",
       "complianceReports": "Rapports de conformité",
       "uploadEncounter": "Téléverser une vidéo",
-      "evalUpload": "Téléversement éval"
+      "evalUpload": "Téléversement éval",
+      "patientChart": "Dossier patient"
     },
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
@@ -448,6 +449,36 @@
       "emptyHint": "Les séances enregistrées pour ce numéro de dossier, MRN ou RAMQ apparaîtront ici."
     },
     "loadFailed": "Impossible de charger les consultations pour ce patient.",
+    "retry": "Réessayer"
+  },
+  "AdminPatientChart": {
+    "eyebrow": "Dossier patient",
+    "title": "Dossier patient",
+    "searchTitle": "Dossier patient",
+    "searchSubtitle": "Consultez toutes les consultations d'un patient, tous cliniciens confondus.",
+    "searchLabel": "Identifiant du patient",
+    "searchPlaceholder": "Numéro de dossier, NAM ou RAMQ…",
+    "searchAction": "Ouvrir le dossier",
+    "searchHint": "L'identifiant est comparé exactement et n'est jamais journalisé. Seules les consultations associées à cet identifiant sont affichées.",
+    "backToSearch": "Dossier patient",
+    "refresh": "Actualiser",
+    "subtitle": {
+      "summary": "{count, plural, one {# consultation} other {# consultations}} tous cliniciens confondus",
+      "none": "Aucune consultation enregistrée pour cet identifiant."
+    },
+    "encounters": {
+      "title": "Toutes les consultations",
+      "empty": "Aucune consultation pour cet identifiant",
+      "emptyHint": "Les consultations enregistrées par tout clinicien pour ce numéro de dossier, NAM ou RAMQ apparaîtront ici."
+    },
+    "validate": "Valider",
+    "validating": "Validation…",
+    "validatedBadge": "Validée",
+    "validateConflict": "Résolvez les conflits visuels de cette note avant de la valider.",
+    "validateFailed": "Impossible de valider cette note.",
+    "notEnabledTitle": "Le dossier patient n'est pas activé",
+    "notEnabledBody": "Le dossier patient inter-cliniciens reste désactivé jusqu'à l'approbation de la conformité. Un administrateur peut l'activer sur la page Indicateurs de fonctionnalités.",
+    "loadFailed": "Impossible de charger le dossier de ce patient.",
     "retry": "Réessayer"
   },
   "AIPrompts": {

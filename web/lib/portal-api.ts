@@ -15,6 +15,7 @@
 import { fetchWithAuth } from "@/lib/api";
 import type {
   AudioReplayUrlResponse,
+  AdminPatientEncounter,
   AuditFilters,
   CodingSuggestion,
   CustomTemplate,
@@ -261,6 +262,33 @@ export async function listMySessionsByPatientIdentifier(
 ): Promise<PatientSessionMatch[]> {
   const r = await fetchWithAuth(
     `/api/v1/me/patients/${encodeURIComponent(identifier)}/sessions`,
+  );
+  return r.json();
+}
+
+/** GET /api/v1/admin/patients/{identifier}/encounters — the cross-clinician
+ * Patient Chart (#604): every encounter tagged with the identifier ACROSS
+ * all staff, with clinician attribution + note status. Elevated-role
+ * (CLINICAL_ADMIN/ADMIN) + flag-gated on the backend — 404s while the
+ * `cross_clinician_chart_enabled` flag is OFF (surfaced as ApiError 404). */
+export async function listAdminPatientEncounters(
+  identifier: string,
+): Promise<AdminPatientEncounter[]> {
+  const r = await fetchWithAuth(
+    `/api/v1/admin/patients/${encodeURIComponent(identifier)}/encounters`,
+  );
+  return r.json();
+}
+
+/** POST /api/v1/admin/patients/notes/{sessionId}/validate — supervisory
+ * sign-off of ANY clinician's note from the Patient Chart (#604). 409 when
+ * the note still has unresolved Stage 2 conflicts (#606 invariant). */
+export async function validatePatientNote(
+  sessionId: string,
+): Promise<{ session_id: string; stage: number; version: number; approved: boolean; message: string }> {
+  const r = await fetchWithAuth(
+    `/api/v1/admin/patients/notes/${sessionId}/validate`,
+    { method: "POST" },
   );
   return r.json();
 }
@@ -987,6 +1015,9 @@ export async function getPortalFeatureFlags(): Promise<{
   /** When true, the video-import page lets the clinician upload several
    *  sequential clips of one encounter (stitched, in order, into one note). */
   multi_clip_import_enabled: boolean;
+  /** Cross-clinician Patient Chart (#604) — gates the elevated-role nav
+   *  entry + page. Default OFF until compliance sign-off. */
+  cross_clinician_chart_enabled: boolean;
 }> {
   const r = await fetchWithAuth("/api/v1/me/feature-flags");
   return r.json();
