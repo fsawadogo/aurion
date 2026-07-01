@@ -33,7 +33,9 @@ enum NotePDFRenderer {
     static func render(
         note: NoteResponse,
         specialtyTitle: String,
-        dateString: String
+        dateString: String,
+        patientAgeSex: String = "",
+        encounterType: String = ""
     ) throws -> Data {
         // Build the SwiftUI document the same way SessionNoteView does,
         // pinned to the page's content width so ImageRenderer lays it
@@ -43,6 +45,8 @@ enum NotePDFRenderer {
             note: note,
             specialtyTitle: specialtyTitle,
             dateString: dateString,
+            patientAgeSex: patientAgeSex,
+            encounterType: encounterType,
             forPDF: true
         )
         .frame(width: contentWidth, alignment: .topLeading)

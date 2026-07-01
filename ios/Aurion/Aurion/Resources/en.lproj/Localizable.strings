@@ -920,6 +920,12 @@
 "noteDoc.status.pending" = "Pending";
 "noteDoc.status.empty" = "Empty";
 "noteDoc.status.failed" = "Failed";
+"noteDoc.metaDate" = "Date";
+"noteDoc.metaPatient" = "Patient Age / Sex";
+"noteDoc.metaEncounter" = "Encounter Type";
+"noteDoc.metaNotDocumented" = "Not documented";
+"noteDoc.encounterInPerson" = "In-person consultation";
+"noteDoc.encounterDictation" = "Dictation";
 
 /* ── Session Note ─────────────────────────────────────── */
 "sessionNote.noNote" = "No note available";
@@ -932,6 +938,10 @@
 "sessionNote.exportFormatTitle" = "Export note as";
 "sessionNote.exportPDF" = "PDF";
 "sessionNote.exportDOCX" = "Word document";
+"sessionNote.ageSexTitle" = "Patient age / sex";
+"sessionNote.ageSexMessage" = "Optional — appears in the document header. Leave blank to show \"Not documented\".";
+"sessionNote.ageSexPlaceholder" = "e.g. 46-year-old female";
+"sessionNote.ageSexExport" = "Export";
 
 /* ── App Lock (security) ──────────────────────────────── */
 "profile.sectionSecurity" = "Security";
