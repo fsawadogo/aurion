@@ -104,7 +104,7 @@ def _grounded_note_gen(prompt_id: str) -> bool:
     )
 
 
-def _compose_system_prompt(
+def compose_system_prompt(
     prompt_id: str,
     user_prompt: Optional[str],
     template_prompt: Optional[str],
@@ -112,25 +112,36 @@ def _compose_system_prompt(
 ) -> str:
     """Resolve the final system prompt from the override cascade.
 
-    Grounded Synthesis Mode (note_generation + flag ON): the grounded boundary
-    is ALWAYS the base; the most-specific override (personal → template →
-    published) is APPENDED as a style layer, never substituted.
+    Winning-override precedence — IDENTICAL in both modes: personal → template →
+    published (``published is not None``, so an empty published string still
+    counts), else no override.
 
-    Otherwise: REPLACEMENT semantics, byte-identical to pre-scribe-1 — the most
-    specific override wins outright (``published is not None`` preserved so an
-    empty published string still counts), else the registry base.
+    Grounded Synthesis Mode (note_generation + flag ON): the grounded boundary
+    is ALWAYS the base and the winning override is APPENDED as a style layer
+    (base alone when there is none). Otherwise: the winning override REPLACES the
+    base (byte-identical to pre-scribe-1), else the registry base.
+
+    Shared by the live note-gen cascade (``assemble_prompt`` + the
+    ``assemble_prompt_for_session`` fallbacks) AND the AI-Prompts transparency
+    serializer (``me_prompts._serialize``), so the page can never diverge from
+    what the LLM actually receives.
     """
+    if user_prompt:
+        override: Optional[str] = user_prompt
+    elif template_prompt:
+        override = template_prompt
+    elif published is not None:
+        override = published
+    else:
+        override = None
     if _grounded_note_gen(prompt_id):
         base = resolve_base_system_prompt(prompt_id)
-        override = user_prompt or template_prompt or published
-        return base + _ADDITIVE_STYLE_HEADER + override if override else base
-    if user_prompt:
-        return user_prompt
-    if template_prompt:
-        return template_prompt
-    if published is not None:
-        return published
-    return resolve_base_system_prompt(prompt_id)
+        return (
+            base + _ADDITIVE_STYLE_HEADER + override
+            if override is not None
+            else base
+        )
+    return override if override is not None else resolve_base_system_prompt(prompt_id)
 
 
 async def _get_user_prompt(
@@ -423,7 +434,7 @@ async def assemble_prompt(
     published: Optional[str] = None
     if not user_prompt and not template_prompt:
         published = await _get_published_prompt(db, owner_id, prompt_id)
-    return _compose_system_prompt(prompt_id, user_prompt, template_prompt, published)
+    return compose_system_prompt(prompt_id, user_prompt, template_prompt, published)
 
 
 async def assemble_prompt_for_session(
@@ -467,13 +478,13 @@ async def assemble_prompt_for_session(
             else uuid.UUID(str(session_id))
         )
     except (ValueError, AttributeError):
-        return _compose_system_prompt(prompt_id, None, template_prompt, None)
+        return compose_system_prompt(prompt_id, None, template_prompt, None)
     result = await db.execute(
         select(SessionModel.clinician_id).where(SessionModel.id == sid)
     )
     clinician_id = result.scalar_one_or_none()
     if clinician_id is None:
-        return _compose_system_prompt(prompt_id, None, template_prompt, None)
+        return compose_system_prompt(prompt_id, None, template_prompt, None)
     return await assemble_prompt(
         prompt_id, clinician_id, db, template_prompt=template_prompt
     )
