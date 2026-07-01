@@ -37,7 +37,15 @@ def _transcript_row(session_id: uuid.UUID) -> SimpleNamespace:
 
 
 def _session(session_id: uuid.UUID) -> SimpleNamespace:
-    return SimpleNamespace(id=session_id, specialty="orthopedic_surgery")
+    return SimpleNamespace(
+        id=session_id, specialty="orthopedic_surgery", output_language="en"
+    )
+
+
+def _config(note_options_enabled: bool) -> SimpleNamespace:
+    return SimpleNamespace(
+        feature_flags=SimpleNamespace(note_options_enabled=note_options_enabled)
+    )
 
 
 def _caller() -> SimpleNamespace:
@@ -58,16 +66,83 @@ def _db(*, user_row, transcript_row) -> AsyncMock:
 
 
 @pytest.mark.asyncio
-async def test_regenerate_denied_when_flag_off():
+async def test_regenerate_denied_when_both_gates_off():
+    """403 when the user lacks prompt_testing AND the global
+    note_options_enabled flag is off."""
     sid = uuid.uuid4()
     db = _db(user_row=_user_row(False), transcript_row=_transcript_row(sid))
-    with patch(
-        "app.api.v1.sessions.get_owned_session_or_404",
-        AsyncMock(return_value=_session(sid)),
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch(
+            "app.api.v1.sessions.get_config",
+            return_value=_config(note_options_enabled=False),
+        ),
     ):
         with pytest.raises(HTTPException) as exc:
             await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
     assert exc.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_regenerate_allowed_via_note_options_flag():
+    """A clinician WITHOUT prompt_testing may regenerate their own note when
+    the global note_options_enabled flag is on (owner-scoped, descriptive)."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(False), transcript_row=_transcript_row(sid))
+    note = Note(
+        session_id=str(sid),
+        stage=1,
+        version=2,
+        provider_used="anthropic",
+        specialty="orthopedic_surgery",
+        completeness_score=0.7,
+    )
+    gen = AsyncMock(return_value=note)
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch(
+            "app.api.v1.sessions.get_config",
+            return_value=_config(note_options_enabled=True),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        resp = await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
+    assert resp.version == 2
+    gen.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_regenerate_threads_output_language():
+    """The change-language action passes output_language through to note-gen;
+    omitted → falls back to the session's stored output_language."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    note = Note(
+        session_id=str(sid),
+        stage=1,
+        version=4,
+        provider_used="anthropic",
+        specialty="orthopedic_surgery",
+        completeness_score=0.6,
+    )
+    gen = AsyncMock(return_value=note)
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        await regenerate_note(
+            sid, RegenerateNoteRequest(output_language="fr"), _caller(), db
+        )
+    assert gen.call_args.kwargs["output_language"] == "fr"
 
 
 @pytest.mark.asyncio

@@ -589,6 +589,8 @@
     "groundedSynthesisHint": "Permet à la note de synthétiser une évaluation et un plan cités à partir des éléments captés, au lieu d’une simple description. DÉSACTIVÉ par défaut — à laisser désactivé jusqu’à l’approbation clinique et réglementaire (#551). Même activé, chaque énoncé doit citer sa source. Les changements sont appliqués dans ~30 secondes.",
     "videoImport": "Import vidéo",
     "videoImportHint": "Contrôles de l’expérience d’import vidéo. Les changements sont appliqués dans ~30 secondes.",
+    "noteOptions": "Options de note",
+    "noteOptionsHint": "Actions après génération sur l’écran de note iOS — changer de modèle / de langue de sortie et régénérer, plus les modules complémentaires et la reprise d’enregistrement à venir. Les changements sont appliqués dans ~30 secondes.",
     "flags": {
       "orders_card_enabled": {
         "name": "Ordonnances",
@@ -621,6 +623,10 @@
       "multi_clip_import_enabled": {
         "name": "Import multi-clips",
         "description": "Permet aux cliniciens de téléverser plusieurs clips séquentiels d’une même rencontre sur la page d’import vidéo; les clips sont concaténés dans l’ordre en une seule note fusionnée. DÉSACTIVÉ masque l’interface multi-fichiers (l’import à un seul clip est inchangé)."
+      },
+      "note_options_enabled": {
+        "name": "Options de note",
+        "description": "Afficher le menu Options sur la note générée (iOS) : changer de modèle / de langue de sortie et régénérer à partir de la transcription stockée. DÉSACTIVÉ masque le menu; la régénération reste limitée au propriétaire et descriptive."
       }
     }
   },

@@ -589,6 +589,8 @@
     "groundedSynthesisHint": "Lets the note synthesize a cited Assessment & Plan from the captured findings instead of describe-only. OFF by default — keep it off until clinical + regulatory sign-off (#551). Even when on, every statement must cite its source. Changes apply within ~30 seconds.",
     "videoImport": "Video import",
     "videoImportHint": "Controls for the video-import upload experience. Changes apply within ~30 seconds.",
+    "noteOptions": "Note options",
+    "noteOptionsHint": "Post-generation actions on the iOS note screen — change template / output language and regenerate, plus the upcoming add-ons and resume-recording. Changes apply within ~30 seconds.",
     "flags": {
       "orders_card_enabled": {
         "name": "Orders",
@@ -621,6 +623,10 @@
       "multi_clip_import_enabled": {
         "name": "Multi-clip import",
         "description": "Let clinicians upload several sequential clips of one encounter on the video-import page; the clips are concatenated in order into a single merged note. OFF hides the multi-file UI (single-clip upload unchanged)."
+      },
+      "note_options_enabled": {
+        "name": "Note options",
+        "description": "Show the Options menu on the generated note (iOS): change template / output language and regenerate from the stored transcript. OFF hides the menu; regeneration stays owner-scoped and descriptive."
       }
     }
   },

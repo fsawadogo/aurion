@@ -506,6 +506,7 @@ export interface FeatureFlags {
   measurement_enabled: boolean;
   video_import_enabled: boolean;
   multi_clip_import_enabled: boolean;
+  note_options_enabled: boolean;
   video_import_drop_zero_face_frames: boolean;
   specialty_style_in_prompt_enabled: boolean;
   // v3.2 Grounded Synthesis Mode (#552) — gates cited A&P synthesis. Dark/OFF

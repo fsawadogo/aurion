@@ -79,6 +79,11 @@ class FeatureFlagsResponse(BaseModel):
     # Gates visibility of the multi-clip upload UI in web + iOS. Ships dark;
     # iOS defaults it False when absent so older clients are unaffected.
     multi_clip_import_enabled: bool
+    # ── Note "Options" surface (post-generation actions) ─────────────────
+    # Gates the iOS note-screen Options menu: change template / output
+    # language and regenerate, plus later add-ons + resume-recording. Ships
+    # dark; iOS defaults it False when absent so older clients are unaffected.
+    note_options_enabled: bool
 
 
 class ClientConfigResponse(BaseModel):
@@ -120,6 +125,7 @@ async def get_client_config(_: CurrentUser = Depends(get_current_user)):
             coding_card_enabled=cfg.feature_flags.coding_card_enabled,
             patient_summary_card_enabled=cfg.feature_flags.patient_summary_card_enabled,
             emr_writeback_card_enabled=cfg.feature_flags.emr_writeback_card_enabled,
+            note_options_enabled=cfg.feature_flags.note_options_enabled,
             measurement_enabled=cfg.feature_flags.measurement_enabled,
             multi_clip_import_enabled=cfg.feature_flags.multi_clip_import_enabled,
         ),

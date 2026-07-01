@@ -228,6 +228,18 @@ class FeatureFlagsConfig(BaseModel):
     coding_card_enabled: bool = False
     patient_summary_card_enabled: bool = False
     emr_writeback_card_enabled: bool = False
+    # ── Note "Options" surface (post-generation actions) ──────────────────
+    # Master gate for the clinician-facing options on the generated note
+    # (iOS note screen): change template / change output language and
+    # regenerate from the STORED transcript (POST /sessions/{id}/regenerate-
+    # note), plus the later add-ons + resume-recording phases. Ships DARK.
+    # When ON it ALSO unlocks the owner-scoped regenerate endpoint for a
+    # clinician who does not have the per-user `prompt_testing_enabled`
+    # flag — regeneration stays owner-scoped, descriptive-mode, and
+    # auto-versioned, so this only changes WHO can trigger a re-run of their
+    # own note, never what the note may contain. Flip via AppConfig / POST
+    # /admin/feature-flags without a redeploy.
+    note_options_enabled: bool = False
     # ── Windowed media retention (#338) ───────────────────────────────────
     # Master gate for the windowed media-retention feature. Keep-full-window
     # model: when ON, raw session audio (and masked clips/frames) is retained
