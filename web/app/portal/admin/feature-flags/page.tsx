@@ -58,6 +58,11 @@ const FLAG_GROUPS = [
     hintKey: "groundedSynthesisHint",
     flags: ["grounded_synthesis_enabled"],
   },
+  {
+    titleKey: "videoImport",
+    hintKey: "videoImportHint",
+    flags: ["multi_clip_import_enabled"],
+  },
 ] as const satisfies readonly {
   titleKey: string;
   hintKey: string;
