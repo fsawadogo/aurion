@@ -1353,7 +1353,8 @@
     "description": "Téléversez une consultation enregistrée et Aurion la traitera dans le même pipeline d’IA qu’une séance en direct, puis produira une note à réviser.",
     "dropzone": {
       "prompt": "Déposez votre vidéo ici ou cliquez pour la sélectionner",
-      "accepted": "MP4, MOV ou WebM · jusqu’à 2 Go"
+      "accepted": "MP4, MOV ou WebM · jusqu’à 2 Go",
+      "promptMulti": "Déposez vos séquences ici ou cliquez pour en sélectionner plusieurs"
     },
     "form": {
       "title": "Détails de la consultation",
@@ -1397,6 +1398,13 @@
       "processingFailed": "Le traitement a échoué. Veuillez réessayer.",
       "lostContact": "Nous avons perdu le contact avec le traitement. Votre note pourrait apparaître dans Mes notes — actualisez ou vérifiez sous peu.",
       "retry": "Réessayer"
+    },
+    "clips": {
+      "title": "Séquences de la consultation",
+      "hint": "Les séquences sont assemblées, dans l’ordre ci-dessous, en une seule note. Réorganisez ou supprimez des séquences avant le téléversement.",
+      "moveUp": "Déplacer la séquence vers le haut",
+      "moveDown": "Déplacer la séquence vers le bas",
+      "remove": "Supprimer la séquence"
     }
   }
 }

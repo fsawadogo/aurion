@@ -881,14 +881,23 @@ export interface VideoImportCreateBody {
    *  original recording (the import substitute for the live consent gate). */
   consent_attested: true;
   consent_method?: string;
+  /** Number of sequential clips (1..20) of the SAME encounter to stitch, in
+   *  order, into one note. Omit / 1 = the classic single-file import; the
+   *  response is then unchanged (no `clips`). Only sent when the
+   *  `multi_clip_import_enabled` flag is on and the clinician picked >1 file. */
+  clip_count?: number;
 }
 
 export interface VideoImportCreated {
   session_id: string;
   job_id: string;
-  /** Presigned S3 PUT URL — upload the raw video straight to S3 (no bearer). */
+  /** Presigned S3 PUT URL — upload the raw video straight to S3 (no bearer).
+   *  When `clip_count > 1` this points at the FIRST clip (`clips[0]`). */
   upload_url: string;
   s3_key: string;
+  /** Present only when `clip_count > 1`: one ordered presigned PUT per clip.
+   *  Upload each file to `clips[i].upload_url` in `index` order. */
+  clips?: { index: number; s3_key: string; upload_url: string }[];
 }
 
 export interface VideoImportStatus {
@@ -936,6 +945,9 @@ export async function getVideoImportStatus(
 /** Read-only portal feature flags for the current user (VID-10 nav gating). */
 export async function getPortalFeatureFlags(): Promise<{
   video_import_enabled: boolean;
+  /** When true, the video-import page lets the clinician upload several
+   *  sequential clips of one encounter (stitched, in order, into one note). */
+  multi_clip_import_enabled: boolean;
 }> {
   const r = await fetchWithAuth("/api/v1/me/feature-flags");
   return r.json();

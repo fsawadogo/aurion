@@ -9,7 +9,14 @@
  * `video_import_enabled` — every call 404s while the feature is dark).
  */
 
-import { Film, ShieldCheck, UploadCloud } from "lucide-react";
+import {
+  ArrowDown,
+  ArrowUp,
+  Film,
+  ShieldCheck,
+  UploadCloud,
+  X,
+} from "lucide-react";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -25,6 +32,7 @@ import {
   abortVideoImportMultipart,
   completeVideoImportMultipart,
   createVideoImport,
+  getPortalFeatureFlags,
   getVideoImportStatus,
   listMyCustomTemplates,
   processVideoImport,
@@ -169,7 +177,13 @@ export default function VideoImportClient({
   // masked transcript + per-claim text); clinicians use their own review.
   const reviewBase = surface === "admin" ? "/eval" : "/portal/notes";
 
-  const [file, setFile] = useState<File | null>(null);
+  // Source of truth for chosen clips. In single-file mode (flag off) this
+  // holds at most one file; the single-file UI derives `file` from files[0]
+  // so its render path is byte-identical to before. In multi-clip mode the
+  // ordered list is the upload order the backend stitches into one note.
+  const [files, setFiles] = useState<File[]>([]);
+  const file = files[0] ?? null;
+  const [multiClipEnabled, setMultiClipEnabled] = useState(false);
   const [specialty, setSpecialty] = useState("general");
   const [encounterType, setEncounterType] = useState("doctor_patient");
   const [language, setLanguage] = useState("en");
@@ -200,25 +214,89 @@ export default function VideoImportClient({
     };
   }, [surface]);
 
-  const pickFile = useCallback((f: File | null) => {
-    setError(null);
-    if (!f) return;
-    if (!ACCEPTED.includes(f.type)) {
-      setError(t("errors.badFormat"));
-      return;
-    }
-    if (f.size === 0) {
-      setError(t("errors.empty"));
-      return;
-    }
-    if (f.size > MAX_VIDEO_BYTES) {
-      setError(t("errors.tooLarge"));
-      return;
-    }
-    setFile(f);
-  }, [t]);
+  // Multi-clip is a clinician-surface capability (the admin/eval surface has
+  // no per-clip presign fan-out). Best-effort: a fetch failure leaves the
+  // classic single-file UI in place.
+  useEffect(() => {
+    if (surface !== "clinician") return;
+    let alive = true;
+    getPortalFeatureFlags()
+      .then((flags) => {
+        if (alive) setMultiClipEnabled(!!flags.multi_clip_import_enabled);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [surface]);
 
-  const canSubmit = file !== null && consent && phase === "form";
+  /** Validate one candidate file; returns it when acceptable, else sets the
+   *  matching error and returns null. */
+  const validateFile = useCallback(
+    (f: File): File | null => {
+      if (!ACCEPTED.includes(f.type)) {
+        setError(t("errors.badFormat"));
+        return null;
+      }
+      if (f.size === 0) {
+        setError(t("errors.empty"));
+        return null;
+      }
+      if (f.size > MAX_VIDEO_BYTES) {
+        setError(t("errors.tooLarge"));
+        return null;
+      }
+      return f;
+    },
+    [t],
+  );
+
+  // Single-file path (flag off): replaces the selection, unchanged behaviour.
+  const pickFile = useCallback(
+    (f: File | null) => {
+      setError(null);
+      if (!f) return;
+      const valid = validateFile(f);
+      if (valid) setFiles([valid]);
+    },
+    [validateFile],
+  );
+
+  // Multi-clip path (flag on): append every valid dropped/selected file to the
+  // ordered list; the first bad file surfaces its error and the rest are still
+  // added.
+  const addFiles = useCallback(
+    (list: FileList | File[] | null) => {
+      setError(null);
+      if (!list) return;
+      const incoming = Array.from(list);
+      if (incoming.length === 0) return;
+      const valid: File[] = [];
+      for (const f of incoming) {
+        const ok = validateFile(f);
+        if (ok) valid.push(ok);
+      }
+      if (valid.length > 0) setFiles((prev) => [...prev, ...valid]);
+    },
+    [validateFile],
+  );
+
+  const moveClip = useCallback((index: number, delta: number) => {
+    setFiles((prev) => {
+      const target = index + delta;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  }, []);
+
+  const removeClip = useCallback((index: number) => {
+    setError(null);
+    setFiles((prev) => prev.filter((_, i) => i !== index));
+  }, []);
+
+  const canSubmit = files.length > 0 && consent && phase === "form";
 
   function mapStage(s: VideoImportStatus): number {
     if (s.status === "completed" || s.session_state === "AWAITING_REVIEW")
@@ -260,7 +338,8 @@ export default function VideoImportClient({
   }
 
   async function start() {
-    if (!file) return;
+    if (files.length === 0) return;
+    const multi = files.length > 1;
     setPhase("uploading");
     setError(null);
     setUploadPct(0);
@@ -272,15 +351,39 @@ export default function VideoImportClient({
         custom_template_id: customTemplateId || null,
         consent_attested: true,
         consent_method: "attested",
+        // Only send clip_count when there's more than one clip so single-file
+        // imports hit the byte-identical legacy request shape.
+        ...(multi ? { clip_count: files.length } : {}),
       });
-      // Large clinician uploads use resumable S3 multipart; everything else
-      // (and the admin surface, which has no /me multipart route) uses the
-      // single presigned PUT.
-      if (surface === "clinician" && file.size > MULTIPART_THRESHOLD) {
-        await uploadMultipart(created.session_id, file, setUploadPct);
+
+      if (multi) {
+        // One presigned PUT per clip, uploaded IN ORDER. The backend returns
+        // `clips` ordered by `index`; guard against a server that didn't echo
+        // enough presigns for the requested count.
+        const clips = [...(created.clips ?? [])].sort((a, b) => a.index - b.index);
+        if (clips.length < files.length) throw new Error("upload_failed");
+        // Aggregate progress across clips: each clip contributes an equal
+        // slice of the overall bar (per-file byte-weighting is unnecessary at
+        // pilot scale and keeps the single-PUT uploader unchanged).
+        const share = 100 / files.length;
+        for (let i = 0; i < files.length; i++) {
+          await putWithProgress(clips[i].upload_url, files[i], (pct) =>
+            setUploadPct(Math.round(i * share + (pct / 100) * share)),
+          );
+        }
+        setUploadPct(100);
       } else {
-        await putWithProgress(created.upload_url, file, setUploadPct);
+        // Single-file: large clinician uploads use resumable S3 multipart;
+        // everything else (and the admin surface, which has no /me multipart
+        // route) uses the single presigned PUT.
+        const single = files[0];
+        if (surface === "clinician" && single.size > MULTIPART_THRESHOLD) {
+          await uploadMultipart(created.session_id, single, setUploadPct);
+        } else {
+          await putWithProgress(created.upload_url, single, setUploadPct);
+        }
       }
+
       setPhase("processing");
       setStageIndex(0);
       await api.process(created.session_id);
@@ -308,7 +411,11 @@ export default function VideoImportClient({
               onDrop={(e) => {
                 e.preventDefault();
                 dragRef.current = false; forceDrag((n) => n + 1);
-                pickFile(e.dataTransfer.files?.[0] ?? null);
+                if (multiClipEnabled) {
+                  addFiles(e.dataTransfer.files);
+                } else {
+                  pickFile(e.dataTransfer.files?.[0] ?? null);
+                }
               }}
               className={
                 "flex cursor-pointer flex-col items-center justify-center rounded-aurion-md border-2 border-dashed px-6 py-10 text-center transition-colors " +
@@ -318,7 +425,7 @@ export default function VideoImportClient({
               }
             >
               <UploadCloud className="mb-2 h-8 w-8 text-gray-400" />
-              {file ? (
+              {!multiClipEnabled && file ? (
                 <span className="text-sm font-medium text-navy-700">
                   <Film className="mr-1 inline h-4 w-4" />
                   {file.name} · {humanBytes(file.size)}
@@ -326,7 +433,9 @@ export default function VideoImportClient({
               ) : (
                 <>
                   <span className="text-sm font-medium text-navy-700">
-                    {t("dropzone.prompt")}
+                    {multiClipEnabled
+                      ? t("dropzone.promptMulti")
+                      : t("dropzone.prompt")}
                   </span>
                   <span className="mt-1 text-xs text-gray-400">
                     {t("dropzone.accepted")}
@@ -336,11 +445,73 @@ export default function VideoImportClient({
               <input
                 type="file"
                 accept="video/mp4,video/quicktime,video/webm"
+                multiple={multiClipEnabled}
                 className="hidden"
-                onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+                data-testid="video-import-file-input"
+                onChange={(e) => {
+                  if (multiClipEnabled) {
+                    addFiles(e.target.files);
+                  } else {
+                    pickFile(e.target.files?.[0] ?? null);
+                  }
+                  // Allow re-selecting the same file(s) after a removal.
+                  e.target.value = "";
+                }}
               />
             </label>
           </Card>
+
+          {multiClipEnabled && files.length > 0 && (
+            <Card title={t("clips.title")}>
+              <p className="mb-3 text-xs text-gray-500">{t("clips.hint")}</p>
+              <ol className="space-y-2" data-testid="video-import-clip-list">
+                {files.map((f, i) => (
+                  <li
+                    key={`${f.name}-${f.size}-${i}`}
+                    className="flex items-center gap-2 rounded-aurion-md border border-gray-200 px-3 py-2 text-sm"
+                    data-testid="video-import-clip-row"
+                  >
+                    <span className="w-5 flex-shrink-0 text-right font-medium text-gray-400">
+                      {i + 1}
+                    </span>
+                    <Film className="h-4 w-4 flex-shrink-0 text-navy-500" />
+                    <span className="min-w-0 flex-1 truncate text-navy-700">
+                      {f.name}
+                    </span>
+                    <span className="flex-shrink-0 text-xs text-gray-400">
+                      {humanBytes(f.size)}
+                    </span>
+                    <button
+                      type="button"
+                      className="rounded p-1 text-gray-400 hover:text-navy-700 disabled:opacity-30"
+                      aria-label={t("clips.moveUp")}
+                      disabled={i === 0}
+                      onClick={() => moveClip(i, -1)}
+                    >
+                      <ArrowUp className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded p-1 text-gray-400 hover:text-navy-700 disabled:opacity-30"
+                      aria-label={t("clips.moveDown")}
+                      disabled={i === files.length - 1}
+                      onClick={() => moveClip(i, 1)}
+                    >
+                      <ArrowDown className="h-4 w-4" />
+                    </button>
+                    <button
+                      type="button"
+                      className="rounded p-1 text-gray-400 hover:text-red-600"
+                      aria-label={t("clips.remove")}
+                      onClick={() => removeClip(i)}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </Card>
+          )}
 
           <Card title={t("form.title")}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">

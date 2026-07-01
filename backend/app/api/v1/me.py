@@ -105,6 +105,9 @@ class PortalFeatureFlagsResponse(BaseModel):
     upload entry while the feature is dark."""
 
     video_import_enabled: bool
+    # Multi-clip import: gates the multi-file upload UI on the video-import
+    # page. Defaulted so an older portal build reading this can't break.
+    multi_clip_import_enabled: bool = False
 
 
 @router.get("/feature-flags", response_model=PortalFeatureFlagsResponse)
@@ -115,6 +118,7 @@ async def get_portal_feature_flags(
     flags = get_config().feature_flags
     return PortalFeatureFlagsResponse(
         video_import_enabled=flags.video_import_enabled,
+        multi_clip_import_enabled=flags.multi_clip_import_enabled,
     )
 
 
