@@ -20,6 +20,7 @@ vi.mock("@/lib/api", () => ({
 vi.mock("@/lib/portal-api", () => ({
   getMyProfile: vi.fn(),
   listMyCustomTemplates: vi.fn(),
+  updateMyProfile: vi.fn(),
 }));
 vi.mock("next/link", () => ({
   default: ({ children }: { children: React.ReactNode }) => children,
@@ -27,6 +28,7 @@ vi.mock("next/link", () => ({
 // Keep the real i18n keys but avoid pulling the full editor component tree.
 vi.mock("@/components/portal/VisitTypeContextsEditor", () => ({
   BUILT_IN_TEMPLATE_KEYS: ["general", "orthopedic_surgery", "plastic_surgery"],
+  newContextId: () => "ctx_test1234",
 }));
 
 import {
@@ -35,14 +37,20 @@ import {
   listOrgVisitTypeTemplates,
   setOrgVisitTypeTemplate,
 } from "@/lib/api";
-import { getMyProfile, listMyCustomTemplates } from "@/lib/portal-api";
+import {
+  getMyProfile,
+  listMyCustomTemplates,
+  updateMyProfile,
+} from "@/lib/portal-api";
 import VisitTypesTab from "@/components/portal/VisitTypesTab";
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getMyProfile).mockResolvedValue({
     consultation_types: ["follow_up", "pre_op"],
+    contexts_per_visit_type: {},
   } as never);
+  vi.mocked(updateMyProfile).mockResolvedValue({} as never);
   vi.mocked(listMyCustomTemplates).mockResolvedValue([
     { id: "c1", display_name: "Ortho FU", is_shared: true },
     { id: "c2", display_name: "Private one", is_shared: false },
@@ -92,17 +100,24 @@ describe("VisitTypesTab", () => {
     );
   });
 
-  it("non-admin: read-only note, never fetches org defaults", async () => {
+  it("clinician: sets their own per-visit default via an is_default context; never fetches org defaults", async () => {
     vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
     render(withIntl(<VisitTypesTab />));
 
-    await waitFor(() =>
-      expect(
-        screen.getByText("Org visit-type defaults are set by your admin."),
-      ).toBeTruthy(),
-    );
+    const sel = await screen.findByTestId("visit-type-template-follow_up");
+    fireEvent.change(sel, { target: { value: "custom:c1" } });
+
+    await waitFor(() => expect(updateMyProfile).toHaveBeenCalled());
+    const arg = vi.mocked(updateMyProfile).mock.calls.at(-1)![0] as {
+      contexts_per_visit_type: Record<
+        string,
+        { is_default?: boolean; template_ref: string | null }[]
+      >;
+    };
+    const def = arg.contexts_per_visit_type.follow_up.find((c) => c.is_default);
+    expect(def?.template_ref).toBe("c1");
+    // A clinician never hits the admin-gated org endpoint.
     expect(listOrgVisitTypeTemplates).not.toHaveBeenCalled();
-    expect(screen.queryByTestId("visit-type-template-follow_up")).toBeNull();
   });
 
   it("admin: selecting the specialty default clears the org default", async () => {
