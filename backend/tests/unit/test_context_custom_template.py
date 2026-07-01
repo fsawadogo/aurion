@@ -55,6 +55,18 @@ def _custom_ctx(ref: str, cid: str = "ctx_aaaaaaaa") -> dict:
     return {"id": cid, "label": "LL", "template_key": None, "template_ref": ref}
 
 
+@pytest.fixture(autouse=True)
+def _no_org_default(monkeypatch):
+    """Isolate these tests to the clinician layer. ``resolve_context_template_key``
+    now falls through to an org-wide visit-type default when the clinician
+    resolves nothing; with no org row that layer is a no-op, so stub it to
+    ``(None, None)`` here (covered by ``test_org_visit_type_templates.py``)."""
+    monkeypatch.setattr(
+        "app.modules.session.service._resolve_org_default_template",
+        AsyncMock(return_value=(None, None)),
+    )
+
+
 def _custom_template() -> Template:
     return Template(
         key="custom_ll",

@@ -455,6 +455,37 @@ class CustomTemplateModel(Base):
     )
 
 
+class OrgVisitTypeTemplateModel(Base):
+    """Org-wide default template per visit type — the visit-type → template map.
+
+    The admin-set default that a clinician's own mapping (a visit type's
+    ``is_default`` context, #577) overrides, which in turn a per-encounter
+    context pin overrides. Consumed by ``resolve_context_template_key`` as the
+    layer between the clinician default and the specialty default. One row per
+    visit-type key; single-org for the pilot (no ``org_id``). ``template_key``
+    (a built-in) XOR ``custom_template_id`` (a SHARED custom template) — the API
+    enforces exactly one; the note pipeline re-validates both at resolve time so
+    a stale pin degrades to the specialty default rather than erroring.
+    """
+
+    __tablename__ = "org_visit_type_templates"
+
+    visit_type: Mapped[str] = mapped_column(String(100), primary_key=True)
+    template_key: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    custom_template_id: Mapped[uuid.UUID | None] = mapped_column(
+        UUID(as_uuid=True), nullable=True
+    )
+    updated_by: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class PilotMetricsModel(Base):
     """Passive pilot behaviour metrics -- collected per session, no PHI.
 
