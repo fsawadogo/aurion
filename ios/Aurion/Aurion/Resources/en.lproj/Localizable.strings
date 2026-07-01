@@ -942,6 +942,16 @@
 "sessionNote.ageSexMessage" = "Optional — appears in the document header. Leave blank to show \"Not documented\".";
 "sessionNote.ageSexPlaceholder" = "e.g. 46-year-old female";
 "sessionNote.ageSexExport" = "Export";
+"noteOptions.menu" = "Note options";
+"noteOptions.changeTemplate" = "Change template";
+"noteOptions.changeLanguage" = "Change output language";
+"noteOptions.templateTitle" = "Regenerate with template";
+"noteOptions.languageTitle" = "Regenerate in language";
+"noteOptions.langEnglish" = "English";
+"noteOptions.langFrench" = "French";
+"noteOptions.regenerating" = "Regenerating note\U2026";
+"noteOptions.regenerated" = "Note regenerated";
+"noteOptions.failedShort" = "Couldn\U2019t regenerate";
 
 /* ── App Lock (security) ──────────────────────────────── */
 "profile.sectionSecurity" = "Security";
