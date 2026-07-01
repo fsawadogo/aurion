@@ -1041,7 +1041,10 @@
     "visitsSelectAria": "Default template for {visit}",
     "visitsLoadError": "Failed to load visit types.",
     "visitsSaveError": "Couldn't save the default.",
-    "visitsRetry": "Retry"
+    "visitsRetry": "Retry",
+    "visitsClinicianHint": "Set your default template for each visit type. It applies when you don't pick a specific context on the device; leave it on Specialty default to inherit.",
+    "visitsMineGroup": "My templates",
+    "visitsProfileSubcontexts": "Need per-context templates (e.g. \"left knee\")? Manage them in My Profile."
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Templates",

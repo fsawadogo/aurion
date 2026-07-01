@@ -943,6 +943,11 @@ export interface VisitTypeContext {
   label: string;
   template_key: string | null;
   template_ref: string | null;
+  /** The visit type's DEFAULT context (#577): its template applies when the
+   * clinician picks the visit type on the device without choosing a specific
+   * context. At most one per visit type. The web historically didn't model this
+   * (iOS-only); the Templates → Visit Types tab now sets it. Omitted = false. */
+  is_default?: boolean;
   /** Optional free-text clinical note for the context (≤500 chars,
    *  #576). The backend persists & returns it and iOS edits it; null or
    *  omitted = none. Can be PHI — rides only the profile PUT body. */

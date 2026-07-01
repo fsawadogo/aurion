@@ -1041,7 +1041,10 @@
     "visitsSelectAria": "Modèle par défaut pour {visit}",
     "visitsLoadError": "Échec du chargement des types de visite.",
     "visitsSaveError": "Impossible d’enregistrer la valeur par défaut.",
-    "visitsRetry": "Réessayer"
+    "visitsRetry": "Réessayer",
+    "visitsClinicianHint": "Définissez votre modèle par défaut pour chaque type de visite. Il s’applique lorsque vous ne choisissez pas de contexte précis sur l’appareil; laissez « Modèle par défaut de la spécialité » pour en hériter.",
+    "visitsMineGroup": "Mes modèles",
+    "visitsProfileSubcontexts": "Besoin de modèles par contexte (p. ex. « genou gauche »)? Gérez-les dans Mon profil."
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Modèles",
