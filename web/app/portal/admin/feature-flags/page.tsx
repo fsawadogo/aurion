@@ -63,6 +63,11 @@ const FLAG_GROUPS = [
     hintKey: "videoImportHint",
     flags: ["multi_clip_import_enabled"],
   },
+  {
+    titleKey: "noteOptions",
+    hintKey: "noteOptionsHint",
+    flags: ["note_options_enabled"],
+  },
 ] as const satisfies readonly {
   titleKey: string;
   hintKey: string;

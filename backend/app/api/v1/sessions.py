@@ -610,10 +610,15 @@ async def _do_transition(db, session, target_state: SessionState) -> SessionResp
 class RegenerateNoteRequest(BaseModel):
     """Re-run Stage-1 note generation on the STORED transcript with a different
     template/prompt (#590). At most one of ``template_key`` /
-    ``custom_template_id``; both omitted → the session's specialty default."""
+    ``custom_template_id``; both omitted → the session's specialty default.
+
+    ``output_language`` lets the note-Options "change language" action
+    re-render the note in a different language; omitted → the session's
+    stored ``output_language`` (unchanged)."""
 
     template_key: Optional[str] = None
     custom_template_id: Optional[uuid.UUID] = None
+    output_language: Optional[str] = None
 
 
 class RegenerateNoteResponse(BaseModel):
@@ -644,15 +649,24 @@ async def regenerate_note(
     """
     session = await get_owned_session_or_404(db, session_id, user)
 
-    # Per-user capability gate. CurrentUser carries only id/role/email from the
-    # token, so re-fetch the row to read the flag (mirrors the _ensure_active
-    # re-fetch). Role-agnostic: a granted clinician OR eval/admin uploader may
-    # re-run their OWN session.
+    # Capability gate. Two independent unlocks, both owner-scoped:
+    #   1. per-user `prompt_testing_enabled` (eval/prompt experimentation), or
+    #   2. the global `note_options_enabled` flag (the clinician-facing note
+    #      "Options" surface — change template / language + regenerate).
+    # Either grants a re-run of the caller's OWN session note. CurrentUser
+    # carries only id/role/email from the token, so re-fetch the row to read
+    # the per-user flag (mirrors the _ensure_active re-fetch).
     user_row = await db.get(UserModel, user.user_id)
-    if user_row is None or not user_row.prompt_testing_enabled:
+    # Short-circuit: only consult AppConfig when the per-user flag doesn't
+    # already grant access (keeps the prompt-testing path independent of the
+    # global flag).
+    allowed = bool(user_row and user_row.prompt_testing_enabled) or (
+        get_config().feature_flags.note_options_enabled
+    )
+    if not allowed:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Prompt testing is not enabled for this user.",
+            detail="Note regeneration is not enabled for this user.",
         )
 
     # Own-scope a custom-template override (SECURITY). A caller may regenerate
@@ -698,6 +712,7 @@ async def regenerate_note(
             db=db,
             template_key=body.template_key,
             custom_template_id=body.custom_template_id,
+            output_language=body.output_language or session.output_language,
         )
     except EmptyTranscriptError:
         raise HTTPException(
