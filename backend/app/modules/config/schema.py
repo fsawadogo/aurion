@@ -56,7 +56,10 @@ class ProvidersConfig(BaseModel):
 
 class NoteGenerationModelParams(BaseModel):
     temperature: float = Field(default=0.1, ge=0.0, le=2.0)
-    max_tokens: int = Field(default=2000, ge=100, le=16000)
+    # Raised 2000 -> 4000 so an exhaustive consult note isn't truncated (a
+    # ~16-min encounter yields ~2-3k output tokens). This is only the .env
+    # fallback; the live value comes from AppConfig -- bump it there too.
+    max_tokens: int = Field(default=4000, ge=100, le=16000)
 
 
 class VisionModelParams(BaseModel):
