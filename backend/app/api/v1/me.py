@@ -62,6 +62,7 @@ from app.modules.note_gen.service import get_latest_note, is_note_approved
 from app.modules.orders import service as orders_service
 from app.modules.patient_summary import service as patient_summary_service
 from app.modules.schedule import service as schedule_service
+from app.modules.surgery_quote import service as surgery_quote_service
 from app.modules.template_authoring import service as template_authoring_service
 
 logger = logging.getLogger("aurion.api.me")
@@ -985,6 +986,158 @@ async def edit_my_patient_summary(
     )
     await db.commit()
     return _to_patient_summary_response(row)
+
+
+# ── Surgery quote (note-Options phase 3) ──────────────────────────────────
+
+
+class SurgeryQuoteLineItem(BaseModel):
+    """One quote line — a procedure the note recorded + its (physician-set)
+    fee. ``fee_cents`` is integer cents; null = not yet priced. The AI never
+    sets a fee."""
+
+    id: str = ""
+    procedure: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(default="", max_length=600)
+    fee_cents: Optional[int] = Field(default=None, ge=0)
+
+
+class SurgeryQuoteResponse(BaseModel):
+    id: str
+    session_id: str
+    version: int
+    line_items: list[SurgeryQuoteLineItem]
+    currency: str
+    notes: Optional[str] = None
+    generated_by_provider: str
+    physician_edited: bool
+    created_at: str
+    updated_at: str
+
+
+class SurgeryQuoteEditRequest(BaseModel):
+    line_items: list[SurgeryQuoteLineItem] = Field(default_factory=list, max_length=30)
+    currency: Optional[str] = Field(default=None, min_length=3, max_length=3)
+    notes: Optional[str] = Field(default=None, max_length=2000)
+
+
+def _to_surgery_quote_response(row) -> SurgeryQuoteResponse:
+    return SurgeryQuoteResponse(
+        id=str(row.id),
+        session_id=str(row.session_id),
+        version=row.version,
+        line_items=[
+            SurgeryQuoteLineItem(**item) for item in (row.line_items or [])
+        ],
+        currency=row.currency,
+        notes=row.notes,
+        generated_by_provider=row.generated_by_provider,
+        physician_edited=row.physician_edited,
+        created_at=row.created_at.isoformat(),
+        updated_at=row.updated_at.isoformat(),
+    )
+
+
+@router.get(
+    "/notes/{session_id}/surgery-quote",
+    response_model=Optional[SurgeryQuoteResponse],
+)
+async def get_my_surgery_quote(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[SurgeryQuoteResponse]:
+    """Return the latest surgery quote, or null when none yet."""
+    await get_owned_session_or_404(db, session_id, user)
+    row = await surgery_quote_service.get_latest(session_id, db)
+    return _to_surgery_quote_response(row) if row else None
+
+
+@router.post(
+    "/notes/{session_id}/surgery-quote",
+    response_model=SurgeryQuoteResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def generate_my_surgery_quote(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> SurgeryQuoteResponse:
+    """Draft a surgery quote from the latest approved note.
+
+    The AI extracts the procedures the note records as discussed into
+    editable, UNPRICED line items — the physician fills the fees. Refuses
+    on an unapproved note (409), same posture as patient summary.
+    """
+    await get_owned_session_or_404(db, session_id, user)
+
+    approved = await is_note_approved(str(session_id), db)
+    if not approved:
+        raise HTTPException(
+            status_code=409,
+            detail="A surgery quote can only be generated from an approved note.",
+        )
+    note = await get_latest_note(str(session_id), db)
+    if note is None:
+        raise HTTPException(
+            status_code=409,
+            detail="No note exists for this session.",
+        )
+
+    try:
+        row = await surgery_quote_service.generate_quote(session_id, note, db)
+    except ProviderError as exc:
+        logger.warning(
+            "surgery-quote generate: provider failed session=%s: %s",
+            session_id, exc,
+        )
+        raise HTTPException(status_code=502, detail=f"AI provider error: {exc}")
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    await write_audit(
+        session_id,
+        AuditEventType.SURGERY_QUOTE_GENERATED,
+        actor_id=str(user.user_id),
+        version=row.version,
+        provider_used=row.generated_by_provider,
+    )
+    await db.commit()
+    return _to_surgery_quote_response(row)
+
+
+@router.patch(
+    "/notes/{session_id}/surgery-quote",
+    response_model=SurgeryQuoteResponse,
+)
+async def edit_my_surgery_quote(
+    session_id: uuid.UUID,
+    body: SurgeryQuoteEditRequest,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> SurgeryQuoteResponse:
+    """Save a physician-edited quote (line items, fees, currency, notes) as
+    a new version. No LLM call."""
+    await get_owned_session_or_404(db, session_id, user)
+    try:
+        row = await surgery_quote_service.save_edit(
+            session_id,
+            [item.model_dump() for item in body.line_items],
+            db,
+            currency=body.currency,
+            notes=body.notes,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    await write_audit(
+        session_id,
+        AuditEventType.SURGERY_QUOTE_EDITED,
+        actor_id=str(user.user_id),
+        version=row.version,
+    )
+    await db.commit()
+    return _to_surgery_quote_response(row)
 
 
 # ── /me/macros — physician phrase shortcuts ───────────────────────────────

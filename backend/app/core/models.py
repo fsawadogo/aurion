@@ -1134,6 +1134,50 @@ class PatientSummaryModel(Base):
     )
 
 
+class SurgeryQuoteModel(Base):
+    """Patient-facing surgical cost quote derived from an approved note
+    (note-Options phase 3).
+
+    One-to-many on session (regenerate/edit → new version; the max-version
+    row is what the UI shows). Ownership flows through
+    ``sessions.clinician_id``. ``line_items`` is a JSONB list of
+    ``{id, procedure, description, fee_cents}`` — the LLM drafts the
+    procedures (grounded in the note, never a price); the physician fills
+    ``fee_cents`` (integer cents; ``None`` = unpriced). PHI-bearing (it
+    references the encounter), stored on the encrypted-at-rest RDS volume.
+    """
+
+    __tablename__ = "surgery_quotes"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    line_items: Mapped[list] = mapped_column(JSONB, nullable=False, default=list)
+    currency: Mapped[str] = mapped_column(
+        String(3), nullable=False, default="CAD"
+    )
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    generated_by_provider: Mapped[str] = mapped_column(String(40), nullable=False)
+    physician_edited: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class NoteOrderModel(Base):
     """Structured order extracted from an approved note.
 
