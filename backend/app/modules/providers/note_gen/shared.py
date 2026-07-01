@@ -241,6 +241,8 @@ def build_user_prompt(
 {participants_block}{prior_block}Transcript segments:
 {segments_text}
 
+Be thorough: capture EVERY distinct point in the transcript as its own claim — each history detail, exam finding, discussed option, risk, medication, instruction, cost, and next step. Do not summarize away or drop points that were discussed; a complete encounter yields many claims spread across the sections, not a handful.
+
 Return JSON with this schema:
 {{
   "sections": [
