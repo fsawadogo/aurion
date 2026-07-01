@@ -65,7 +65,11 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
         params = get_config().model_params.note_generation
 
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            # 300s: grounded synthesis over a full note with the enriched
+            # specialty prompt + few-shot can exceed the old 120s ceiling —
+            # a ReadTimeout there surfaced as a blank "Note generation failed:"
+            # and a 500 on upload. Well within the 5-min Stage 2 budget.
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(
                     "https://api.anthropic.com/v1/messages",
                     headers={
@@ -134,7 +138,7 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
 
         except httpx.HTTPError as e:
             logger.error("Anthropic note gen failed: session=%s error=%s", transcript.session_id, str(e))
-            raise ProviderError("anthropic", f"Note generation failed: {e}", e)
+            raise ProviderError("anthropic", f"Note generation failed: {type(e).__name__}: {e}", e)
         except (json.JSONDecodeError, KeyError, IndexError) as e:
             logger.error("Anthropic response parse failed: session=%s error=%s", transcript.session_id, str(e))
             raise ProviderError("anthropic", f"Response parse failed: {e}", e)

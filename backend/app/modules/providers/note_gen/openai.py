@@ -67,7 +67,7 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
         params = get_config().model_params.note_generation
 
         try:
-            async with httpx.AsyncClient(timeout=120.0) as client:
+            async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(
                     "https://api.openai.com/v1/chat/completions",
                     headers={
@@ -98,7 +98,7 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
 
         except httpx.HTTPError as e:
             logger.error("OpenAI note gen failed: session=%s error=%s", transcript.session_id, str(e))
-            raise ProviderError("openai", f"Note generation failed: {e}", e)
+            raise ProviderError("openai", f"Note generation failed: {type(e).__name__}: {e}", e)
         except (json.JSONDecodeError, KeyError, IndexError) as e:
             logger.error("OpenAI response parse failed: session=%s error=%s", transcript.session_id, str(e))
             raise ProviderError("openai", f"Response parse failed: {e}", e)
