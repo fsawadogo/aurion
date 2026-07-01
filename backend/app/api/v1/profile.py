@@ -658,16 +658,17 @@ async def _validate_template_refs(
     owner_id: uuid.UUID,
     db: AsyncSession,
 ) -> None:
-    """Reject any ``template_ref`` that isn't an owned, existing custom
-    template (#318 / B3).
+    """Reject any ``template_ref`` that isn't an owned OR shared existing
+    custom template (#318 / B3; shared refs enabled for the visit-type map).
 
-    Gathers the distinct ``template_ref`` values across every context in
-    the request and verifies each against ``custom_templates`` scoped to
-    ``owner_id``. Raises ``HTTPException(422)`` on the first failure —
-    malformed UUID, nonexistent row, or a row owned by someone else (the
-    owner-scoped lookup collapses "not found" and "not yours" into one
-    404-shaped result, so a non-owner can't distinguish the two). The
-    detail string is reason-only: the rejected ref never rides along.
+    Gathers the distinct ``template_ref`` values across every context in the
+    request and verifies each is owned by ``owner_id`` OR shared (an org/Library
+    template) — mirroring the note-gen resolve path. Raises
+    ``HTTPException(422)`` on the first failure — malformed UUID, nonexistent
+    row, or a PRIVATE row owned by someone else (the lookup collapses "not
+    found" and "not-yours-and-not-shared" into one result, so a non-owner can't
+    probe another clinician's private templates). The detail string is
+    reason-only: the rejected ref never rides along.
     """
     refs = {
         ctx.template_ref
@@ -683,13 +684,19 @@ async def _validate_template_refs(
                 status_code=422,
                 detail="template_ref is not a valid custom template reference",
             )
-        owned = await custom_templates_service.get_owned(
+        # Owned OR shared: a clinician may pin their own custom template OR a
+        # SHARED org/Library template (its whole purpose). A non-owned PRIVATE
+        # template still resolves to None here → rejected (no cross-tenant leak).
+        resolved = await custom_templates_service.get_owned_or_shared(
             ref_uuid, owner_id, db
         )
-        if owned is None:
+        if resolved is None:
             raise HTTPException(
                 status_code=422,
-                detail="template_ref does not reference an owned custom template",
+                detail=(
+                    "template_ref does not reference an owned or shared "
+                    "custom template"
+                ),
             )
 
 
