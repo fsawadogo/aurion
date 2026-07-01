@@ -347,6 +347,8 @@ struct SessionNoteView: View {
     /// Phase 3 add-ons tray.
     @State private var showPatientSummarySheet = false
     @State private var showSurgeryQuoteSheet = false
+    /// Phase 4: record a follow-up clip → merge → regenerate.
+    @State private var showResumeRecording = false
     @State private var isRegenerating = false
     @State private var regenerateError: String?
     /// Brief success toast after a regenerate lands the new note version.
@@ -519,6 +521,11 @@ struct SessionNoteView: View {
                         } label: {
                             Label(L("noteOptions.changeContext"), systemImage: "text.bubble")
                         }
+                        Button {
+                            showResumeRecording = true
+                        } label: {
+                            Label(L("noteOptions.resumeRecording"), systemImage: "mic.badge.plus")
+                        }
                         Section(L("noteOptions.addOns")) {
                             Button {
                                 showPatientSummarySheet = true
@@ -625,6 +632,26 @@ struct SessionNoteView: View {
                 sessionId: session.id,
                 sessionState: session.state,
                 onClose: { showSurgeryQuoteSheet = false }
+            )
+        }
+        // Resume recording — record a follow-up clip; on merge+regenerate the
+        // note reloads with the new version covering both clips.
+        .sheet(isPresented: $showResumeRecording) {
+            ResumeRecordingSheet(
+                sessionId: session.id,
+                onFinished: {
+                    showResumeRecording = false
+                    Task { await loadNote() }
+                    AurionHaptics.notification(.success)
+                    withAnimation { regenToast = L("noteOptions.regenerated") }
+                    toastDismissTask?.cancel()
+                    toastDismissTask = Task {
+                        try? await Task.sleep(nanoseconds: 2_000_000_000)
+                        guard !Task.isCancelled else { return }
+                        withAnimation { regenToast = nil }
+                    }
+                },
+                onClose: { showResumeRecording = false }
             )
         }
         // Add-ons: patient after-visit summary — reuse the existing card in a

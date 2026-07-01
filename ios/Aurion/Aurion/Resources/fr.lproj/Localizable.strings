@@ -976,6 +976,20 @@
 "quote.tbd" = "\U00C0 d\U00E9terminer";
 "quote.disclaimer" = "Il s\U2019agit d\U2019une estimation des co\U00FBts pour les interventions discut\U00E9es lors de cette visite. Ce n\U2019est pas une facture ni une garantie du co\U00FBt final. Les honoraires sont fix\U00E9s par la clinique.";
 
+/* ── Reprise d'enregistrement (options de note, phase 4) ─ */
+"noteOptions.resumeRecording" = "Reprendre l\U2019enregistrement";
+"resume.navTitle" = "Reprendre l\U2019enregistrement";
+"resume.title" = "Ajouter \U00E0 cette rencontre";
+"resume.hint" = "Enregistrez un court compl\U00E9ment. Il est fusionn\U00E9 \U00E0 cette rencontre et la note est r\U00E9g\U00E9n\U00E9r\U00E9e pour couvrir les deux.";
+"resume.recordingSub" = "Enregistrement\U2026 touchez Arr\U00EAter quand vous avez termin\U00E9.";
+"resume.start" = "Commencer l\U2019enregistrement";
+"resume.stop" = "Arr\U00EAter et fusionner";
+"resume.merging" = "Fusion\U2026";
+"resume.mergingSub" = "Transcription du clip et r\U00E9g\U00E9n\U00E9ration de la note.";
+"resume.permissionDenied" = "L\U2019acc\U00E8s au micro est d\U00E9sactiv\U00E9. Activez-le dans R\U00E9glages pour enregistrer.";
+"resume.startFailed" = "Impossible de d\U00E9marrer l\U2019enregistrement.";
+"resume.failedShort" = "Erreur d\U2019enregistrement";
+
 /* ── Verrouillage de l\U2019application ─────────────────── */
 "profile.sectionSecurity" = "S\U00E9curit\U00E9";
 "profile.appLock" = "Verrouillage de l\U2019application";
