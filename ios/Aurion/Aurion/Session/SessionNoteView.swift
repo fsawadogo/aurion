@@ -340,6 +340,10 @@ struct SessionNoteView: View {
     // regenerate from the stored transcript (no re-record).
     @State private var showTemplatePicker = false
     @State private var showLanguagePicker = false
+    /// Phase 2: edit/add the encounter context (e.g. a breast-aug visit that
+    /// also covered liposuction), then regenerate focused on it.
+    @State private var showContextEditor = false
+    @State private var contextDraft = ""
     @State private var isRegenerating = false
     @State private var regenerateError: String?
     /// Brief success toast after a regenerate lands the new note version.
@@ -506,6 +510,12 @@ struct SessionNoteView: View {
                         } label: {
                             Label(L("noteOptions.changeLanguage"), systemImage: "globe")
                         }
+                        Button {
+                            contextDraft = ""
+                            showContextEditor = true
+                        } label: {
+                            Label(L("noteOptions.changeContext"), systemImage: "text.bubble")
+                        }
                     } label: {
                         if isRegenerating {
                             ProgressView()
@@ -578,6 +588,21 @@ struct SessionNoteView: View {
             Button(L("noteOptions.langFrench")) {
                 Task { await regenerate(outputLanguage: "fr") }
             }
+        }
+        // Change/add encounter context — a short free-text sheet. On
+        // Regenerate the note is re-run focused on the new context (the
+        // breast-aug → also-lipo case). Descriptive mode is preserved
+        // server-side (the context is framing, never a fabricated finding).
+        .sheet(isPresented: $showContextEditor) {
+            NoteContextEditorSheet(
+                text: $contextDraft,
+                onRegenerate: {
+                    let value = contextDraft
+                    showContextEditor = false
+                    Task { await regenerate(encounterContext: value) }
+                },
+                onCancel: { showContextEditor = false }
+            )
         }
         // Regenerate-failure alert.
         .alert(
@@ -799,7 +824,11 @@ struct SessionNoteView: View {
     /// versioned server-side; on success we reload the freshly-created version.
     /// The expensive transcription/vision work is NOT repeated — this is a
     /// note-gen re-run over stored data, so it takes a few seconds.
-    private func regenerate(templateKey: String? = nil, outputLanguage: String? = nil) async {
+    private func regenerate(
+        templateKey: String? = nil,
+        outputLanguage: String? = nil,
+        encounterContext: String? = nil
+    ) async {
         guard let note else { return }
         isRegenerating = true
         regenerateError = nil
@@ -807,7 +836,8 @@ struct SessionNoteView: View {
             _ = try await APIClient.shared.regenerateNote(
                 sessionId: note.sessionId,
                 templateKey: templateKey,
-                outputLanguage: outputLanguage
+                outputLanguage: outputLanguage,
+                encounterContext: encounterContext
             )
             // Pull the new version so the screen reflects the regenerated note.
             await loadNote()
@@ -1024,5 +1054,62 @@ struct SessionNoteView: View {
         let url = dir.appendingPathComponent(filename)
         try data.write(to: url, options: [.atomic])
         return url
+    }
+}
+
+// MARK: - Change-context editor sheet (note-options phase 2)
+
+/// Short free-text editor for the encounter context. Tapping Regenerate re-runs
+/// the note focused on the entered context (e.g. "Breast augmentation consult;
+/// also discussed liposuction"). Framing only — the backend never mints a claim
+/// from it, so descriptive mode is preserved.
+private struct NoteContextEditorSheet: View {
+    @Binding var text: String
+    let onRegenerate: () -> Void
+    let onCancel: () -> Void
+
+    var body: some View {
+        NavigationStack {
+            VStack(alignment: .leading, spacing: AurionSpacing.md) {
+                Text(L("noteOptions.contextHint"))
+                    .aurionFont(14, relativeTo: .subheadline)
+                    .foregroundColor(.aurionTextSecondary)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                ZStack(alignment: .topLeading) {
+                    if text.isEmpty {
+                        Text(L("noteOptions.contextPlaceholder"))
+                            .aurionFont(16, relativeTo: .body)
+                            .foregroundColor(.aurionTextSecondary.opacity(0.6))
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 10)
+                            .allowsHitTesting(false)
+                    }
+                    TextEditor(text: $text)
+                        .aurionFont(16, relativeTo: .body)
+                        .frame(minHeight: 140)
+                        .scrollContentBackground(.hidden)
+                }
+                .padding(8)
+                .background(Color.aurionFieldBackground)
+                .clipShape(RoundedRectangle(cornerRadius: AurionRadius.md))
+
+                Spacer()
+            }
+            .padding(AurionSpacing.xl)
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            .background(Color.aurionBackground.ignoresSafeArea())
+            .navigationTitle(L("noteOptions.changeContext"))
+            .navigationBarTitleDisplayMode(.inline)
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button(L("common.cancel"), action: onCancel)
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button(L("noteOptions.regenerateAction"), action: onRegenerate)
+                        .disabled(text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
     }
 }

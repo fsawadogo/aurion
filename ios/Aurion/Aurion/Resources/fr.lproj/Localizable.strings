@@ -940,6 +940,10 @@
 "noteOptions.regenerating" = "R\U00E9g\U00E9n\U00E9ration de la note\U2026";
 "noteOptions.regenerated" = "Note r\U00E9g\U00E9n\U00E9r\U00E9e";
 "noteOptions.failedShort" = "\U00C9chec de la r\U00E9g\U00E9n\U00E9ration";
+"noteOptions.changeContext" = "Changer le contexte";
+"noteOptions.contextHint" = "Ajoutez ou modifiez ce que cette rencontre a couvert. La note est r\U00E9g\U00E9n\U00E9r\U00E9e en fonction de ce contexte \U2014 il s\U2019agit d\U2019un cadrage, pas d\U2019une observation consign\U00E9e.";
+"noteOptions.contextPlaceholder" = "p. ex. Consultation pour augmentation mammaire; la patiente a aussi demand\U00E9 pour une liposuccion";
+"noteOptions.regenerateAction" = "R\U00E9g\U00E9n\U00E9rer";
 
 /* ── Verrouillage de l\U2019application ─────────────────── */
 "profile.sectionSecurity" = "S\U00E9curit\U00E9";
