@@ -956,6 +956,37 @@
 "noteOptions.contextHint" = "Add or update what this encounter covered. The note regenerates focused on it \U2014 this is framing, not a recorded finding.";
 "noteOptions.contextPlaceholder" = "e.g. Breast augmentation consult; patient also asked about liposuction";
 "noteOptions.regenerateAction" = "Regenerate";
+"noteOptions.addOns" = "Add-ons";
+"noteOptions.patientSummary" = "Patient summary";
+"noteOptions.surgeryQuote" = "Surgery quote";
+
+/* ── Surgery quote (note add-on) ──────────────────────── */
+"quote.title" = "Surgery quote";
+"quote.docTitle" = "Surgical Quote";
+"quote.save" = "Save";
+"quote.generate" = "Generate from note";
+"quote.regenerate" = "Regenerate from note";
+"quote.generating" = "Drafting quote\U2026";
+"quote.saving" = "Saving\U2026";
+"quote.emptyTitle" = "No quote yet";
+"quote.emptySub" = "Draft a quote from the approved note. Aurion lists the procedures discussed \U2014 you add the fees.";
+"quote.lockedTitle" = "Approve the note first";
+"quote.lockedSub" = "A surgery quote can be generated once the note is approved.";
+"quote.editorHint" = "Aurion drafted the procedures discussed. Add or edit line items and enter your fees.";
+"quote.addLine" = "Add line item";
+"quote.removeLine" = "Remove line item";
+"quote.procedure" = "Procedure";
+"quote.description" = "Description (optional)";
+"quote.fee" = "Fee";
+"quote.currency" = "Currency";
+"quote.total" = "Total";
+"quote.notes" = "Notes";
+"quote.exportPDF" = "Export PDF";
+"quote.failedShort" = "Quote error";
+"quote.colProcedure" = "Procedure";
+"quote.colFee" = "Fee";
+"quote.tbd" = "TBD";
+"quote.disclaimer" = "This is a cost estimate for the procedures discussed at this visit. It is not a bill and not a guarantee of final cost. Fees are set by the practice.";
 
 /* ── App Lock (security) ──────────────────────────────── */
 "profile.sectionSecurity" = "Security";

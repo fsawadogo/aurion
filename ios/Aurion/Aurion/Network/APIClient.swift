@@ -306,6 +306,46 @@ final class APIClient: Sendable {
         )
     }
 
+    // MARK: - Surgery quote (note-options phase 3)
+
+    func getSurgeryQuote(sessionId: String) async throws -> SurgeryQuoteResponse? {
+        return try await getOptional(
+            path: "/me/notes/\(sessionId)/surgery-quote"
+        )
+    }
+
+    /// Draft a quote from the approved note — the AI extracts the procedures
+    /// discussed into UNPRICED line items (never a fee). 409 when the note
+    /// isn't approved; 502 on upstream LLM failure.
+    func generateSurgeryQuote(sessionId: String) async throws -> SurgeryQuoteResponse {
+        return try await post(path: "/me/notes/\(sessionId)/surgery-quote")
+    }
+
+    /// Save physician-edited line items + fees + currency + notes as a new
+    /// version. A nil `feeCents` on an item is sent as "unpriced".
+    func editSurgeryQuote(
+        sessionId: String,
+        lineItems: [SurgeryQuoteLineItem],
+        currency: String?,
+        notes: String?
+    ) async throws -> SurgeryQuoteResponse {
+        let items: [[String: Any]] = lineItems.map { item in
+            var d: [String: Any] = [
+                "id": item.id,
+                "procedure": item.procedure,
+                "description": item.detail,
+            ]
+            if let fee = item.feeCents { d["fee_cents"] = fee }
+            return d
+        }
+        var body: [String: Any] = ["line_items": items]
+        if let currency { body["currency"] = currency }
+        if let notes { body["notes"] = notes }
+        return try await patch(
+            path: "/me/notes/\(sessionId)/surgery-quote", body: body
+        )
+    }
+
     // MARK: - Orders (#58)
 
     /// List all order drafts for the session (newest first).
@@ -1930,6 +1970,47 @@ struct PatientSummaryResponse: Codable, Sendable, Equatable {
     enum CodingKeys: String, CodingKey {
         case id, version, body
         case sessionId = "session_id"
+        case generatedByProvider = "generated_by_provider"
+        case physicianEdited = "physician_edited"
+        case createdAt = "created_at"
+        case updatedAt = "updated_at"
+    }
+}
+
+/// One line of a surgery quote — a procedure the note recorded + its
+/// (physician-set) fee. `feeCents` is integer cents; nil = not yet priced.
+/// The AI never sets a fee. `detail` maps to the backend `description`.
+struct SurgeryQuoteLineItem: Codable, Sendable, Equatable, Identifiable {
+    var id: String
+    var procedure: String
+    var detail: String
+    var feeCents: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case id, procedure
+        case detail = "description"
+        case feeCents = "fee_cents"
+    }
+}
+
+/// `GET/POST/PATCH /me/notes/{id}/surgery-quote` — a patient-facing surgical
+/// cost quote drafted from the approved note (note-options phase 3).
+struct SurgeryQuoteResponse: Codable, Sendable, Equatable {
+    let id: String
+    let sessionId: String
+    let version: Int
+    var lineItems: [SurgeryQuoteLineItem]
+    var currency: String
+    var notes: String?
+    let generatedByProvider: String
+    let physicianEdited: Bool
+    let createdAt: String
+    let updatedAt: String
+
+    enum CodingKeys: String, CodingKey {
+        case id, version, currency, notes
+        case sessionId = "session_id"
+        case lineItems = "line_items"
         case generatedByProvider = "generated_by_provider"
         case physicianEdited = "physician_edited"
         case createdAt = "created_at"

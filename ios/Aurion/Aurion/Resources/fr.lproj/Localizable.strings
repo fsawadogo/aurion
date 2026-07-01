@@ -944,6 +944,37 @@
 "noteOptions.contextHint" = "Ajoutez ou modifiez ce que cette rencontre a couvert. La note est r\U00E9g\U00E9n\U00E9r\U00E9e en fonction de ce contexte \U2014 il s\U2019agit d\U2019un cadrage, pas d\U2019une observation consign\U00E9e.";
 "noteOptions.contextPlaceholder" = "p. ex. Consultation pour augmentation mammaire; la patiente a aussi demand\U00E9 pour une liposuccion";
 "noteOptions.regenerateAction" = "R\U00E9g\U00E9n\U00E9rer";
+"noteOptions.addOns" = "Modules compl\U00E9mentaires";
+"noteOptions.patientSummary" = "R\U00E9sum\U00E9 pour le patient";
+"noteOptions.surgeryQuote" = "Devis chirurgical";
+
+/* ── Devis chirurgical (module de note) ───────────────── */
+"quote.title" = "Devis chirurgical";
+"quote.docTitle" = "Devis chirurgical";
+"quote.save" = "Enregistrer";
+"quote.generate" = "G\U00E9n\U00E9rer \U00E0 partir de la note";
+"quote.regenerate" = "R\U00E9g\U00E9n\U00E9rer \U00E0 partir de la note";
+"quote.generating" = "R\U00E9daction du devis\U2026";
+"quote.saving" = "Enregistrement\U2026";
+"quote.emptyTitle" = "Aucun devis";
+"quote.emptySub" = "G\U00E9n\U00E9rez un devis \U00E0 partir de la note approuv\U00E9e. Aurion \U00E9num\U00E8re les interventions discut\U00E9es \U2014 vous ajoutez les honoraires.";
+"quote.lockedTitle" = "Approuvez d\U2019abord la note";
+"quote.lockedSub" = "Un devis chirurgical peut \U00EAtre g\U00E9n\U00E9r\U00E9 une fois la note approuv\U00E9e.";
+"quote.editorHint" = "Aurion a r\U00E9dig\U00E9 les interventions discut\U00E9es. Ajoutez ou modifiez des lignes et saisissez vos honoraires.";
+"quote.addLine" = "Ajouter une ligne";
+"quote.removeLine" = "Supprimer la ligne";
+"quote.procedure" = "Intervention";
+"quote.description" = "Description (facultatif)";
+"quote.fee" = "Honoraires";
+"quote.currency" = "Devise";
+"quote.total" = "Total";
+"quote.notes" = "Notes";
+"quote.exportPDF" = "Exporter en PDF";
+"quote.failedShort" = "Erreur du devis";
+"quote.colProcedure" = "Intervention";
+"quote.colFee" = "Honoraires";
+"quote.tbd" = "\U00C0 d\U00E9terminer";
+"quote.disclaimer" = "Il s\U2019agit d\U2019une estimation des co\U00FBts pour les interventions discut\U00E9es lors de cette visite. Ce n\U2019est pas une facture ni une garantie du co\U00FBt final. Les honoraires sont fix\U00E9s par la clinique.";
 
 /* ── Verrouillage de l\U2019application ─────────────────── */
 "profile.sectionSecurity" = "S\U00E9curit\U00E9";
