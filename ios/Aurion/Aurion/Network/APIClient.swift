@@ -96,6 +96,26 @@ final class APIClient: Sendable {
         return try await patch(path: "/sessions/\(sessionId)/template", body: ["specialty": specialty])
     }
 
+    /// Re-run Stage 1 note generation on the STORED transcript with a
+    /// different template and/or output language — no re-record, no
+    /// re-transcribe. Server auto-creates a new note version. Backs the
+    /// note-screen "Options" actions (change template / language). Gated by
+    /// the `note_options_enabled` flag server-side (403 otherwise).
+    func regenerateNote(
+        sessionId: String,
+        templateKey: String? = nil,
+        customTemplateId: String? = nil,
+        outputLanguage: String? = nil
+    ) async throws -> RegenerateNoteResult {
+        var body: [String: Any] = [:]
+        if let templateKey { body["template_key"] = templateKey }
+        if let customTemplateId { body["custom_template_id"] = customTemplateId }
+        if let outputLanguage { body["output_language"] = outputLanguage }
+        return try await post(
+            path: "/sessions/\(sessionId)/regenerate-note", body: body
+        )
+    }
+
     /// Set or clear the session's patient identifier (#61).
     ///
     /// Pass `identifier` to set; pass `nil` to clear. The server encrypts
@@ -2596,6 +2616,10 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
     // Gates a future iOS multi-clip import UI. Plumbed now so the flag is
     // available on-device; `decodeIfPresent` keeps older backends safely off.
     let multiClipImportEnabled: Bool
+    // ── Note "Options" surface (post-generation actions) ─────────────────
+    // Gates the note-screen Options menu: change template / output language
+    // and regenerate. `decodeIfPresent` keeps older backends safely off.
+    let noteOptionsEnabled: Bool
 
     enum CodingKeys: String, CodingKey {
         case screenCaptureEnabled = "screen_capture_enabled"
@@ -2609,6 +2633,7 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         case emrWritebackCardEnabled = "emr_writeback_card_enabled"
         case measurementEnabled = "measurement_enabled"
         case multiClipImportEnabled = "multi_clip_import_enabled"
+        case noteOptionsEnabled = "note_options_enabled"
     }
 
     // Memberwise init so RemoteConfig's `@Published` default can build
@@ -2624,7 +2649,8 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         patientSummaryCardEnabled: Bool,
         emrWritebackCardEnabled: Bool,
         measurementEnabled: Bool = false,
-        multiClipImportEnabled: Bool = false
+        multiClipImportEnabled: Bool = false,
+        noteOptionsEnabled: Bool = false
     ) {
         self.screenCaptureEnabled = screenCaptureEnabled
         self.noteVersioningEnabled = noteVersioningEnabled
@@ -2637,6 +2663,7 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         self.emrWritebackCardEnabled = emrWritebackCardEnabled
         self.measurementEnabled = measurementEnabled
         self.multiClipImportEnabled = multiClipImportEnabled
+        self.noteOptionsEnabled = noteOptionsEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -2655,6 +2682,22 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         emrWritebackCardEnabled = try c.decodeIfPresent(Bool.self, forKey: .emrWritebackCardEnabled) ?? false
         measurementEnabled = try c.decodeIfPresent(Bool.self, forKey: .measurementEnabled) ?? false
         multiClipImportEnabled = try c.decodeIfPresent(Bool.self, forKey: .multiClipImportEnabled) ?? false
+        noteOptionsEnabled = try c.decodeIfPresent(Bool.self, forKey: .noteOptionsEnabled) ?? false
+    }
+}
+
+/// Result of `POST /sessions/{id}/regenerate-note` — a new note version
+/// generated from the stored transcript with a different template/language.
+struct RegenerateNoteResult: Codable, Sendable {
+    let version: Int
+    let stage: Int
+    let completenessScore: Double
+    let providerUsed: String
+
+    enum CodingKeys: String, CodingKey {
+        case version, stage
+        case completenessScore = "completeness_score"
+        case providerUsed = "provider_used"
     }
 }
 

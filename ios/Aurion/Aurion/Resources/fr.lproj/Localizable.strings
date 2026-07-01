@@ -930,6 +930,16 @@
 "sessionNote.ageSexMessage" = "Facultatif — appara\U00EEt dans l\U2019en-t\U00EAte du document. Laissez vide pour afficher « Non document\U00E9 ».";
 "sessionNote.ageSexPlaceholder" = "p. ex. femme de 46 ans";
 "sessionNote.ageSexExport" = "Exporter";
+"noteOptions.menu" = "Options de note";
+"noteOptions.changeTemplate" = "Changer de mod\U00E8le";
+"noteOptions.changeLanguage" = "Changer la langue de sortie";
+"noteOptions.templateTitle" = "R\U00E9g\U00E9n\U00E9rer avec le mod\U00E8le";
+"noteOptions.languageTitle" = "R\U00E9g\U00E9n\U00E9rer dans la langue";
+"noteOptions.langEnglish" = "Anglais";
+"noteOptions.langFrench" = "Fran\U00E7ais";
+"noteOptions.regenerating" = "R\U00E9g\U00E9n\U00E9ration de la note\U2026";
+"noteOptions.regenerated" = "Note r\U00E9g\U00E9n\U00E9r\U00E9e";
+"noteOptions.failedShort" = "\U00C9chec de la r\U00E9g\U00E9n\U00E9ration";
 
 /* ── Verrouillage de l\U2019application ─────────────────── */
 "profile.sectionSecurity" = "S\U00E9curit\U00E9";

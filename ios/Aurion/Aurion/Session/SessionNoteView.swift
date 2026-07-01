@@ -335,6 +335,15 @@ struct SessionNoteView: View {
     @State private var pendingExportFormat: SharedExportFormat?
     /// Drives the age/sex capture alert shown between format pick and render.
     @State private var showAgeSexPrompt = false
+    // ── Note "Options" (post-generation actions) — gated on
+    // `note_options_enabled`. Phase 1: change template / output language and
+    // regenerate from the stored transcript (no re-record).
+    @State private var showTemplatePicker = false
+    @State private var showLanguagePicker = false
+    @State private var isRegenerating = false
+    @State private var regenerateError: String?
+    /// Brief success toast after a regenerate lands the new note version.
+    @State private var regenToast: String?
     /// Clamps the note's reading column to a comfortable measure on
     /// iPad. Without this the SOAP section paragraphs run edge-to-edge
     /// at ~1000pt — too wide for sustained reading per HIG.
@@ -402,6 +411,44 @@ struct SessionNoteView: View {
                 }
                 .animation(AurionAnimation.spring, value: showCopiedToast)
             }
+
+            // Regenerate success toast (mirrors the copied toast).
+            if let regenToast {
+                VStack {
+                    Spacer()
+                    HStack(spacing: AurionSpacing.sm) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .foregroundColor(.clinicalNormal)
+                        Text(regenToast)
+                            .aurionFont(14, weight: .semibold, relativeTo: .subheadline)
+                    }
+                    .foregroundColor(.aurionTextPrimary)
+                    .padding(.horizontal, AurionSpacing.xl)
+                    .padding(.vertical, AurionSpacing.sm)
+                    .background(.regularMaterial, in: Capsule())
+                    .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+                    .padding(.bottom, AurionSpacing.xxl)
+                    .transition(AurionTransition.fadeUp)
+                }
+                .animation(AurionAnimation.spring, value: regenToast)
+            }
+
+            // Regenerating veil — the note-gen re-run takes a few seconds.
+            // Block interaction + show a spinner so a second tap can't queue a
+            // duplicate regenerate.
+            if isRegenerating {
+                Color.black.opacity(0.06).ignoresSafeArea()
+                VStack(spacing: AurionSpacing.md) {
+                    ProgressView()
+                    Text(L("noteOptions.regenerating"))
+                        .aurionFont(14, weight: .medium, relativeTo: .subheadline)
+                        .foregroundColor(.aurionTextSecondary)
+                }
+                .padding(AurionSpacing.xl)
+                .background(.regularMaterial, in: RoundedRectangle(cornerRadius: AurionRadius.md))
+                .shadow(color: .black.opacity(0.15), radius: 16, y: 8)
+                .transition(.opacity)
+            }
         }
         .navigationTitle(displaySpecialty)
         .aurionNavBar()
@@ -443,6 +490,32 @@ struct SessionNoteView: View {
                 .disabled(note == nil || isPreparingExport)
                 .accessibilityLabel(L("sessionNote.a11yExport"))
                 .accessibilityHint(L("sessionNote.a11yExportHint"))
+
+                // Options menu — post-generation actions. Gated on the
+                // note_options_enabled flag; ships hidden until an ADMIN flips
+                // it. Phase 1: change template / output language + regenerate.
+                if remoteConfig.featureFlags.noteOptionsEnabled {
+                    Menu {
+                        Button {
+                            showTemplatePicker = true
+                        } label: {
+                            Label(L("noteOptions.changeTemplate"), systemImage: "doc.text.magnifyingglass")
+                        }
+                        Button {
+                            showLanguagePicker = true
+                        } label: {
+                            Label(L("noteOptions.changeLanguage"), systemImage: "globe")
+                        }
+                    } label: {
+                        if isRegenerating {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "ellipsis.circle")
+                        }
+                    }
+                    .disabled(note == nil || isRegenerating)
+                    .accessibilityLabel(L("noteOptions.menu"))
+                }
             }
         }
         .task { await loadNote() }
@@ -478,6 +551,46 @@ struct SessionNoteView: View {
             if let url = exportFileURL {
                 ShareSheet(items: [url])
             }
+        }
+        // Change-template picker — the 8 built-in note templates. Selecting one
+        // regenerates the note from the STORED transcript (no re-record).
+        .confirmationDialog(
+            L("noteOptions.templateTitle"),
+            isPresented: $showTemplatePicker,
+            titleVisibility: .visible
+        ) {
+            ForEach(BuiltInTemplate.keys, id: \.self) { key in
+                Button(localizedTemplate(key)) {
+                    Task { await regenerate(templateKey: key) }
+                }
+            }
+        }
+        // Change-output-language picker — regenerates the note in the chosen
+        // language (EN/FR at pilot parity).
+        .confirmationDialog(
+            L("noteOptions.languageTitle"),
+            isPresented: $showLanguagePicker,
+            titleVisibility: .visible
+        ) {
+            Button(L("noteOptions.langEnglish")) {
+                Task { await regenerate(outputLanguage: "en") }
+            }
+            Button(L("noteOptions.langFrench")) {
+                Task { await regenerate(outputLanguage: "fr") }
+            }
+        }
+        // Regenerate-failure alert.
+        .alert(
+            L("noteOptions.failedShort"),
+            isPresented: Binding(
+                get: { regenerateError != nil },
+                set: { if !$0 { regenerateError = nil } }
+            ),
+            presenting: regenerateError
+        ) { _ in
+            Button(L("common.ok"), role: .cancel) { regenerateError = nil }
+        } message: { detail in
+            Text(detail)
         }
         // Export-failure alert. Sits over the loaded note (the `error`
         // EmptyStateView only renders when note==nil, so an export that
@@ -680,6 +793,37 @@ struct SessionNoteView: View {
     }
 
     // MARK: - Actions
+
+    /// Regenerate the note from the STORED transcript with a different template
+    /// and/or output language (note-Options phase 1). Owner-scoped + auto-
+    /// versioned server-side; on success we reload the freshly-created version.
+    /// The expensive transcription/vision work is NOT repeated — this is a
+    /// note-gen re-run over stored data, so it takes a few seconds.
+    private func regenerate(templateKey: String? = nil, outputLanguage: String? = nil) async {
+        guard let note else { return }
+        isRegenerating = true
+        regenerateError = nil
+        do {
+            _ = try await APIClient.shared.regenerateNote(
+                sessionId: note.sessionId,
+                templateKey: templateKey,
+                outputLanguage: outputLanguage
+            )
+            // Pull the new version so the screen reflects the regenerated note.
+            await loadNote()
+            AurionHaptics.notification(.success)
+            withAnimation { regenToast = L("noteOptions.regenerated") }
+            toastDismissTask?.cancel()
+            toastDismissTask = Task {
+                try? await Task.sleep(nanoseconds: 2_000_000_000)
+                guard !Task.isCancelled else { return }
+                withAnimation { regenToast = nil }
+            }
+        } catch {
+            regenerateError = (error as? APIError)?.errorDescription ?? error.localizedDescription
+        }
+        isRegenerating = false
+    }
 
     private func loadNote() async {
         isLoading = true
