@@ -166,6 +166,7 @@ async def run_stage1(db: AsyncSession, session, audio_bytes: bytes):
             template_key=getattr(session, "template_key", None),
             custom_template_id=getattr(session, "custom_template_id", None),
             participants=participants,
+            encounter_context=session.encounter_context,
         )
     except EmptyTranscriptError as exc:
         try:

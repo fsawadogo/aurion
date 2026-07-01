@@ -38,7 +38,10 @@ def _transcript_row(session_id: uuid.UUID) -> SimpleNamespace:
 
 def _session(session_id: uuid.UUID) -> SimpleNamespace:
     return SimpleNamespace(
-        id=session_id, specialty="orthopedic_surgery", output_language="en"
+        id=session_id,
+        specialty="orthopedic_surgery",
+        output_language="en",
+        encounter_context=None,
     )
 
 
@@ -115,6 +118,95 @@ async def test_regenerate_allowed_via_note_options_flag():
         resp = await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
     assert resp.version == 2
     gen.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_regenerate_persists_and_threads_encounter_context():
+    """The change-context action persists the new context on the session AND
+    passes it into note-gen so the regenerated note is focused on it."""
+    sid = uuid.uuid4()
+    session = _session(sid)
+    session.encounter_context = "Breast augmentation consult"
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    note = Note(
+        session_id=str(sid),
+        stage=1,
+        version=5,
+        provider_used="anthropic",
+        specialty="orthopedic_surgery",
+        completeness_score=0.6,
+    )
+    gen = AsyncMock(return_value=note)
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=session),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        await regenerate_note(
+            sid,
+            RegenerateNoteRequest(
+                encounter_context="Breast augmentation; also liposuction"
+            ),
+            _caller(),
+            db,
+        )
+    # Persisted to the session row + threaded into note-gen.
+    assert session.encounter_context == "Breast augmentation; also liposuction"
+    assert (
+        gen.call_args.kwargs["encounter_context"]
+        == "Breast augmentation; also liposuction"
+    )
+
+
+@pytest.mark.asyncio
+async def test_regenerate_blank_context_clears_it():
+    sid = uuid.uuid4()
+    session = _session(sid)
+    session.encounter_context = "old context"
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    note = Note(
+        session_id=str(sid), stage=1, version=2, provider_used="anthropic",
+        specialty="orthopedic_surgery", completeness_score=0.5,
+    )
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=session),
+        ),
+        patch(
+            "app.api.v1.sessions.generate_stage1_note",
+            AsyncMock(return_value=note),
+        ),
+    ):
+        await regenerate_note(
+            sid, RegenerateNoteRequest(encounter_context="  "), _caller(), db
+        )
+    assert session.encounter_context is None
+
+
+@pytest.mark.asyncio
+async def test_regenerate_omitted_context_leaves_session_unchanged():
+    sid = uuid.uuid4()
+    session = _session(sid)
+    session.encounter_context = "keep me"
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    note = Note(
+        session_id=str(sid), stage=1, version=2, provider_used="anthropic",
+        specialty="orthopedic_surgery", completeness_score=0.5,
+    )
+    gen = AsyncMock(return_value=note)
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=session),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
+    assert session.encounter_context == "keep me"
+    assert gen.call_args.kwargs["encounter_context"] == "keep me"
 
 
 @pytest.mark.asyncio

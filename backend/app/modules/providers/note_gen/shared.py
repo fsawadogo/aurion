@@ -167,6 +167,7 @@ def build_user_prompt(
     prior_context_text: str | None = None,
     participants: list[dict] | None = None,
     specialty_prefix: str | None = None,
+    encounter_context: str | None = None,
 ) -> str:
     """Build the user prompt with transcript and template context.
 
@@ -228,6 +229,20 @@ def build_user_prompt(
     prior_block = ""
     if prior_context_text:
         prior_block = f"{prior_context_text}\n\n"
+    # Encounter context — clinician-provided framing for THIS encounter (e.g.
+    # "breast augmentation consult; patient also raised liposuction"). It tells
+    # the model which topics/sections to focus on so an under-narrated or
+    # multi-topic encounter is documented under the right headings. DESCRIPTIVE
+    # MODE: it is framing, NOT a captured finding — the model must never mint a
+    # claim solely from it; every claim still traces to transcript/visual/screen.
+    context_block = ""
+    if encounter_context and encounter_context.strip():
+        context_block = (
+            "ENCOUNTER CONTEXT (clinician-provided framing for this encounter — "
+            "use it to focus the note on the right topics and sections; it is "
+            "NOT itself a captured finding, so never create a claim solely from "
+            f"it):\n{encounter_context.strip()}\n\n"
+        )
     participants_block = render_participants_block(participants)
     # Specialty STYLE GUIDANCE + few-shot block (resolved against the
     # physician's override upstream). Ends with its own blank line so the
@@ -238,7 +253,7 @@ def build_user_prompt(
 {specialty_block}Template sections (generate each):
 {sections_spec}
 
-{participants_block}{prior_block}Transcript segments:
+{context_block}{participants_block}{prior_block}Transcript segments:
 {segments_text}
 
 Be thorough: capture EVERY distinct point in the transcript as its own claim — each history detail, exam finding, discussed option, risk, medication, instruction, cost, and next step. Do not summarize away or drop points that were discussed; a complete encounter yields many claims spread across the sections, not a handful.

@@ -57,6 +57,7 @@ class NoteGenerationProvider(ABC):
         prior_context_text: str | None = None,
         participants: list[dict] | None = None,
         specialty_prefix: str | None = None,
+        encounter_context: str | None = None,
     ) -> Note:
         """Generate a structured SOAP note from a transcript and template.
 
