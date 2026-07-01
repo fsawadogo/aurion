@@ -38,6 +38,15 @@ resource "aws_dynamodb_table" "audit_log" {
     kms_key_arn = aws_kms_key.main.arn
   }
 
+  # Retention — NO `ttl` block by design (#606). Audit rows must never
+  # auto-expire: the immutable trail is retained indefinitely, well beyond
+  # the ≥ 7-year floor (2555 days ≈ 7y) that Quebec medical-records law
+  # requires and that the CloudTrail / logs bucket lifecycle already encodes
+  # (logs_bucket.tf, "glacier-after-90d-expire-after-7y"). Introducing a
+  # `ttl { ... }` stanza here would silently start deleting audit events and
+  # break the 7-year retention guarantee — `tests/unit/test_audit_retention.py`
+  # fails if one ever appears on this table.
+
   # Deletion protection for prod
   deletion_protection_enabled = var.environment == "prod"
 

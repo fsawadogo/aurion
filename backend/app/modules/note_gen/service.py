@@ -1372,6 +1372,52 @@ async def get_note_by_stage(
     return _deserialize_note(version_record) if version_record else None
 
 
+class UnresolvedConflictError(Exception):
+    """Raised by :func:`approve_note` when the note still has unresolved
+    Stage 2 visual CONFLICTS. Approving over one would sign off a note
+    whose audio and video disagree — every conflict must be resolved
+    (accepted / rejected / edited) first. The HTTP layer maps this to 409.
+
+    ``section_ids`` / ``claim_ids`` name the offending claims so the caller
+    can surface a precise message. They carry NO PHI — only claim ids.
+    """
+
+    def __init__(self, section_ids: list[str], claim_ids: list[str]) -> None:
+        self.section_ids = section_ids
+        self.claim_ids = claim_ids
+        super().__init__(
+            f"{len(claim_ids)} unresolved conflict(s) in section(s) "
+            f"{section_ids}; resolve all conflicts before approval"
+        )
+
+
+def is_unresolved_conflict_claim(claim) -> bool:
+    """True for a Stage 2 visual conflict claim not yet resolved by a
+    physician edit. Once a physician edits a conflict claim it flips
+    ``physician_edited`` True and counts as resolved. Single source of
+    truth for the "what is an open conflict" rule — the notes router's
+    conflict summary reuses this."""
+    return (
+        claim.source_type == "visual"
+        and claim.id.startswith("conflict_")
+        and not claim.physician_edited
+    )
+
+
+def unresolved_conflict_claim_ids(note) -> tuple[list[str], list[str]]:
+    """Return ``(section_ids, claim_ids)`` for every unresolved conflict
+    claim in the note. Empty lists mean nothing is left to resolve."""
+    section_ids: list[str] = []
+    claim_ids: list[str] = []
+    for section in note.sections:
+        for claim in section.claims:
+            if is_unresolved_conflict_claim(claim):
+                if section.id not in section_ids:
+                    section_ids.append(section.id)
+                claim_ids.append(claim.id)
+    return section_ids, claim_ids
+
+
 async def approve_note(
     session_id: str,
     db: AsyncSession,
@@ -1379,7 +1425,8 @@ async def approve_note(
     """Approve the latest note version -- marks it as vFinal.
 
     Creates a new approved version record. Returns the approved Note.
-    Raises ValueError if no note exists for the session.
+    Raises ValueError if no note exists for the session, and
+    UnresolvedConflictError if the note still has open Stage 2 conflicts.
     """
     version_record = await note_repo.get_latest_version(db, session_id)
 
@@ -1390,10 +1437,19 @@ async def approve_note(
         # Already approved -- return existing note
         return _deserialize_note(version_record)
 
+    note = _deserialize_note(version_record)
+
+    # #606 defense-in-depth: never sign off over unresolved Stage 2 visual
+    # CONFLICTS, regardless of which caller invoked approval. The HTTP
+    # /approve route pre-checks too; keeping the invariant in the service
+    # protects non-HTTP callers (e.g. the video-import auto-approve path).
+    section_ids, claim_ids = unresolved_conflict_claim_ids(note)
+    if claim_ids:
+        raise UnresolvedConflictError(section_ids, claim_ids)
+
     version_record.is_approved = True
     await db.flush()
 
-    note = _deserialize_note(version_record)
     logger.info(
         "Note approved: session=%s version=%d stage=%d (vFinal)",
         session_id,
