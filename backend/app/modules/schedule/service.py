@@ -40,18 +40,18 @@ logger = logging.getLogger("aurion.schedule")
 _MAX_IDENTIFIER_LEN = 64
 _MAX_NOTE_LEN = 500
 
-# Lifecycle status set + legal transitions. `completed` / `cancelled` are
-# terminal — no outgoing edge, so re-opening a finished entry is rejected
-# (AC-3). Setting a status to its current value is always a no-op.
-_STATUSES: frozenset[str] = frozenset(
-    {"scheduled", "in_progress", "completed", "cancelled"}
-)
+# Lifecycle status transitions. `completed` / `cancelled` are terminal —
+# no outgoing edge, so re-opening a finished entry is rejected (AC-3).
+# Setting a status to its current value is always a no-op.
 _TRANSITIONS: dict[str, frozenset[str]] = {
     "scheduled": frozenset({"in_progress", "completed", "cancelled"}),
     "in_progress": frozenset({"scheduled", "completed", "cancelled"}),
     "completed": frozenset(),
     "cancelled": frozenset(),
 }
+# The valid status set is exactly the transition-map keys — derived so the
+# two can't drift out of lock-step.
+_STATUSES: frozenset[str] = frozenset(_TRANSITIONS)
 
 
 class ScheduleError(Exception):
