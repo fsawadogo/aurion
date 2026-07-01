@@ -2592,6 +2592,10 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
     // Hidden by default; ADMIN flips it via AppConfig. `decodeIfPresent`
     // below keeps older backends (that don't emit the key) safely off.
     let measurementEnabled: Bool
+    // ── Multi-clip video import (sequential clips → one note) ────────────
+    // Gates a future iOS multi-clip import UI. Plumbed now so the flag is
+    // available on-device; `decodeIfPresent` keeps older backends safely off.
+    let multiClipImportEnabled: Bool
 
     enum CodingKeys: String, CodingKey {
         case screenCaptureEnabled = "screen_capture_enabled"
@@ -2604,6 +2608,7 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         case patientSummaryCardEnabled = "patient_summary_card_enabled"
         case emrWritebackCardEnabled = "emr_writeback_card_enabled"
         case measurementEnabled = "measurement_enabled"
+        case multiClipImportEnabled = "multi_clip_import_enabled"
     }
 
     // Memberwise init so RemoteConfig's `@Published` default can build
@@ -2618,7 +2623,8 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         codingCardEnabled: Bool,
         patientSummaryCardEnabled: Bool,
         emrWritebackCardEnabled: Bool,
-        measurementEnabled: Bool = false
+        measurementEnabled: Bool = false,
+        multiClipImportEnabled: Bool = false
     ) {
         self.screenCaptureEnabled = screenCaptureEnabled
         self.noteVersioningEnabled = noteVersioningEnabled
@@ -2630,6 +2636,7 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         self.patientSummaryCardEnabled = patientSummaryCardEnabled
         self.emrWritebackCardEnabled = emrWritebackCardEnabled
         self.measurementEnabled = measurementEnabled
+        self.multiClipImportEnabled = multiClipImportEnabled
     }
 
     init(from decoder: Decoder) throws {
@@ -2647,6 +2654,7 @@ struct ClientFeatureFlagsResponse: Codable, Sendable {
         patientSummaryCardEnabled = try c.decodeIfPresent(Bool.self, forKey: .patientSummaryCardEnabled) ?? false
         emrWritebackCardEnabled = try c.decodeIfPresent(Bool.self, forKey: .emrWritebackCardEnabled) ?? false
         measurementEnabled = try c.decodeIfPresent(Bool.self, forKey: .measurementEnabled) ?? false
+        multiClipImportEnabled = try c.decodeIfPresent(Bool.self, forKey: .multiClipImportEnabled) ?? false
     }
 }
 
