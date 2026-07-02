@@ -720,6 +720,7 @@
 
 /* ── Dashboard (extended) ─────────────────────────────── */
 "dashboard.sessionSummary" = "%d sessions today \U00B7 %d pending review";
+"dashboard.todaySummary" = "%d sessions today";
 "dashboard.continueRecording" = "Continue Recording";
 "dashboard.recordingAgo" = "Recording %@";
 "dashboard.pausedAgo" = "Paused %@";
