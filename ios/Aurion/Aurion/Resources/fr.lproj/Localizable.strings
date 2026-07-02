@@ -708,6 +708,7 @@
 
 /* ── Tableau de bord (suite) ──────────────────────────── */
 "dashboard.sessionSummary" = "%d sessions aujourd\U2019hui \U00B7 %d en attente de r\U00E9vision";
+"dashboard.todaySummary" = "%d sessions aujourd\U2019hui";
 "dashboard.continueRecording" = "Continuer l\U2019enregistrement";
 "dashboard.recordingAgo" = "Enregistrement \U00B7 %@";
 "dashboard.pausedAgo" = "En pause \U00B7 %@";

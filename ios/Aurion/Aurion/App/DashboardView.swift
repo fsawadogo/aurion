@@ -108,23 +108,12 @@ struct DashboardView: View {
         }.count
     }
 
+    /// Sessions ready for the physician to review. No longer surfaced on Home
+    /// (Home is Quick Start only) — retained because it drives the Sessions
+    /// tab-bar badge (see `loadDashboardData` → navigation.pendingReviewCount).
     private var pendingReviewSessions: [SessionResponse] {
-        // AWAITING_REVIEW (Stage 1) plus sessions whose Stage 2 has finished
-        // and now await the physician's final approval (stage2ReviewReady) —
-        // both are "ready for you to review", not "still processing".
         recentSessions.filter {
             $0.state == "AWAITING_REVIEW" || $0.stage2ReviewReady
-        }
-    }
-
-    /// Sessions whose Stage 2 visual enrichment is in flight on the
-    /// backend (post-`/approve-stage1`, pre-`REVIEW_COMPLETE`). The tile
-    /// polls each session's job state and self-promotes when complete.
-    /// Excludes sessions whose Stage 2 already finished (stage2ReviewReady) —
-    /// those move to the pending-review surface above.
-    private var stage2InProgressSessions: [SessionResponse] {
-        recentSessions.filter {
-            $0.state == "PROCESSING_STAGE2" && !$0.stage2ReviewReady
         }
     }
 
@@ -189,16 +178,11 @@ struct DashboardView: View {
                     greetingHeader
                         .tourAnchor(.greeting)
                         .id(TourAnchor.greeting)
-                    // Home is Quick Start only. An interrupted recording is
-                    // resumed from the Sessions tab (SessionsInboxView already
-                    // renders RECORDING/PAUSED with a Resume action), and the
-                    // "Recent" list lives there too — so neither belongs on
-                    // Home. Pending-review + Stage 2-in-progress stay: they're
-                    // transient "needs your attention" prompts, not history,
-                    // and only render when non-empty (so a clean Home is just
-                    // Quick Start).
-                    if !stage2InProgressSessions.isEmpty { stage2InProgressSection }
-                    if !pendingReviewSessions.isEmpty { pendingReviewSection }
+                    // Home is Quick Start ONLY. Everything else — recent
+                    // history, resume-recording, pending-review, and Stage 2-
+                    // in-progress — lives on the Sessions tab (its Pending
+                    // filter + the tab-bar badge surface work that needs
+                    // attention). Home stays a clean launchpad.
                     quickStartSection
                         .tourAnchor(.startSession)
                         .id(TourAnchor.startSession)
@@ -306,7 +290,9 @@ struct DashboardView: View {
                             .foregroundColor(.aurionTextPrimary)
                     }
                 }
-                Text(L("dashboard.sessionSummary", displayedTodayCount, pendingReviewSessions.count))
+                // Home shows today's count only — pending review lives on the
+                // Sessions tab (Pending filter + tab badge), not here.
+                Text(L("dashboard.todaySummary", displayedTodayCount))
                     .aurionFont(14, relativeTo: .subheadline)
                     .foregroundColor(.aurionTextSecondary)
                     .contentTransition(.numericText())
@@ -324,68 +310,9 @@ struct DashboardView: View {
         }
     }
 
-    // MARK: - Pending Review (gold-accent card)
-    //
-    // Marie bug-bash (2026-06-05): this section once used the SAME
-    // "Resume" pill label as the (now-removed) resume card, even though the
-    // tap action is completely different — pending-review navigates to
-    // `SessionNoteView` (a note-review screen), not back into recording.
-    // Marie tapped this card expecting to resume her paused encounter
-    // and landed on a blank review screen ("No content captured" per
-    // section, because her earlier audio-upload bug had stranded
-    // sessions in AWAITING_REVIEW with no note). Pill is labelled
-    // "Review" (`sessions.review`) so its action is unambiguous.
-    private var pendingReviewSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: L("dashboard.pendingReview"))
-            ForEach(pendingReviewSessions, id: \.id) { session in
-                NavigationLink(destination: SessionNoteView(session: session)) {
-                    AurionCard(padding: 16, accent: true) {
-                        HStack {
-                            VStack(alignment: .leading, spacing: 2) {
-                                Text(localizedSpecialty(session.specialty))
-                                    .aurionFont(16, weight: .semibold, relativeTo: .body)
-                                    .foregroundColor(.aurionTextPrimary)
-                                Text(L("dashboard.recordedAgo", formatRelativeTime(session.createdAt)))
-                                    .aurionFont(13, relativeTo: .footnote)
-                                    .foregroundColor(.aurionTextSecondary)
-                            }
-                            Spacer()
-                            Text(L("sessions.review"))
-                                .aurionFont(13, weight: .semibold, relativeTo: .footnote)
-                                // Brand-navy on gold pill — fixed in both modes.
-                                .foregroundColor(.aurionNavy)
-                                .padding(.horizontal, 14)
-                                .padding(.vertical, 6)
-                                .background(Color.aurionGold)
-                                .clipShape(Capsule())
-                        }
-                    }
-                }
-                .buttonStyle(.plain)
-            }
-        }
-    }
-
-    // MARK: - Stage 2 in progress (polled tile)
-    //
-    // Surfaces sessions whose visual enrichment is still running on the
-    // backend. Each tile owns its own poll loop (5 s cadence); when a
-    // tile reports completion we refresh `recentSessions` so the row
-    // moves into Pending Review and the tile drops out.
-
-    private var stage2InProgressSection: some View {
-        VStack(alignment: .leading, spacing: 8) {
-            SectionHeader(title: L("dashboard.stage2InProgress"))
-            ForEach(stage2InProgressSessions, id: \.id) { session in
-                Stage2DashboardTile(
-                    session: session,
-                    onCompleted: { Task { await loadRecentSessions() } },
-                    onFailed: { Task { await loadRecentSessions() } }
-                )
-            }
-        }
-    }
+    // Pending-review + Stage-2-in-progress sections were removed from Home
+    // (Home is Quick Start only). Both surfaces live on the Sessions tab: the
+    // Pending filter lists them and the tab-bar badge counts pending review.
 
     // MARK: - Quick Start (2×2 grid)
 
