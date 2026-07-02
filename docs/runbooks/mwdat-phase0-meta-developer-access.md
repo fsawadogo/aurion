@@ -101,12 +101,45 @@ throws and is ignored → "dark" state). To activate:
 
 ## Definition of done (Phase 0)
 
-- [ ] Aurion org registered on the Wearables Developer Center; Developer Terms accepted.
-- [ ] Developer-preview/partner access granted for `com.aurionclinical.physician`.
-- [ ] `MetaAppID` + `ClientToken` obtained and handed off via the secret channel.
-- [ ] App-link Universal Link (`https://portal.aurionclinical.com/wearables/auth`) + MFi string (`com.meta.ar.wearable`) confirmed.
-- [ ] Release channel created; internal-TestFlight viability for the ExternalAccessory build confirmed.
+- [x] Aurion org registered on the Wearables Developer Center; Developer Terms accepted. *(project "Aurion Clinical" exists under the Faïçal Sawadogo Team — verified 2026-07-02)*
+- [x] Developer-preview/partner access granted for `com.aurionclinical.physician`. *(the Meta AI app recognizes Aurion and opens the authorization sheet)*
+- [x] `MetaAppID` + `ClientToken` obtained and handed off via the secret channel. *(GH secrets `MWDAT_META_APP_ID`/`MWDAT_CLIENT_TOKEN` set; baked into TestFlight builds)*
+- [x] App-link Universal Link (`https://portal.aurionclinical.com/wearables/auth`) + MFi string (`com.meta.ar.wearable`) confirmed. *(entitlement + served AASA verified 2026-07-02)*
+- [ ] Release channel created; internal-TestFlight viability for the ExternalAccessory build confirmed. **← the remaining blocker — see below**
 - [ ] Pilot-physician tester tier decided (internal vs external).
 
 When all boxes are checked, **Phase 3** (implement `MetaWearablesSource` for real) is unblocked —
 keep `meta_wearables_enabled` OFF in AppConfig until on-device validation with a real pair.
+*(Phase 3 code is on `main` (#443/#644); the flag is ON in dev — first field attempt 2026-07-02
+failed with Meta AI "Device not connected" because no release channel existed.)*
+
+---
+
+## Release channel — the field-tested unblock (2026-07-02)
+
+The 2026-07-02 on-device attempt failed exactly here: with **no release channel**, NO Meta
+account (including the project owner's) may register the integration, and the Meta AI app shows
+**"Device not connected"** during authorization. Meta's docs: the channel "controls a user's
+ability to register an app integration."
+
+A channel requires a **Version** first — both live under **Distribute** in the project:
+
+1. **Distribute → Versions → Create new version** → pick the type (**Major** for the first) →
+   **Create version** → wait for build status **Ready**. (DAT v0.7+ auto-generates the toolkit
+   application per version — nothing is uploaded; this is *not* the iOS binary.)
+2. **Distribute → Release channels → Create a release channel** → Name + Description → select the
+   Version → **enter tester emails** — the **Meta account email signed into the Meta AI app** on
+   the phone paired with the glasses. ⚠️ Must be **existing personal Meta accounts** (managed
+   accounts don't qualify). → review → **Create release channel**.
+3. Each tester **accepts the invite** (email, or <https://wearables.meta.com/invites>) with that
+   same Meta account.
+4. On the phone: Meta AI app → glasses show **Connected** (green) → Aurion → **Devices →
+   Connect Ray-Ban Meta** → authorization completes.
+
+Notes:
+- The channel does **not** distribute the iOS app — Aurion still ships via TestFlight; the channel
+  only allowlists Meta accounts for device authorization.
+- Since #644, a failed connect explains itself in-app: the Devices screen shows MWDAT's actual
+  error, and the recording screen shows "Glasses video unavailable — recording continues with
+  audio only" instead of a silent black screen.
+- Docs: <https://wearables.developer.meta.com/docs/set-up-release-channels>
