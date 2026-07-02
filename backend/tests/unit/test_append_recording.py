@@ -77,7 +77,14 @@ def _session(sid: uuid.UUID) -> SimpleNamespace:
 
 def _config(note_options_enabled: bool) -> SimpleNamespace:
     return SimpleNamespace(
-        feature_flags=SimpleNamespace(note_options_enabled=note_options_enabled)
+        feature_flags=SimpleNamespace(
+            note_options_enabled=note_options_enabled,
+            # #605 — append_recording purges raw audio in-band unless the
+            # retention window is on; keep it ON here so these append tests
+            # stay hermetic (the purge no-ops, no S3 call). The purge-timing
+            # behaviour itself is covered by test_raw_data_purge_timing.py.
+            media_review_retention_enabled=True,
+        )
     )
 
 

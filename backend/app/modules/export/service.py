@@ -22,6 +22,7 @@ from app.modules.cleanup.service import (
     purge_clips,
     purge_frames,
 )
+from app.modules.config.appconfig_client import get_config
 
 logger = logging.getLogger("aurion.export")
 
@@ -160,23 +161,31 @@ async def export_note_docx(
             str(exc),
         )
 
-    try:
-        await purge_frames(session_id)
-    except Exception as exc:
-        logger.error(
-            "Frame purge failed during export cleanup: session=%s error=%s",
-            session_id,
-            str(exc),
-        )
+    # #605 — raw video (frames/clips) purge on export is spec-strict by
+    # default: flag OFF (prod) purges immediately on export (stricter than the
+    # 24hr spec). When ``media_review_retention_enabled`` is ON (#338), the
+    # frames/clips are KEPT for the review/replay window and the S3 lifecycle
+    # TTL is the max-window backstop — so we skip the immediate purge. Eval
+    # migration above always runs (the eval bucket has its own retention
+    # regime, independent of the clinician replay window).
+    if not get_config().feature_flags.media_review_retention_enabled:
+        try:
+            await purge_frames(session_id)
+        except Exception as exc:
+            logger.error(
+                "Frame purge failed during export cleanup: session=%s error=%s",
+                session_id,
+                str(exc),
+            )
 
-    try:
-        await purge_clips(session_id)
-    except Exception as exc:
-        logger.error(
-            "Clip purge failed during export cleanup: session=%s error=%s",
-            session_id,
-            str(exc),
-        )
+        try:
+            await purge_clips(session_id)
+        except Exception as exc:
+            logger.error(
+                "Clip purge failed during export cleanup: session=%s error=%s",
+                session_id,
+                str(exc),
+            )
 
     return docx_bytes
 

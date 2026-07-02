@@ -34,7 +34,7 @@ variable "region" {
 # -----------------------------------------------------------------------------
 
 variable "media_retention_days" {
-  description = "Max-window TTL (in whole days) for the audio + frames S3 buckets' expiration lifecycle rules (#338). Dev uses 7 to give the eval team a review window over recent captures; prod stays at 1 (unchanged). S3 lifecycle expiration is whole-bucket and whole-day granular, so this is only the worst-case backstop ceiling — the precise deletion path is the app-level purge-on-approval that removes raw audio right after transcription and frames right after export. Raw audio is PHI, so the window is capped intentionally. Eval bucket is exempt (no lifecycle rule)."
+  description = "Max-window TTL (in whole days) for the audio + frames S3 buckets' expiration lifecycle rules (#338). Dev uses 7 to give the eval team a review window over recent captures; prod stays at 1 (unchanged). S3 lifecycle expiration is whole-bucket and whole-day granular, so this is only the worst-case backstop ceiling. The precise deletion path is the app-level in-band purge (#605), gated on the media_review_retention_enabled feature flag: when the flag is OFF (prod default), raw audio is purged right after transcription (<1hr) and frames/clips right after export; when it is ON, audio + frames/clips are kept for the review/replay window and this lifecycle TTL is the max-window backstop. Raw audio is PHI, so the window is capped intentionally. Eval bucket is exempt (no lifecycle rule)."
   type        = number
   default     = 1
 }
