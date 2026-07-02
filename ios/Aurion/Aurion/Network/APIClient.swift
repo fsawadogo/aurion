@@ -226,6 +226,32 @@ final class APIClient: Sendable {
         try validateResponse(response, data: data)
     }
 
+    /// Resume recording (note-options phase 4): upload a follow-up WAV clip to
+    /// merge into the encounter's transcript and regenerate the note covering
+    /// both. Gated on `note_options_enabled` server-side (403 otherwise); the
+    /// session need not be in any capture state.
+    func appendRecording(sessionId: String, audio: Data) async throws -> AppendRecordingResult {
+        let url = URL(string: "\(baseURL)/transcription/\(sessionId)/append")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = 300
+        let boundary = UUID().uuidString
+        request.setValue(
+            "multipart/form-data; boundary=\(boundary)",
+            forHTTPHeaderField: "Content-Type"
+        )
+        await ensureFreshToken()
+        addAuth(&request)
+        var builder = MultipartBuilder(boundary: boundary)
+        builder.appendFile(
+            "audio_file", filename: "resume.wav", mime: "audio/wav", data: audio
+        )
+        request.httpBody = builder.finish()
+        let (data, response) = try await performRequest(request)
+        try validateResponse(response, data: data)
+        return try JSONDecoder().decode(AppendRecordingResult.self, from: data)
+    }
+
     /// Permanently delete a session and its data (clinician-scoped on the
     /// backend — you can only discard your own). Returns 204 with no body, so
     /// it goes through a non-decoding path rather than `mutate`.
@@ -2015,6 +2041,25 @@ struct SurgeryQuoteResponse: Codable, Sendable, Equatable {
         case physicianEdited = "physician_edited"
         case createdAt = "created_at"
         case updatedAt = "updated_at"
+    }
+}
+
+/// Result of `POST /transcription/{id}/append` — a follow-up clip merged into
+/// the encounter and the note regenerated (note-options phase 4).
+struct AppendRecordingResult: Codable, Sendable, Equatable {
+    let version: Int
+    let stage: Int
+    let completenessScore: Double
+    let providerUsed: String
+    let addedSegments: Int
+    let totalSegments: Int
+
+    enum CodingKeys: String, CodingKey {
+        case version, stage
+        case completenessScore = "completeness_score"
+        case providerUsed = "provider_used"
+        case addedSegments = "added_segments"
+        case totalSegments = "total_segments"
     }
 }
 

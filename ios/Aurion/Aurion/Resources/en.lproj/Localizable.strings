@@ -988,6 +988,20 @@
 "quote.tbd" = "TBD";
 "quote.disclaimer" = "This is a cost estimate for the procedures discussed at this visit. It is not a bill and not a guarantee of final cost. Fees are set by the practice.";
 
+/* ── Resume recording (note-options phase 4) ──────────── */
+"noteOptions.resumeRecording" = "Resume recording";
+"resume.navTitle" = "Resume recording";
+"resume.title" = "Add to this encounter";
+"resume.hint" = "Record a short follow-up. It\U2019s merged into this encounter and the note regenerates covering both.";
+"resume.recordingSub" = "Recording\U2026 tap Stop when you\U2019re done.";
+"resume.start" = "Start recording";
+"resume.stop" = "Stop & merge";
+"resume.merging" = "Merging\U2026";
+"resume.mergingSub" = "Transcribing the clip and regenerating the note.";
+"resume.permissionDenied" = "Microphone access is off. Enable it in Settings to record.";
+"resume.startFailed" = "Couldn\U2019t start recording.";
+"resume.failedShort" = "Recording error";
+
 /* ── App Lock (security) ──────────────────────────────── */
 "profile.sectionSecurity" = "Security";
 "profile.appLock" = "App Lock";
