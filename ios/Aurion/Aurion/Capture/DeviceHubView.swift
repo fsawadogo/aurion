@@ -173,41 +173,70 @@ struct DeviceHubView: View {
     @ViewBuilder
     private var metaConnectPrompt: some View {
         if RemoteConfig.shared.featureFlags.metaWearablesEnabled, !mwdat.isConnected {
-            Button {
-                AurionHaptics.selection()
-                mwdat.connect()
-            } label: {
-                HStack(spacing: 10) {
-                    Image(systemName: "eyeglasses")
-                        .foregroundColor(.aurionGold)
-                    VStack(alignment: .leading, spacing: 2) {
-                        Text(L("devices.meta.connect"))
-                            .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
-                            .foregroundColor(.aurionTextPrimary)
-                        Text(mwdat.connection == .registering
-                             ? L("devices.meta.registering")
-                             : L("devices.meta.connectHint"))
-                            .aurionFont(12, relativeTo: .caption)
-                            .foregroundColor(.aurionTextSecondary)
+            VStack(alignment: .leading, spacing: 6) {
+                Button {
+                    AurionHaptics.selection()
+                    mwdat.connect()
+                } label: {
+                    HStack(spacing: 10) {
+                        Image(systemName: "eyeglasses")
+                            .foregroundColor(.aurionGold)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(L("devices.meta.connect"))
+                                .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                                .foregroundColor(.aurionTextPrimary)
+                            Text(metaConnectHint)
+                                .aurionFont(12, relativeTo: .caption)
+                                .foregroundColor(.aurionTextSecondary)
+                        }
+                        Spacer()
+                        if mwdat.connection == .registering {
+                            ProgressView()
+                        } else {
+                            Image(systemName: "chevron.right")
+                                .foregroundColor(.aurionTextSecondary)
+                        }
                     }
-                    Spacer()
-                    if mwdat.connection == .registering {
-                        ProgressView()
-                    } else {
-                        Image(systemName: "chevron.right")
-                            .foregroundColor(.aurionTextSecondary)
-                    }
+                    .padding(14)
+                    .background(Color.aurionCardBackground)
+                    .cornerRadius(16)
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 16)
+                            .stroke(Color.aurionBorder, lineWidth: 1)
+                    )
                 }
-                .padding(14)
-                .background(Color.aurionCardBackground)
-                .cornerRadius(16)
-                .overlay(
-                    RoundedRectangle(cornerRadius: 16)
-                        .stroke(Color.aurionBorder, lineWidth: 1)
-                )
+                .buttonStyle(.plain)
+                .disabled(mwdat.connection == .registering)
+
+                // Diagnostic line — the registration flow fails opaquely on the
+                // Meta side ("Device not connected" in the Meta AI app) with no
+                // clue in Aurion. Surface MWDAT's last error verbatim so a
+                // failed connect explains itself (auth/allowlist vs device
+                // unreachable) instead of leaving a silent dead card.
+                if let err = mwdat.lastError {
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .font(.system(size: 11))
+                            .foregroundColor(.clinicalAlert)
+                        Text(err)
+                            .aurionFont(12, relativeTo: .caption)
+                            .foregroundColor(.clinicalAlert)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(.horizontal, 4)
+                }
             }
-            .buttonStyle(.plain)
-            .disabled(mwdat.connection == .registering)
+        }
+    }
+
+    /// Per-state hint under the connect row. `.unavailable` means the MWDAT
+    /// SDK never configured (credentials absent from this build) — a tap can't
+    /// succeed, so say that instead of the generic "connect" copy.
+    private var metaConnectHint: String {
+        switch mwdat.connection {
+        case .registering: return L("devices.meta.registering")
+        case .unavailable: return L("devices.meta.sdkUnconfigured")
+        default:           return L("devices.meta.connectHint")
         }
     }
 
