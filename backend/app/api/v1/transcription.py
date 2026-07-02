@@ -28,6 +28,7 @@ from app.core.models import PilotMetricsModel, TranscriptModel
 from app.core.types import SessionState, Transcript
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.cleanup.service import purge_audio_for_session
 from app.modules.config.appconfig_client import get_config
 from app.modules.note_gen.service import EmptyTranscriptError, generate_stage1_note
 from app.modules.phi_audit.service import scan_transcript_for_phi
@@ -77,6 +78,38 @@ async def _record_stage1_latency(
         logger.warning(
             "Failed to record stage1_latency_ms for session=%s: %s",
             session.id, exc,
+        )
+
+
+async def _purge_raw_audio_if_not_retained(session_id) -> None:
+    """Spec-timing raw-audio purge (#605): delete the session's raw audio
+    in-band right after a SUCCESSFUL transcription — unless the media-review
+    retention window is on.
+
+    The MVP Scope Definition requires raw audio deleted <1hr post-
+    transcription. Audio is the spine: once the transcript exists the raw
+    audio has served its purpose, so in the default posture we delete it
+    immediately rather than waiting on the whole-day S3 lifecycle TTL.
+
+    When ``media_review_retention_enabled`` is ON (opt-in, compliance-gated,
+    #338) the audio is instead KEPT for the replay/download window and the S3
+    lifecycle TTL is the max-window backstop — so this no-ops.
+
+    Fail-soft: a purge hiccup must never turn a delivered note into a failed
+    request; the S3 lifecycle TTL backstops any object left behind. The
+    underlying ``purge_audio_for_session`` writes its own immutable
+    ``AUDIO_PURGED`` audit row (bucket + count, never a key or body).
+    """
+    if get_config().feature_flags.media_review_retention_enabled:
+        return
+    try:
+        await purge_audio_for_session(str(session_id))
+    except Exception:
+        logger.warning(
+            "In-band raw-audio purge failed for session=%s — the S3 "
+            "lifecycle TTL will backstop it",
+            str(session_id)[:8],
+            exc_info=True,
         )
 
 
@@ -250,6 +283,12 @@ async def run_stage1(db: AsyncSession, session, audio_bytes: bytes):
     # WS hiccup can never turn a delivered note into a failed request.
     await notify_stage1_delivered(str(session_id), stage1_note)
 
+    # #605 — raw audio has served its purpose once the transcript + note are
+    # delivered; purge it in-band (<1hr) unless the replay window is on. Placed
+    # here (after full Stage-1 success) so a transcription/note-gen failure —
+    # which raises above and rolls the request back — keeps the audio for retry.
+    await _purge_raw_audio_if_not_retained(session_id)
+
     return transcript
 
 
@@ -417,6 +456,12 @@ async def append_recording(
         added_segments=len(addition.segments),
     )
     await db.commit()
+
+    # #605 — the appended clip's raw audio was uploaded + transcribed here;
+    # purge all of the session's raw audio in-band (<1hr) once the merged
+    # transcript is durably committed, unless the replay window is on. Post-
+    # commit, so there is no rollback-vs-purge race on this path.
+    await _purge_raw_audio_if_not_retained(session_id)
 
     return AppendRecordingResponse(
         version=note.version,
