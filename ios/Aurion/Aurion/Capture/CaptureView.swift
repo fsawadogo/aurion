@@ -154,7 +154,10 @@ struct CaptureView: View {
         } else if let meta = registry.activeVideoSource as? MetaWearablesSource {
             // Ray-Ban Meta POV preview (#443) — the glasses stream
             // CMSampleBuffers over MWDAT into an AVSampleBufferDisplayLayer.
-            MetaPreviewView(displayLayer: meta.previewLayer)
+            // Status-aware: when the stream never started (glasses not
+            // connected / MWDAT error) this shows WHY instead of an
+            // unexplained black screen while audio records.
+            MetaPreviewOrStatus(source: meta)
         }
     }
 

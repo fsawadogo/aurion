@@ -50,3 +50,43 @@ struct MetaPreviewView: UIViewRepresentable {
         }
     }
 }
+
+/// Status-aware wrapper for the glasses preview. The raw `MetaPreviewView`
+/// renders an empty (black) layer when the MWDAT stream never started — e.g.
+/// glasses not connected in the Meta AI app — leaving the physician staring at
+/// a black screen with no explanation while audio records. This wrapper
+/// observes the source: POV preview while streaming, otherwise a fixed-light
+/// explanatory placeholder (why video is missing + that audio continues).
+struct MetaPreviewOrStatus: View {
+    @ObservedObject var source: MetaWearablesSource
+
+    var body: some View {
+        if source.isReadyForPreview {
+            MetaPreviewView(displayLayer: source.previewLayer)
+        } else {
+            // Over the capture screen's black backdrop — fixed-light styling,
+            // matching the immersive layout's over-camera chrome.
+            VStack(spacing: 12) {
+                Image(systemName: "eyeglasses")
+                    .font(.system(size: 42, weight: .light))
+                    .foregroundColor(.white.opacity(0.55))
+                Text(L("capture.meta.noVideoTitle"))
+                    .aurionFont(17, weight: .semibold, relativeTo: .headline)
+                    .foregroundColor(.white)
+                if !source.detail.isEmpty {
+                    Text(source.detail)
+                        .aurionFont(13, relativeTo: .footnote)
+                        .foregroundColor(.white.opacity(0.7))
+                        .multilineTextAlignment(.center)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Text(L("capture.meta.audioOnly"))
+                    .aurionFont(13, relativeTo: .footnote)
+                    .foregroundColor(.aurionGold)
+                    .multilineTextAlignment(.center)
+            }
+            .padding(.horizontal, 32)
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
