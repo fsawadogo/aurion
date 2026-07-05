@@ -66,77 +66,120 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
         # without a redeploy.
         params = get_config().model_params.note_generation
 
+        # Output ceilings, in escalation order. A long encounter (e.g. a
+        # 400-segment video import) can exceed the configured max_tokens
+        # mid-tool-call; the API then returns stop_reason="max_tokens" with an
+        # EMPTY tool input ({}), which previously parsed "successfully" into a
+        # zero-section note — a silent BLANK note delivered as success. On
+        # truncation we retry once at an escalated ceiling; if that truncates
+        # too we fail LOUDLY (ProviderError) so the pipeline surfaces it.
+        # claude-sonnet supports far larger outputs, so the escalation is safe.
+        ceilings = [params.max_tokens]
+        escalated = min(max(params.max_tokens * 4, 16_000), 32_000)
+        if escalated > params.max_tokens:
+            ceilings.append(escalated)
+
+        # Telemetry: sum usage across attempts so a retried call bills honestly.
+        total_input_tokens = 0
+        total_output_tokens = 0
+
         try:
             # 300s: grounded synthesis over a full note with the enriched
             # specialty prompt + few-shot can exceed the old 120s ceiling —
             # a ReadTimeout there surfaced as a blank "Note generation failed:"
             # and a 500 on upload. Well within the 5-min Stage 2 budget.
             async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "x-api-key": _ANTHROPIC_API_KEY,
-                        "anthropic-version": "2023-06-01",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": _MODEL,
-                        "max_tokens": params.max_tokens,
-                        "temperature": params.temperature,
-                        "system": effective_system,
-                        "messages": [
-                            {"role": "user", "content": user_prompt},
-                        ],
-                        # Force the model to emit the note via a tool call.
-                        # Anthropic guarantees the `input` matches the
-                        # `input_schema` when tool_choice pins the tool —
-                        # eliminates an entire class of JSON parse / shape
-                        # errors that previously surfaced as STAGE1_FAILED.
-                        "tools": [
-                            {
-                                "name": "emit_clinical_note",
-                                "description": (
-                                    "Emit the structured clinical note built "
-                                    "from the transcript per the descriptive-"
-                                    "mode rules in the system prompt."
-                                ),
-                                "input_schema": NOTE_RESPONSE_SCHEMA,
-                            }
-                        ],
-                        "tool_choice": {
-                            "type": "tool",
-                            "name": "emit_clinical_note",
+                for attempt_max_tokens in ceilings:
+                    response = await client.post(
+                        "https://api.anthropic.com/v1/messages",
+                        headers={
+                            "x-api-key": _ANTHROPIC_API_KEY,
+                            "anthropic-version": "2023-06-01",
+                            "Content-Type": "application/json",
                         },
-                    },
-                )
-                response.raise_for_status()
-                data = response.json()
-                usage = data.get("usage") or {}
-                set_call_usage(
-                    input_tokens=int(usage.get("input_tokens", 0)),
-                    output_tokens=int(usage.get("output_tokens", 0)),
-                    model=_MODEL,
-                )
-                # Tool-use response: content blocks include a tool_use
-                # block whose `input` is the schema-validated JSON. Fall
-                # back to a text block if the model declined the tool
-                # (shouldn't happen with tool_choice, but defensive).
-                payload_str = None
-                for block in data.get("content", []):
-                    if block.get("type") == "tool_use" and block.get("name") == "emit_clinical_note":
-                        payload_str = json.dumps(block["input"])
-                        break
-                if payload_str is None:
-                    # Defensive fallback — should never hit with forced
-                    # tool_choice but tolerate older API shapes (text
-                    # block, or a bare text-bearing block) for resilience.
+                        json={
+                            "model": _MODEL,
+                            "max_tokens": attempt_max_tokens,
+                            "temperature": params.temperature,
+                            "system": effective_system,
+                            "messages": [
+                                {"role": "user", "content": user_prompt},
+                            ],
+                            # Force the model to emit the note via a tool call.
+                            # Anthropic guarantees the `input` matches the
+                            # `input_schema` when tool_choice pins the tool —
+                            # eliminates an entire class of JSON parse / shape
+                            # errors that previously surfaced as STAGE1_FAILED.
+                            "tools": [
+                                {
+                                    "name": "emit_clinical_note",
+                                    "description": (
+                                        "Emit the structured clinical note built "
+                                        "from the transcript per the descriptive-"
+                                        "mode rules in the system prompt."
+                                    ),
+                                    "input_schema": NOTE_RESPONSE_SCHEMA,
+                                }
+                            ],
+                            "tool_choice": {
+                                "type": "tool",
+                                "name": "emit_clinical_note",
+                            },
+                        },
+                    )
+                    response.raise_for_status()
+                    data = response.json()
+                    usage = data.get("usage") or {}
+                    total_input_tokens += int(usage.get("input_tokens", 0))
+                    total_output_tokens += int(usage.get("output_tokens", 0))
+                    set_call_usage(
+                        input_tokens=total_input_tokens,
+                        output_tokens=total_output_tokens,
+                        model=_MODEL,
+                    )
+
+                    if data.get("stop_reason") == "max_tokens":
+                        logger.warning(
+                            "Anthropic note gen truncated at max_tokens=%d: "
+                            "session=%s segments=%d — %s",
+                            attempt_max_tokens,
+                            transcript.session_id,
+                            len(transcript.segments),
+                            "retrying at a higher ceiling"
+                            if attempt_max_tokens != ceilings[-1]
+                            else "ceiling exhausted",
+                        )
+                        continue
+
+                    # Tool-use response: content blocks include a tool_use
+                    # block whose `input` is the schema-validated JSON. Fall
+                    # back to a text block if the model declined the tool
+                    # (shouldn't happen with tool_choice, but defensive).
+                    payload_str = None
                     for block in data.get("content", []):
-                        if "text" in block:
-                            payload_str = block["text"]
+                        if block.get("type") == "tool_use" and block.get("name") == "emit_clinical_note":
+                            payload_str = json.dumps(block["input"])
                             break
-                if payload_str is None:
-                    raise ProviderError("anthropic", "No tool_use or text block in response")
-                return parse_note_response(payload_str, transcript, template, stage, "anthropic")
+                    if payload_str is None:
+                        # Defensive fallback — should never hit with forced
+                        # tool_choice but tolerate older API shapes (text
+                        # block, or a bare text-bearing block) for resilience.
+                        for block in data.get("content", []):
+                            if "text" in block:
+                                payload_str = block["text"]
+                                break
+                    if payload_str is None:
+                        raise ProviderError("anthropic", "No tool_use or text block in response")
+                    return parse_note_response(payload_str, transcript, template, stage, "anthropic")
+
+            # Every ceiling truncated — fail loudly rather than deliver the
+            # empty tool input as a blank note.
+            raise ProviderError(
+                "anthropic",
+                f"Note generation output truncated at max_tokens={ceilings[-1]} "
+                f"({len(transcript.segments)}-segment transcript) — the encounter "
+                "is too long for the configured output ceiling.",
+            )
 
         except httpx.HTTPError as e:
             logger.error("Anthropic note gen failed: session=%s error=%s", transcript.session_id, str(e))
