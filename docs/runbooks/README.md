@@ -14,6 +14,7 @@ with MFA, and can read `.claude/state/backlog.md` for current context.
 | [cognito-user-management.md](cognito-user-management.md) | Add / remove pilot users, reset MFA when a doctor loses their phone, force sign-out |
 | [web-portal-deployment.md](web-portal-deployment.md) | First-time Amplify provisioning + deploy / rollback for the admin portal |
 | [pilot-launch-checklist.md](pilot-launch-checklist.md) | Go / no-go review before first physician sign-in |
+| [note-gen-blank-notes.md](note-gen-blank-notes.md) | A session delivered a blank note (completeness 0.00) — triage the truncation / thin-transcript / template-mismatch causes |
 
 ## Conventions
 
