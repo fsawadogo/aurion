@@ -78,6 +78,22 @@ _BOOTSTRAP_MESSAGE = (
     "general musculoskeletal exam.)"
 )
 
+# Prepended to any document we ask the model to reverse-engineer into a
+# template. The GENERALIZE clause is load-bearing for PHI: the source may
+# contain patient specifics, so the model is told to emit ONLY structure +
+# capture guidance and never copy a patient value into the draft. The draft is
+# re-validated as a structure-only Template on finalize regardless.
+_EXTRACTION_INSTRUCTION = (
+    "Here is a source document to reverse-engineer into a note template. "
+    "Output a single valid draft_template action whose sections + descriptions "
+    "capture the STRUCTURE of this document. Use snake_case ids; mark "
+    "obviously-mandatory sections as required.\n\n"
+    "GENERALIZE — do NOT copy any patient-specific value into the template: no "
+    "names, dates, ages, measurements, or clinical findings. A section's "
+    "description says WHAT to capture, never what a specific patient's value "
+    "was.\n\n--- SOURCE ---\n"
+)
+
 
 @dataclass(frozen=True)
 class AuthoringReply:
@@ -222,51 +238,72 @@ async def finalize_authoring(
 async def upload_template_document(
     owner_id: uuid.UUID, document_text: str, db: AsyncSession
 ) -> tuple[TemplateAuthoringSessionModel, AuthoringReply]:
-    """Seed an authoring session from a pasted template document.
+    """Seed an authoring session from a pasted / uploaded template document.
 
-    Same engine as the conversational path: we synthesize a single user
-    turn ("here's a template document, extract it"), run the LLM, and
-    let the validation-retry loop produce a clean draft. The row is
-    persisted in `status='active'` so the physician can keep refining
-    the extracted draft via chat if it needs tweaks.
+    Same engine as the conversational path, via `_seed_authoring_session`:
+    the full document is sent to the LLM for structure extraction but stored
+    only as a redacted placeholder (a "template" a physician pastes may itself
+    contain patient specifics). The row is persisted `status='active'` so the
+    physician can keep refining the extracted draft via chat.
     """
     document_text = document_text.strip()
     if not document_text:
         raise ValueError("Document is empty")
 
-    seed_user_message = (
-        "Here is a template document to extract. Output a single valid "
-        "draft_template action with the structure that best represents "
-        "this document. Use snake_case ids; mark obviously-mandatory "
-        "sections as required.\n\n--- DOCUMENT ---\n"
-        f"{document_text}"
+    placeholder = (
+        f"[uploaded template document · {len(document_text)} chars — "
+        "used to extract structure, not stored verbatim]"
     )
-    history: list[ChatMessage] = [
+    return await _seed_authoring_session(owner_id, document_text, placeholder, db)
+
+
+# ── Internals ──────────────────────────────────────────────────────────────
+
+
+async def _seed_authoring_session(
+    owner_id: uuid.UUID,
+    source_text: str,
+    stored_placeholder: str,
+    db: AsyncSession,
+) -> tuple[TemplateAuthoringSessionModel, AuthoringReply]:
+    """Create an authoring session seeded from ``source_text``.
+
+    The full ``source_text`` is sent to the LLM for structure extraction
+    (prefixed with the generalize / strip-PHI ``_EXTRACTION_INSTRUCTION``), but
+    it is NEVER persisted: the stored message history keeps only
+    ``stored_placeholder`` where the source turn would be. ``source_text`` can
+    be a real patient note, so storing it verbatim in ``messages_json`` would be
+    a PHI leak — the placeholder keeps the row reconstructable ("a document was
+    provided for extraction") without the content.
+    """
+    seed_user_message = f"{_EXTRACTION_INSTRUCTION}{source_text}"
+    llm_history: list[ChatMessage] = [
         ChatMessage(role="assistant", content=_BOOTSTRAP_MESSAGE),
         ChatMessage(role="user", content=seed_user_message),
     ]
 
     provider = get_registry().get_note_provider()
     assistant_text, draft = await _generate_with_validation_retry(
-        provider, history
+        provider, llm_history
     )
 
-    history.append(ChatMessage(role="assistant", content=assistant_text))
+    # Persist the placeholder — NOT the source text — as the user turn.
+    stored_history: list[ChatMessage] = [
+        ChatMessage(role="assistant", content=_BOOTSTRAP_MESSAGE),
+        ChatMessage(role="user", content=stored_placeholder),
+        ChatMessage(role="assistant", content=assistant_text),
+    ]
 
     row = TemplateAuthoringSessionModel(
         id=uuid.uuid4(),
         owner_id=owner_id,
-        messages_json=_encode_messages(history),
+        messages_json=_encode_messages(stored_history),
         draft_template_json=draft.model_dump_json() if draft else None,
         status="active",
     )
     db.add(row)
     await db.flush()
-
     return row, AuthoringReply(assistant_message=assistant_text, draft_template=draft)
-
-
-# ── Internals ──────────────────────────────────────────────────────────────
 
 
 async def _generate_with_validation_retry(
