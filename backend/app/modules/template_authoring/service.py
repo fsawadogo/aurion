@@ -270,11 +270,14 @@ async def _seed_authoring_session(
 
     The full ``source_text`` is sent to the LLM for structure extraction
     (prefixed with the generalize / strip-PHI ``_EXTRACTION_INSTRUCTION``), but
-    it is NEVER persisted: the stored message history keeps only
-    ``stored_placeholder`` where the source turn would be. ``source_text`` can
-    be a real patient note, so storing it verbatim in ``messages_json`` would be
-    a PHI leak — the placeholder keeps the row reconstructable ("a document was
-    provided for extraction") without the content.
+    NOTHING derived from it is persisted verbatim. The stored history keeps only
+    ``stored_placeholder`` (in place of the source turn) and a fixed
+    acknowledgment (in place of the model's raw reply, which is generated from
+    the source and could echo patient specifics in its prose). ``source_text``
+    can be a real patient note, so persisting either turn verbatim in
+    ``messages_json`` would be a PHI leak. The structured draft — parsed from the
+    reply and generalized per ``_EXTRACTION_INSTRUCTION`` — is what carries
+    forward.
     """
     seed_user_message = f"{_EXTRACTION_INSTRUCTION}{source_text}"
     llm_history: list[ChatMessage] = [
@@ -283,15 +286,29 @@ async def _seed_authoring_session(
     ]
 
     provider = get_registry().get_note_provider()
-    assistant_text, draft = await _generate_with_validation_retry(
-        provider, llm_history
-    )
+    # The raw reply is generated FROM the (possibly-PHI) source, so its prose can
+    # echo patient specifics — persisting it verbatim would reopen the leak the
+    # placeholder closes. Use it only to extract the draft, then discard it in
+    # favour of a fixed, draft-derived acknowledgment.
+    _raw_reply, draft = await _generate_with_validation_retry(provider, llm_history)
 
-    # Persist the placeholder — NOT the source text — as the user turn.
+    if draft is not None:
+        seed_ack = (
+            f"I drafted a template from your document — {len(draft.sections)} "
+            "section(s). Review it on the right, then tell me what to adjust."
+        )
+    else:
+        seed_ack = (
+            "I couldn't extract a clean template from that document. Tell me the "
+            "sections you'd like and I'll build it."
+        )
+
+    # Neither the source turn nor the model's raw reply is persisted — only the
+    # placeholder and the fixed acknowledgment.
     stored_history: list[ChatMessage] = [
         ChatMessage(role="assistant", content=_BOOTSTRAP_MESSAGE),
         ChatMessage(role="user", content=stored_placeholder),
-        ChatMessage(role="assistant", content=assistant_text),
+        ChatMessage(role="assistant", content=seed_ack),
     ]
 
     row = TemplateAuthoringSessionModel(
@@ -303,7 +320,7 @@ async def _seed_authoring_session(
     )
     db.add(row)
     await db.flush()
-    return row, AuthoringReply(assistant_message=assistant_text, draft_template=draft)
+    return row, AuthoringReply(assistant_message=seed_ack, draft_template=draft)
 
 
 async def _generate_with_validation_retry(
@@ -329,11 +346,19 @@ async def _generate_with_validation_retry(
             template = Template.model_validate(extracted)
             return last_assistant, template
         except ValidationError as exc:
+            # Pydantic v2 `.errors()` embeds the offending `input` — which, for
+            # a note-derived draft, can carry patient content. Summarize to
+            # loc+msg only (no input) before it touches logs or the re-prompt.
+            safe_errors = "; ".join(
+                f"{'.'.join(str(p) for p in e.get('loc', ())) or 'template'}: "
+                f"{e.get('msg', 'invalid')}"
+                for e in exc.errors()
+            )
             if attempt == _MAX_VALIDATION_RETRIES:
                 logger.warning(
                     "Template authoring: gave up after %d invalid drafts; "
-                    "surfacing reply without a draft. last_errors=%s",
-                    _MAX_VALIDATION_RETRIES + 1, exc.errors(),
+                    "surfacing reply without a draft. errors=%s",
+                    _MAX_VALIDATION_RETRIES + 1, safe_errors,
                 )
                 return last_assistant, None
             # Re-prompt: append the bad assistant reply + a correction
@@ -346,7 +371,7 @@ async def _generate_with_validation_retry(
                     role="user",
                     content=(
                         "Your last draft failed schema validation with these "
-                        f"errors: {exc.errors()}. Please re-emit a single "
+                        f"errors: {safe_errors}. Please re-emit a single "
                         "valid draft_template action that satisfies the "
                         "Template schema."
                     ),

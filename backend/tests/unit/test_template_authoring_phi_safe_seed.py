@@ -66,26 +66,53 @@ def stub_db():
 
 
 @pytest.mark.asyncio
-async def test_upload_sends_full_source_to_llm(monkeypatch, stub_db):
-    """AC-1: the model must see the full source to extract structure from it."""
+async def test_upload_uses_full_source_but_stores_placeholder(monkeypatch, stub_db):
+    """AC-1/AC-2 in ONE call: the exact source that reached the LLM (needed to
+    extract structure) is absent from the persisted history; only the
+    placeholder is stored."""
     provider, seen = _capturing_provider(_draft_reply())
-    _patch_registry(monkeypatch, provider)
-    await ta_service.upload_template_document(
-        uuid.uuid4(), f"Section A. {_SENTINEL}. Section B.", stub_db
-    )
-    assert any(_SENTINEL in m for m in seen)
-
-
-@pytest.mark.asyncio
-async def test_upload_redacts_source_from_stored_history(monkeypatch, stub_db):
-    """AC-2: the persisted history has the placeholder, never the source."""
-    provider, _ = _capturing_provider(_draft_reply())
     _patch_registry(monkeypatch, provider)
     row, _reply = await ta_service.upload_template_document(
         uuid.uuid4(), f"Section A. {_SENTINEL}. Section B.", stub_db
     )
+    joined = " ".join(seen)
+    assert _SENTINEL in joined  # reached the LLM
+    assert _SENTINEL not in row.messages_json  # not persisted
+    assert "not stored" in row.messages_json  # placeholder present
+
+
+@pytest.mark.asyncio
+async def test_upload_redacts_echoed_source_from_assistant_turn(monkeypatch, stub_db):
+    """The model's reply is generated from the source and may echo it. The seed
+    turn stores a fixed acknowledgment, so an echoed value is neither persisted
+    nor returned."""
+    echoing_reply = f"Built this from your note about {_SENTINEL}.\n" + _draft_reply()
+    provider, _ = _capturing_provider(echoing_reply)
+    _patch_registry(monkeypatch, provider)
+    row, reply = await ta_service.upload_template_document(
+        uuid.uuid4(), "Section A", stub_db
+    )
     assert _SENTINEL not in row.messages_json
-    assert "not stored" in row.messages_json
+    assert _SENTINEL not in (reply.assistant_message or "")
+    assert reply.draft_template is not None
+
+
+@pytest.mark.asyncio
+async def test_upload_seed_with_no_draft_persists_safely(monkeypatch, stub_db):
+    """Extraction yields no draft (reply has no valid draft block): the row is
+    still active, draft is None, and the reply — which may echo the source — is
+    not persisted."""
+    no_draft_reply = f"What specialty is {_SENTINEL} for? No JSON here."
+    provider, _ = _capturing_provider(no_draft_reply)
+    _patch_registry(monkeypatch, provider)
+    row, reply = await ta_service.upload_template_document(
+        uuid.uuid4(), "Section A", stub_db
+    )
+    assert row.status == "active"
+    assert row.draft_template_json is None
+    assert reply.draft_template is None
+    assert _SENTINEL not in row.messages_json
+    assert "couldn't extract" in reply.assistant_message
 
 
 @pytest.mark.asyncio
