@@ -1512,6 +1512,13 @@ async def edit_note(
                 claim.original_text = claim.text
                 claim.physician_edited = True
             claim.text = new_text
+            # A physician-attested section is populated regardless of what
+            # the pipeline had it at (e.g. a pending_video physical exam the
+            # physician corrects before approving — pilot feedback). Stage 2
+            # can still enrich it later; the status just stops reading as
+            # "waiting" for content the physician already wrote.
+            if section.status != "populated":
+                section.status = "populated"
         else:
             # Net-new physician claim — no Stage 1 anchor exists, so the
             # source provenance is the edit itself.

@@ -329,7 +329,19 @@ export default function NoteReviewPage() {
                 <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
                   {t("noteLabel")}
                 </h2>
-                <CompletenessRing sections={detail.note.sections} />
+                {/* Caption the ring — a bare percentage read as a mystery
+                    number in pilot feedback. */}
+                <div className="flex items-center gap-2">
+                  <span className="text-[11px] text-gray-500">
+                    {t("completenessCaption", {
+                      populated: detail.note.sections.filter(
+                        (s) => s.status === "populated",
+                      ).length,
+                      total: detail.note.sections.length,
+                    })}
+                  </span>
+                  <CompletenessRing sections={detail.note.sections} />
+                </div>
               </div>
               <div className="space-y-3">
                 {detail.note.sections.map((section) => (

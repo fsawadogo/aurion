@@ -1248,6 +1248,7 @@
     "transcriptLabel": "Transcript",
     "transcriptCount": "{count} cited segments",
     "noteLabel": "Note",
+    "completenessCaption": "{populated} of {total} sections populated",
     "conflicts": {
       "summary": "{count, plural, one {# unresolved conflict.} other {# unresolved conflicts.}}",
       "blockedHint": "Approval is blocked until every conflict is resolved.",
