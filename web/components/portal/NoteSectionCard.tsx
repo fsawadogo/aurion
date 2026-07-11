@@ -86,7 +86,12 @@ export default function NoteSectionCard({
           {section.title || section.id}
         </h3>
         {statusBadge}
-        {section.status === "populated" && !editing && !busy && (
+        {/* Every section is editable — including pending-visual / not-captured
+            / failed ones (pilot feedback: the physician couldn't correct a
+            physical exam stuck in pending_video). The backend edit endpoint
+            creates a physician_edit claim when none exists and marks the
+            section populated. */}
+        {!editing && !busy && (
           <button
             type="button"
             onClick={() => setEditing(true)}
@@ -219,7 +224,13 @@ function sectionBadge(status: NoteSection["status"]) {
     case "populated":
       return <Badge variant="success" dot>Populated</Badge>;
     case "pending_video":
-      return <Badge variant="warning" dot>Pending visual</Badge>;
+      // Pilot feedback: "pending visual" read as a mystery. Explain when it
+      // resolves (visual analysis runs after Stage 1 approval) on hover.
+      return (
+        <span title="Waiting for visual analysis — it runs after you approve the note. You can still edit this section now.">
+          <Badge variant="warning" dot>Pending visual</Badge>
+        </span>
+      );
     case "processing_failed":
       return <Badge variant="error" dot>Failed</Badge>;
     case "not_captured":

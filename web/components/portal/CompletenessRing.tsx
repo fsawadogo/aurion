@@ -35,6 +35,9 @@ export default function CompletenessRing({
       className="relative inline-flex items-center justify-center"
       style={{ width: size, height: size }}
       aria-label={`Completeness ${Math.round(pct * 100)}%`}
+      // Pilot feedback: a bare "80%" read as a mystery number. Spell out
+      // what it measures on hover; NoteReviewClient renders a caption too.
+      title={`Note completeness — ${populated} of ${required} sections populated`}
       role="img"
     >
       <svg width={size} height={size} className="-rotate-90">

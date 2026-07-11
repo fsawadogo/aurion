@@ -291,3 +291,45 @@ async def test_edit_note_raises_when_no_note_exists():
 
         with pytest.raises(ValueError, match="No note found"):
             await edit_note(session_id, {"physical_exam": "text"}, db)
+
+
+@pytest.mark.asyncio
+async def test_edit_flips_pending_and_empty_sections_to_populated():
+    """Pilot feedback: a physician must be able to correct a section stuck in
+    pending_video (visual enrichment runs only after approval) and have it
+    read as populated — same for filling an empty not_captured section."""
+    session_id = str(uuid.uuid4())
+    original = _make_note(session_id)
+    # Make physical_exam a pending-visual section WITH an existing claim.
+    original.sections[0].status = "pending_video"
+
+    with (
+        patch(
+            "app.modules.note_gen.service.get_latest_note",
+            AsyncMock(return_value=original),
+        ),
+        patch(
+            "app.modules.note_gen.service.create_note_version",
+            AsyncMock(),
+        ) as create_mock,
+    ):
+        from app.modules.note_gen.service import edit_note
+
+        result = await edit_note(
+            session_id,
+            {
+                "physical_exam": "Patellar grind test positive on the right.",
+                "imaging_review": "AP and lateral right knee X-ray reviewed.",
+            },
+            MagicMock(),
+        )
+
+    exam = result.get_section("physical_exam")
+    assert exam.status == "populated"          # pending_video → populated
+    assert exam.claims[0].physician_edited is True
+    assert exam.claims[0].text == "Patellar grind test positive on the right."
+
+    imaging = result.get_section("imaging_review")
+    assert imaging.status == "populated"       # not_captured → populated
+    assert imaging.claims[0].source_type == "physician_edit"
+    create_mock.assert_awaited_once()
