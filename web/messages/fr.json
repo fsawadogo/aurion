@@ -1126,7 +1126,15 @@
     "visitsRetry": "Réessayer",
     "visitsClinicianHint": "Définissez votre modèle par défaut pour chaque type de visite. Il s’applique lorsque vous ne choisissez pas de contexte précis sur l’appareil; laissez « Modèle par défaut de la spécialité » pour en hériter.",
     "visitsMineGroup": "Mes modèles",
-    "visitsProfileSubcontexts": "Besoin de modèles par contexte (p. ex. « genou gauche »)? Gérez-les dans Mon profil."
+    "visitsProfileSubcontexts": "Besoin de modèles par contexte (p. ex. « genou gauche »)? Gérez-les dans Mon profil.",
+    "fromNote": "À partir d’une consultation",
+    "fromNoteTitle": "Créer un modèle à partir d’une note",
+    "fromNoteHint": "Choisissez une consultation — Aurion en extrait un modèle réutilisable à partir de sa note, que vous affinez ensuite par clavardage. Aucune donnée du patient n’est copiée dans le modèle.",
+    "fromNoteEmpty": "Aucune consultation avec une note pour l’instant.",
+    "fromNoteUntitled": "Consultation sans titre",
+    "fromNoteSeeding": "Ouverture…",
+    "fromNoteLoadError": "Impossible de charger vos consultations.",
+    "fromNoteError": "Impossible de démarrer à partir de cette note."
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Modèles",

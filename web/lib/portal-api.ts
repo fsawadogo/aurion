@@ -215,6 +215,22 @@ export async function finalizeTemplateAuthoring(
   return r.json();
 }
 
+/** POST /me/template-authoring/from-note/{sessionId} — mint an authoring
+ *  session seeded from one of the caller's past encounter notes. `sessionId`
+ *  is the SOURCE note's session id (not an authoring-session id); the returned
+ *  session's `.id` is the new authoring session to resume in the AI builder.
+ *  Gated server-side by `template_authoring_chat_enabled` (403 when off), and
+ *  404 when the session has no note yet. */
+export async function startTemplateAuthoringFromNote(
+  sessionId: string,
+): Promise<TemplateAuthoringSession> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/template-authoring/from-note/${sessionId}`,
+    { method: "POST" },
+  );
+  return r.json();
+}
+
 /* ─── Sessions (own) ─────────────────────────────────────────────────────── */
 
 /** GET /api/v1/sessions — the caller's own sessions.
@@ -1018,6 +1034,10 @@ export async function getPortalFeatureFlags(): Promise<{
   /** Cross-clinician Patient Chart (#604) — gates the elevated-role nav
    *  entry + page. Default OFF until compliance sign-off. */
   cross_clinician_chart_enabled: boolean;
+  /** Conversational template authoring — the note-derived seed (tpl-from-note).
+   *  Gates the "From a past encounter" entry into Create-with-AI. Default OFF
+   *  until a pilot rollout enables it. */
+  template_authoring_chat_enabled: boolean;
 }> {
   const r = await fetchWithAuth("/api/v1/me/feature-flags");
   return r.json();

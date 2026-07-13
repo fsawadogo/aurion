@@ -1126,7 +1126,15 @@
     "visitsRetry": "Retry",
     "visitsClinicianHint": "Set your default template for each visit type. It applies when you don't pick a specific context on the device; leave it on Specialty default to inherit.",
     "visitsMineGroup": "My templates",
-    "visitsProfileSubcontexts": "Need per-context templates (e.g. \"left knee\")? Manage them in My Profile."
+    "visitsProfileSubcontexts": "Need per-context templates (e.g. \"left knee\")? Manage them in My Profile.",
+    "fromNote": "From a past encounter",
+    "fromNoteTitle": "Create a template from a past note",
+    "fromNoteHint": "Pick an encounter — Aurion reverse-engineers a reusable template from its note, then you refine it in chat. No patient details are copied into the template.",
+    "fromNoteEmpty": "No past encounters with a note yet.",
+    "fromNoteUntitled": "Untitled encounter",
+    "fromNoteSeeding": "Opening…",
+    "fromNoteLoadError": "Couldn't load your encounters.",
+    "fromNoteError": "Couldn't start from that note."
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Templates",
