@@ -1134,7 +1134,8 @@
     "fromNoteUntitled": "Consultation sans titre",
     "fromNoteSeeding": "Ouverture…",
     "fromNoteLoadError": "Impossible de charger vos consultations.",
-    "fromNoteError": "Impossible de démarrer à partir de cette note."
+    "fromNoteError": "Impossible de démarrer à partir de cette note.",
+    "fromNoteRetry": "Réessayer"
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Modèles",

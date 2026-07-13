@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent, within } from "@testing-library/react";
 
 import PortalTemplatesPage from "@/app/portal/templates/page";
 import { withIntl } from "./helpers/intl";
@@ -242,5 +242,68 @@ describe("PortalTemplatesPage — from a past encounter (from-note, flag-gated)"
     await waitFor(() =>
       expect(startTemplateAuthoringFromNote).toHaveBeenCalledWith("s-note"),
     );
+  });
+
+  it("surfaces an in-modal error when seeding a note fails", async () => {
+    vi.mocked(getPortalFeatureFlags).mockResolvedValue({
+      video_import_enabled: false,
+      multi_clip_import_enabled: false,
+      cross_clinician_chart_enabled: false,
+      template_authoring_chat_enabled: true,
+    } as never);
+    vi.mocked(listMySessions).mockResolvedValue([
+      sess("s-note", "AWAITING_REVIEW", "MRN-1"),
+    ] as never);
+    vi.mocked(startTemplateAuthoringFromNote).mockRejectedValueOnce(
+      new Error("boom"),
+    );
+
+    render(withIntl(<PortalTemplatesPage />));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "From a past encounter" }),
+    );
+    fireEvent.click(await screen.findByText("MRN-1"));
+
+    // Error shows IN the modal (scoped to the dialog — not the occluded page
+    // banner), and the encounter row is still there to pick a different one.
+    const dialog = await screen.findByRole("dialog");
+    await waitFor(() =>
+      expect(
+        within(dialog).getByText("Couldn't start from that note."),
+      ).toBeTruthy(),
+    );
+    expect(within(dialog).getByText("MRN-1")).toBeTruthy();
+  });
+
+  it("shows a load error (not the empty state); Retry re-fetches the list", async () => {
+    vi.mocked(getPortalFeatureFlags).mockResolvedValue({
+      video_import_enabled: false,
+      multi_clip_import_enabled: false,
+      cross_clinician_chart_enabled: false,
+      template_authoring_chat_enabled: true,
+    } as never);
+    vi.mocked(listMySessions)
+      .mockRejectedValueOnce(new Error("boom"))
+      .mockResolvedValueOnce([
+        sess("s-note", "AWAITING_REVIEW", "MRN-9"),
+      ] as never);
+
+    render(withIntl(<PortalTemplatesPage />));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "From a past encounter" }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("Couldn't load your encounters.")).toBeTruthy(),
+    );
+    // A failed load must NOT masquerade as "you have no encounters".
+    expect(
+      screen.queryByText("No past encounters with a note yet."),
+    ).toBeNull();
+
+    // Retry re-fetches → the encounter now loads.
+    fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+    await waitFor(() => expect(screen.getByText("MRN-9")).toBeTruthy());
+    expect(listMySessions).toHaveBeenCalledTimes(2);
   });
 });

@@ -3,7 +3,7 @@
 import { Copy, FileClock, LayoutGrid, MessagesSquare, Plus, SquarePen, Trash2, Upload } from "lucide-react";
 import { getMe, humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
@@ -78,6 +78,12 @@ export default function PortalTemplatesPage() {
   const [sessions, setSessions] = useState<Session[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(false);
   const [seedingId, setSeedingId] = useState<string | null>(null);
+  // Picker-scoped error: the page-level `error` banner is occluded by the
+  // Modal overlay, so from-note load/seed failures surface IN the modal.
+  const [pickerError, setPickerError] = useState<string | null>(null);
+  // Set when the picker is dismissed mid-seed, so a late-resolving seed request
+  // doesn't navigate the clinician away after they've moved on.
+  const cancelledRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -119,8 +125,10 @@ export default function PortalTemplatesPage() {
 
   const openPicker = useCallback(async () => {
     setPickerOpen(true);
+    setPickerError(null);
+    // Clear any prior open's rows so a failed reload can't show a stale list.
+    setSessions([]);
     setSessionsLoading(true);
-    setError(null);
     try {
       const xs = await listMySessions();
       const notes = xs
@@ -128,23 +136,29 @@ export default function PortalTemplatesPage() {
         .sort((a, b) => b.created_at.localeCompare(a.created_at));
       setSessions(notes);
     } catch (e) {
-      setError(humanizeError(e, t("fromNoteLoadError")));
+      // In-modal error — a load failure must not masquerade as the empty state.
+      setPickerError(humanizeError(e, t("fromNoteLoadError")));
     } finally {
       setSessionsLoading(false);
     }
   }, [t]);
 
   async function onSeedFromNote(session: Session) {
+    cancelledRef.current = false;
     setSeedingId(session.id);
-    setError(null);
+    setPickerError(null);
     try {
       // sessionId here is the SOURCE note's session; the returned session's id
       // is the new authoring session the AI builder resumes.
       const authoring = await startTemplateAuthoringFromNote(session.id);
+      // The clinician may have dismissed the picker while the request was in
+      // flight — don't navigate them away after they've moved on.
+      if (cancelledRef.current) return;
       router.push(`/portal/templates/new?session=${authoring.id}`);
     } catch (e) {
-      // Navigation didn't happen — surface the error and re-enable the picker.
-      setError(humanizeError(e, t("fromNoteError")));
+      // Navigation didn't happen — surface the error IN the modal (the
+      // page-level banner is occluded by it) and re-enable the picker.
+      setPickerError(humanizeError(e, t("fromNoteError")));
       setSeedingId(null);
     }
   }
@@ -450,7 +464,12 @@ export default function PortalTemplatesPage() {
       <Modal
         isOpen={pickerOpen}
         onClose={() => {
-          if (!seedingId) setPickerOpen(false);
+          // Closeable even mid-seed: a stalled request must never trap the
+          // clinician. cancelledRef stops a late-resolving seed from navigating.
+          cancelledRef.current = true;
+          setPickerOpen(false);
+          setPickerError(null);
+          setSeedingId(null);
         }}
         title={t("fromNoteTitle")}
         size="lg"
@@ -458,12 +477,32 @@ export default function PortalTemplatesPage() {
         <p className="mb-4 text-aurion-caption text-navy-500">
           {t("fromNoteHint")}
         </p>
+        {pickerError && (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-aurion-md border border-red-200 bg-red-50 px-3 py-2 text-aurion-caption text-red-700">
+            <span>{pickerError}</span>
+            {/* Retry re-fetches the list — only meaningful for a load failure
+                (empty list). On a seed failure the rows are still shown, so the
+                clinician just re-picks one; a "Retry" there would mislead. */}
+            {sessions.length === 0 && (
+              <button
+                type="button"
+                onClick={() => void openPicker()}
+                className="shrink-0 font-semibold underline hover:no-underline"
+              >
+                {t("fromNoteRetry")}
+              </button>
+            )}
+          </div>
+        )}
         {sessionsLoading ? (
           <LoadingSkeleton lines={5} />
         ) : sessions.length === 0 ? (
-          <p className="py-6 text-center text-aurion-caption text-navy-500">
-            {t("fromNoteEmpty")}
-          </p>
+          // A load failure sets pickerError; don't disguise it as "no encounters".
+          pickerError ? null : (
+            <p className="py-6 text-center text-aurion-caption text-navy-500">
+              {t("fromNoteEmpty")}
+            </p>
+          )
         ) : (
           <ul className="max-h-[52vh] divide-y divide-hairline overflow-y-auto">
             {sessions.map((s) => (
@@ -482,7 +521,7 @@ export default function PortalTemplatesPage() {
                       {s.external_reference_id || t("fromNoteUntitled")}
                     </p>
                     <p className="mt-0.5 text-aurion-caption text-navy-500">
-                      {s.specialty} · {formatRelative(s.created_at)}
+                      {s.specialty.replace(/_/g, " ")} · {formatRelative(s.created_at)}
                     </p>
                   </div>
                   {seedingId === s.id && (

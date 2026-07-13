@@ -1134,7 +1134,8 @@
     "fromNoteUntitled": "Untitled encounter",
     "fromNoteSeeding": "Opening…",
     "fromNoteLoadError": "Couldn't load your encounters.",
-    "fromNoteError": "Couldn't start from that note."
+    "fromNoteError": "Couldn't start from that note.",
+    "fromNoteRetry": "Retry"
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Templates",
