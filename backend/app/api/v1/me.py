@@ -623,6 +623,57 @@ async def upload_template_for_extraction(
     return _to_authoring_response(row, reply.assistant_message)
 
 
+@router.post(
+    "/template-authoring/from-note/{session_id}",
+    response_model=AuthoringSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def start_template_authoring_from_note(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> AuthoringSessionResponse:
+    """Seed a template-authoring session from one of the caller's past notes.
+
+    Reads the latest note for an owned session and extracts a reusable template
+    structure from it, landing as an *active* authoring session the clinician
+    refines via chat before saving. The note is PHI: it is used for extraction
+    but never stored in the authoring history (only a redacted placeholder is),
+    and the extraction keeps structure only. Ships DARK behind
+    ``template_authoring_chat_enabled``.
+    """
+    if not get_config().feature_flags.template_authoring_chat_enabled:
+        raise HTTPException(
+            status_code=403, detail="The note-to-template feature is not enabled."
+        )
+    await get_owned_session_or_404(db, session_id, user)
+    note = await get_latest_note(str(session_id), db)
+    if note is None:
+        raise HTTPException(status_code=404, detail="This session has no note yet")
+    try:
+        row, reply = await template_authoring_service.create_authoring_from_note(
+            user.user_id, note, db
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+    except ProviderError as exc:
+        logger.warning(
+            "template-authoring from-note: provider failed session=%s: %s",
+            session_id,
+            exc,
+        )
+        raise HTTPException(status_code=502, detail=f"AI provider error: {exc}")
+    # Audit the PHI-note access + outbound LLM extraction, same as the other
+    # note-consuming endpoints (orders / patient-summary / surgery-quote).
+    await write_audit(
+        session_id,
+        AuditEventType.TEMPLATE_AUTHORING_SEEDED_FROM_NOTE,
+        actor_id=str(user.user_id),
+    )
+    await db.commit()
+    return _to_authoring_response(row, reply.assistant_message)
+
+
 # ── /me/notes/{id}/orders — structured order drafts ──────────────────────
 
 

@@ -253,6 +253,14 @@ class FeatureFlagsConfig(BaseModel):
     # TTL alone governs retention. PHI-sensitive, so it ships dark and the
     # operator flips it via POST /admin/feature-flags.
     media_review_retention_enabled: bool = False
+    # ── Conversational template authoring (tpl-from-note) ─────────────────
+    # Gates the clinician "Create with AI" template chat's note-derived seed:
+    # POST /me/template-authoring/from-note/{session_id} reads one of the
+    # clinician's own past notes to extract a reusable template. Ships DARK —
+    # the endpoint 403s while False, so the note-derived path is off in prod
+    # until a pilot rollout flips it via AppConfig / POST /admin/feature-flags.
+    # Org-level for now; per-role / per-user targeting is a follow-up.
+    template_authoring_chat_enabled: bool = False
     # ── Specialty style layer in the live note prompt ─────────────────────
     # Master gate for injecting the per-specialty STYLE GUIDANCE block (and
     # the specialty's few-shot examples) into the Stage 1 note user prompt —

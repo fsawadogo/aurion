@@ -43,7 +43,7 @@ from app.core.models import (
     CustomTemplateModel,
     TemplateAuthoringSessionModel,
 )
-from app.core.types import Template
+from app.core.types import Note, Template
 from app.modules.config.provider_registry import get_registry
 from app.modules.providers.base import ChatMessage
 from app.modules.template_authoring.system_prompt import SYSTEM_PROMPT
@@ -257,6 +257,28 @@ async def upload_template_document(
     return await _seed_authoring_session(owner_id, document_text, placeholder, db)
 
 
+async def create_authoring_from_note(
+    owner_id: uuid.UUID, note: Note, db: AsyncSession
+) -> tuple[TemplateAuthoringSessionModel, AuthoringReply]:
+    """Seed an authoring session from one of the clinician's past notes.
+
+    Renders the note's populated sections to text and hands it to the same
+    PHI-safe engine as :func:`upload_template_document`
+    (:func:`_seed_authoring_session`): the note is a real patient note, so it is
+    used for extraction but never persisted — only a redacted placeholder + the
+    fixed acknowledgment are stored, and the extraction is instructed to keep
+    structure only.
+    """
+    note_text = _note_to_text(note)
+    if not note_text:
+        raise ValueError("This note has no content to extract a template from")
+    placeholder = (
+        f"[note from a past encounter · {len(note_text)} chars — "
+        "used to extract structure, not stored]"
+    )
+    return await _seed_authoring_session(owner_id, note_text, placeholder, db)
+
+
 # ── Internals ──────────────────────────────────────────────────────────────
 
 
@@ -321,6 +343,26 @@ async def _seed_authoring_session(
     db.add(row)
     await db.flush()
     return row, AuthoringReply(assistant_message=seed_ack, draft_template=draft)
+
+
+def _note_to_text(note: Note) -> str:
+    """Render a note's populated sections to plain text for template extraction.
+
+    Section title + each claim's text; sections with no claims are skipped.
+    Deliberately drops citations / source ids — the template only needs the
+    shape (which sections exist, what goes in each), not the provenance.
+    """
+    lines: list[str] = []
+    for section in note.sections:
+        claim_texts = [
+            c.text.strip() for c in section.claims if c.text and c.text.strip()
+        ]
+        if not claim_texts:
+            continue
+        lines.append(f"## {section.title or section.id}")
+        lines.extend(claim_texts)
+        lines.append("")
+    return "\n".join(lines).strip()
 
 
 async def _generate_with_validation_retry(
