@@ -3,7 +3,7 @@
 import { Copy, FileClock, LayoutGrid, MessagesSquare, Plus, SquarePen, Trash2, Upload } from "lucide-react";
 import { getMe, humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Button from "@/components/ui/Button";
@@ -81,6 +81,9 @@ export default function PortalTemplatesPage() {
   // Picker-scoped error: the page-level `error` banner is occluded by the
   // Modal overlay, so from-note load/seed failures surface IN the modal.
   const [pickerError, setPickerError] = useState<string | null>(null);
+  // Set when the picker is dismissed mid-seed, so a late-resolving seed request
+  // doesn't navigate the clinician away after they've moved on.
+  const cancelledRef = useRef(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -141,12 +144,16 @@ export default function PortalTemplatesPage() {
   }, [t]);
 
   async function onSeedFromNote(session: Session) {
+    cancelledRef.current = false;
     setSeedingId(session.id);
     setPickerError(null);
     try {
       // sessionId here is the SOURCE note's session; the returned session's id
       // is the new authoring session the AI builder resumes.
       const authoring = await startTemplateAuthoringFromNote(session.id);
+      // The clinician may have dismissed the picker while the request was in
+      // flight — don't navigate them away after they've moved on.
+      if (cancelledRef.current) return;
       router.push(`/portal/templates/new?session=${authoring.id}`);
     } catch (e) {
       // Navigation didn't happen — surface the error IN the modal (the
@@ -457,10 +464,12 @@ export default function PortalTemplatesPage() {
       <Modal
         isOpen={pickerOpen}
         onClose={() => {
-          if (!seedingId) {
-            setPickerOpen(false);
-            setPickerError(null);
-          }
+          // Closeable even mid-seed: a stalled request must never trap the
+          // clinician. cancelledRef stops a late-resolving seed from navigating.
+          cancelledRef.current = true;
+          setPickerOpen(false);
+          setPickerError(null);
+          setSeedingId(null);
         }}
         title={t("fromNoteTitle")}
         size="lg"
@@ -471,13 +480,18 @@ export default function PortalTemplatesPage() {
         {pickerError && (
           <div className="mb-3 flex items-center justify-between gap-3 rounded-aurion-md border border-red-200 bg-red-50 px-3 py-2 text-aurion-caption text-red-700">
             <span>{pickerError}</span>
-            <button
-              type="button"
-              onClick={() => void openPicker()}
-              className="shrink-0 font-semibold underline hover:no-underline"
-            >
-              {t("fromNoteRetry")}
-            </button>
+            {/* Retry re-fetches the list — only meaningful for a load failure
+                (empty list). On a seed failure the rows are still shown, so the
+                clinician just re-picks one; a "Retry" there would mislead. */}
+            {sessions.length === 0 && (
+              <button
+                type="button"
+                onClick={() => void openPicker()}
+                className="shrink-0 font-semibold underline hover:no-underline"
+              >
+                {t("fromNoteRetry")}
+              </button>
+            )}
           </div>
         )}
         {sessionsLoading ? (
