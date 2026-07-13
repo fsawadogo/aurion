@@ -243,4 +243,55 @@ describe("PortalTemplatesPage — from a past encounter (from-note, flag-gated)"
       expect(startTemplateAuthoringFromNote).toHaveBeenCalledWith("s-note"),
     );
   });
+
+  it("surfaces an in-modal error when seeding a note fails", async () => {
+    vi.mocked(getPortalFeatureFlags).mockResolvedValue({
+      video_import_enabled: false,
+      multi_clip_import_enabled: false,
+      cross_clinician_chart_enabled: false,
+      template_authoring_chat_enabled: true,
+    } as never);
+    vi.mocked(listMySessions).mockResolvedValue([
+      sess("s-note", "AWAITING_REVIEW", "MRN-1"),
+    ] as never);
+    vi.mocked(startTemplateAuthoringFromNote).mockRejectedValueOnce(
+      new Error("boom"),
+    );
+
+    render(withIntl(<PortalTemplatesPage />));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "From a past encounter" }),
+    );
+    fireEvent.click(await screen.findByText("MRN-1"));
+
+    // Error shows IN the modal (the page banner is occluded by it), and the
+    // encounter row is still there to pick a different one.
+    await waitFor(() =>
+      expect(screen.getByText("Couldn't start from that note.")).toBeTruthy(),
+    );
+    expect(screen.getByText("MRN-1")).toBeTruthy();
+  });
+
+  it("shows a load error (not the empty state) when listing encounters fails", async () => {
+    vi.mocked(getPortalFeatureFlags).mockResolvedValue({
+      video_import_enabled: false,
+      multi_clip_import_enabled: false,
+      cross_clinician_chart_enabled: false,
+      template_authoring_chat_enabled: true,
+    } as never);
+    vi.mocked(listMySessions).mockRejectedValueOnce(new Error("boom"));
+
+    render(withIntl(<PortalTemplatesPage />));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "From a past encounter" }),
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("Couldn't load your encounters.")).toBeTruthy(),
+    );
+    // A failed load must NOT masquerade as "you have no encounters".
+    expect(
+      screen.queryByText("No past encounters with a note yet."),
+    ).toBeNull();
+  });
 });
