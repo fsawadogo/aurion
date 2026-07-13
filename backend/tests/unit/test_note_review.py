@@ -19,7 +19,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi import HTTPException
 
-from app.core.types import Note, NoteClaim, NoteSection, SessionState
+from app.core.types import Note, NoteClaim, NoteSection, ProviderError, SessionState
 from app.modules.note_review import service as svc
 from app.modules.note_review.service import NoteEditOp
 
@@ -237,3 +237,199 @@ async def test_endpoint_audits_and_commits_when_applied(monkeypatch):
     audit.assert_awaited_once()
     assert audit.call_args.args[1] == notes_module.AuditEventType.NOTE_VERSION_CREATED
     db.commit.assert_awaited_once()
+
+
+# ── multi-op / blank-text / quote-truncation / second-reword ────────────────
+
+
+def test_apply_multiple_ops_partial():
+    ops = [
+        NoteEditOp(op="reword_claim", claim_id="c1", text="Short."),
+        NoteEditOp(op="reword_claim", claim_id="missing", text="x"),  # skipped
+        NoteEditOp(op="add_claim", section_id="allergies", text="Sulfa allergy."),
+    ]
+    updated, applied = svc._apply_ops(_note(), ops, {})
+    assert applied == 2  # reword + add; the missing-claim reword is skipped
+    assert updated.get_section("hpi").claims[0].text == "Short."
+    assert len(updated.get_section("allergies").claims) == 1
+
+
+def test_reword_blank_text_is_skipped():
+    _updated, applied = svc._apply_ops(
+        _note(), [NoteEditOp(op="reword_claim", claim_id="c1", text="   ")], {}
+    )
+    assert applied == 0
+
+
+def test_add_blank_text_is_skipped():
+    _updated, applied = svc._apply_ops(
+        _note(), [NoteEditOp(op="add_claim", section_id="allergies", text="")], {}
+    )
+    assert applied == 0
+
+
+def test_add_grounded_quote_truncated_at_cap():
+    op = NoteEditOp(op="add_claim", section_id="allergies", text="note", source_id="seg_1")
+    updated, _applied = svc._apply_ops(_note(), [op], {"seg_1": "x" * 900})
+    assert len(updated.get_section("allergies").claims[0].source_quote) == 500
+
+
+def test_second_reword_preserves_the_first_original():
+    note = _note()
+    u1, _ = svc._apply_ops(
+        note, [NoteEditOp(op="reword_claim", claim_id="c1", text="Edit 1.")], {}
+    )
+    u2, _ = svc._apply_ops(
+        u1, [NoteEditOp(op="reword_claim", claim_id="c1", text="Edit 2.")], {}
+    )
+    claim = u2.get_section("hpi").claims[0]
+    assert claim.text == "Edit 2."
+    assert claim.original_text == "Original HPI text."  # NOT "Edit 1."
+
+
+# ── retry-exhaustion + PHI-safe re-prompt ───────────────────────────────────
+
+
+def _capturing_provider(monkeypatch, reply: str):
+    """Stub that records the messages sent on each call and always returns
+    `reply`. Returns the list of per-call message-content lists."""
+    seen: list[list[str]] = []
+
+    class _Stub:
+        async def generate_text(self, system, messages):
+            seen.append([m.content for m in messages])
+            return reply
+
+    reg = MagicMock()
+    reg.get_note_provider = MagicMock(return_value=_Stub())
+    monkeypatch.setattr(svc, "get_registry", lambda: reg)
+    monkeypatch.setattr(svc, "assemble_prompt_for_session", AsyncMock(return_value="SYS"))
+    monkeypatch.setattr(svc, "_load_transcript", AsyncMock(return_value=None))
+    return seen
+
+
+@pytest.mark.asyncio
+async def test_retry_exhaustion_no_version_and_no_phi_in_reprompt(monkeypatch):
+    monkeypatch.setattr(svc, "get_latest_note", AsyncMock(return_value=_note()))
+    cnv = AsyncMock()
+    monkeypatch.setattr(svc, "create_note_version", cnv)
+    # Invalid op enum, with a PHI sentinel in the op payload.
+    bad = "```json\n" + json.dumps({
+        "action": "edit_note",
+        "message": "done",
+        "ops": [{"op": "delete_claim", "claim_id": "c1", "text": "SENTINEL_PHI_9Z"}],
+    }) + "\n```"
+    seen = _capturing_provider(monkeypatch, bad)
+
+    result = await svc.assist_note("s1", "do it", AsyncMock())
+
+    assert result.applied is False
+    assert "couldn't apply" in result.assistant_message  # not the model's "done"
+    cnv.assert_not_awaited()
+    # It retried (>1 call), and the correction turns WE author carry no PHI —
+    # only the Pydantic loc+msg summary, never the offending `input`.
+    assert len(seen) > 1
+    corrections = [msgs[-1] for msgs in seen[1:]]  # the user correction each retry
+    assert all("SENTINEL_PHI_9Z" not in c for c in corrections)
+
+
+@pytest.mark.asyncio
+async def test_ops_all_skipped_reports_failure_not_success(monkeypatch):
+    monkeypatch.setattr(svc, "get_latest_note", AsyncMock(return_value=_note()))
+    cnv = AsyncMock()
+    monkeypatch.setattr(svc, "create_note_version", cnv)
+    reply = "```json\n" + json.dumps({
+        "action": "edit_note",
+        "message": "Shortened the HPI.",  # a success claim the edit didn't achieve
+        "ops": [{"op": "reword_claim", "claim_id": "ghost", "text": "x"}],
+    }) + "\n```"
+    _patch_provider(monkeypatch, reply)
+
+    result = await svc.assist_note("s1", "shorten hpi", AsyncMock())
+
+    assert result.applied is False
+    assert result.assistant_message != "Shortened the HPI."
+    assert "couldn't apply" in result.assistant_message
+    cnv.assert_not_awaited()
+
+
+# ── endpoint error branches + conversational (no audit/commit) ───────────────
+
+
+async def _run_endpoint(monkeypatch, *, assist_side_effect=None, assist_return=None):
+    from app.api.v1 import notes as notes_module
+
+    cfg = MagicMock()
+    cfg.feature_flags.note_review_chat_enabled = True
+    monkeypatch.setattr(notes_module, "get_config", lambda: cfg)
+    session = MagicMock()
+    session.state = SessionState.AWAITING_REVIEW
+    monkeypatch.setattr(
+        notes_module, "get_owned_session_or_404", AsyncMock(return_value=session)
+    )
+    mock = AsyncMock(side_effect=assist_side_effect, return_value=assist_return)
+    monkeypatch.setattr(notes_module.note_review_service, "assist_note", mock)
+    audit = AsyncMock()
+    monkeypatch.setattr(notes_module, "write_audit", audit)
+    db = AsyncMock()
+    resp = await notes_module.assist_note_endpoint(
+        session_id=uuid.uuid4(),
+        body=notes_module.NoteAssistRequest(message="hi"),
+        user=MagicMock(),
+        db=db,
+    )
+    return resp, audit, db
+
+
+@pytest.mark.asyncio
+async def test_endpoint_provider_error_maps_to_502(monkeypatch):
+    from app.api.v1 import notes as notes_module
+
+    with pytest.raises(HTTPException) as ei:
+        await _run_endpoint(
+            monkeypatch, assist_side_effect=ProviderError("anthropic", "down")
+        )
+    assert ei.value.status_code == 502
+    _ = notes_module  # keep import used
+
+
+@pytest.mark.asyncio
+async def test_endpoint_value_error_maps_to_404(monkeypatch):
+    with pytest.raises(HTTPException) as ei:
+        await _run_endpoint(
+            monkeypatch, assist_side_effect=ValueError("No note found for session x")
+        )
+    assert ei.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_endpoint_conversational_turn_no_audit_no_commit(monkeypatch):
+    resp, audit, db = await _run_endpoint(
+        monkeypatch,
+        assist_return=svc.AssistResult("Which section?", False, _note()),
+    )
+    assert resp.applied is False
+    audit.assert_not_awaited()
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_endpoint_blank_message_maps_to_400(monkeypatch):
+    from app.api.v1 import notes as notes_module
+
+    cfg = MagicMock()
+    cfg.feature_flags.note_review_chat_enabled = True
+    monkeypatch.setattr(notes_module, "get_config", lambda: cfg)
+    session = MagicMock()
+    session.state = SessionState.AWAITING_REVIEW
+    monkeypatch.setattr(
+        notes_module, "get_owned_session_or_404", AsyncMock(return_value=session)
+    )
+    with pytest.raises(HTTPException) as ei:
+        await notes_module.assist_note_endpoint(
+            session_id=uuid.uuid4(),
+            body=notes_module.NoteAssistRequest(message="   "),
+            user=MagicMock(),
+            db=AsyncMock(),
+        )
+    assert ei.value.status_code == 400

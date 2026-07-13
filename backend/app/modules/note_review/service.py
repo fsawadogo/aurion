@@ -92,7 +92,16 @@ async def assist_note(session_id: str, message: str, db: AsyncSession) -> Assist
 
     updated, applied = _apply_ops(note, ops, segment_text)
     if applied == 0:
-        return AssistResult(assistant_message=assistant_message, applied=False, note=note)
+        # Ops were proposed but none matched a real claim/section — don't echo
+        # the model's success message.
+        return AssistResult(
+            assistant_message=(
+                "I couldn't apply that — the section or claim it referred to "
+                "wasn't found in the current note."
+            ),
+            applied=False,
+            note=note,
+        )
 
     await create_note_version(
         session_id, updated, db, stats_trigger="note_review_assist"
@@ -180,7 +189,9 @@ async def _generate_edits_with_retry(
                     "note-review: gave up after %d invalid op sets; no edits applied.",
                     _MAX_VALIDATION_RETRIES + 1,
                 )
-                return message, []
+                # Neutral message — the model's own `message` claims a success it
+                # didn't achieve, which would mislead the physician.
+                return "I couldn't apply that change — please try rephrasing.", []
             # Summarize to loc+msg only (Pydantic's `input` can carry note text).
             safe = "; ".join(
                 f"{'.'.join(str(p) for p in e.get('loc', ())) or 'ops'}: "

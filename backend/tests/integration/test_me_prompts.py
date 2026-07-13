@@ -42,7 +42,9 @@ from httpx import ASGITransport, AsyncClient  # noqa: E402
 
 from app.modules.prompts import PROMPTS  # noqa: E402
 
-EXPECTED_PROMPT_COUNT = 8
+# Every registered prompt job. Bump when a job is added to registry.PROMPTS
+# (note_review — the fix-this-note assistant — is the most recent).
+EXPECTED_PROMPT_COUNT = 10
 
 
 # ── Fixtures ────────────────────────────────────────────────────────────────

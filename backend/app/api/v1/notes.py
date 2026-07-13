@@ -893,6 +893,10 @@ async def assist_note_endpoint(
                 f"Must be in AWAITING_REVIEW or REVIEW_COMPLETE."
             ),
         )
+    if not body.message.strip():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Message cannot be blank."
+        )
 
     try:
         result = await note_review_service.assist_note(
