@@ -13,7 +13,7 @@ from typing import Callable, Literal, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,7 +29,7 @@ from app.core.s3 import (
     generate_presigned_evidence_url,
     get_s3_client,
 )
-from app.core.types import SessionState, Transcript
+from app.core.types import ProviderError, SessionState, Transcript
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.config.appconfig_client import get_config
@@ -43,6 +43,7 @@ from app.modules.note_gen.service import (
     is_unresolved_conflict_claim,
     resolve_conflict,
 )
+from app.modules.note_review import service as note_review_service
 from app.modules.session.service import (
     InvalidTransitionError,
     transition_session,
@@ -848,6 +849,79 @@ async def edit_note_endpoint(
     )
 
     return _to_note_response(updated_note)
+
+
+class NoteAssistRequest(BaseModel):
+    message: str = Field(..., min_length=1)
+
+
+class NoteAssistResponse(BaseModel):
+    """The assistant's reply, whether it changed the note (a new version was
+    written), and the current note (updated when applied, unchanged otherwise).
+    Client-agnostic so iOS can reuse this endpoint verbatim."""
+
+    assistant_message: str
+    applied: bool
+    note: NoteResponse
+
+
+@router.post("/{session_id}/assist", response_model=NoteAssistResponse)
+async def assist_note_endpoint(
+    session_id: uuid.UUID,
+    body: NoteAssistRequest,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> NoteAssistResponse:
+    """"Fix this note" chat: apply the physician's plain-language request to the
+    latest note as grounded, auto-versioned edits.
+
+    Ships DARK behind ``note_review_chat_enabled``. A conversational reply (e.g.
+    a clarifying question) returns ``applied=False`` and writes no version.
+    """
+    if not get_config().feature_flags.note_review_chat_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The fix-this-note assistant is not enabled.",
+        )
+    session = await get_owned_session_or_404(db, session_id, user)
+    allowed_states = {SessionState.AWAITING_REVIEW, SessionState.REVIEW_COMPLETE}
+    if session.state not in allowed_states:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Cannot edit note: session is in {session.state.value}. "
+                f"Must be in AWAITING_REVIEW or REVIEW_COMPLETE."
+            ),
+        )
+
+    try:
+        result = await note_review_service.assist_note(
+            str(session_id), body.message, db
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except ProviderError as exc:
+        logger.warning(
+            "note-review assist: provider failed session=%s: %s", session_id, exc
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI provider error: {exc}",
+        )
+
+    if result.applied:
+        await write_audit(
+            session_id,
+            AuditEventType.NOTE_VERSION_CREATED,
+            version=result.note.version,
+        )
+        await db.commit()
+
+    return NoteAssistResponse(
+        assistant_message=result.assistant_message,
+        applied=result.applied,
+        note=_to_note_response(result.note),
+    )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────

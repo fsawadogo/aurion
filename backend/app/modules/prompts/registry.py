@@ -22,6 +22,9 @@ from typing import Final, Literal
 from pydantic import BaseModel, Field
 
 from app.modules.coding.system_prompt import SYSTEM_PROMPT as CODING_SYSTEM_PROMPT
+from app.modules.note_review.system_prompt import (
+    SYSTEM_PROMPT as NOTE_REVIEW_SYSTEM_PROMPT,
+)
 from app.modules.orders.system_prompt import SYSTEM_PROMPT as ORDERS_SYSTEM_PROMPT
 from app.modules.patient_summary.system_prompt import (
     SYSTEM_PROMPT as PATIENT_SUMMARY_SYSTEM_PROMPT,
@@ -192,6 +195,26 @@ PROMPTS: Final[dict[str, PromptDefinition]] = {
             "already record."
         ),
         system_prompt=PATIENT_SUMMARY_SYSTEM_PROMPT,
+    ),
+    "note_review": PromptDefinition(
+        id="note_review",
+        name="Fix-this-note assistant",
+        purpose=(
+            "Applies a physician's plain-language edits to a generated note "
+            "as grounded, traceable operations."
+        ),
+        category="extraction",
+        runs_when=(
+            "While reviewing a note in the web portal, when you ask the "
+            "assistant to change it."
+        ),
+        provider_field="note_generation",
+        schema_note=(
+            'Output: fenced JSON {"action":"edit_note","message":...,"ops":[...]} '
+            "— reword / remove / add claim ops; added content is cited to a real "
+            "transcript segment or recorded as a physician edit."
+        ),
+        system_prompt=NOTE_REVIEW_SYSTEM_PROMPT,
     ),
     "surgery_quote": PromptDefinition(
         id="surgery_quote",

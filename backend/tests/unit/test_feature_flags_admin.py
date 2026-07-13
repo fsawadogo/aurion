@@ -75,6 +75,7 @@ def _all_flags_response(**overrides) -> FeatureFlagsResponse:
         "emr_writeback_card_enabled": False,
         "media_review_retention_enabled": False,
         "template_authoring_chat_enabled": False,
+        "note_review_chat_enabled": False,
         "measurement_enabled": False,
         "video_import_enabled": False,
         "multi_clip_import_enabled": False,

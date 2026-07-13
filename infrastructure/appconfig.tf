@@ -232,6 +232,10 @@ resource "aws_appconfig_configuration_profile" "main" {
             # under additionalProperties = false — the backend Pydantic schema
             # defaults it false (the note-to-template path stays dark until enabled).
             template_authoring_chat_enabled = { type = "boolean" }
+            # Note-review "fix this note" chat (note-review-assist). NOT in
+            # `required` so an older document without the key still validates
+            # under additionalProperties = false — the backend defaults it false.
+            note_review_chat_enabled = { type = "boolean" }
             # Web-portal encounter-video import (VID-01..11). Master gate +
             # the zero-face-frame drop policy. NOT in `required` so older
             # documents without the keys still validate under
