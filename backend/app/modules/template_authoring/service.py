@@ -78,6 +78,22 @@ _BOOTSTRAP_MESSAGE = (
     "general musculoskeletal exam.)"
 )
 
+# Prepended to any document we ask the model to reverse-engineer into a
+# template. The GENERALIZE clause is load-bearing for PHI: the source may
+# contain patient specifics, so the model is told to emit ONLY structure +
+# capture guidance and never copy a patient value into the draft. The draft is
+# re-validated as a structure-only Template on finalize regardless.
+_EXTRACTION_INSTRUCTION = (
+    "Here is a source document to reverse-engineer into a note template. "
+    "Output a single valid draft_template action whose sections + descriptions "
+    "capture the STRUCTURE of this document. Use snake_case ids; mark "
+    "obviously-mandatory sections as required.\n\n"
+    "GENERALIZE — do NOT copy any patient-specific value into the template: no "
+    "names, dates, ages, measurements, or clinical findings. A section's "
+    "description says WHAT to capture, never what a specific patient's value "
+    "was.\n\n--- SOURCE ---\n"
+)
+
 
 @dataclass(frozen=True)
 class AuthoringReply:
@@ -222,51 +238,89 @@ async def finalize_authoring(
 async def upload_template_document(
     owner_id: uuid.UUID, document_text: str, db: AsyncSession
 ) -> tuple[TemplateAuthoringSessionModel, AuthoringReply]:
-    """Seed an authoring session from a pasted template document.
+    """Seed an authoring session from a pasted / uploaded template document.
 
-    Same engine as the conversational path: we synthesize a single user
-    turn ("here's a template document, extract it"), run the LLM, and
-    let the validation-retry loop produce a clean draft. The row is
-    persisted in `status='active'` so the physician can keep refining
-    the extracted draft via chat if it needs tweaks.
+    Same engine as the conversational path, via `_seed_authoring_session`:
+    the full document is sent to the LLM for structure extraction but stored
+    only as a redacted placeholder (a "template" a physician pastes may itself
+    contain patient specifics). The row is persisted `status='active'` so the
+    physician can keep refining the extracted draft via chat.
     """
     document_text = document_text.strip()
     if not document_text:
         raise ValueError("Document is empty")
 
-    seed_user_message = (
-        "Here is a template document to extract. Output a single valid "
-        "draft_template action with the structure that best represents "
-        "this document. Use snake_case ids; mark obviously-mandatory "
-        "sections as required.\n\n--- DOCUMENT ---\n"
-        f"{document_text}"
+    placeholder = (
+        f"[uploaded template document · {len(document_text)} chars — "
+        "used to extract structure, not stored verbatim]"
     )
-    history: list[ChatMessage] = [
+    return await _seed_authoring_session(owner_id, document_text, placeholder, db)
+
+
+# ── Internals ──────────────────────────────────────────────────────────────
+
+
+async def _seed_authoring_session(
+    owner_id: uuid.UUID,
+    source_text: str,
+    stored_placeholder: str,
+    db: AsyncSession,
+) -> tuple[TemplateAuthoringSessionModel, AuthoringReply]:
+    """Create an authoring session seeded from ``source_text``.
+
+    The full ``source_text`` is sent to the LLM for structure extraction
+    (prefixed with the generalize / strip-PHI ``_EXTRACTION_INSTRUCTION``), but
+    NOTHING derived from it is persisted verbatim. The stored history keeps only
+    ``stored_placeholder`` (in place of the source turn) and a fixed
+    acknowledgment (in place of the model's raw reply, which is generated from
+    the source and could echo patient specifics in its prose). ``source_text``
+    can be a real patient note, so persisting either turn verbatim in
+    ``messages_json`` would be a PHI leak. The structured draft — parsed from the
+    reply and generalized per ``_EXTRACTION_INSTRUCTION`` — is what carries
+    forward.
+    """
+    seed_user_message = f"{_EXTRACTION_INSTRUCTION}{source_text}"
+    llm_history: list[ChatMessage] = [
         ChatMessage(role="assistant", content=_BOOTSTRAP_MESSAGE),
         ChatMessage(role="user", content=seed_user_message),
     ]
 
     provider = get_registry().get_note_provider()
-    assistant_text, draft = await _generate_with_validation_retry(
-        provider, history
-    )
+    # The raw reply is generated FROM the (possibly-PHI) source, so its prose can
+    # echo patient specifics — persisting it verbatim would reopen the leak the
+    # placeholder closes. Use it only to extract the draft, then discard it in
+    # favour of a fixed, draft-derived acknowledgment.
+    _raw_reply, draft = await _generate_with_validation_retry(provider, llm_history)
 
-    history.append(ChatMessage(role="assistant", content=assistant_text))
+    if draft is not None:
+        seed_ack = (
+            f"I drafted a template from your document — {len(draft.sections)} "
+            "section(s). Review it on the right, then tell me what to adjust."
+        )
+    else:
+        seed_ack = (
+            "I couldn't extract a clean template from that document. Tell me the "
+            "sections you'd like and I'll build it."
+        )
+
+    # Neither the source turn nor the model's raw reply is persisted — only the
+    # placeholder and the fixed acknowledgment.
+    stored_history: list[ChatMessage] = [
+        ChatMessage(role="assistant", content=_BOOTSTRAP_MESSAGE),
+        ChatMessage(role="user", content=stored_placeholder),
+        ChatMessage(role="assistant", content=seed_ack),
+    ]
 
     row = TemplateAuthoringSessionModel(
         id=uuid.uuid4(),
         owner_id=owner_id,
-        messages_json=_encode_messages(history),
+        messages_json=_encode_messages(stored_history),
         draft_template_json=draft.model_dump_json() if draft else None,
         status="active",
     )
     db.add(row)
     await db.flush()
-
-    return row, AuthoringReply(assistant_message=assistant_text, draft_template=draft)
-
-
-# ── Internals ──────────────────────────────────────────────────────────────
+    return row, AuthoringReply(assistant_message=seed_ack, draft_template=draft)
 
 
 async def _generate_with_validation_retry(
@@ -292,11 +346,19 @@ async def _generate_with_validation_retry(
             template = Template.model_validate(extracted)
             return last_assistant, template
         except ValidationError as exc:
+            # Pydantic v2 `.errors()` embeds the offending `input` — which, for
+            # a note-derived draft, can carry patient content. Summarize to
+            # loc+msg only (no input) before it touches logs or the re-prompt.
+            safe_errors = "; ".join(
+                f"{'.'.join(str(p) for p in e.get('loc', ())) or 'template'}: "
+                f"{e.get('msg', 'invalid')}"
+                for e in exc.errors()
+            )
             if attempt == _MAX_VALIDATION_RETRIES:
                 logger.warning(
                     "Template authoring: gave up after %d invalid drafts; "
-                    "surfacing reply without a draft. last_errors=%s",
-                    _MAX_VALIDATION_RETRIES + 1, exc.errors(),
+                    "surfacing reply without a draft. errors=%s",
+                    _MAX_VALIDATION_RETRIES + 1, safe_errors,
                 )
                 return last_assistant, None
             # Re-prompt: append the bad assistant reply + a correction
@@ -309,7 +371,7 @@ async def _generate_with_validation_retry(
                     role="user",
                     content=(
                         "Your last draft failed schema validation with these "
-                        f"errors: {exc.errors()}. Please re-emit a single "
+                        f"errors: {safe_errors}. Please re-emit a single "
                         "valid draft_template action that satisfies the "
                         "Template schema."
                     ),
