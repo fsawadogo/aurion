@@ -261,6 +261,12 @@ class FeatureFlagsConfig(BaseModel):
     # until a pilot rollout flips it via AppConfig / POST /admin/feature-flags.
     # Org-level for now; per-role / per-user targeting is a follow-up.
     template_authoring_chat_enabled: bool = False
+    # ── Note-review "fix this note" chat (note-review-assist) ─────────────
+    # Gates the clinician POST /notes/{id}/assist endpoint — grounded,
+    # auto-versioned note edits driven by a plain-language chat. Ships DARK:
+    # the endpoint 403s while False, so it is off in prod until a pilot rollout
+    # flips it via AppConfig / POST /admin/feature-flags.
+    note_review_chat_enabled: bool = False
     # ── Specialty style layer in the live note prompt ─────────────────────
     # Master gate for injecting the per-specialty STYLE GUIDANCE block (and
     # the specialty's few-shot examples) into the Stage 1 note user prompt —

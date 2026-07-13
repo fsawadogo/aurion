@@ -84,6 +84,7 @@ class FeatureFlagsResponse(BaseModel):
     emr_writeback_card_enabled: bool
     media_review_retention_enabled: bool
     template_authoring_chat_enabled: bool
+    note_review_chat_enabled: bool
     measurement_enabled: bool
     video_import_enabled: bool
     # Defaulted (like grounded_synthesis_enabled) so a save from a portal build
@@ -197,6 +198,7 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         template_authoring_chat_enabled=(
             cfg_feature_flags.template_authoring_chat_enabled
         ),
+        note_review_chat_enabled=cfg_feature_flags.note_review_chat_enabled,
         measurement_enabled=cfg_feature_flags.measurement_enabled,
         video_import_enabled=cfg_feature_flags.video_import_enabled,
         multi_clip_import_enabled=cfg_feature_flags.multi_clip_import_enabled,
