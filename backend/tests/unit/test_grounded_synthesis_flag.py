@@ -54,6 +54,7 @@ def test_response_defaults_off_when_omitted():
         prompt_studio_enabled=False,
         prompt_studio_roles=["ADMIN"],
         clinician_prompts_note_only=False,
+        template_authoring_chat_enabled=False,
         # grounded_synthesis_enabled intentionally omitted
     )
     assert body.grounded_synthesis_enabled is False
