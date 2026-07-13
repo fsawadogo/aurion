@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, LayoutGrid, MessagesSquare, Plus, SquarePen, Trash2, Upload } from "lucide-react";
+import { Copy, FileClock, LayoutGrid, MessagesSquare, Plus, SquarePen, Trash2, Upload } from "lucide-react";
 import { getMe, humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -15,11 +15,14 @@ import VisitTypesTab from "@/components/portal/VisitTypesTab";
 import {
   deleteMyCustomTemplate,
   duplicateMyCustomTemplate,
+  getPortalFeatureFlags,
   listMyCustomTemplates,
+  listMySessions,
+  startTemplateAuthoringFromNote,
   uploadTemplateDocument,
 } from "@/lib/portal-api";
 import { formatRelative } from "@/lib/session-format";
-import type { CustomTemplate } from "@/types";
+import type { CustomTemplate, Session, SessionState } from "@/types";
 
 /**
  * /portal/templates — the clinician's templates, split across two tabs:
@@ -41,6 +44,16 @@ import type { CustomTemplate } from "@/types";
  */
 type TemplatesTab = "mine" | "library" | "visits";
 
+// A note the from-note seed can read exists once Stage 1 has produced one —
+// i.e. from AWAITING_REVIEW onward. Earlier states have no note yet;
+// PURGED/FAILED aren't offered as a seed source.
+const NOTE_READY_STATES: ReadonlySet<SessionState> = new Set<SessionState>([
+  "AWAITING_REVIEW",
+  "PROCESSING_STAGE2",
+  "REVIEW_COMPLETE",
+  "EXPORTED",
+]);
+
 export default function PortalTemplatesPage() {
   const t = useTranslations("TemplatesList");
   const router = useRouter();
@@ -57,6 +70,14 @@ export default function PortalTemplatesPage() {
   const [meId, setMeId] = useState<string | null>(null);
   const [meResolved, setMeResolved] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<CustomTemplate | null>(null);
+  // From-note seed (tpl-from-note): the "From a past encounter" affordance is
+  // gated on the portal flag; the picker lists the caller's note-bearing
+  // sessions and mints an authoring session from the chosen one.
+  const [fromNoteEnabled, setFromNoteEnabled] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [sessions, setSessions] = useState<Session[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(false);
+  const [seedingId, setSeedingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,6 +99,9 @@ export default function PortalTemplatesPage() {
       .then((u) => setMeId(u.user_id))
       .catch(() => {})
       .finally(() => setMeResolved(true));
+    void getPortalFeatureFlags()
+      .then((f) => setFromNoteEnabled(f.template_authoring_chat_enabled))
+      .catch(() => {});
   }, [load]);
 
   async function onUpload(file: File) {
@@ -90,6 +114,38 @@ export default function PortalTemplatesPage() {
       setError(humanizeError(e, t("uploadError")));
     } finally {
       setUploading(false);
+    }
+  }
+
+  const openPicker = useCallback(async () => {
+    setPickerOpen(true);
+    setSessionsLoading(true);
+    setError(null);
+    try {
+      const xs = await listMySessions();
+      const notes = xs
+        .filter((s) => NOTE_READY_STATES.has(s.state))
+        .sort((a, b) => b.created_at.localeCompare(a.created_at));
+      setSessions(notes);
+    } catch (e) {
+      setError(humanizeError(e, t("fromNoteLoadError")));
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, [t]);
+
+  async function onSeedFromNote(session: Session) {
+    setSeedingId(session.id);
+    setError(null);
+    try {
+      // sessionId here is the SOURCE note's session; the returned session's id
+      // is the new authoring session the AI builder resumes.
+      const authoring = await startTemplateAuthoringFromNote(session.id);
+      router.push(`/portal/templates/new?session=${authoring.id}`);
+    } catch (e) {
+      // Navigation didn't happen — surface the error and re-enable the picker.
+      setError(humanizeError(e, t("fromNoteError")));
+      setSeedingId(null);
     }
   }
 
@@ -170,6 +226,16 @@ export default function PortalTemplatesPage() {
         description={t("description")}
         actions={
           <>
+            {fromNoteEnabled && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void openPicker()}
+              >
+                <FileClock className="h-4 w-4 mr-1" />
+                {t("fromNote")}
+              </Button>
+            )}
             <label className="inline-flex">
               <input
                 type="file"
@@ -377,6 +443,58 @@ export default function PortalTemplatesPage() {
             ? t("deleteConfirm", { name: pendingDelete.display_name })
             : ""}
         </p>
+      </Modal>
+
+      {/* From a past encounter — pick a note-bearing session; the backend
+          extracts a reusable template from its note (structure only). */}
+      <Modal
+        isOpen={pickerOpen}
+        onClose={() => {
+          if (!seedingId) setPickerOpen(false);
+        }}
+        title={t("fromNoteTitle")}
+        size="lg"
+      >
+        <p className="mb-4 text-aurion-caption text-navy-500">
+          {t("fromNoteHint")}
+        </p>
+        {sessionsLoading ? (
+          <LoadingSkeleton lines={5} />
+        ) : sessions.length === 0 ? (
+          <p className="py-6 text-center text-aurion-caption text-navy-500">
+            {t("fromNoteEmpty")}
+          </p>
+        ) : (
+          <ul className="max-h-[52vh] divide-y divide-hairline overflow-y-auto">
+            {sessions.map((s) => (
+              <li key={s.id}>
+                <button
+                  type="button"
+                  disabled={seedingId !== null}
+                  onClick={() => void onSeedFromNote(s)}
+                  className="group -mx-2 flex w-full items-center gap-3 rounded-aurion-md px-2 py-3 text-left transition-colors duration-short hover:bg-canvas/40 disabled:opacity-50"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-aurion-md bg-navy-50 text-navy-600 ring-1 ring-inset ring-navy-100">
+                    <FileClock className="h-4 w-4" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-aurion-callout font-medium text-navy-800">
+                      {s.external_reference_id || t("fromNoteUntitled")}
+                    </p>
+                    <p className="mt-0.5 text-aurion-caption text-navy-500">
+                      {s.specialty} · {formatRelative(s.created_at)}
+                    </p>
+                  </div>
+                  {seedingId === s.id && (
+                    <span className="shrink-0 text-aurion-caption text-navy-400">
+                      {t("fromNoteSeeding")}
+                    </span>
+                  )}
+                </button>
+              </li>
+            ))}
+          </ul>
+        )}
       </Modal>
     </div>
   );

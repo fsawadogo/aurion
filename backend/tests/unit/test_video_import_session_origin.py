@@ -46,6 +46,7 @@ async def test_portal_feature_flags_reads_config() -> None:
             video_import_enabled=True,
             multi_clip_import_enabled=True,
             cross_clinician_chart_enabled=True,
+            template_authoring_chat_enabled=True,
         )
     )
     with patch.object(me, "get_config", return_value=cfg):

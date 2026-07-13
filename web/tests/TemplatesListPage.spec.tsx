@@ -24,6 +24,9 @@ vi.mock("@/lib/portal-api", () => ({
   deleteMyCustomTemplate: vi.fn(),
   duplicateMyCustomTemplate: vi.fn(),
   uploadTemplateDocument: vi.fn(),
+  getPortalFeatureFlags: vi.fn(),
+  listMySessions: vi.fn(),
+  startTemplateAuthoringFromNote: vi.fn(),
 }));
 vi.mock("@/lib/session-format", () => ({ formatRelative: () => "today" }));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
@@ -36,6 +39,9 @@ import {
   listMyCustomTemplates,
   deleteMyCustomTemplate,
   duplicateMyCustomTemplate,
+  getPortalFeatureFlags,
+  listMySessions,
+  startTemplateAuthoringFromNote,
 } from "@/lib/portal-api";
 
 function tpl(id: string, name: string, ownerId: string, shared = false) {
@@ -68,7 +74,39 @@ beforeEach(() => {
   vi.mocked(duplicateMyCustomTemplate).mockResolvedValue(
     tpl("mine-copy", "Shared Template (copy)", "me") as never,
   );
+  // From-note defaults: flag OFF, no sessions. Individual tests override.
+  vi.mocked(getPortalFeatureFlags).mockResolvedValue({
+    video_import_enabled: false,
+    multi_clip_import_enabled: false,
+    cross_clinician_chart_enabled: false,
+    template_authoring_chat_enabled: false,
+  } as never);
+  vi.mocked(listMySessions).mockResolvedValue([] as never);
+  vi.mocked(startTemplateAuthoringFromNote).mockResolvedValue({
+    id: "auth1",
+    status: "active",
+    messages: [],
+    draft_template: null,
+    assistant_message: null,
+  } as never);
 });
+
+function sess(id: string, state: string, ref: string) {
+  return {
+    id,
+    clinician_id: "me",
+    clinician_name: "Me",
+    specialty: "orthopedic_surgery",
+    state,
+    completeness_score: 0,
+    sections_populated: 0,
+    sections_required: 5,
+    provider_used: "anthropic",
+    external_reference_id: ref,
+    created_at: "2026-06-01T00:00:00Z",
+    updated_at: "2026-06-01T00:00:00Z",
+  };
+}
 
 describe("PortalTemplatesPage — ownership gating + delete modal", () => {
   it("shows Delete only for owned rows", async () => {
@@ -166,6 +204,43 @@ describe("PortalTemplatesPage — tabbed My Templates / Library split + fork", (
     );
     await waitFor(() =>
       expect(screen.getByText("Couldn't copy the template.")).toBeTruthy(),
+    );
+  });
+});
+
+describe("PortalTemplatesPage — from a past encounter (from-note, flag-gated)", () => {
+  it("hides the button while the flag is off", async () => {
+    render(withIntl(<PortalTemplatesPage />));
+    await screen.findByLabelText("Delete My Template"); // page loaded
+    expect(
+      screen.queryByRole("button", { name: "From a past encounter" }),
+    ).toBeNull();
+  });
+
+  it("shows the button; picker lists only note-bearing encounters and seeds", async () => {
+    vi.mocked(getPortalFeatureFlags).mockResolvedValue({
+      video_import_enabled: false,
+      multi_clip_import_enabled: false,
+      cross_clinician_chart_enabled: false,
+      template_authoring_chat_enabled: true,
+    } as never);
+    vi.mocked(listMySessions).mockResolvedValue([
+      sess("s-note", "AWAITING_REVIEW", "MRN-1"),
+      sess("s-live", "RECORDING", "MRN-2"), // no note yet → filtered out
+    ] as never);
+
+    render(withIntl(<PortalTemplatesPage />));
+    fireEvent.click(
+      await screen.findByRole("button", { name: "From a past encounter" }),
+    );
+
+    // The note-bearing encounter is offered; the in-progress one is not.
+    await waitFor(() => expect(screen.getByText("MRN-1")).toBeTruthy());
+    expect(screen.queryByText("MRN-2")).toBeNull();
+
+    fireEvent.click(screen.getByText("MRN-1"));
+    await waitFor(() =>
+      expect(startTemplateAuthoringFromNote).toHaveBeenCalledWith("s-note"),
     );
   });
 });

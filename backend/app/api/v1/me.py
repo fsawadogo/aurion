@@ -115,6 +115,11 @@ class PortalFeatureFlagsResponse(BaseModel):
     # chart nav entry + page. Defaulted OFF so an older portal build can't
     # break and the surface stays hidden until compliance enables it.
     cross_clinician_chart_enabled: bool = False
+    # Conversational template authoring — the note-derived seed (tpl-from-note).
+    # Gates the clinician "From a past encounter" entry into Create-with-AI.
+    # Defaulted OFF so an older portal build can't break and the surface stays
+    # hidden until a pilot rollout enables it.
+    template_authoring_chat_enabled: bool = False
 
 
 @router.get("/feature-flags", response_model=PortalFeatureFlagsResponse)
@@ -127,6 +132,7 @@ async def get_portal_feature_flags(
         video_import_enabled=flags.video_import_enabled,
         multi_clip_import_enabled=flags.multi_clip_import_enabled,
         cross_clinician_chart_enabled=flags.cross_clinician_chart_enabled,
+        template_authoring_chat_enabled=flags.template_authoring_chat_enabled,
     )
 
 
