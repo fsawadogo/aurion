@@ -56,6 +56,11 @@ class AuditEventType(StrEnum):
     CUSTOM_TEMPLATE_CREATED = "custom_template_created"
     CUSTOM_TEMPLATE_UPDATED = "custom_template_updated"
     CUSTOM_TEMPLATE_DELETED = "custom_template_deleted"
+    # A clinician's stored note was read to seed conversational template
+    # authoring (POST /me/template-authoring/from-note). Records the PHI-note
+    # access + outbound LLM extraction call, same as the other note-consuming
+    # endpoints (orders / patient-summary / surgery-quote).
+    TEMPLATE_AUTHORING_SEEDED_FROM_NOTE = "template_authoring_seeded_from_note"
     PATIENT_SUMMARY_GENERATED = "patient_summary_generated"
     PATIENT_SUMMARY_EDITED = "patient_summary_edited"
     SURGERY_QUOTE_GENERATED = "surgery_quote_generated"
@@ -485,6 +490,10 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     AuditEventType.CUSTOM_TEMPLATE_DELETED: frozenset(
         {"actor_id", "template_id", "template_key"}
     ),
+    # Note→template seed: actor + the source session id (the audit row key) is
+    # enough to reconstruct "clinician X read session Y's note to seed template
+    # authoring". Never carry the note text or the derived template body.
+    AuditEventType.TEMPLATE_AUTHORING_SEEDED_FROM_NOTE: frozenset({"actor_id"}),
     # Patient summary lifecycle — never carry the body text; the
     # summary itself is PHI and would be permanent in the audit log.
     # version + provider_used are the audit-trail-meaningful fields.

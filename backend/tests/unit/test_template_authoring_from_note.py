@@ -114,7 +114,8 @@ async def test_from_note_redacts_note_content(monkeypatch, stub_db):
         uuid.uuid4(), _note_with_content(), stub_db
     )
     assert _SENTINEL in " ".join(seen)  # reached the LLM
-    assert _SENTINEL not in row.messages_json  # not persisted
+    assert _SENTINEL not in row.messages_json  # not persisted in history
+    assert _SENTINEL not in (row.draft_template_json or "")  # nor the draft
     assert "not stored" in row.messages_json  # placeholder present
 
 
@@ -140,3 +141,78 @@ def test_note_to_text_skips_empty_sections():
     assert "Chief Complaint" in text
     assert "Right knee pain" in text
     assert "Imaging" not in text  # empty / no claims -> skipped
+
+
+# ── endpoint: flag gate + audit (safety boundary — the only thing keeping
+#    this note→LLM feature DARK is the flag check) ───────────────────────────
+
+from fastapi import HTTPException  # noqa: E402
+
+from app.api.v1 import me as me_module  # noqa: E402
+
+
+def _fake_user():
+    u = MagicMock()
+    u.user_id = uuid.uuid4()
+    return u
+
+
+def _flag(monkeypatch, on: bool):
+    cfg = MagicMock()
+    cfg.feature_flags.template_authoring_chat_enabled = on
+    monkeypatch.setattr(me_module, "get_config", lambda: cfg)
+
+
+@pytest.mark.asyncio
+async def test_endpoint_403_when_flag_off(monkeypatch):
+    """AC-5: the note→template endpoint 403s while the flag is off (DARK)."""
+    _flag(monkeypatch, on=False)
+    with pytest.raises(HTTPException) as ei:
+        await me_module.start_template_authoring_from_note(
+            session_id=uuid.uuid4(), user=_fake_user(), db=AsyncMock()
+        )
+    assert ei.value.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_endpoint_404_when_session_has_no_note(monkeypatch):
+    _flag(monkeypatch, on=True)
+    monkeypatch.setattr(
+        me_module, "get_owned_session_or_404", AsyncMock(return_value=MagicMock())
+    )
+    monkeypatch.setattr(me_module, "get_latest_note", AsyncMock(return_value=None))
+    with pytest.raises(HTTPException) as ei:
+        await me_module.start_template_authoring_from_note(
+            session_id=uuid.uuid4(), user=_fake_user(), db=AsyncMock()
+        )
+    assert ei.value.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_endpoint_audits_the_note_access_on_success(monkeypatch):
+    """The PHI-note access + LLM call is audited, like the sibling endpoints."""
+    _flag(monkeypatch, on=True)
+    monkeypatch.setattr(
+        me_module, "get_owned_session_or_404", AsyncMock(return_value=MagicMock())
+    )
+    monkeypatch.setattr(me_module, "get_latest_note", AsyncMock(return_value=MagicMock()))
+    monkeypatch.setattr(
+        me_module.template_authoring_service,
+        "create_authoring_from_note",
+        AsyncMock(return_value=(MagicMock(), MagicMock(assistant_message="ok"))),
+    )
+    monkeypatch.setattr(me_module, "_to_authoring_response", lambda row, msg: {"ok": True})
+    audit = AsyncMock()
+    monkeypatch.setattr(me_module, "write_audit", audit)
+    db = AsyncMock()
+
+    await me_module.start_template_authoring_from_note(
+        session_id=uuid.uuid4(), user=_fake_user(), db=db
+    )
+
+    audit.assert_awaited_once()
+    assert (
+        audit.call_args.args[1]
+        == me_module.AuditEventType.TEMPLATE_AUTHORING_SEEDED_FROM_NOTE
+    )
+    db.commit.assert_awaited_once()

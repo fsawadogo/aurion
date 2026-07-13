@@ -663,6 +663,13 @@ async def start_template_authoring_from_note(
             exc,
         )
         raise HTTPException(status_code=502, detail=f"AI provider error: {exc}")
+    # Audit the PHI-note access + outbound LLM extraction, same as the other
+    # note-consuming endpoints (orders / patient-summary / surgery-quote).
+    await write_audit(
+        session_id,
+        AuditEventType.TEMPLATE_AUTHORING_SEEDED_FROM_NOTE,
+        actor_id=str(user.user_id),
+    )
     await db.commit()
     return _to_authoring_response(row, reply.assistant_message)
 
