@@ -13,6 +13,7 @@ import CompletenessRing from "@/components/portal/CompletenessRing";
 import EmrWriteBackCard from "@/components/portal/EmrWriteBackCard";
 import EncounterAudioCard from "@/components/portal/EncounterAudioCard";
 import LivePreviewCard from "@/components/portal/LivePreviewCard";
+import NoteAssistChat from "@/components/portal/NoteAssistChat";
 import NoteContextBadge from "@/components/portal/NoteContextBadge";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
 import OrdersCard from "@/components/portal/OrdersCard";
@@ -26,16 +27,24 @@ import TranscriptPane, {
 } from "@/components/portal/TranscriptPane";
 import {
   approveAll,
+  assistNote,
   editNote,
   exportNote,
   getNoteDetail,
+  getPortalFeatureFlags,
   getSession,
   listMyMacros,
   resolveConflict,
 } from "@/lib/portal-api";
 import { filterForSpecialty } from "@/lib/portal-macros-expand";
 import { humanSpecialty } from "@/lib/session-format";
-import type { Claim, NoteDetail, PhysicianMacro, Session as SessionRow } from "@/types";
+import type {
+  Claim,
+  NoteAssistResponse,
+  NoteDetail,
+  PhysicianMacro,
+  Session as SessionRow,
+} from "@/types";
 
 /**
  * /portal/notes/[id] — the note review screen.
@@ -75,6 +84,8 @@ export default function NoteReviewPage() {
   // that even when the note doesn't exist yet.
   const [session, setSession] = useState<SessionRow | null>(null);
   const [macros, setMacros] = useState<PhysicianMacro[]>([]);
+  // "Fix this note" chat is gated on the portal flag (default off / DARK).
+  const [chatEnabled, setChatEnabled] = useState(false);
   const transcriptRef = useRef<TranscriptPaneHandle>(null);
 
   // Pull the user's macros once. Re-fetching on every render would
@@ -88,6 +99,20 @@ export default function NoteReviewPage() {
       })
       .catch(() => {
         // Quiet failure — the review still works without macros.
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    void getPortalFeatureFlags()
+      .then((f) => {
+        if (!cancelled) setChatEnabled(f.note_review_chat_enabled);
+      })
+      .catch(() => {
+        // Quiet failure — the review works without the chat.
       });
     return () => {
       cancelled = true;
@@ -151,6 +176,14 @@ export default function NoteReviewPage() {
     if (!detail) return;
     await resolveConflict(sessionId, claim.id, action, resolutionText);
     await load();
+  }
+
+  async function onAssist(message: string): Promise<NoteAssistResponse> {
+    const res = await assistNote(sessionId, message);
+    // Re-fetch the whole detail (like the edit flow) so citations, conflict
+    // state and export metadata stay consistent with the new version.
+    if (res.applied) await load();
+    return res;
   }
 
   async function onApprove() {
@@ -364,6 +397,10 @@ export default function NoteReviewPage() {
               </div>
             </div>
           </div>
+
+          {/* "Fix this note" chat — Heidi-style grounded editor under the note.
+              DARK until note_review_chat_enabled. */}
+          {chatEnabled && <NoteAssistChat onAssist={onAssist} />}
 
           {/* Orders card — extracted structured imaging/lab/referral/
               prescription orders awaiting physician confirmation.

@@ -23,6 +23,7 @@ import type {
   EmrWriteBack,
   LivePreview,
   Note,
+  NoteAssistResponse,
   NoteDetail,
   NoteOrder,
   PaginatedResponse,
@@ -369,6 +370,20 @@ export async function editNote(
   const r = await fetchWithAuth(`/api/v1/notes/${sessionId}/edit`, {
     method: "PATCH",
     body: JSON.stringify({ edits }),
+  });
+  return r.json();
+}
+
+/** POST /api/v1/notes/{id}/assist — conversational "fix this note". Returns the
+ *  assistant's reply plus the (possibly updated) note. `applied` signals whether
+ *  a new version was written, so the caller knows to re-fetch the note detail. */
+export async function assistNote(
+  sessionId: string,
+  message: string,
+): Promise<NoteAssistResponse> {
+  const r = await fetchWithAuth(`/api/v1/notes/${sessionId}/assist`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
   });
   return r.json();
 }
@@ -1038,6 +1053,9 @@ export async function getPortalFeatureFlags(): Promise<{
    *  Gates the "From a past encounter" entry into Create-with-AI. Default OFF
    *  until a pilot rollout enables it. */
   template_authoring_chat_enabled: boolean;
+  /** Note-review "fix this note" chat — gates the chat bar under the note on
+   *  the review screen. Default OFF until a pilot rollout enables it. */
+  note_review_chat_enabled: boolean;
 }> {
   const r = await fetchWithAuth("/api/v1/me/feature-flags");
   return r.json();

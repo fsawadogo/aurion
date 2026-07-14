@@ -120,6 +120,10 @@ class PortalFeatureFlagsResponse(BaseModel):
     # Defaulted OFF so an older portal build can't break and the surface stays
     # hidden until a pilot rollout enables it.
     template_authoring_chat_enabled: bool = False
+    # Note-review "fix this note" chat on the note-review screen. Gates the
+    # chat bar that calls POST /notes/{id}/assist. Defaulted OFF so an older
+    # portal build can't break and the surface stays hidden until enabled.
+    note_review_chat_enabled: bool = False
 
 
 @router.get("/feature-flags", response_model=PortalFeatureFlagsResponse)
@@ -133,6 +137,7 @@ async def get_portal_feature_flags(
         multi_clip_import_enabled=flags.multi_clip_import_enabled,
         cross_clinician_chart_enabled=flags.cross_clinician_chart_enabled,
         template_authoring_chat_enabled=flags.template_authoring_chat_enabled,
+        note_review_chat_enabled=flags.note_review_chat_enabled,
     )
 
 

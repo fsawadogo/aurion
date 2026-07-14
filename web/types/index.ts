@@ -382,6 +382,16 @@ export interface NoteDetail {
   export_metadata: ExportMetadata;
 }
 
+/** POST /api/v1/notes/{id}/assist — the "fix this note" chat response.
+ *  `applied` is true when the assistant actually mutated the note (a new
+ *  version was written); `note` is the latest version. When false, the turn
+ *  was conversational (a question) or nothing matched — no version was created. */
+export interface NoteAssistResponse {
+  assistant_message: string;
+  applied: boolean;
+  note: Note;
+}
+
 export type Stage2JobStatus =
   | "no_job"
   | "pending"

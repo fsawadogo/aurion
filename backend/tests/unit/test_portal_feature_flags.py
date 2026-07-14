@@ -21,6 +21,7 @@ def _cfg(**overrides):
         "multi_clip_import_enabled": False,
         "cross_clinician_chart_enabled": False,
         "template_authoring_chat_enabled": False,
+        "note_review_chat_enabled": False,
     }
     base.update(overrides)
     return SimpleNamespace(feature_flags=SimpleNamespace(**base))
@@ -40,3 +41,19 @@ async def test_portal_flags_surfaces_template_authoring_when_on(monkeypatch):
     )
     resp = await me_module.get_portal_feature_flags(_user=MagicMock())
     assert resp.template_authoring_chat_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_portal_flags_note_review_dark_by_default(monkeypatch):
+    monkeypatch.setattr(me_module, "get_config", lambda: _cfg())
+    resp = await me_module.get_portal_feature_flags(_user=MagicMock())
+    assert resp.note_review_chat_enabled is False
+
+
+@pytest.mark.asyncio
+async def test_portal_flags_surfaces_note_review_when_on(monkeypatch):
+    monkeypatch.setattr(
+        me_module, "get_config", lambda: _cfg(note_review_chat_enabled=True)
+    )
+    resp = await me_module.get_portal_feature_flags(_user=MagicMock())
+    assert resp.note_review_chat_enabled is True

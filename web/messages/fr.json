@@ -1263,6 +1263,19 @@
       "blockedHint": "L’approbation est bloquée tant que chaque conflit n’est pas résolu.",
       "showFirst": "Afficher le premier"
     },
+    "chat": {
+      "title": "Corriger cette note",
+      "hint": "Demandez une modification en langage naturel — reformuler, ajouter depuis la transcription ou supprimer. Les modifications restent fondées et créent une nouvelle version.",
+      "placeholder": "Demandez, modifiez ou corrigez…",
+      "send": "Envoyer",
+      "thinking": "En cours…",
+      "error": "Impossible d’appliquer. Veuillez réessayer.",
+      "chipShorten": "Raccourcir la note",
+      "chipAddMissed": "Ajouter ce que j’ai oublié",
+      "chipTidy": "Nettoyer les sections vides",
+      "youLabel": "Vous",
+      "assistantLabel": "Aurion"
+    },
     "actions": {
       "approvedExported": "Approuvée · exportée",
       "approvedReady": "Approuvée · prête à exporter",
