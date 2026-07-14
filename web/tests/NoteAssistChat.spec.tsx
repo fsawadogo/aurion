@@ -60,9 +60,20 @@ describe("NoteAssistChat (fix this note)", () => {
     );
   });
 
-  it("disables send until there is input", () => {
-    render(withIntl(<NoteAssistChat onAssist={vi.fn()} />));
+  it("enables send only with input, and clears the input after a send", async () => {
+    const onAssist = vi
+      .fn()
+      .mockResolvedValue({ assistant_message: "ok", applied: false, note: {} });
+    render(withIntl(<NoteAssistChat onAssist={onAssist} />));
     const send = screen.getByRole("button", { name: "Send" }) as HTMLButtonElement;
-    expect(send.disabled).toBe(true);
+    const input = screen.getByPlaceholderText(PLACEHOLDER) as HTMLInputElement;
+
+    expect(send.disabled).toBe(true); // no input
+    fireEvent.change(input, { target: { value: "shorten" } });
+    expect(send.disabled).toBe(false); // re-enables with input
+
+    fireEvent.click(send);
+    await waitFor(() => expect(onAssist).toHaveBeenCalledWith("shorten"));
+    await waitFor(() => expect(input.value).toBe("")); // cleared after send
   });
 });

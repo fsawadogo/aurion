@@ -27,6 +27,10 @@ export default function NoteAssistChat({
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
+  // Keep the log pinned to the bottom only while the user hasn't scrolled up.
+  const stuckToBottom = useRef(true);
+  const wasSending = useRef(false);
 
   const send = useCallback(
     async (text: string) => {
@@ -54,11 +58,18 @@ export default function NoteAssistChat({
   );
 
   useEffect(() => {
-    // Assigning scrollTop (rather than scrollTo) keeps the auto-scroll working
-    // in browsers while staying compatible with jsdom, which has no scrollTo.
+    // Assign scrollTop (not scrollTo — jsdom lacks it) to pin the log to the
+    // bottom, but only while the user hasn't scrolled up to re-read.
     const el = scrollRef.current;
-    if (el) el.scrollTop = el.scrollHeight;
+    if (el && stuckToBottom.current) el.scrollTop = el.scrollHeight;
   }, [messages, sending]);
+
+  // Restore focus to the input after a send completes (not on mount) so the
+  // physician can keep the conversation going without reaching for the mouse.
+  useEffect(() => {
+    if (wasSending.current && !sending) inputRef.current?.focus();
+    wasSending.current = sending;
+  }, [sending]);
 
   const chips = [t("chipShorten"), t("chipAddMissed"), t("chipTidy")];
 
@@ -79,6 +90,13 @@ export default function NoteAssistChat({
       {messages.length > 0 && (
         <div
           ref={scrollRef}
+          role="log"
+          aria-live="polite"
+          onScroll={(e) => {
+            const el = e.currentTarget;
+            stuckToBottom.current =
+              el.scrollHeight - el.scrollTop - el.clientHeight < 40;
+          }}
           className="mb-3 max-h-64 space-y-2 overflow-y-auto rounded-aurion-md bg-canvas/40 p-3"
         >
           {messages.map((m, i) => (
@@ -124,6 +142,7 @@ export default function NoteAssistChat({
         className="flex items-center gap-2"
       >
         <input
+          ref={inputRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           disabled={sending}
