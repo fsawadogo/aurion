@@ -39,6 +39,7 @@ from app.modules.note_gen.service import (
     EmptyTranscriptError,
     generate_stage1_note,
     get_latest_note,
+    list_available_templates,
     regenerate_discard_summary,
 )
 from app.modules.session.service import (
@@ -635,6 +636,17 @@ class RegenerateNoteRequest(BaseModel):
     # before asking again with True. A lossless note never needs this.
     confirm_discard: bool = False
 
+    @model_validator(mode="after")
+    def _at_most_one_template(self):
+        # The two are mutually exclusive on the session row, and note-gen's
+        # resolver silently prefers the custom one if handed both — so reject
+        # the ambiguity here rather than guess which the caller meant.
+        if self.template_key is not None and self.custom_template_id is not None:
+            raise ValueError(
+                "Provide at most one of template_key / custom_template_id."
+            )
+        return self
+
 
 class RegenerateNoteResponse(BaseModel):
     version: int
@@ -684,6 +696,22 @@ async def regenerate_note(
             detail="Note regeneration is not enabled for this user.",
         )
 
+    # Validate a caller-named built-in key. get_template() FALLS BACK to
+    # "general" rather than raising, so an unknown key would hand the physician
+    # a general-template note while reporting success — the same silent swap
+    # this endpoint's session-pin default exists to prevent. It would also put
+    # unvalidated client text into the append-only NOTE_REGENERATED row below.
+    # The session's own pin needs no check: resolve_context_template_key
+    # validated it against this same list at create, and re-validates on read.
+    if (
+        body.template_key is not None
+        and body.template_key not in list_available_templates()
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Unknown template key.",
+        )
+
     # Own-scope a custom-template override (SECURITY). A caller may regenerate
     # with their OWN custom template or a shared/Library one — never another
     # clinician's private template. generate_stage1_note's resolver loads the
@@ -723,16 +751,13 @@ async def regenerate_note(
     # / screen claims, physician edits, and confirmed measurements on the
     # CURRENT note are destroyed — and cannot be rebuilt (captions are never
     # persisted; after export purge_frames has deleted the source images).
-    # Most consequential: dropping unresolved conflicts would let a note
-    # approve_note refuses to sign become signable, so this gate is what keeps
-    # CLAUDE.md's "CONFLICTS resolution: 100% before approval" honest here.
-    # Counts only — no claim text crosses the wire.
+    # Most consequential: unresolved conflicts block approve_note, so dropping
+    # them turns an unsignable note into a signable one. Confirming still
+    # allows that — the rebuilt note has no visual layer, so no discrepancy
+    # survives to resolve — but it becomes a deliberate, audited act instead
+    # of a silent side effect. Counts only; no claim text crosses the wire.
     current_note = await get_latest_note(str(session_id), db)
-    discard = (
-        regenerate_discard_summary(current_note)
-        if current_note is not None
-        else {}
-    )
+    discard = regenerate_discard_summary(current_note)
     lossy = any(discard.values())
     if lossy and not body.confirm_discard:
         raise HTTPException(
@@ -785,16 +810,23 @@ async def regenerate_note(
             detail="The stored transcript is empty.",
         )
 
-    # Record the replacement and what it cost. PHI-free: a built-in template
-    # KEY is a code identifier, but a custom template's name is physician-
-    # authored, so that one is reported as a bool only.
+    # Record the replacement and what it cost. PHI-free: template_key is a
+    # built-in key — a code identifier, validated against
+    # list_available_templates() above and at session create, so it can never
+    # be a custom template's physician-authored key. A custom template is
+    # reported as a bool for exactly that reason.
+    #
+    # These name what note-gen was ASKED for, not necessarily what it used:
+    # _resolve_stage1_template degrades to the specialty default if a pinned
+    # custom template was deleted since session create. Auditing the RESOLVED
+    # template needs generate_stage1_note to report it back — deferred.
     await write_audit(
         session_id,
         AuditEventType.NOTE_REGENERATED,
         version=note.version,
         template_key=template_key,
         used_custom_template=custom_template_id is not None,
-        confirmed_discard=lossy,
+        discarded_work=lossy,
         **{f"discarded_{key}": value for key, value in discard.items()},
     )
     await db.commit()

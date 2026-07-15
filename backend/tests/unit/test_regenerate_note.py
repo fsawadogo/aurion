@@ -595,7 +595,7 @@ async def test_regenerate_proceeds_when_discard_confirmed(regen_stubs):
     db.commit.assert_awaited_once()
 
     kwargs = regen_stubs.call_args.kwargs
-    assert kwargs["confirmed_discard"] is True
+    assert kwargs["discarded_work"] is True
     assert kwargs["discarded_visual_claims"] == 2  # conflict claim is visual
     assert kwargs["discarded_unresolved_conflicts"] == 1
 
@@ -636,7 +636,101 @@ async def test_regenerate_needs_no_confirmation_when_lossless(regen_stubs):
         resp = await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
 
     assert resp.version == 2
-    assert regen_stubs.call_args.kwargs["confirmed_discard"] is False
+    assert regen_stubs.call_args.kwargs["discarded_work"] is False
+
+
+@pytest.mark.asyncio
+async def test_no_prior_note_still_audits_zero_counts(regen_stubs):
+    """A session with no note yet must emit the same row SHAPE as a lossy one
+    — all-zero, not absent — so the eval team gets one schema to read."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    gen = AsyncMock(
+        return_value=Note(
+            session_id=str(sid),
+            stage=1,
+            version=1,
+            provider_used="anthropic",
+            specialty="orthopedic_surgery",
+            completeness_score=0.5,
+        )
+    )
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
+
+    kwargs = regen_stubs.call_args.kwargs
+    assert kwargs["discarded_visual_claims"] == 0
+    assert kwargs["discarded_unresolved_conflicts"] == 0
+    assert kwargs["discarded_work"] is False
+
+
+# ── Caller-named built-in template must exist ───────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_regenerate_rejects_unknown_template_key():
+    """get_template() falls back to "general" instead of raising, so an
+    unvalidated key would hand the physician a general-template note while
+    reporting 200 — the silent swap this endpoint exists to prevent."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    gen = AsyncMock()
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await regenerate_note(
+                sid,
+                RegenerateNoteRequest(template_key="soap"),  # not on disk
+                _caller(),
+                db,
+            )
+    assert exc.value.status_code == 422
+    gen.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_regenerate_never_audits_unvalidated_client_text():
+    """template_key reaches the APPEND-ONLY audit log, where a PHI string is
+    permanent by design. The whitelist checks kwarg NAMES, never values — so
+    the 422 above is the only thing keeping this row PHI-free."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", AsyncMock()),
+        patch("app.api.v1.sessions.write_audit", AsyncMock()) as audit,
+    ):
+        with pytest.raises(HTTPException):
+            await regenerate_note(
+                sid,
+                RegenerateNoteRequest(template_key="Jane Doe DOB 1980-04-12"),
+                _caller(),
+                db,
+            )
+    audit.assert_not_awaited()
+
+
+def test_regenerate_request_rejects_both_template_fields():
+    """The two are mutually exclusive; note-gen silently prefers the custom one
+    if handed both, so the ambiguity is rejected at the boundary."""
+    with pytest.raises(ValueError):
+        RegenerateNoteRequest(
+            template_key="general", custom_template_id=uuid.uuid4()
+        )
 
 
 # ── The session's template is the default, not the specialty ────────────────

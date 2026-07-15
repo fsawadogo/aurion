@@ -651,17 +651,22 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
         {"job_id", "reason", "total_frames", "failed_frames"}
     ),
     AuditEventType.NOTE_VERSION_CREATED: frozenset({"version", "sections_edited"}),
-    # #590 regenerate. ``template_key`` is a built-in template key (a code
-    # identifier like "orthopedic_surgery", never a clinician-authored name);
-    # ``used_custom_template`` is a bool rather than the id/display_name so a
-    # physician's template title can't reach the audit log. The discarded_*
-    # counts are integers only.
+    # #590 regenerate. ``template_key`` is a built-in template key — a code
+    # identifier like "orthopedic_surgery". The route validates it against
+    # list_available_templates() before emitting, so a clinician-authored
+    # custom-template key can never land here (this store is append-only:
+    # a PHI string written here is permanent by design). A custom template
+    # is reported as the bool ``used_custom_template`` for the same reason —
+    # never its id or physician-authored display_name. ``discarded_work``
+    # says the re-run destroyed something; the ``discarded_*`` counts are
+    # integers only and OVERLAP (see regenerate_discard_summary) — do not
+    # sum them.
     AuditEventType.NOTE_REGENERATED: frozenset(
         {
             "version",
             "template_key",
             "used_custom_template",
-            "confirmed_discard",
+            "discarded_work",
             "discarded_visual_claims",
             "discarded_screen_claims",
             "discarded_physician_edits",

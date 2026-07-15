@@ -1437,7 +1437,7 @@ _UNREPRODUCIBLE_SOURCE_TYPES: dict[str, str] = {
 }
 
 
-def regenerate_discard_summary(note) -> dict[str, int]:
+def regenerate_discard_summary(note: Optional[Note]) -> dict[str, int]:
     """Count what re-running Stage 1 would destroy in ``note`` (#590).
 
     Regenerate rebuilds the note from the stored transcript alone, so anything
@@ -1452,16 +1452,22 @@ def regenerate_discard_summary(note) -> dict[str, int]:
     that changes what the physician is *permitted* to do, not just what the
     note says: ``approve_note`` refuses to sign a note carrying open Stage 2
     conflicts, so dropping them silently would launder an unapprovable note
-    into an approvable one. It deliberately overlaps ``visual_claims`` (a
-    conflict claim IS a visual claim) — they answer different questions.
+    into an approvable one.
 
-    All-zero means a regenerate is lossless and needs no confirmation.
+    THE BUCKETS OVERLAP BY DESIGN — they answer different questions about the
+    same claim, so do NOT sum them into a single "N items will be lost". One
+    physician-edited conflict claim reports 1 in each of ``visual_claims``,
+    ``physician_edits`` and ``unresolved_conflicts``. ``all-zero`` (including
+    for ``note=None``) means the regenerate is lossless and needs no
+    confirmation; that is the only aggregate reading the counts support.
 
     Counts only — never claim text, section titles, or ids (PHI).
     """
     counts = {key: 0 for key in _UNREPRODUCIBLE_SOURCE_TYPES.values()}
     counts["physician_edits"] = 0
     counts["unresolved_conflicts"] = 0
+    if note is None:
+        return counts
 
     for section in note.sections:
         for claim in section.claims:
