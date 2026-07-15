@@ -1263,6 +1263,19 @@
       "blockedHint": "Approval is blocked until every conflict is resolved.",
       "showFirst": "Show first"
     },
+    "chat": {
+      "title": "Fix this note",
+      "hint": "Ask for a change in plain language — reword, add from the transcript, or remove. Edits stay grounded and create a new version.",
+      "placeholder": "Ask, edit, or fix anything…",
+      "send": "Send",
+      "thinking": "Working…",
+      "error": "Couldn't apply that. Please try again.",
+      "chipShorten": "Shorten the note",
+      "chipAddMissed": "Add anything I missed",
+      "chipTidy": "Tidy empty sections",
+      "youLabel": "You",
+      "assistantLabel": "Aurion"
+    },
     "actions": {
       "approvedExported": "Approved · exported",
       "approvedReady": "Approved · ready to export",

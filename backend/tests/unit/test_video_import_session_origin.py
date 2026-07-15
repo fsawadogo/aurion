@@ -47,6 +47,7 @@ async def test_portal_feature_flags_reads_config() -> None:
             multi_clip_import_enabled=True,
             cross_clinician_chart_enabled=True,
             template_authoring_chat_enabled=True,
+            note_review_chat_enabled=True,
         )
     )
     with patch.object(me, "get_config", return_value=cfg):
@@ -54,3 +55,4 @@ async def test_portal_feature_flags_reads_config() -> None:
     assert resp.video_import_enabled is True
     assert resp.multi_clip_import_enabled is True
     assert resp.cross_clinician_chart_enabled is True
+    assert resp.note_review_chat_enabled is True
