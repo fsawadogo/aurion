@@ -68,6 +68,11 @@ const FLAG_GROUPS = [
     hintKey: "noteOptionsHint",
     flags: ["note_options_enabled"],
   },
+  {
+    titleKey: "chatTools",
+    hintKey: "chatToolsHint",
+    flags: ["template_authoring_chat_enabled", "note_review_chat_enabled"],
+  },
 ] as const satisfies readonly {
   titleKey: string;
   hintKey: string;
