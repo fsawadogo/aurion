@@ -115,6 +115,10 @@ class PortalFeatureFlagsResponse(BaseModel):
     # chart nav entry + page. Defaulted OFF so an older portal build can't
     # break and the surface stays hidden until compliance enables it.
     cross_clinician_chart_enabled: bool = False
+    # Chat surfaces: the Templates page "From a past encounter" button and
+    # the note-review "Fix this note" panel. Defaulted OFF (same rationale).
+    template_authoring_chat_enabled: bool = False
+    note_review_chat_enabled: bool = False
 
 
 @router.get("/feature-flags", response_model=PortalFeatureFlagsResponse)
@@ -127,6 +131,8 @@ async def get_portal_feature_flags(
         video_import_enabled=flags.video_import_enabled,
         multi_clip_import_enabled=flags.multi_clip_import_enabled,
         cross_clinician_chart_enabled=flags.cross_clinician_chart_enabled,
+        template_authoring_chat_enabled=flags.template_authoring_chat_enabled,
+        note_review_chat_enabled=flags.note_review_chat_enabled,
     )
 
 
@@ -401,6 +407,57 @@ async def start_template_authoring(
     row, reply = await template_authoring_service.start_authoring_session(
         user.user_id, db
     )
+    await db.commit()
+    return _to_authoring_response(row, reply.assistant_message)
+
+
+class AuthoringFromNoteRequest(BaseModel):
+    """The encounter session whose note seeds the template draft."""
+
+    session_id: uuid.UUID
+
+
+# NOTE: declared before the `/{session_id}` routes below — path matching is
+# declaration-ordered, and "from-note" must not be parsed as a session UUID.
+@router.post(
+    "/template-authoring/from-note",
+    response_model=AuthoringSessionResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def start_template_authoring_from_note(
+    body: AuthoringFromNoteRequest,
+    user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> AuthoringSessionResponse:
+    """Seed an authoring session from a past encounter's note structure.
+
+    Gated by ``feature_flags.template_authoring_chat_enabled`` — 404 while
+    dark (same posture as video_import). Only the note's structural skeleton
+    (section ids/titles/status) reaches the LLM; claim text never does.
+    """
+    if not get_config().feature_flags.template_authoring_chat_enabled:
+        raise HTTPException(status_code=404, detail="Not found")
+
+    await get_owned_session_or_404(db, body.session_id, user)
+    note = await get_latest_note(str(body.session_id), db)
+    if note is None:
+        raise HTTPException(
+            status_code=404, detail="No note exists for this session"
+        )
+
+    try:
+        row, reply = await template_authoring_service.start_from_note(
+            user.user_id, note, db
+        )
+    except ProviderError as exc:
+        # Same rationale as continue_template_authoring — surface provider
+        # failures as 502 so CORS headers survive and the frontend can show
+        # a real error.
+        logger.warning("template-authoring from-note: provider failed: %s", exc)
+        raise HTTPException(
+            status_code=502,
+            detail=f"AI provider error: {exc}",
+        )
     await db.commit()
     return _to_authoring_response(row, reply.assistant_message)
 

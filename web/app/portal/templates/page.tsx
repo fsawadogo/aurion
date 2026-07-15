@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, LayoutGrid, MessagesSquare, Plus, SquarePen, Trash2, Upload } from "lucide-react";
+import { Copy, History, LayoutGrid, MessagesSquare, Plus, SquarePen, Trash2, Upload } from "lucide-react";
 import { getMe, humanizeError } from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
@@ -15,11 +15,24 @@ import VisitTypesTab from "@/components/portal/VisitTypesTab";
 import {
   deleteMyCustomTemplate,
   duplicateMyCustomTemplate,
+  getPortalFeatureFlags,
   listMyCustomTemplates,
+  listMySessions,
+  startTemplateAuthoringFromNote,
   uploadTemplateDocument,
 } from "@/lib/portal-api";
-import { formatRelative } from "@/lib/session-format";
-import type { CustomTemplate } from "@/types";
+import { formatRelative, humanSpecialty, shortSessionId } from "@/lib/session-format";
+import type { CustomTemplate, Session } from "@/types";
+
+/** Session states in which a note version exists (notes persist in Postgres
+ *  even after media purge), so the encounter can seed a template draft. */
+const NOTE_BEARING_STATES = new Set([
+  "AWAITING_REVIEW",
+  "PROCESSING_STAGE2",
+  "REVIEW_COMPLETE",
+  "EXPORTED",
+  "PURGED",
+]);
 
 /**
  * /portal/templates — the clinician's templates, split across two tabs:
@@ -57,6 +70,14 @@ export default function PortalTemplatesPage() {
   const [meId, setMeId] = useState<string | null>(null);
   const [meResolved, setMeResolved] = useState(false);
   const [pendingDelete, setPendingDelete] = useState<CustomTemplate | null>(null);
+  // "From a past encounter" seed (template_authoring_chat_enabled). The
+  // button only renders once the flag resolves true; every backend call
+  // 404s while the flag is dark, so hiding is UX not security.
+  const [fromNoteEnabled, setFromNoteEnabled] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerSessions, setPickerSessions] = useState<Session[] | null>(null);
+  const [pickerError, setPickerError] = useState<string | null>(null);
+  const [seedingId, setSeedingId] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -78,7 +99,38 @@ export default function PortalTemplatesPage() {
       .then((u) => setMeId(u.user_id))
       .catch(() => {})
       .finally(() => setMeResolved(true));
+    void getPortalFeatureFlags()
+      .then((f) => setFromNoteEnabled(f.template_authoring_chat_enabled))
+      .catch(() => {});
   }, [load]);
+
+  async function openFromNotePicker() {
+    setPickerOpen(true);
+    setPickerError(null);
+    if (pickerSessions !== null) return;
+    try {
+      const xs = await listMySessions();
+      const withNotes = xs
+        .filter((s) => NOTE_BEARING_STATES.has(s.state))
+        .sort((a, b) => (b.created_at ?? "").localeCompare(a.created_at ?? ""));
+      setPickerSessions(withNotes);
+    } catch (e) {
+      setPickerError(humanizeError(e, t("fromNoteLoadError")));
+      setPickerSessions([]);
+    }
+  }
+
+  async function onSeedFromNote(session: Session) {
+    setSeedingId(session.id);
+    setPickerError(null);
+    try {
+      const authoring = await startTemplateAuthoringFromNote(session.id);
+      router.push(`/portal/templates/new?session=${authoring.id}`);
+    } catch (e) {
+      setPickerError(humanizeError(e, t("fromNoteError")));
+      setSeedingId(null);
+    }
+  }
 
   async function onUpload(file: File) {
     setUploading(true);
@@ -193,6 +245,17 @@ export default function PortalTemplatesPage() {
                 {t("upload")}
               </Button>
             </label>
+            {fromNoteEnabled && (
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => void openFromNotePicker()}
+                data-testid="from-note-button"
+              >
+                <History className="h-4 w-4 mr-1" />
+                {t("fromNote")}
+              </Button>
+            )}
             <Link href="/portal/templates/new">
               <Button variant="primary" size="sm">
                 <Plus className="h-4 w-4 mr-1" />
@@ -343,6 +406,55 @@ export default function PortalTemplatesPage() {
           </div>
         )}
       </Card>
+
+      <Modal
+        isOpen={pickerOpen}
+        onClose={() => {
+          if (!seedingId) setPickerOpen(false);
+        }}
+        title={t("fromNoteTitle")}
+      >
+        <p className="mb-4 text-aurion-callout text-navy-600">
+          {t("fromNoteHint")}
+        </p>
+        {pickerError && (
+          <div className="mb-3 rounded-aurion-md bg-red-50 border border-red-200 px-3 py-2 text-aurion-caption text-red-700">
+            {pickerError}
+          </div>
+        )}
+        {pickerSessions === null ? (
+          <LoadingSkeleton lines={4} />
+        ) : pickerSessions.length === 0 ? (
+          <p className="py-6 text-center text-aurion-caption text-navy-500">
+            {t("fromNoteEmpty")}
+          </p>
+        ) : (
+          <ul className="max-h-80 divide-y divide-hairline overflow-y-auto">
+            {pickerSessions.map((s) => (
+              <li key={s.id} className="flex items-center gap-3 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-aurion-callout font-medium text-navy-800 truncate">
+                    {humanSpecialty(s.specialty)}
+                  </p>
+                  <p className="mt-0.5 text-aurion-caption text-navy-500">
+                    {shortSessionId(s.id)} · {formatRelative(s.created_at)}
+                  </p>
+                </div>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="shrink-0"
+                  loading={seedingId === s.id}
+                  disabled={!!seedingId}
+                  onClick={() => void onSeedFromNote(s)}
+                >
+                  {t("fromNoteUse")}
+                </Button>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Modal>
 
       <Modal
         isOpen={pendingDelete !== null}

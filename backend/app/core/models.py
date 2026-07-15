@@ -992,6 +992,43 @@ class TemplateAuthoringSessionModel(Base):
     )
 
 
+class NoteReviewChatModel(Base):
+    """Per-session "Fix this note" conversation (note_review_chat_enabled).
+
+    One row per encounter session — the chat is scoped to that session's
+    note and resumable across devices. Messages may reference note content,
+    so the row is PHI-bearing like the note versions themselves (Postgres,
+    never logged). Applied edits do NOT live here: every applied edit goes
+    through note_gen.create_note_version, so the note's own immutable
+    version history remains the single source of truth.
+    """
+
+    __tablename__ = "note_review_chats"
+
+    # The encounter session id — one chat per session.
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True
+    )
+    owner_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    # JSON-encoded list of {"role": "user" | "assistant", "content": "..."}
+    # objects, bounded by an application-level message cap like
+    # template_authoring_sessions.messages_json.
+    messages_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+
 class PhysicianMacroModel(Base):
     """Per-physician text shortcut → expansion mapping.
 

@@ -13,7 +13,7 @@ from typing import Callable, Literal, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -21,7 +21,7 @@ from app.api.v1._helpers import get_owned_session_or_404, write_audit
 from app.core.audit_events import AuditEventType
 from app.core.background import spawn_background_task
 from app.core.database import async_session_factory, get_db
-from app.core.models import TranscriptModel
+from app.core.models import NoteReviewChatModel, TranscriptModel
 from app.core.s3 import (
     AUDIO_BUCKET,
     DEFAULT_EVIDENCE_TTL_SECONDS,
@@ -29,13 +29,14 @@ from app.core.s3 import (
     generate_presigned_evidence_url,
     get_s3_client,
 )
-from app.core.types import SessionState, Transcript
+from app.core.types import ProviderError, SessionState, Transcript
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.config.appconfig_client import get_config
 from app.modules.note_gen.service import (
     UnresolvedConflictError,
     approve_note,
+    create_note_version,
     edit_note,
     get_latest_note,
     get_note_by_stage,
@@ -43,6 +44,7 @@ from app.modules.note_gen.service import (
     is_unresolved_conflict_claim,
     resolve_conflict,
 )
+from app.modules.note_review_chat import service as review_chat_service
 from app.modules.session.service import (
     InvalidTransitionError,
     transition_session,
@@ -848,6 +850,158 @@ async def edit_note_endpoint(
     )
 
     return _to_note_response(updated_note)
+
+
+# ── "Fix this note" review chat (note_review_chat_enabled) ───────────────
+
+
+class ReviewChatMessage(BaseModel):
+    role: Literal["user", "assistant"]
+    content: str
+
+
+class ReviewChatResponse(BaseModel):
+    """Chat state + the outcome of the latest turn. ``note`` is populated
+    (with the freshly-versioned note) only when the turn applied an edit."""
+
+    session_id: str
+    messages: list[ReviewChatMessage]
+    assistant_message: Optional[str] = None
+    applied_version: Optional[int] = None
+    sections_edited: list[str] = []
+    note: Optional[NoteResponse] = None
+
+
+class ReviewChatMessageRequest(BaseModel):
+    message: str = Field(..., min_length=1)
+
+
+def _require_review_chat_enabled() -> None:
+    """404 while the flag is dark — same posture as video_import: the
+    surface simply doesn't exist until an ADMIN flips it."""
+    if not get_config().feature_flags.note_review_chat_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Not found"
+        )
+
+
+def _to_review_chat_messages(messages_json: str) -> list[ReviewChatMessage]:
+    return [
+        ReviewChatMessage(role=m.role, content=m.content)
+        for m in review_chat_service._decode_messages(messages_json)
+    ]
+
+
+@router.get("/{session_id}/review-chat", response_model=ReviewChatResponse)
+async def get_review_chat(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Return the session's review-chat history (empty if never used)."""
+    _require_review_chat_enabled()
+    await get_owned_session_or_404(db, session_id, user)
+
+    result = await db.execute(
+        select(NoteReviewChatModel).where(
+            NoteReviewChatModel.session_id == session_id
+        )
+    )
+    row = result.scalar_one_or_none()
+    return ReviewChatResponse(
+        session_id=str(session_id),
+        messages=(
+            _to_review_chat_messages(row.messages_json) if row else []
+        ),
+    )
+
+
+@router.post("/{session_id}/review-chat", response_model=ReviewChatResponse)
+async def post_review_chat(
+    session_id: uuid.UUID,
+    body: ReviewChatMessageRequest,
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """One "Fix this note" turn: plain-language instruction in; if the
+    assistant emits a valid grounded edit, it lands as a NEW immutable note
+    version (same audit event as a manual edit) and the response carries the
+    updated note. Conversational replies apply nothing.
+
+    Session must be in AWAITING_REVIEW or REVIEW_COMPLETE — the same window
+    as manual edits.
+    """
+    _require_review_chat_enabled()
+    session = await get_owned_session_or_404(db, session_id, user)
+
+    allowed_states = {SessionState.AWAITING_REVIEW, SessionState.REVIEW_COMPLETE}
+    if session.state not in allowed_states:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"Cannot edit note: session is in {session.state.value}. "
+                f"Must be in AWAITING_REVIEW or REVIEW_COMPLETE."
+            ),
+        )
+
+    current = await get_latest_note(str(session_id), db)
+    if current is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No note exists for this session.",
+        )
+
+    chat = await review_chat_service.get_or_create_chat(
+        session_id, user.user_id, db
+    )
+    try:
+        reply = await review_chat_service.continue_chat(
+            chat, current, body.message, db
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)
+        )
+    except ProviderError as exc:
+        # Surface upstream LLM failures as 502 so CORS headers survive and
+        # the portal renders a retry affordance (same rationale as the
+        # template-authoring chat).
+        logger.warning(
+            "review-chat: provider failed session=%s: %s", session_id, exc
+        )
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"AI provider error: {exc}",
+        )
+
+    applied_version: Optional[int] = None
+    updated_note = None
+    if reply.edited_note is not None:
+        await create_note_version(
+            str(session_id),
+            reply.edited_note,
+            db,
+            stats_trigger="note_review_chat",
+        )
+        updated_note = reply.edited_note
+        applied_version = updated_note.version
+        await write_audit(
+            session_id,
+            AuditEventType.NOTE_VERSION_CREATED,
+            version=applied_version,
+            sections_edited=reply.sections_edited,
+        )
+
+    await db.commit()
+
+    return ReviewChatResponse(
+        session_id=str(session_id),
+        messages=_to_review_chat_messages(chat.messages_json),
+        assistant_message=reply.assistant_message,
+        applied_version=applied_version,
+        sections_edited=reply.sections_edited,
+        note=_to_note_response(updated_note) if updated_note else None,
+    )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────

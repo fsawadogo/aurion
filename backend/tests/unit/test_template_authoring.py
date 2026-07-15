@@ -26,6 +26,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from app.core.types import Note, NoteClaim, NoteSection
 from app.modules.custom_templates.service import CustomTemplateError
 from app.modules.providers.base import ChatMessage
 from app.modules.template_authoring import service as ta_service
@@ -279,6 +280,113 @@ async def test_upload_template_document_seeds_active_session_with_draft(
 async def test_upload_template_document_refuses_empty(stub_db):
     with pytest.raises(ValueError, match="empty"):
         await ta_service.upload_template_document(uuid.uuid4(), "   ", stub_db)
+
+
+# ── start_from_note (From a past encounter) ────────────────────────────────
+
+
+def _encounter_note() -> Note:
+    return Note(
+        session_id=str(uuid.uuid4()),
+        stage=2,
+        version=3,
+        provider_used="anthropic",
+        specialty="orthopedic_surgery",
+        completeness_score=0.8,
+        sections=[
+            NoteSection(
+                id="physical_exam",
+                title="Physical Exam",
+                status="populated",
+                claims=[
+                    NoteClaim(
+                        id="claim_001",
+                        text="Restricted internal rotation at approximately 20 degrees",
+                        source_type="transcript",
+                        source_id="seg_014",
+                        source_quote="rotation about 20 degrees",
+                    )
+                ],
+            ),
+            NoteSection(
+                id="imaging_review",
+                title="Imaging Review",
+                status="not_captured",
+                claims=[],
+            ),
+        ],
+    )
+
+
+@pytest.mark.asyncio
+async def test_start_from_note_seeds_active_session_with_draft(
+    monkeypatch, stub_db
+):
+    template_json = {
+        "key": "ortho_encounter",
+        "display_name": "Orthopedic Encounter",
+        "version": "1.0",
+        "sections": [],
+    }
+    assistant_reply = (
+        "```json\n"
+        + json.dumps({"action": "draft_template", "template": template_json})
+        + "\n```"
+    )
+    _patch_registry(monkeypatch, _stub_provider([assistant_reply]))
+
+    row, reply = await ta_service.start_from_note(
+        uuid.uuid4(), _encounter_note(), stub_db
+    )
+
+    assert row.status == "active"
+    assert reply.draft_template is not None
+    assert reply.draft_template.key == "ortho_encounter"
+    stub_db.add.assert_called_once_with(row)
+
+
+@pytest.mark.asyncio
+async def test_start_from_note_seed_is_structure_only(monkeypatch, stub_db):
+    """The PHI boundary: section ids/titles reach the conversation, claim
+    text and quotes never do."""
+    assistant_reply = "What would you like to call this template?"
+    _patch_registry(monkeypatch, _stub_provider([assistant_reply]))
+
+    row, _ = await ta_service.start_from_note(
+        uuid.uuid4(), _encounter_note(), stub_db
+    )
+
+    stored = row.messages_json
+    assert "physical_exam" in stored
+    assert "imaging_review" in stored
+    assert "orthopedic_surgery" in stored
+    # Claim text / source quote must never enter the authoring conversation.
+    assert "Restricted internal rotation" not in stored
+    assert "rotation about 20 degrees" not in stored
+    assert "seg_014" not in stored
+
+
+@pytest.mark.asyncio
+async def test_from_note_route_404_while_flag_dark(stub_db):
+    """The /me/template-authoring/from-note route is gated by
+    feature_flags.template_authoring_chat_enabled — 404 while dark."""
+    from types import SimpleNamespace
+    from unittest.mock import patch
+
+    from fastapi import HTTPException
+
+    from app.api.v1 import me as me_api
+
+    cfg = SimpleNamespace(
+        feature_flags=SimpleNamespace(template_authoring_chat_enabled=False)
+    )
+    body = me_api.AuthoringFromNoteRequest(session_id=uuid.uuid4())
+    with patch.object(me_api, "get_config", return_value=cfg):
+        with pytest.raises(HTTPException) as exc:
+            await me_api.start_template_authoring_from_note(
+                body=body, user=MagicMock(), db=stub_db
+            )
+    assert exc.value.status_code == 404
 
 
 # ── finalize_authoring ─────────────────────────────────────────────────────

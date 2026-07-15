@@ -43,7 +43,7 @@ from app.core.models import (
     CustomTemplateModel,
     TemplateAuthoringSessionModel,
 )
-from app.core.types import Template
+from app.core.types import Note, Template
 from app.modules.config.provider_registry import get_registry
 from app.modules.providers.base import ChatMessage
 from app.modules.template_authoring.system_prompt import SYSTEM_PROMPT
@@ -240,6 +240,67 @@ async def upload_template_document(
         "this document. Use snake_case ids; mark obviously-mandatory "
         "sections as required.\n\n--- DOCUMENT ---\n"
         f"{document_text}"
+    )
+    history: list[ChatMessage] = [
+        ChatMessage(role="assistant", content=_BOOTSTRAP_MESSAGE),
+        ChatMessage(role="user", content=seed_user_message),
+    ]
+
+    provider = get_registry().get_note_provider()
+    assistant_text, draft = await _generate_with_validation_retry(
+        provider, history
+    )
+
+    history.append(ChatMessage(role="assistant", content=assistant_text))
+
+    row = TemplateAuthoringSessionModel(
+        id=uuid.uuid4(),
+        owner_id=owner_id,
+        messages_json=_encode_messages(history),
+        draft_template_json=draft.model_dump_json() if draft else None,
+        status="active",
+    )
+    db.add(row)
+    await db.flush()
+
+    return row, AuthoringReply(assistant_message=assistant_text, draft_template=draft)
+
+
+async def start_from_note(
+    owner_id: uuid.UUID,
+    note: Note,
+    db: AsyncSession,
+) -> tuple[TemplateAuthoringSessionModel, AuthoringReply]:
+    """Seed an authoring session from the STRUCTURE of a past encounter note.
+
+    Gated by ``feature_flags.template_authoring_chat_enabled`` at the route.
+    Same engine as the document-upload path, but the seed is built here from
+    the note's structural skeleton only — section ids, titles, populated
+    status and claim counts. Claim TEXT never enters the conversation, so no
+    PHI lands in ``messages_json``; a template is pure structure, so nothing
+    material is lost. The row persists in ``status='active'`` so the
+    physician refines the draft via chat before finalizing.
+    """
+    lines = []
+    for section in note.sections:
+        populated = section.status == "populated"
+        lines.append(
+            f"- id: {section.id} | title: {section.title} | "
+            f"{'used (' + str(len(section.claims)) + ' statements)' if populated else 'left ' + section.status}"
+        )
+    skeleton = "\n".join(lines)
+
+    seed_user_message = (
+        "I want a reusable template based on the structure of one of my "
+        "past encounter notes. Below is the structural skeleton of that "
+        "note — section ids, titles, and whether I used each section. "
+        "There is no clinical content here and none should appear in the "
+        f"template.\n\nSpecialty: {note.specialty}\n\nSections:\n{skeleton}\n\n"
+        "Output a single valid draft_template action that mirrors this "
+        "structure. Keep the section ids and titles, mark the sections I "
+        "actually used as required, keep the unused ones optional, and "
+        "suggest a snake_case key and display name derived from the "
+        "specialty. I'll refine it from there."
     )
     history: list[ChatMessage] = [
         ChatMessage(role="assistant", content=_BOOTSTRAP_MESSAGE),

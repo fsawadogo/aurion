@@ -23,12 +23,20 @@ interface TemplateChatProps {
   /** Disables the input + send button (during an in-flight LLM call). */
   busy: boolean;
   onSend: (message: string) => Promise<void> | void;
+  /** Bubble text when an assistant message is ONLY a stripped action block
+   *  (default: the template "draft updated" label). The note-review chat
+   *  passes its own "edit applied" label. */
+  emptyLabel?: string;
+  /** Input placeholder override (default: the template chat placeholder). */
+  placeholder?: string;
 }
 
 export default function TemplateChat({
   messages,
   busy,
   onSend,
+  emptyLabel,
+  placeholder,
 }: TemplateChatProps) {
   const t = useTranslations("TemplateChat");
   const [draft, setDraft] = useState("");
@@ -56,7 +64,7 @@ export default function TemplateChat({
         aria-live="polite"
       >
         {messages.map((m, i) => (
-          <Bubble key={i} message={m} emptyLabel={t("draftUpdated")} />
+          <Bubble key={i} message={m} emptyLabel={emptyLabel ?? t("draftUpdated")} />
         ))}
         {busy && (
           <div className="flex">
@@ -70,7 +78,7 @@ export default function TemplateChat({
       <div className="border-t border-gray-100 p-3 flex items-center gap-2">
         <input
           className="form-input flex-1"
-          placeholder={busy ? t("sending") : t("inputPlaceholder")}
+          placeholder={busy ? t("sending") : placeholder ?? t("inputPlaceholder")}
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
@@ -137,10 +145,11 @@ function Dots() {
   );
 }
 
-/** Strip the fenced ```json {"action":"draft_template",...}``` block
- * the LLM emits. The draft preview card next to the chat is the right
- * place for that JSON — inside a chat bubble it's overwhelming. */
+/** Strip the fenced ```json {"action":...}``` block the LLM emits
+ * (template drafts and note edits alike). The preview card / note pane
+ * next to the chat is the right place for that JSON — inside a chat
+ * bubble it's overwhelming. */
 function stripDraftBlock(text: string): string {
-  const re = /```(?:json)?\s*\{[\s\S]*?"action"\s*:\s*"draft_template"[\s\S]*?\}\s*```/gi;
+  const re = /```(?:json)?\s*\{[\s\S]*?"action"\s*:\s*"(?:draft_template|edit_note)"[\s\S]*?\}\s*```/gi;
   return text.replace(re, "").trim();
 }

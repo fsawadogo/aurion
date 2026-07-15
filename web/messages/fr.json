@@ -627,8 +627,18 @@
       "note_options_enabled": {
         "name": "Options de note",
         "description": "Afficher le menu Options sur la note générée (iOS) : changer de modèle / de langue de sortie et régénérer à partir de la transcription stockée. DÉSACTIVÉ masque le menu; la régénération reste limitée au propriétaire et descriptive."
+      },
+      "template_authoring_chat_enabled": {
+        "name": "Gabarit à partir d'une consultation",
+        "description": "Ajoute un bouton « À partir d'une consultation » sur la page Gabarits : crée une ébauche de gabarit réutilisable à partir de la structure des sections d'une note du clinicien, affinée par clavardage. Seule la structure est utilisée — jamais le contenu de la note."
+      },
+      "note_review_chat_enabled": {
+        "name": "Clavardage « Corriger cette note »",
+        "description": "Ajoute un panneau de clavardage sous la note générée : des modifications en langage simple (« raccourcir l'HMA ») appliquées comme des changements ancrés et versionnés automatiquement. Chaque modification appliquée crée une nouvelle version de la note."
       }
-    }
+    },
+    "chatTools": "Outils de conversation",
+    "chatToolsHint": "Surfaces conversationnelles pour les cliniciens dans le portail web. Chacune est livrée éteinte derrière son propre indicateur."
   },
   "Providers": {
     "eyebrow": "Admin",
@@ -1126,7 +1136,14 @@
     "visitsRetry": "Réessayer",
     "visitsClinicianHint": "Définissez votre modèle par défaut pour chaque type de visite. Il s’applique lorsque vous ne choisissez pas de contexte précis sur l’appareil; laissez « Modèle par défaut de la spécialité » pour en hériter.",
     "visitsMineGroup": "Mes modèles",
-    "visitsProfileSubcontexts": "Besoin de modèles par contexte (p. ex. « genou gauche »)? Gérez-les dans Mon profil."
+    "visitsProfileSubcontexts": "Besoin de modèles par contexte (p. ex. « genou gauche »)? Gérez-les dans Mon profil.",
+    "fromNote": "À partir d'une consultation",
+    "fromNoteTitle": "Partir d'une consultation passée",
+    "fromNoteHint": "Choisissez une de vos consultations — Aurion réutilise la structure des sections de la note (jamais son contenu) comme ébauche de départ.",
+    "fromNoteEmpty": "Aucune consultation avec une note pour l'instant.",
+    "fromNoteUse": "Utiliser la structure",
+    "fromNoteError": "Impossible de démarrer à partir de cette consultation.",
+    "fromNoteLoadError": "Impossible de charger vos consultations."
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Modèles",
@@ -1509,5 +1526,14 @@
       "moveDown": "Déplacer la séquence vers le bas",
       "remove": "Supprimer la séquence"
     }
+  },
+  "NoteReviewChat": {
+    "title": "Corriger cette note",
+    "hint": "Modifications en langage simple — chaque changement crée une nouvelle version",
+    "placeholder": "p. ex. « Raccourcir l'HMA » ou « Ajouter l'allergie aux sulfamides »",
+    "editApplied": "Modification appliquée.",
+    "applied": "Appliquée comme version {version} de la note.",
+    "loadError": "Impossible de charger la conversation.",
+    "sendError": "Impossible d'appliquer cette instruction."
   }
 }

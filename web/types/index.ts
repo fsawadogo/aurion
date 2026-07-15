@@ -521,6 +521,10 @@ export interface FeatureFlags {
   // Clinician AI-Prompts display scope — when on, the clinician AI Prompts page
   // shows only the note-generation prompt. Portal toggle (ps-fu6).
   clinician_prompts_note_only: boolean;
+  // Chat tools — Templates "From a past encounter" seed and the note-review
+  // "Fix this note" panel. Portal toggles; both ship dark.
+  template_authoring_chat_enabled: boolean;
+  note_review_chat_enabled: boolean;
 }
 
 export interface UpdateFeatureFlagsResponse {

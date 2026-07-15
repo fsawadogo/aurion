@@ -302,6 +302,25 @@ class FeatureFlagsConfig(BaseModel):
     # cross-clinician PHI is reachable until compliance flips it. Same
     # opt-in posture as `video_import_enabled` / `grounded_synthesis_enabled`.
     cross_clinician_chart_enabled: bool = False
+    # ── Template authoring from a past encounter ──────────────────────────
+    # Gates the "From a past encounter" entry point into the conversational
+    # template-authoring chat: seeding an authoring session from the
+    # STRUCTURAL skeleton of one of the clinician's own notes (section ids,
+    # titles, populated status — never claim text, so no PHI enters the
+    # authoring conversation). The pre-existing chat + document-upload entry
+    # points stay available regardless of this flag. Ships DARK — the
+    # /me/template-authoring/from-note route 404s while False.
+    template_authoring_chat_enabled: bool = False
+    # ── Note-review "Fix this note" chat ──────────────────────────────────
+    # Gates the conversational note-editing surface under the generated
+    # note: plain-language instructions ("shorten the HPI") applied as
+    # grounded, auto-versioned edits through the same create_note_version
+    # path as manual edits. Edits may only rephrase / reorganize / remove
+    # existing claims (provenance preserved, physician_edited=True) or add
+    # clinician-dictated content as `physician_edit` claims — the service
+    # rejects any turn that invents a source. Ships DARK — every
+    # /notes/{id}/review-chat route 404s while False.
+    note_review_chat_enabled: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────

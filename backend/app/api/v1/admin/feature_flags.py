@@ -105,6 +105,12 @@ class FeatureFlagsResponse(BaseModel):
     # this field can't 422 — and while the feature is dark, a missing field
     # resolves to the safe OFF value.
     cross_clinician_chart_enabled: bool = False
+    # Chat surfaces (template-from-encounter seed + note-review "Fix this
+    # note"). Defaulted like grounded_synthesis_enabled so a save from a
+    # portal build that predates these fields can't 422 — a missing field
+    # resolves to the safe OFF value.
+    template_authoring_chat_enabled: bool = False
+    note_review_chat_enabled: bool = False
 
 
 class UpdateFeatureFlagsResponse(BaseModel):
@@ -211,6 +217,10 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         cross_clinician_chart_enabled=(
             cfg_feature_flags.cross_clinician_chart_enabled
         ),
+        template_authoring_chat_enabled=(
+            cfg_feature_flags.template_authoring_chat_enabled
+        ),
+        note_review_chat_enabled=cfg_feature_flags.note_review_chat_enabled,
     )
 
 

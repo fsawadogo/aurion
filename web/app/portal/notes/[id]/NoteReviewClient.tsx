@@ -14,6 +14,7 @@ import EmrWriteBackCard from "@/components/portal/EmrWriteBackCard";
 import EncounterAudioCard from "@/components/portal/EncounterAudioCard";
 import LivePreviewCard from "@/components/portal/LivePreviewCard";
 import NoteContextBadge from "@/components/portal/NoteContextBadge";
+import NoteReviewChat from "@/components/portal/NoteReviewChat";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
 import OrdersCard from "@/components/portal/OrdersCard";
 import PageHeader from "@/components/portal/PageHeader";
@@ -349,6 +350,17 @@ export default function NoteReviewPage() {
                     }
                   />
                 ))}
+
+                {/* "Fix this note" chat (note_review_chat_enabled) —
+                    self-gating: renders nothing while the flag is dark or
+                    the session is outside the editable window. Applied
+                    edits are new immutable versions server-side; reload
+                    pulls the fresh one. */}
+                <NoteReviewChat
+                  sessionId={sessionId}
+                  sessionState={detail.export_metadata.session_state}
+                  onNoteUpdated={load}
+                />
               </div>
             </div>
           </div>

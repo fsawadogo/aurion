@@ -24,8 +24,25 @@ vi.mock("@/lib/portal-api", () => ({
   deleteMyCustomTemplate: vi.fn(),
   duplicateMyCustomTemplate: vi.fn(),
   uploadTemplateDocument: vi.fn(),
+  // "From a past encounter" seed (template_authoring_chat_enabled). The
+  // flag resolves false here so the button stays hidden in existing specs.
+  getPortalFeatureFlags: vi.fn(() =>
+    Promise.resolve({
+      video_import_enabled: false,
+      multi_clip_import_enabled: false,
+      cross_clinician_chart_enabled: false,
+      template_authoring_chat_enabled: false,
+      note_review_chat_enabled: false,
+    }),
+  ),
+  listMySessions: vi.fn(() => Promise.resolve([])),
+  startTemplateAuthoringFromNote: vi.fn(),
 }));
-vi.mock("@/lib/session-format", () => ({ formatRelative: () => "today" }));
+vi.mock("@/lib/session-format", () => ({
+  formatRelative: () => "today",
+  humanSpecialty: (k: string) => k,
+  shortSessionId: (id: string) => id.slice(0, 8),
+}));
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }));
 vi.mock("next/link", () => ({
   default: ({ children }: { children: React.ReactNode }) => children,

@@ -215,6 +215,19 @@ export async function finalizeTemplateAuthoring(
   return r.json();
 }
 
+/** Seed an authoring session from a past encounter's note STRUCTURE
+ *  (section skeleton only — no clinical content reaches the chat).
+ *  Gated by `template_authoring_chat_enabled` — 404s while dark. */
+export async function startTemplateAuthoringFromNote(
+  sessionId: string,
+): Promise<TemplateAuthoringSession> {
+  const r = await fetchWithAuth("/api/v1/me/template-authoring/from-note", {
+    method: "POST",
+    body: JSON.stringify({ session_id: sessionId }),
+  });
+  return r.json();
+}
+
 /* ─── Sessions (own) ─────────────────────────────────────────────────────── */
 
 /** GET /api/v1/sessions — the caller's own sessions.
@@ -353,6 +366,40 @@ export async function editNote(
   const r = await fetchWithAuth(`/api/v1/notes/${sessionId}/edit`, {
     method: "PATCH",
     body: JSON.stringify({ edits }),
+  });
+  return r.json();
+}
+
+/* ─── "Fix this note" review chat (note_review_chat_enabled) ─────────────── */
+
+export interface ReviewChatState {
+  session_id: string;
+  messages: { role: "user" | "assistant"; content: string }[];
+  assistant_message?: string | null;
+  /** New note version number when this turn applied an edit; null when the
+   *  assistant replied conversationally. */
+  applied_version?: number | null;
+  sections_edited?: string[];
+  note?: Note | null;
+}
+
+/** GET /api/v1/notes/{id}/review-chat — history (404 while the flag is dark). */
+export async function getReviewChat(
+  sessionId: string,
+): Promise<ReviewChatState> {
+  const r = await fetchWithAuth(`/api/v1/notes/${sessionId}/review-chat`);
+  return r.json();
+}
+
+/** POST /api/v1/notes/{id}/review-chat — one plain-language editing turn.
+ * Applied edits land as a NEW immutable note version server-side. */
+export async function sendReviewChatMessage(
+  sessionId: string,
+  message: string,
+): Promise<ReviewChatState> {
+  const r = await fetchWithAuth(`/api/v1/notes/${sessionId}/review-chat`, {
+    method: "POST",
+    body: JSON.stringify({ message }),
   });
   return r.json();
 }
@@ -1018,6 +1065,10 @@ export async function getPortalFeatureFlags(): Promise<{
   /** Cross-clinician Patient Chart (#604) — gates the elevated-role nav
    *  entry + page. Default OFF until compliance sign-off. */
   cross_clinician_chart_enabled: boolean;
+  /** Templates page "From a past encounter" seed button. */
+  template_authoring_chat_enabled: boolean;
+  /** Note-review "Fix this note" chat panel. */
+  note_review_chat_enabled: boolean;
 }> {
   const r = await fetchWithAuth("/api/v1/me/feature-flags");
   return r.json();

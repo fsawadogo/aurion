@@ -273,6 +273,14 @@ resource "aws_appconfig_configuration_profile" "main" {
             # here (additionalProperties = false) or the portal Feature Flags
             # save is rejected by AWS (the backend dumps the full config).
             cross_clinician_chart_enabled = { type = "boolean" }
+            # Chat surfaces: template-authoring "From a past encounter" seed
+            # + note-review "Fix this note" chat. NOT in `required` so older
+            # hosted documents still validate — the backend Pydantic schema
+            # defaults both false (features stay dark). MUST be here
+            # (additionalProperties = false) or the portal Feature Flags save
+            # is rejected by AWS (the backend dumps the full config).
+            template_authoring_chat_enabled = { type = "boolean" }
+            note_review_chat_enabled        = { type = "boolean" }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in
