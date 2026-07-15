@@ -5,6 +5,13 @@ the ``prompt_testing_enabled`` gate (403 when off), the missing-transcript 404,
 and the happy path — reuse the STORED transcript (no re-transcribe) + honour a
 template override + return the new note version. Plus the admin response
 mapping carries the new flag.
+
+Also covers the loss gate: Stage 1 rebuilds from the transcript alone, so
+regenerating destroys Stage 2 visual/screen claims, physician edits, and
+confirmed measurements — none of which can be re-merged. The route refuses
+(409) with PHI-free counts until the caller confirms. Most important is the
+unresolved-conflict case: dropping open conflicts would turn a note
+``approve_note`` refuses to sign into a signable one.
 """
 
 from __future__ import annotations
@@ -22,7 +29,14 @@ from app.api.v1.sessions import (
     RegenerateNoteResponse,
     regenerate_note,
 )
-from app.core.types import Note, Transcript, UserRole
+from app.core.audit_events import AuditEventType, validate_audit_kwargs
+from app.core.types import (
+    Note,
+    NoteClaim,
+    NoteSection,
+    Transcript,
+    UserRole,
+)
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -36,12 +50,52 @@ def _transcript_row(session_id: uuid.UUID) -> SimpleNamespace:
     return SimpleNamespace(transcript_json=t.model_dump_json())
 
 
-def _session(session_id: uuid.UUID) -> SimpleNamespace:
+def _session(
+    session_id: uuid.UUID,
+    *,
+    template_key: str | None = None,
+    custom_template_id: uuid.UUID | None = None,
+) -> SimpleNamespace:
     return SimpleNamespace(
         id=session_id,
         specialty="orthopedic_surgery",
         output_language="en",
         encounter_context=None,
+        template_key=template_key,
+        custom_template_id=custom_template_id,
+    )
+
+
+def _note_with(*claims: NoteClaim, session_id: uuid.UUID) -> Note:
+    """A stage-2 note whose physical_exam section carries ``claims``."""
+    return Note(
+        session_id=str(session_id),
+        stage=2,
+        version=4,
+        provider_used="anthropic",
+        specialty="orthopedic_surgery",
+        completeness_score=0.9,
+        sections=[
+            NoteSection(
+                id="physical_exam",
+                title="Physical Examination",
+                status="populated",
+                claims=list(claims),
+            )
+        ],
+    )
+
+
+def _visual_claim(claim_id: str = "vclaim_frame_1") -> NoteClaim:
+    return NoteClaim(
+        id=claim_id, text="x", source_type="visual", source_id="frame_1"
+    )
+
+
+def _open_conflict_claim() -> NoteClaim:
+    # source_type visual + id conflict_* + not physician_edited == unresolved.
+    return NoteClaim(
+        id="conflict_frame_9", text="x", source_type="visual", source_id="frame_9"
     )
 
 
@@ -63,6 +117,24 @@ def _db(*, user_row, transcript_row) -> AsyncMock:
     db.execute = AsyncMock(return_value=result)
     db.commit = AsyncMock()
     return db
+
+
+@pytest.fixture(autouse=True)
+def regen_stubs():
+    """Stub the two collaborators every regenerate call reaches: the loss gate
+    reads the current note, and the route audits the replacement.
+
+    Defaults describe the lossless path — no prior note, so the gate is a
+    no-op. Tests about the gate re-patch ``get_latest_note`` with an inner
+    ``patch`` (which wins). Yields the audit mock for assertion.
+    """
+    with (
+        patch(
+            "app.api.v1.sessions.get_latest_note", AsyncMock(return_value=None)
+        ),
+        patch("app.api.v1.sessions.write_audit", AsyncMock()) as audit,
+    ):
+        yield audit
 
 
 # ── The gate ────────────────────────────────────────────────────────────────
@@ -378,3 +450,367 @@ async def test_regenerate_allows_owned_or_shared_custom_template():
         )
     assert resp.version == 2
     assert gen.call_args.kwargs["custom_template_id"] == cid
+
+
+# ── The loss gate (#590) ────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_regenerate_409s_rather_than_silently_dropping_stage2():
+    """A stage-2 note's visual claims cannot be re-merged (captions are never
+    persisted), so an unconfirmed regenerate must refuse and say what it would
+    cost — not destroy them quietly."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    gen = AsyncMock()
+    current = _note_with(_visual_claim(), session_id=sid)
+
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch(
+            "app.api.v1.sessions.get_latest_note",
+            AsyncMock(return_value=current),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
+
+    assert exc.value.status_code == 409
+    detail = exc.value.detail
+    assert detail["code"] == "regenerate_would_discard"
+    assert detail["would_discard"]["visual_claims"] == 1
+    gen.assert_not_awaited()  # never regenerated
+    db.commit.assert_not_awaited()  # and never committed
+
+
+@pytest.mark.asyncio
+async def test_regenerate_409_reports_unresolved_conflicts_separately():
+    """The invariant that matters: approve_note refuses to sign a note with
+    open conflicts, so dropping them would launder an unapprovable note into
+    an approvable one. The count is surfaced on its own, and deliberately also
+    counts inside visual_claims (a conflict claim IS a visual claim)."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    gen = AsyncMock()
+    current = _note_with(_open_conflict_claim(), session_id=sid)
+
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch(
+            "app.api.v1.sessions.get_latest_note",
+            AsyncMock(return_value=current),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
+
+    discard = exc.value.detail["would_discard"]
+    assert discard["unresolved_conflicts"] == 1
+    assert discard["visual_claims"] == 1
+
+
+@pytest.mark.asyncio
+async def test_regenerate_409_detail_carries_no_claim_text():
+    """The 409 is counts-only — claim text is PHI and must never reach a
+    client error body (CLAUDE.md: no PHI in API responses)."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    secret = "Patient reports a 3cm laceration to the left forearm"
+    current = _note_with(
+        NoteClaim(
+            id="vclaim_1",
+            text=secret,
+            source_type="visual",
+            source_id="frame_1",
+        ),
+        session_id=sid,
+    )
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch(
+            "app.api.v1.sessions.get_latest_note",
+            AsyncMock(return_value=current),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", AsyncMock()),
+    ):
+        with pytest.raises(HTTPException) as exc:
+            await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
+
+    assert secret not in str(exc.value.detail)
+    assert all(
+        isinstance(v, int) for v in exc.value.detail["would_discard"].values()
+    )
+
+
+@pytest.mark.asyncio
+async def test_regenerate_proceeds_when_discard_confirmed(regen_stubs):
+    """confirm_discard=True is the physician accepting the loss — the re-run
+    proceeds and the audit row records both the confirmation and the cost."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    new_note = Note(
+        session_id=str(sid),
+        stage=1,
+        version=5,
+        provider_used="anthropic",
+        specialty="orthopedic_surgery",
+        completeness_score=0.6,
+    )
+    gen = AsyncMock(return_value=new_note)
+    current = _note_with(
+        _visual_claim(), _open_conflict_claim(), session_id=sid
+    )
+
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch(
+            "app.api.v1.sessions.get_latest_note",
+            AsyncMock(return_value=current),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        resp = await regenerate_note(
+            sid,
+            RegenerateNoteRequest(confirm_discard=True),
+            _caller(),
+            db,
+        )
+
+    assert resp.version == 5
+    gen.assert_awaited_once()
+    db.commit.assert_awaited_once()
+
+    kwargs = regen_stubs.call_args.kwargs
+    assert kwargs["confirmed_discard"] is True
+    assert kwargs["discarded_visual_claims"] == 2  # conflict claim is visual
+    assert kwargs["discarded_unresolved_conflicts"] == 1
+
+
+@pytest.mark.asyncio
+async def test_regenerate_needs_no_confirmation_when_lossless(regen_stubs):
+    """A stage-1 note with only transcript claims can be rebuilt exactly, so
+    the gate must not nag — regenerate straight through."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    lossless = _note_with(
+        NoteClaim(
+            id="claim_1", text="x", source_type="transcript", source_id="seg_1"
+        ),
+        session_id=sid,
+    )
+    lossless.stage = 1
+    new_note = Note(
+        session_id=str(sid),
+        stage=1,
+        version=2,
+        provider_used="anthropic",
+        specialty="orthopedic_surgery",
+        completeness_score=0.5,
+    )
+    gen = AsyncMock(return_value=new_note)
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch(
+            "app.api.v1.sessions.get_latest_note",
+            AsyncMock(return_value=lossless),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        resp = await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
+
+    assert resp.version == 2
+    assert regen_stubs.call_args.kwargs["confirmed_discard"] is False
+
+
+# ── The session's template is the default, not the specialty ────────────────
+
+
+@pytest.mark.asyncio
+async def test_regenerate_without_a_template_reuses_the_session_pin():
+    """Omitting the template means "same template, re-run". Falling through to
+    the specialty default would silently swap the physician's template."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    session = _session(sid, template_key="plastic_surgery")
+    gen = AsyncMock(
+        return_value=Note(
+            session_id=str(sid),
+            stage=1,
+            version=2,
+            provider_used="anthropic",
+            specialty="orthopedic_surgery",
+            completeness_score=0.5,
+        )
+    )
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=session),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
+
+    # NOT the session's specialty ("orthopedic_surgery").
+    assert gen.call_args.kwargs["template_key"] == "plastic_surgery"
+
+
+@pytest.mark.asyncio
+async def test_regenerate_without_a_template_reuses_a_custom_session_pin():
+    sid = uuid.uuid4()
+    cid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    session = _session(sid, custom_template_id=cid)
+    gen = AsyncMock(
+        return_value=Note(
+            session_id=str(sid),
+            stage=1,
+            version=2,
+            provider_used="anthropic",
+            specialty="orthopedic_surgery",
+            completeness_score=0.5,
+        )
+    )
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=session),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        await regenerate_note(sid, RegenerateNoteRequest(), _caller(), db)
+
+    assert gen.call_args.kwargs["custom_template_id"] == cid
+    assert gen.call_args.kwargs["template_key"] is None
+
+
+@pytest.mark.asyncio
+async def test_body_template_replaces_the_session_pin_wholesale():
+    """The two fields are mutually exclusive, so naming a built-in must not
+    leave the session's custom pin attached — note-gen would get both."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    session = _session(sid, custom_template_id=uuid.uuid4())
+    gen = AsyncMock(
+        return_value=Note(
+            session_id=str(sid),
+            stage=1,
+            version=2,
+            provider_used="anthropic",
+            specialty="orthopedic_surgery",
+            completeness_score=0.5,
+        )
+    )
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=session),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        await regenerate_note(
+            sid, RegenerateNoteRequest(template_key="general"), _caller(), db
+        )
+
+    kwargs = gen.call_args.kwargs
+    assert kwargs["template_key"] == "general"
+    assert kwargs["custom_template_id"] is None
+
+
+# ── Audit ───────────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_regenerate_audit_kwargs_are_whitelisted(regen_stubs):
+    """The route stubs write_audit, which bypasses strict-mode enforcement —
+    so assert the emitted kwargs against ALLOWED_AUDIT_KWARGS directly. Catches
+    a kwarg added to the route but not the whitelist."""
+    sid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    gen = AsyncMock(
+        return_value=Note(
+            session_id=str(sid),
+            stage=1,
+            version=2,
+            provider_used="anthropic",
+            specialty="orthopedic_surgery",
+            completeness_score=0.5,
+        )
+    )
+    current = _note_with(_visual_claim(), session_id=sid)
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid, template_key="general")),
+        ),
+        patch(
+            "app.api.v1.sessions.get_latest_note",
+            AsyncMock(return_value=current),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        await regenerate_note(
+            sid, RegenerateNoteRequest(confirm_discard=True), _caller(), db
+        )
+
+    assert regen_stubs.call_args.args[1] is AuditEventType.NOTE_REGENERATED
+    unknown = validate_audit_kwargs(
+        AuditEventType.NOTE_REGENERATED, regen_stubs.call_args.kwargs.keys()
+    )
+    assert unknown == set()
+
+
+@pytest.mark.asyncio
+async def test_regenerate_audit_never_carries_a_custom_template_name(
+    regen_stubs,
+):
+    """A custom template's display_name is physician-authored, so only a bool
+    may reach the audit log — never the id or the name."""
+    sid = uuid.uuid4()
+    cid = uuid.uuid4()
+    db = _db(user_row=_user_row(True), transcript_row=_transcript_row(sid))
+    gen = AsyncMock(
+        return_value=Note(
+            session_id=str(sid),
+            stage=1,
+            version=2,
+            provider_used="anthropic",
+            specialty="orthopedic_surgery",
+            completeness_score=0.5,
+        )
+    )
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=_session(sid)),
+        ),
+        patch(
+            "app.modules.custom_templates.service.get_owned_or_shared",
+            AsyncMock(return_value=SimpleNamespace(id=cid)),
+        ),
+        patch("app.api.v1.sessions.generate_stage1_note", gen),
+    ):
+        await regenerate_note(
+            sid, RegenerateNoteRequest(custom_template_id=cid), _caller(), db
+        )
+
+    kwargs = regen_stubs.call_args.kwargs
+    assert kwargs["used_custom_template"] is True
+    assert str(cid) not in str(kwargs)

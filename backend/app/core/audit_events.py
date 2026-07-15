@@ -149,6 +149,13 @@ class AuditEventType(StrEnum):
     STAGE2_COMPLETE = "stage2_complete"
     STAGE2_FAILED = "stage2_failed"
     NOTE_VERSION_CREATED = "note_version_created"
+    # Stage 1 was re-run on the STORED transcript with a different template /
+    # language (#590). Distinct from NOTE_VERSION_CREATED (which every write
+    # path emits): this one records that the physician deliberately REPLACED
+    # the note, and what the replacement destroyed. Counts only — never claim
+    # text. ``discarded_*`` are PHI-free integers so the eval team can see how
+    # often a regenerate cost Stage 2 work.
+    NOTE_REGENERATED = "note_regenerated"
     TEMPLATE_CHANGED = "template_changed"
     # Session create resolved a chosen context whose pinned template_key is
     # no longer an available built-in template; we coerced to the specialty
@@ -644,6 +651,24 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
         {"job_id", "reason", "total_frames", "failed_frames"}
     ),
     AuditEventType.NOTE_VERSION_CREATED: frozenset({"version", "sections_edited"}),
+    # #590 regenerate. ``template_key`` is a built-in template key (a code
+    # identifier like "orthopedic_surgery", never a clinician-authored name);
+    # ``used_custom_template`` is a bool rather than the id/display_name so a
+    # physician's template title can't reach the audit log. The discarded_*
+    # counts are integers only.
+    AuditEventType.NOTE_REGENERATED: frozenset(
+        {
+            "version",
+            "template_key",
+            "used_custom_template",
+            "confirmed_discard",
+            "discarded_visual_claims",
+            "discarded_screen_claims",
+            "discarded_physician_edits",
+            "discarded_unresolved_conflicts",
+            "discarded_measurement_claims",
+        }
+    ),
     AuditEventType.TEMPLATE_CHANGED: frozenset({"new_specialty"}),
     # Count-only — no kwargs (never the context id / template / label).
     AuditEventType.NOTE_VALIDATED: frozenset(

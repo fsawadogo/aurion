@@ -34,6 +34,7 @@ from app.modules.note_gen.service import EmptyTranscriptError, generate_stage1_n
 from app.modules.phi_audit.service import scan_transcript_for_phi
 from app.modules.session.service import (
     InvalidTransitionError,
+    stored_template_pin,
     transition_session,
 )
 from app.modules.transcription.service import merge_transcripts, transcribe_audio
@@ -190,6 +191,7 @@ async def run_stage1(db: AsyncSession, session, audio_bytes: bytes):
                 session_id,
             )
 
+    pinned_key, pinned_custom_id = stored_template_pin(session)
     try:
         stage1_note = await generate_stage1_note(
             transcript=transcript,
@@ -197,8 +199,8 @@ async def run_stage1(db: AsyncSession, session, audio_bytes: bytes):
             session_id=str(session_id),
             db=db,
             output_language=session.output_language,
-            template_key=getattr(session, "template_key", None),
-            custom_template_id=getattr(session, "custom_template_id", None),
+            template_key=pinned_key,
+            custom_template_id=pinned_custom_id,
             participants=participants,
             encounter_context=session.encounter_context,
         )
@@ -430,6 +432,7 @@ async def append_recording(
         except (TypeError, ValueError):
             pass
 
+    pinned_key, pinned_custom_id = stored_template_pin(session)
     try:
         note = await generate_stage1_note(
             transcript=merged,
@@ -437,8 +440,8 @@ async def append_recording(
             session_id=str(session_id),
             db=db,
             output_language=session.output_language,
-            template_key=getattr(session, "template_key", None),
-            custom_template_id=getattr(session, "custom_template_id", None),
+            template_key=pinned_key,
+            custom_template_id=pinned_custom_id,
             participants=participants,
             encounter_context=session.encounter_context,
         )

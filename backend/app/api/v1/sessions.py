@@ -38,6 +38,8 @@ from app.modules.config.schema import (
 from app.modules.note_gen.service import (
     EmptyTranscriptError,
     generate_stage1_note,
+    get_latest_note,
+    regenerate_discard_summary,
 )
 from app.modules.session.service import (
     ConsentRequiredError,
@@ -48,6 +50,7 @@ from app.modules.session.service import (
     get_audit_event_for_state,
     list_sessions,
     resolve_context_template_key,
+    stored_template_pin,
     transition_session,
 )
 
@@ -610,7 +613,8 @@ async def _do_transition(db, session, target_state: SessionState) -> SessionResp
 class RegenerateNoteRequest(BaseModel):
     """Re-run Stage-1 note generation on the STORED transcript with a different
     template/prompt (#590). At most one of ``template_key`` /
-    ``custom_template_id``; both omitted → the session's specialty default.
+    ``custom_template_id``; both omitted → the template the SESSION was created
+    with (its snapshot), and only if it has none, the specialty default.
 
     ``output_language`` lets the note-Options "change language" action
     re-render the note in a different language; omitted → the session's
@@ -625,6 +629,11 @@ class RegenerateNoteRequest(BaseModel):
     # focus the regenerated note. Empty string clears it. Omitted → the
     # session's stored context is reused unchanged.
     encounter_context: Optional[str] = None
+    # Acknowledge that regenerating destroys work Stage 1 cannot rebuild
+    # (Stage 2 visual/screen claims, physician edits, confirmed measurements).
+    # False + a lossy note → 409 carrying the counts, so the client can warn
+    # before asking again with True. A lossless note never needs this.
+    confirm_discard: bool = False
 
 
 class RegenerateNoteResponse(BaseModel):
@@ -710,6 +719,35 @@ async def regenerate_note(
         )
     transcript = Transcript(**_json.loads(transcript_row.transcript_json))
 
+    # Loss gate. Stage 1 rebuilds from the transcript alone, so Stage 2 visual
+    # / screen claims, physician edits, and confirmed measurements on the
+    # CURRENT note are destroyed — and cannot be rebuilt (captions are never
+    # persisted; after export purge_frames has deleted the source images).
+    # Most consequential: dropping unresolved conflicts would let a note
+    # approve_note refuses to sign become signable, so this gate is what keeps
+    # CLAUDE.md's "CONFLICTS resolution: 100% before approval" honest here.
+    # Counts only — no claim text crosses the wire.
+    current_note = await get_latest_note(str(session_id), db)
+    discard = (
+        regenerate_discard_summary(current_note)
+        if current_note is not None
+        else {}
+    )
+    lossy = any(discard.values())
+    if lossy and not body.confirm_discard:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "code": "regenerate_would_discard",
+                "message": (
+                    "Regenerating rebuilds this note from the transcript "
+                    "alone and permanently discards work that cannot be "
+                    "recreated. Resend with confirm_discard to proceed."
+                ),
+                "would_discard": discard,
+            },
+        )
+
     # Persist a changed encounter context so it (a) focuses this regenerate and
     # (b) sticks for any future re-run. Empty string clears it. `None` (omitted)
     # leaves the stored value untouched. Committed alongside the note below.
@@ -717,22 +755,48 @@ async def regenerate_note(
         stripped = body.encounter_context.strip()
         session.encounter_context = stripped or None
 
+    # Naming NO template means "same template, re-run" — so fall back to the
+    # session's own snapshot, not the specialty default (which would silently
+    # swap the physician's template out from under them). The body wins as a
+    # unit: naming either field replaces the pin wholesale, because the two are
+    # mutually exclusive and mixing one from the body with one from the session
+    # could send both to note-gen at once.
+    if body.template_key is None and body.custom_template_id is None:
+        template_key, custom_template_id = stored_template_pin(session)
+    else:
+        template_key = body.template_key
+        custom_template_id = body.custom_template_id
+
     try:
         note = await generate_stage1_note(
             transcript=transcript,
             specialty=session.specialty,
             session_id=str(session_id),
             db=db,
-            template_key=body.template_key,
-            custom_template_id=body.custom_template_id,
+            template_key=template_key,
+            custom_template_id=custom_template_id,
             output_language=body.output_language or session.output_language,
             encounter_context=session.encounter_context,
+            stats_trigger="regenerate",
         )
     except EmptyTranscriptError:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="The stored transcript is empty.",
         )
+
+    # Record the replacement and what it cost. PHI-free: a built-in template
+    # KEY is a code identifier, but a custom template's name is physician-
+    # authored, so that one is reported as a bool only.
+    await write_audit(
+        session_id,
+        AuditEventType.NOTE_REGENERATED,
+        version=note.version,
+        template_key=template_key,
+        used_custom_template=custom_template_id is not None,
+        confirmed_discard=lossy,
+        **{f"discarded_{key}": value for key, value in discard.items()},
+    )
     await db.commit()
 
     return RegenerateNoteResponse(

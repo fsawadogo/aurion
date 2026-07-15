@@ -816,6 +816,7 @@ async def generate_stage1_note(
     custom_template_id: Optional[uuid.UUID] = None,
     participants: Optional[list[dict]] = None,
     encounter_context: Optional[str] = None,
+    stats_trigger: str = "create_note_version",
 ) -> Note:
     """Generate a Stage 1 note from a transcript.
 
@@ -833,6 +834,12 @@ async def generate_stage1_note(
     content that no longer validates) degrades defensively to the
     built-in / specialty path. When ``None`` the resolution is exactly
     ``get_template(template_key or specialty)`` — byte-for-byte unchanged.
+
+    ``stats_trigger`` labels the SESSION_STATS_RECOMPUTED audit row this
+    generation writes. The default names the initial generation; the #590
+    regenerate path passes ``"regenerate"`` so a deliberate note replacement
+    is distinguishable from a first build in the audit trail (mirrors
+    ``"vision_merge"`` / ``"screen_inject"`` / ``"note_review_assist"``).
 
     Pipeline:
     1. Load the template (custom snapshot → ``template_key`` snapshot →
@@ -1008,7 +1015,7 @@ async def generate_stage1_note(
         len(note.sections),
     )
 
-    await create_note_version(session_id, note, db)
+    await create_note_version(session_id, note, db, stats_trigger=stats_trigger)
 
     return note
 
@@ -1418,6 +1425,56 @@ def unresolved_conflict_claim_ids(note) -> tuple[list[str], list[str]]:
                     section_ids.append(section.id)
                 claim_ids.append(claim.id)
     return section_ids, claim_ids
+
+
+# Claim source_types a Stage-1 re-run cannot reproduce, mapped to the
+# discard-summary key that reports them. Stage 1 sees the transcript and
+# nothing else, so every one of these was layered on afterwards.
+_UNREPRODUCIBLE_SOURCE_TYPES: dict[str, str] = {
+    "visual": "visual_claims",  # Stage 2 vision merge
+    "screen": "screen_claims",  # screen/OCR injection
+    "measurement": "measurement_claims",  # physician-confirmed on-device
+}
+
+
+def regenerate_discard_summary(note) -> dict[str, int]:
+    """Count what re-running Stage 1 would destroy in ``note`` (#590).
+
+    Regenerate rebuilds the note from the stored transcript alone, so anything
+    layered on top afterwards is dropped. Almost none of it can be re-merged:
+    frame captions are never persisted (``FrameCaption`` is an in-memory type,
+    no table), and no orchestrator re-drives a session's screen frames. After
+    export it is worse still — ``purge_frames`` has deleted the source images,
+    so Stage 2 can never be re-run at all. That is why the caller must confirm
+    the loss rather than discover it.
+
+    ``unresolved_conflicts`` is reported separately because it is the count
+    that changes what the physician is *permitted* to do, not just what the
+    note says: ``approve_note`` refuses to sign a note carrying open Stage 2
+    conflicts, so dropping them silently would launder an unapprovable note
+    into an approvable one. It deliberately overlaps ``visual_claims`` (a
+    conflict claim IS a visual claim) — they answer different questions.
+
+    All-zero means a regenerate is lossless and needs no confirmation.
+
+    Counts only — never claim text, section titles, or ids (PHI).
+    """
+    counts = {key: 0 for key in _UNREPRODUCIBLE_SOURCE_TYPES.values()}
+    counts["physician_edits"] = 0
+    counts["unresolved_conflicts"] = 0
+
+    for section in note.sections:
+        for claim in section.claims:
+            key = _UNREPRODUCIBLE_SOURCE_TYPES.get(claim.source_type)
+            if key is not None:
+                counts[key] += 1
+            # A physician edit to a transcript-sourced claim is equally
+            # unreproducible — the re-run regenerates the original wording.
+            if claim.physician_edited:
+                counts["physician_edits"] += 1
+            if is_unresolved_conflict_claim(claim):
+                counts["unresolved_conflicts"] += 1
+    return counts
 
 
 async def approve_note(
