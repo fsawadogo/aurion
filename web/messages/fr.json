@@ -627,8 +627,18 @@
       "note_options_enabled": {
         "name": "Options de note",
         "description": "Afficher le menu Options sur la note générée (iOS) : changer de modèle / de langue de sortie et régénérer à partir de la transcription stockée. DÉSACTIVÉ masque le menu; la régénération reste limitée au propriétaire et descriptive."
+      },
+      "template_authoring_chat_enabled": {
+        "name": "Gabarit à partir d'une consultation",
+        "description": "Ajoute un bouton « À partir d'une consultation » sur la page Gabarits : crée une ébauche de gabarit réutilisable à partir de la structure des sections d'une note du clinicien, affinée par clavardage. Seule la structure est utilisée — jamais le contenu de la note."
+      },
+      "note_review_chat_enabled": {
+        "name": "Clavardage « Corriger cette note »",
+        "description": "Ajoute un panneau de clavardage sous la note générée : des modifications en langage simple (« raccourcir l'HMA ») appliquées comme des changements ancrés et versionnés automatiquement. Chaque modification appliquée crée une nouvelle version de la note."
       }
-    }
+    },
+    "chatTools": "Outils de conversation",
+    "chatToolsHint": "Surfaces conversationnelles pour les cliniciens dans le portail web. Chacune est livrée éteinte derrière son propre indicateur."
   },
   "Providers": {
     "eyebrow": "Admin",

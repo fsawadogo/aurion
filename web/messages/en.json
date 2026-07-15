@@ -627,8 +627,18 @@
       "note_options_enabled": {
         "name": "Note options",
         "description": "Show the Options menu on the generated note (iOS): change template / output language and regenerate from the stored transcript. OFF hides the menu; regeneration stays owner-scoped and descriptive."
+      },
+      "template_authoring_chat_enabled": {
+        "name": "Template from a past encounter",
+        "description": "Adds a “From a past encounter” button on the Templates page: seeds a reusable template draft from the section structure of one of the clinician's own notes, refined in chat. Only the structure is used — never note content."
+      },
+      "note_review_chat_enabled": {
+        "name": "“Fix this note” chat",
+        "description": "Adds a chat panel under the generated note: plain-language edits (“shorten the HPI”) applied as grounded, auto-versioned changes. Every applied edit creates a new note version."
       }
-    }
+    },
+    "chatTools": "Chat tools",
+    "chatToolsHint": "Conversational surfaces for clinicians in the web portal. Each ships dark behind its own flag."
   },
   "Providers": {
     "eyebrow": "Admin",
