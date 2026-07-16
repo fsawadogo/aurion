@@ -9,7 +9,7 @@ abstraction, no DI ceremony.
 from __future__ import annotations
 
 import uuid
-from typing import Any
+from typing import Any, Optional
 
 from fastapi import HTTPException
 from pydantic import ValidationError
@@ -21,6 +21,7 @@ from app.core.types import ClipMaskingMetadata, MaskingProof, SessionState, User
 from app.core.uuids import to_uuid
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth.service import CurrentUser
+from app.modules.note_gen.service import list_available_templates
 from app.modules.prompts import ValidationCode, ValidationResult
 from app.modules.session.service import get_session
 
@@ -116,6 +117,28 @@ async def write_audit(
     """
     audit = get_audit_log_service()
     await audit.write_event(session_id=session_id, event_type=event_type, **fields)
+
+
+def raise_if_unknown_template_key(template_key: Optional[str]) -> None:
+    """Raise 422 when ``template_key`` names no built-in template, or no-op.
+
+    ``None`` is always fine — it means "no built-in named", which every caller
+    resolves its own way (a custom template, a session pin, or the specialty
+    default). Centralised here once the pattern reached a third caller
+    (DRY, §6c): admin visit-type defaults, and note regeneration.
+
+    This has to be a hard reject and not a fallback, because ``get_template``
+    silently degrades to "general" instead of raising — so an unvalidated key
+    hands the physician the wrong note while reporting success, and (on the
+    regenerate path) writes unvalidated client text into the append-only audit
+    log. ``profile.py`` keeps its own copy: it validates inside a pydantic
+    ``model_validator``, which must raise ``ValueError``, not ``HTTPException``.
+    """
+    if template_key is not None and template_key not in list_available_templates():
+        raise HTTPException(
+            status_code=422,
+            detail=f"template_key '{template_key}' is not an available template",
+        )
 
 
 def raise_if_validation_failed(validation: ValidationResult) -> None:

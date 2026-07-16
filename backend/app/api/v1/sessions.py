@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.v1._helpers import (
     get_owned_session_or_404,
+    raise_if_unknown_template_key,
     require_state,
     write_audit,
 )
@@ -39,7 +40,6 @@ from app.modules.note_gen.service import (
     EmptyTranscriptError,
     generate_stage1_note,
     get_latest_note,
-    list_available_templates,
     regenerate_discard_summary,
 )
 from app.modules.session.service import (
@@ -696,21 +696,10 @@ async def regenerate_note(
             detail="Note regeneration is not enabled for this user.",
         )
 
-    # Validate a caller-named built-in key. get_template() FALLS BACK to
-    # "general" rather than raising, so an unknown key would hand the physician
-    # a general-template note while reporting success — the same silent swap
-    # this endpoint's session-pin default exists to prevent. It would also put
-    # unvalidated client text into the append-only NOTE_REGENERATED row below.
-    # The session's own pin needs no check: resolve_context_template_key
-    # validated it against this same list at create, and re-validates on read.
-    if (
-        body.template_key is not None
-        and body.template_key not in list_available_templates()
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Unknown template key.",
-        )
+    # Validate a caller-named built-in key. The session's own pin needs no
+    # check — resolve_context_template_key validated it against the same list
+    # at create and re-validates on read.
+    raise_if_unknown_template_key(body.template_key)
 
     # Own-scope a custom-template override (SECURITY). A caller may regenerate
     # with their OWN custom template or a shared/Library one — never another
@@ -782,15 +771,13 @@ async def regenerate_note(
 
     # Naming NO template means "same template, re-run" — so fall back to the
     # session's own snapshot, not the specialty default (which would silently
-    # swap the physician's template out from under them). The body wins as a
-    # unit: naming either field replaces the pin wholesale, because the two are
-    # mutually exclusive and mixing one from the body with one from the session
-    # could send both to note-gen at once.
-    if body.template_key is None and body.custom_template_id is None:
+    # swap the physician's template out from under them). Naming EITHER field
+    # replaces the pin wholesale: the two are mutually exclusive, so mixing one
+    # from the body with one from the session would send both to note-gen.
+    template_key = body.template_key
+    custom_template_id = body.custom_template_id
+    if template_key is None and custom_template_id is None:
         template_key, custom_template_id = stored_template_pin(session)
-    else:
-        template_key = body.template_key
-        custom_template_id = body.custom_template_id
 
     try:
         note = await generate_stage1_note(
@@ -810,16 +797,11 @@ async def regenerate_note(
             detail="The stored transcript is empty.",
         )
 
-    # Record the replacement and what it cost. PHI-free: template_key is a
-    # built-in key — a code identifier, validated against
-    # list_available_templates() above and at session create, so it can never
-    # be a custom template's physician-authored key. A custom template is
-    # reported as a bool for exactly that reason.
-    #
-    # These name what note-gen was ASKED for, not necessarily what it used:
-    # _resolve_stage1_template degrades to the specialty default if a pinned
-    # custom template was deleted since session create. Auditing the RESOLVED
-    # template needs generate_stage1_note to report it back — deferred.
+    # Record the replacement and what it cost. Counts only, PHI-free — see
+    # ALLOWED_AUDIT_KWARGS[NOTE_REGENERATED]. Names what note-gen was ASKED
+    # for: _resolve_stage1_template degrades to the specialty default if a
+    # pinned custom template was deleted since create (auditing the RESOLVED
+    # template needs note-gen to report it back — see #590).
     await write_audit(
         session_id,
         AuditEventType.NOTE_REGENERATED,

@@ -14,7 +14,7 @@ import logging
 import time
 import uuid
 from pathlib import Path
-from typing import Optional
+from typing import Final, Optional
 
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -1427,55 +1427,69 @@ def unresolved_conflict_claim_ids(note) -> tuple[list[str], list[str]]:
     return section_ids, claim_ids
 
 
-# Claim source_types a Stage-1 re-run cannot reproduce, mapped to the
-# discard-summary key that reports them. Stage 1 sees the transcript and
-# nothing else, so every one of these was layered on afterwards.
-_UNREPRODUCIBLE_SOURCE_TYPES: dict[str, str] = {
-    "visual": "visual_claims",  # Stage 2 vision merge
-    "screen": "screen_claims",  # screen/OCR injection
-    "measurement": "measurement_claims",  # physician-confirmed on-device
-}
+# The only source_types a Stage-1 rebuild reproduces. Stage 1 reads the
+# transcript and nothing else, so ANY other source_type was layered on
+# afterwards and is dropped. "physician_edit" is listed here not because it
+# survives — it doesn't — but because the physician_edits counter already
+# reports it; leaving it out would double-count it into "other_claims" too.
+_REBUILT_BY_STAGE1: Final[frozenset[str]] = frozenset(
+    {"transcript", "physician_edit"}
+)
 
 
 def regenerate_discard_summary(note: Optional[Note]) -> dict[str, int]:
-    """Count what re-running Stage 1 would destroy in ``note`` (#590).
+    """Count what re-running Stage 1 would drop from ``note`` (#590).
 
-    Regenerate rebuilds the note from the stored transcript alone, so anything
-    layered on top afterwards is dropped. Almost none of it can be re-merged:
-    frame captions are never persisted (``FrameCaption`` is an in-memory type,
-    no table), and no orchestrator re-drives a session's screen frames. After
-    export it is worse still — ``purge_frames`` has deleted the source images,
-    so Stage 2 can never be re-run at all. That is why the caller must confirm
-    the loss rather than discover it.
+    A rebuild reads the transcript alone, so everything layered on afterwards
+    falls out of the new version: Stage 2 visual claims, screen/OCR claims,
+    confirmed measurements, physician edits.
 
-    ``unresolved_conflicts`` is reported separately because it is the count
-    that changes what the physician is *permitted* to do, not just what the
-    note says: ``approve_note`` refuses to sign a note carrying open Stage 2
-    conflicts, so dropping them silently would launder an unapprovable note
-    into an approvable one.
+    Nothing is deleted from the DATABASE — versions are append-only, so the
+    prior version keeps every one of those claims. What is lost is their place
+    in the LATEST note, and nothing re-merges them: frame captions are never
+    persisted (``FrameCaption`` has no table), no orchestrator re-drives screen
+    frames, and after export ``purge_frames`` has deleted the source images.
+    Re-routing claims into a possibly-different template's sections is real
+    design work, so today the caller confirms the loss instead.
+
+    ``unresolved_conflicts`` is reported separately because it changes what the
+    physician is *permitted* to do, not just what the note says: ``approve_note``
+    refuses to sign a note carrying open Stage 2 conflicts, so dropping them
+    silently would launder an unapprovable note into an approvable one.
 
     THE BUCKETS OVERLAP BY DESIGN — they answer different questions about the
-    same claim, so do NOT sum them into a single "N items will be lost". One
+    same claim, so do NOT sum them into "N items will be lost". One
     physician-edited conflict claim reports 1 in each of ``visual_claims``,
-    ``physician_edits`` and ``unresolved_conflicts``. ``all-zero`` (including
-    for ``note=None``) means the regenerate is lossless and needs no
-    confirmation; that is the only aggregate reading the counts support.
+    ``physician_edits`` and ``unresolved_conflicts``. All-zero (including for
+    ``note=None``) means the rebuild is lossless and needs no confirmation —
+    that is the only aggregate reading these counts support.
 
     Counts only — never claim text, section titles, or ids (PHI).
     """
-    counts = {key: 0 for key in _UNREPRODUCIBLE_SOURCE_TYPES.values()}
-    counts["physician_edits"] = 0
-    counts["unresolved_conflicts"] = 0
+    counts = {
+        "visual_claims": 0,  # Stage 2 vision merge
+        "screen_claims": 0,  # screen/OCR injection
+        "measurement_claims": 0,  # physician-confirmed on-device
+        "other_claims": 0,  # fail-closed catch-all, see below
+        "physician_edits": 0,
+        "unresolved_conflicts": 0,
+    }
     if note is None:
         return counts
 
     for section in note.sections:
         for claim in section.claims:
-            key = _UNREPRODUCIBLE_SOURCE_TYPES.get(claim.source_type)
-            if key is not None:
-                counts[key] += 1
-            # A physician edit to a transcript-sourced claim is equally
-            # unreproducible — the re-run regenerates the original wording.
+            if claim.source_type == "visual":
+                counts["visual_claims"] += 1
+            elif claim.source_type == "screen":
+                counts["screen_claims"] += 1
+            elif claim.source_type == "measurement":
+                counts["measurement_claims"] += 1
+            elif claim.source_type not in _REBUILT_BY_STAGE1:
+                # Fail closed. A source_type added to NoteClaim later is
+                # unreproducible until someone proves otherwise, so the gate
+                # warns about it rather than silently destroying it.
+                counts["other_claims"] += 1
             if claim.physician_edited:
                 counts["physician_edits"] += 1
             if is_unresolved_conflict_claim(claim):

@@ -150,11 +150,11 @@ class AuditEventType(StrEnum):
     STAGE2_FAILED = "stage2_failed"
     NOTE_VERSION_CREATED = "note_version_created"
     # Stage 1 was re-run on the STORED transcript with a different template /
-    # language (#590). Distinct from NOTE_VERSION_CREATED (which every write
-    # path emits): this one records that the physician deliberately REPLACED
-    # the note, and what the replacement destroyed. Counts only — never claim
-    # text. ``discarded_*`` are PHI-free integers so the eval team can see how
-    # often a regenerate cost Stage 2 work.
+    # language (#590): the physician deliberately REPLACED the note, and this
+    # records what the replacement cost. Distinct from NOTE_VERSION_CREATED,
+    # which the two /notes edit routes emit — a version write alone doesn't say
+    # WHY. Counts only, never claim text; the ``discarded_*`` integers let the
+    # eval team see how often a regenerate cost Stage 2 work.
     NOTE_REGENERATED = "note_regenerated"
     TEMPLATE_CHANGED = "template_changed"
     # Session create resolved a chosen context whose pinned template_key is
@@ -651,16 +651,13 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
         {"job_id", "reason", "total_frames", "failed_frames"}
     ),
     AuditEventType.NOTE_VERSION_CREATED: frozenset({"version", "sections_edited"}),
-    # #590 regenerate. ``template_key`` is a built-in template key — a code
-    # identifier like "orthopedic_surgery". The route validates it against
-    # list_available_templates() before emitting, so a clinician-authored
-    # custom-template key can never land here (this store is append-only:
-    # a PHI string written here is permanent by design). A custom template
-    # is reported as the bool ``used_custom_template`` for the same reason —
-    # never its id or physician-authored display_name. ``discarded_work``
-    # says the re-run destroyed something; the ``discarded_*`` counts are
-    # integers only and OVERLAP (see regenerate_discard_summary) — do not
-    # sum them.
+    # #590 regenerate. This store is append-only, so a PHI string written here
+    # is permanent by design — hence: ``template_key`` is a BUILT-IN key (a code
+    # identifier like "orthopedic_surgery") that the route validates against
+    # list_available_templates() before emitting, and a custom template is
+    # reported as the bool ``used_custom_template``, never its id or its
+    # physician-authored display_name. ``discarded_*`` are integers that OVERLAP
+    # (see regenerate_discard_summary) — do not sum them.
     AuditEventType.NOTE_REGENERATED: frozenset(
         {
             "version",
@@ -672,6 +669,7 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
             "discarded_physician_edits",
             "discarded_unresolved_conflicts",
             "discarded_measurement_claims",
+            "discarded_other_claims",
         }
     ),
     AuditEventType.TEMPLATE_CHANGED: frozenset({"new_specialty"}),
