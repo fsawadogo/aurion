@@ -1,4 +1,4 @@
 {
-  "backend": {"task_id": "loop-1", "branch": "lane-backend/loop-1-regenerate-guard", "pr": 657, "started_at": "2026-07-15T18:40:00Z"},
+  "backend": {"task_id": "loop-0", "branch": "lane-backend/loop-0-db-ssl-local", "pr": null, "started_at": "2026-07-15T20:35:00Z"},
   "ios": {"task_id": null, "branch": null, "pr": null, "started_at": null}
 }
