@@ -7,8 +7,10 @@ from __future__ import annotations
 
 import json
 import os
-from typing import AsyncGenerator
+from typing import AsyncGenerator, Final
 
+from sqlalchemy.engine.url import make_url
+from sqlalchemy.exc import ArgumentError
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 
@@ -49,6 +51,15 @@ def _resolve_database_url() -> str:
 DATABASE_URL = _resolve_database_url()
 
 
+# Hosts that are a developer's own machine. Everything else — every RDS
+# endpoint — gets TLS. "postgres" is the docker-compose service name
+# (docker-compose.yml: `postgres` / container_name aurion-postgres); "db" is
+# kept for any older compose file still naming it that.
+_LOCAL_DB_HOSTS: Final[frozenset[str]] = frozenset(
+    {"localhost", "127.0.0.1", "::1", "db", "postgres"}
+)
+
+
 def _ssl_connect_args(url: str) -> dict[str, str]:
     """Force TLS on the asyncpg connection for RDS, plaintext for local dev.
 
@@ -61,12 +72,25 @@ def _ssl_connect_args(url: str) -> dict[str, str]:
     regardless of how the URL was assembled (the env-var path *or* the
     rebuilt-from-JSON path), decoupling TLS from URL formatting.
 
-    Local dev (docker-compose Postgres) has no TLS, so hosts that are clearly
-    local stay plaintext. ``require`` encrypts without CA verification, which
-    matches RDS's default posture and needs no cert bundle.
+    Local dev (docker-compose Postgres) has no TLS, so ``_LOCAL_DB_HOSTS``
+    stay plaintext. ``require`` encrypts without CA verification, which matches
+    RDS's default posture and needs no cert bundle.
+
+    The host is PARSED, not substring-matched. Substring matching read the
+    whole URL, so it both under-matched (it missed the real compose service
+    name and no local stack could boot — loop-0) and could over-match (a
+    password or database name containing "localhost" would have silently
+    disabled TLS to RDS).
+
+    Fails CLOSED: an unparseable or unknown URL gets TLS. A dev box that
+    wrongly requires TLS fails loudly at boot; a prod task that wrongly skips
+    it ships PHI in plaintext.
     """
-    is_local = any(h in url for h in ("@localhost", "@127.0.0.1", "@db:", "@db/"))
-    return {} if is_local else {"ssl": "require"}
+    try:
+        host = make_url(url).host
+    except ArgumentError:
+        return {"ssl": "require"}
+    return {} if host in _LOCAL_DB_HOSTS else {"ssl": "require"}
 
 
 engine = create_async_engine(

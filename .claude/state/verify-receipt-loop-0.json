@@ -1,0 +1,16 @@
+{
+  "task_id": "loop-0",
+  "branch": "lane-backend/loop-0-db-ssl-local",
+  "verified_at": "2026-07-15T20:55:00Z",
+  "checks": {
+    "backend_tests": "pytest tests/unit/ -q -> 1868 passed (FULL suite). test_database_ssl.py: 8 passed.",
+    "lint": "ruff check app/ tests/ -> All checks passed",
+    "stack_boots": "PASS - this is the AC the task exists for, and the first time it has passed this session. docker compose -f backend/docker-compose.yml -f backend/docker-compose.override.yml up -d --build aurion-api; GET localhost:8080/health -> HTTP 200, body {\"status\":\"ok\",\"version\":\"0.1.0\",...}. 'rejected SSL upgrade' occurrences in aurion-api logs: 0. Unblocks the §9d gate for loop-2..loop-5 and every other lane.",
+    "ios_builds": "n/a - git diff --stat main...HEAD -- ios/ is EMPTY",
+    "web_builds": "n/a - git diff --stat main...HEAD -- web/ is EMPTY",
+    "acceptance_criteria": "AC-1 compose host @postgres -> {} (test_compose_postgres_host_stays_plaintext); AC-2 RDS host -> ssl=require (existing, green); AC-3 RDS host starting with 'postgres' -> ssl=require (test_rds_host_merely_starting_with_postgres_requires_ssl); AC-4 REVISED - see mutation_check; AC-5 unparseable -> ssl=require, no raise (test_unparseable_url_fails_closed); AC-6 localhost/127.0.0.1/db stay plaintext (existing, green); AC-7 full suite + ruff; AC-8 stack boots -> HTTP 200; AC-9 zero ios/ + web/ diff.",
+    "mutation_check": "Ran every proposed test against the OLD substring implementation before trusting them. THREE were vacuous (passed on the broken code, proving nothing) and their comments overclaimed: a password or db-name containing 'localhost' CANNOT trigger the old over-match, because '@' must be percent-encoded in userinfo. Those were deleted, not kept as decoration. The exercise surfaced a REAL over-match instead: 'postgresql+asyncpg://aurion:pw@localhost.internal.example.com:5432/aurion' -> old code returns {} -> TLS silently dropped to a REMOTE host (PHI in plaintext, no error, no log). That is now test_remote_host_merely_starting_with_localhost_requires_ssl, and it fails against the old implementation. Exactly 2 of 8 tests are true regressions; the file labels which are REGRESSION and which are guards.",
+    "simplify": "SKIPPED - S-complexity (0.2d, ~10-line diff), per §17 cost control ('skip it on S-complexity tasks via the plan's out of scope line') and declared in docs/plans/loop-0.md Out of scope.",
+    "independent_review": "PENDING - security-adjacent (TLS on the PHI database), so it gets a review before it is called ready, per standing instruction."
+  }
+}
