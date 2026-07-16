@@ -82,13 +82,19 @@ def _ssl_connect_args(url: str) -> dict[str, str]:
     password or database name containing "localhost" would have silently
     disabled TLS to RDS).
 
-    Fails CLOSED: an unparseable or unknown URL gets TLS. A dev box that
-    wrongly requires TLS fails loudly at boot; a prod task that wrongly skips
-    it ships PHI in plaintext.
+    Fails CLOSED: an unparseable or unknown URL gets TLS, and so does a URL
+    with no host at all (a socket-style ``postgresql+asyncpg:///db``). A dev
+    box that wrongly requires TLS fails loudly at boot; a prod task that
+    wrongly skips it ships PHI in plaintext.
+
+    ``ValueError`` is caught alongside ``ArgumentError`` because ``make_url``
+    raises the bare builtin — not its own exception type — for a non-numeric
+    or empty port. Letting that escape would take the app down at import,
+    since this is called at module scope.
     """
     try:
         host = make_url(url).host
-    except ArgumentError:
+    except (ArgumentError, ValueError):
         return {"ssl": "require"}
     return {} if host in _LOCAL_DB_HOSTS else {"ssl": "require"}
 
