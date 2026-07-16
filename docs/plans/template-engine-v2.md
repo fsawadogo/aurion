@@ -163,6 +163,13 @@ runtime validators. **We adopt their expressiveness, not their noise.**
   surface by design.
 - Any template directive that loosens grounding — forbidden, not deferred.
 
+## Status: ⛔ PLANNING ONLY — implementation not authorized
+
+Faïçal (2026-07-15): plan approved for the backlog, **"don't implement yet."**
+No TPL-V2 slice may start — regardless of lane availability or upstream
+cohorts completing — until he flips the Cohort 7 hold in
+`.claude/state/backlog.md`.
+
 ## Rollout
 1. TPL-V2-0 → TPL-V2-1 → TPL-V2-2 merge dark; eval receipt.
 2. TPL-V2-3/4/5 merge (authoring UX works while generation flag is dark —
