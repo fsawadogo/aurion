@@ -601,11 +601,17 @@ platform :ios do
   end
 
   # -------------------------------------------------------------------------
-  # add_to_pilot_internal — add already-team-member emails to the
-  # "Pilot" internal beta group. Run after `invite_internal_testers`
-  # once invitees have accepted the email.
+  # add_to_pilot_internal — add already-team-member emails to the internal
+  # beta group. Run after `invite_internal_testers` once invitees have
+  # accepted the email.
+  #
+  # Group name comes from ENV["INTERNAL_GROUP_NAME"], defaulting to
+  # "Aurion Internal" — the internal group that actually exists on the app
+  # and receives every processed build. The lane previously hardcoded
+  # "Pilot", which was never created, so every run died at the group
+  # lookup before touching a tester.
   # -------------------------------------------------------------------------
-  desc "Add team members to the Pilot internal beta group"
+  desc "Add team members to the internal beta group (default: Aurion Internal)"
   lane :add_to_pilot_internal do
     emails = (ENV["INVITE_EMAILS"] || "").split(",").map(&:strip).reject(&:empty?)
     if emails.empty?
@@ -623,12 +629,14 @@ platform :ios do
     app = Spaceship::ConnectAPI::App.find("com.aurionclinical.physician")
     UI.user_error!("App not found") unless app
 
+    group_name = ENV["INTERNAL_GROUP_NAME"].to_s.strip
+    group_name = "Aurion Internal" if group_name.empty?
     pilot = Spaceship::ConnectAPI.get_beta_groups(
       filter: { app: app.id }, limit: 200
-    ).find { |g| g.name == "Pilot" && g.is_internal_group }
-    UI.user_error!("'Pilot' internal beta group not found") unless pilot
+    ).find { |g| g.name == group_name && g.is_internal_group }
+    UI.user_error!("'#{group_name}' internal beta group not found") unless pilot
 
-    UI.success "Adding #{emails.size} email(s) to internal group 'Pilot'"
+    UI.success "Adding #{emails.size} email(s) to internal group '#{group_name}'"
     emails.each do |email|
       tester = Spaceship::ConnectAPI.get_beta_testers(
         filter: { email: email }, limit: 1
