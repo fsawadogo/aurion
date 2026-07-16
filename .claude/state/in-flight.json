@@ -1,4 +1,4 @@
 {
-  "backend": {"task_id": null, "branch": null, "pr": null, "started_at": null},
+  "backend": {"task_id": "loop-1", "branch": "lane-backend/loop-1-regenerate-guard", "pr": 657, "started_at": "2026-07-15T18:40:00Z"},
   "ios": {"task_id": null, "branch": null, "pr": null, "started_at": null}
 }
