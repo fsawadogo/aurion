@@ -8,11 +8,26 @@ topmost Active item matching its lane. Format per line:
 When a task moves through states, the loop edits this file in place:
 Active → In flight → Done (or → Blocked on triple failure).
 
-Last seeded: 2026-05-14. Last updated: 2026-07-01 (added Cohort 5 — Grounded AI Scribe: #620–#625; see memory/grounded-scribe-gap-map.md). Prior: 2026-05-30 (seeded 17 backend issues from GitHub per CTO's "implement all backend" directive).
+Last seeded: 2026-05-14. Last updated: 2026-07-15 (added Cohort 6 — Template Functional Loop; demoted Cohort 5 per the 2026-07-15 weekly). Prior: 2026-07-01 (added Cohort 5 — Grounded AI Scribe: #620–#625; see memory/grounded-scribe-gap-map.md). Prior: 2026-05-30 (seeded 17 backend issues from GitHub per CTO's "implement all backend" directive).
 
 ## Active
 
-### Cohort 5 — Grounded AI Scribe (CURRENT PRIORITY) — see memory/grounded-scribe-gap-map.md; epic #626
+### Cohort 6 — Template Functional Loop (CURRENT PRIORITY) — set by the 2026-07-15 weekly; owner Uzziel
+Faïçal, 2026-07-15: *"se concentrer sur l'achèvement de la boucle opérationnelle actuelle, à savoir la sélection de modèles et le formatage de sortie, avant d'introduire de nouvelles fonctionnalités"* — ~2 weeks, so the pilot can use it in clinical practice. Uzziel's assigned items: *"Corriger interface notes: regrouper les notes dans une seule zone de texte"*, *"Développer moteur modèles"*, *"Localiser modèle SOAP"*.
+
+**This is the FIRST HALF of Cohort 5's own goal chain** (create template → map to visit type → pick → record → *then* a polished grounded note), not a competitor to it. Cohort 5 stays next; its note-CONTENT work (verbosity, grounded voice, medico-legal capture) is explicitly deferred until the loop closes, because real pilot usage of the loop is what produces the markup that work needs.
+
+Mobile constraint: every capability lands server-side behind client-agnostic REST so Faïçal wires iOS afterwards with no server change. Prefer mechanisms needing zero client key lists — a seeded `is_shared` Library row resolves to iOS through the existing org visit-type map; a new built-in template key would need 5 web + 3 iOS files (incl. the Siri `AppEnum`).
+
+- [ ] loop-0 · Fix local DB SSL allowlist (`database.py:68` omits the `@postgres:` compose service name → API can't boot locally) — 0.2d — lane: backend — no blockers — UNBLOCKS the §9d "stack boots" gate for every task in every lane; see alerts.md 2026-07-15 20:05. One allowlist entry; do NOT key off APP_ENV (would drop TLS on a prod task with a misset env).
+- [ ] loop-1 · regenerate-note correctness — confirm-or-409 loss gate + session-pin template default + NOTE_REGENERATED audit — 2d — lane: backend — no blockers — PR #657 open, CI green, awaiting human review+merge
+- [ ] loop-1b · Close the same loss hole on `append-recording` (`transcription.py:437` rebuilds over a REVIEW_COMPLETE Stage-2 note with no gate → same conflict laundering) — 2d — lane: backend — depends on loop-1 — **needs a human call on the append UX first**; see alerts.md 2026-07-15 19:55. Correct fix moves the gate into `generate_stage1_note` so all 3 callers inherit it; gate must run BEFORE `transcribe_audio` or a 409 wastes a paid Whisper call. iOS must handle the new 409 → fold into loop-5.
+- [ ] loop-2 · Seed the Library with SOAP (starter_library/soap.json + idempotent scripts/seed_library.py, is_shared=True) — 2d — lane: backend — no blockers — closes "Localiser modèle SOAP"; source = Marie's 2026-06-12 S/O/A/P notes
+- [ ] loop-3 · Canonical note→text renderer + GET /notes/{id}/text (approved-only gate, NOTE_EXPORTED origin=clipboard) — 2d — lane: backend — no blockers — 8 renderers / 5 formats exist today; promote emr/fhir.py render_note_plain_text
+- [ ] loop-4 · Web: single text block + Copy + change-template picker — 3d — lane: backend (web/**) — depends on loop-1, loop-3 — wires the dead regenerateNote (lib/api.ts:479, zero call sites)
+- [ ] loop-5 · Mobile wiring contract for Faïçal (docs) — 1d — lane: backend — depends on loop-1, loop-2, loop-3, loop-4
+
+### Cohort 5 — Grounded AI Scribe (NEXT — deferred behind Cohort 6 on 2026-07-15) — see memory/grounded-scribe-gap-map.md; epic #626
 Goal: create template → map to visit type → pick visit type → record → **polished grounded (non-descriptive) note**. Ordered top-to-bottom = work order. #621/#622 change the AI-output boundary → sanctioned Grounded Synthesis path, dark behind `grounded_synthesis_enabled` + GS-9 sign-off (#551).
 - [ ] #620 scribe-0 · Retire descriptive note-gen publication + de-conflict export disclaimers — 1d — lane: backend (+iOS disclaimer) — no blockers — NOTE: operational half (un-publish in Prompt Studio) is a human/portal action, not a loop task
 - [x] #621 scribe-1 · Grounded Synthesis as a true mode (boundary always-on + additive overrides + missing-clinician + transparency) — MERGED 2026-07-01 (PR #627 + review-fix #628); parse-time source_id moved to #624
@@ -20,6 +35,8 @@ Goal: create template → map to visit type → pick visit type → record → *
 - [ ] #624 scribe-4 · Note completeness + grounding integrity (stop_reason truncation, max_tokens, non-optional quote-support) — 3d — lane: backend — depends on #621
 - [ ] #625 scribe-5 · Grounded scribe render/export (selectable text, hide citations for prod, attestation, A&P layout) — 8d — lane: ios (+web/backend export) — depends on #620
 - [ ] #623 scribe-3 · iOS one-tap default context (optional UX; correctness already server-side) — 3d — lane: ios — no blockers
+- [ ] scribe-6 · Medico-legal capture in the template library — 3d — lane: backend — no blockers — NEW 2026-07-15, from the loop-2 library audit. `complication`, `consent`, `benefit`, `outcome`, `expectation` appear **0 times** across all 8 templates; `risks counselled` / `trade-offs/cost when mentioned` exist only as a "when mentioned" sub-clause in 3 of 8 plan descriptions (ortho/MSK/plastics), and the two worked examples that model it (`claim_p3`) are unreachable while `grounded_synthesis_enabled` is off. This is Perry's 2026-06-17 #1 complaint ("AI notes drop medico-legal detail"). Note-CONTENT work → sits behind Cohort 6.
+- [ ] scribe-7 · Finish the v1.0→v1.1 template enhancement pass — 2d — lane: backend — no blockers — NEW 2026-07-15. The library is two generations, split perfectly: `general`/`emergency_medicine`/`musculoskeletal`/`orthopedic_surgery`/`plastic_surgery` are v1.1 (prose descriptions 37–64 mean words, grounded-aware assessment, both example sets, grounded style variant); `family_medicine`/`internal_medicine`/`pediatrics` are v1.0 (~11-word noun phrases, `— no inference` assessments that CONTRADICT grounded mode, no grounded examples, no grounded style variant — mtimes Jun 2 vs Jun 29–30). Not pilot-blocking (Marie=ortho, Perry=plastics, both v1.1) — but the "no inference" contradiction bites the moment `grounded_synthesis_enabled` flips on.
 
 ### Cohort 1 — Foundations (post-pilot)
 - [ ] #75 Portal · Org / multi-clinic + SSO (SAML/OIDC) — 15d — lane: backend — no blockers
@@ -49,7 +66,7 @@ Goal: create template → map to visit type → pick visit type → record → *
 
 ## In flight
 
-(none — autonomous run checkpoint 2026-05-30; see digests/2026-05-30.md)
+- [ ] loop-1 · regenerate-note correctness — lane: backend — branch `lane-backend/loop-1-regenerate-guard` — PR #657 — started 2026-07-15. CI green (lint+test). Independent review done (2 reviewers, 1 HIGH found + fixed in 689dd9a). **Human merges — never auto-merge** (standing instruction from Uzziel; overrides AURION-CODING-WORKFLOW.md §2 "auto-merge on green CI").
 
 ## Blocked
 

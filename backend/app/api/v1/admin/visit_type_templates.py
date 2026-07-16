@@ -18,7 +18,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.v1._helpers import write_audit
+from app.api.v1._helpers import raise_if_unknown_template_key, write_audit
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import OrgVisitTypeTemplateModel
@@ -30,7 +30,6 @@ from app.modules.note_gen.org_visit_type_templates import (
     list_org_defaults,
     upsert_org_default,
 )
-from app.modules.note_gen.service import list_available_templates
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
@@ -105,14 +104,7 @@ async def upsert_visit_type_template(
     is rejected so an org default can never leak one clinician's template.
     """
     if body.template_key is not None:
-        if body.template_key not in list_available_templates():
-            raise HTTPException(
-                status_code=422,
-                detail=(
-                    f"template_key '{body.template_key}' is not an available "
-                    "template"
-                ),
-            )
+        raise_if_unknown_template_key(body.template_key)
     else:
         shared = await get_shared(body.custom_template_id, db)
         if shared is None:

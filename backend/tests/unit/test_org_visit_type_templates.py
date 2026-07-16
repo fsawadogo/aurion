@@ -250,7 +250,9 @@ def test_upsert_request_requires_exactly_one():
 async def test_admin_upsert_rejects_unknown_builtin():
     body = UpsertOrgVisitTypeTemplateRequest(template_key="not_a_template")
     with patch(
-        "app.api.v1.admin.visit_type_templates.list_available_templates",
+        # The built-in-key check lives in the shared _helpers raiser (DRY §6c),
+        # so patch it where the lookup actually resolves.
+        "app.api.v1._helpers.list_available_templates",
         return_value={"orthopedic_surgery"},
     ):
         with pytest.raises(HTTPException) as exc:
@@ -281,7 +283,9 @@ async def test_admin_upsert_builtin_ok():
     )
     with (
         patch(
-            "app.api.v1.admin.visit_type_templates.list_available_templates",
+            # The built-in-key check lives in the shared _helpers raiser (DRY §6c),
+        # so patch it where the lookup actually resolves.
+        "app.api.v1._helpers.list_available_templates",
             return_value={"orthopedic_surgery"},
         ),
         patch(

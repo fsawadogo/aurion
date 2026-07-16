@@ -149,6 +149,13 @@ class AuditEventType(StrEnum):
     STAGE2_COMPLETE = "stage2_complete"
     STAGE2_FAILED = "stage2_failed"
     NOTE_VERSION_CREATED = "note_version_created"
+    # Stage 1 was re-run on the STORED transcript with a different template /
+    # language (#590): the physician deliberately REPLACED the note, and this
+    # records what the replacement cost. Distinct from NOTE_VERSION_CREATED,
+    # which the two /notes edit routes emit — a version write alone doesn't say
+    # WHY. Counts only, never claim text; the ``discarded_*`` integers let the
+    # eval team see how often a regenerate cost Stage 2 work.
+    NOTE_REGENERATED = "note_regenerated"
     TEMPLATE_CHANGED = "template_changed"
     # Session create resolved a chosen context whose pinned template_key is
     # no longer an available built-in template; we coerced to the specialty
@@ -644,6 +651,27 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
         {"job_id", "reason", "total_frames", "failed_frames"}
     ),
     AuditEventType.NOTE_VERSION_CREATED: frozenset({"version", "sections_edited"}),
+    # #590 regenerate. This store is append-only, so a PHI string written here
+    # is permanent by design — hence: ``template_key`` is a BUILT-IN key (a code
+    # identifier like "orthopedic_surgery") that the route validates against
+    # list_available_templates() before emitting, and a custom template is
+    # reported as the bool ``used_custom_template``, never its id or its
+    # physician-authored display_name. ``discarded_*`` are integers that OVERLAP
+    # (see regenerate_discard_summary) — do not sum them.
+    AuditEventType.NOTE_REGENERATED: frozenset(
+        {
+            "version",
+            "template_key",
+            "used_custom_template",
+            "discarded_work",
+            "discarded_visual_claims",
+            "discarded_screen_claims",
+            "discarded_physician_edits",
+            "discarded_unresolved_conflicts",
+            "discarded_measurement_claims",
+            "discarded_other_claims",
+        }
+    ),
     AuditEventType.TEMPLATE_CHANGED: frozenset({"new_specialty"}),
     # Count-only — no kwargs (never the context id / template / label).
     AuditEventType.NOTE_VALIDATED: frozenset(

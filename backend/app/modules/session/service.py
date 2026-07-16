@@ -105,6 +105,25 @@ class ConsentRequiredError(Exception):
 VALID_CAPTURE_MODES = {"multimodal", "audio_only", "smart_dictation"}
 
 
+def stored_template_pin(session) -> tuple[Optional[str], Optional[uuid.UUID]]:
+    """The template SNAPSHOT this session was created with.
+
+    Returns ``(template_key, custom_template_id)`` — at most one non-None, the
+    pair ``resolve_context_template_key`` wrote at create. ``(None, None)``
+    means no pin, so the caller falls back to the specialty default.
+
+    Read this instead of the session attributes directly: every path that
+    re-runs Stage 1 must reproduce the SAME template the note was first built
+    with, or an omitted request field silently swaps the physician's template
+    for the specialty default (#590). ``getattr`` because callers pass both
+    ORM rows and lightweight session stand-ins.
+    """
+    return (
+        getattr(session, "template_key", None),
+        getattr(session, "custom_template_id", None),
+    )
+
+
 async def resolve_context_template_key(
     db: AsyncSession,
     clinician_id: uuid.UUID,
