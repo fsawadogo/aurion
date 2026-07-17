@@ -7,7 +7,25 @@ import { withIntl } from "./helpers/intl";
 // The heavy child cards/panes (each fetches on mount) are stubbed to null — the
 // real NoteAssistChat is left unmocked so the gate + wiring are genuinely tested.
 vi.mock("@/lib/use-route-segment", () => ({ useRouteSegment: () => "sess-1" }));
-vi.mock("@/lib/api", () => ({ humanizeError: (_e: unknown, fb: string) => fb }));
+// loop-4: the page now calls regenerateNote (template/language switch) and
+// catches RegenerateDiscardError on the 409 loss gate. Provide both; the class
+// is defined inside the factory (vi.mock is hoisted — no outer references) and
+// must be real so the `instanceof` in doRegenerate works.
+vi.mock("@/lib/api", () => {
+  class RegenerateDiscardError extends Error {
+    wouldDiscard: Record<string, number>;
+    constructor(wouldDiscard: Record<string, number>) {
+      super("would discard");
+      this.name = "RegenerateDiscardError";
+      this.wouldDiscard = wouldDiscard;
+    }
+  }
+  return {
+    humanizeError: (_e: unknown, fb: string) => fb,
+    regenerateNote: vi.fn(),
+    RegenerateDiscardError,
+  };
+});
 vi.mock("@/components/portal/OrdersCard", () => ({ default: () => null }));
 vi.mock("@/components/portal/PatientSummaryCard", () => ({ default: () => null }));
 vi.mock("@/components/portal/CodingSuggestionsCard", () => ({ default: () => null }));
@@ -29,6 +47,7 @@ vi.mock("@/lib/portal-api", () => ({
   getNoteDetail: vi.fn(),
   getSession: vi.fn(),
   listMyMacros: vi.fn(),
+  listMyCustomTemplates: vi.fn(),
   getPortalFeatureFlags: vi.fn(),
   assistNote: vi.fn(),
   approveAll: vi.fn(),
@@ -41,9 +60,11 @@ import {
   getNoteDetail,
   getSession,
   listMyMacros,
+  listMyCustomTemplates,
   getPortalFeatureFlags,
   assistNote,
 } from "@/lib/portal-api";
+import { regenerateNote } from "@/lib/api";
 import NoteReviewPage from "@/app/portal/notes/[id]/NoteReviewClient";
 
 const DETAIL = {
@@ -90,6 +111,7 @@ describe("NoteReviewPage — fix-this-note chat wiring", () => {
     vi.mocked(getNoteDetail).mockResolvedValue(DETAIL as never);
     vi.mocked(getSession).mockResolvedValue({ state: "AWAITING_REVIEW" } as never);
     vi.mocked(listMyMacros).mockResolvedValue([] as never);
+    vi.mocked(listMyCustomTemplates).mockResolvedValue([] as never);
   });
 
   it("hides the chat when note_review_chat_enabled is off (fails closed)", async () => {
@@ -141,5 +163,82 @@ describe("NoteReviewPage — fix-this-note chat wiring", () => {
     await waitFor(() => expect(assistNote).toHaveBeenCalled());
     expect(screen.getByText("Which section?")).toBeTruthy();
     expect(getNoteDetail).toHaveBeenCalledTimes(1); // no re-fetch
+  });
+});
+
+describe("NoteReviewPage — loop-4 copy + regenerate wiring", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    vi.mocked(getNoteDetail).mockResolvedValue(DETAIL as never);
+    vi.mocked(getSession).mockResolvedValue({ state: "AWAITING_REVIEW" } as never);
+    vi.mocked(listMyMacros).mockResolvedValue([] as never);
+    vi.mocked(listMyCustomTemplates).mockResolvedValue([] as never);
+    vi.mocked(getPortalFeatureFlags).mockResolvedValue(flags(false) as never);
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
+    });
+  });
+
+  it("Copy writes the full note to the clipboard — not gated on approval", async () => {
+    render(withIntl(<NoteReviewPage />));
+    // Two Copy affordances (toolbar + rail); the toolbar one is unambiguous.
+    const copyBtn = await screen.findByText("Copy");
+    fireEvent.click(copyBtn);
+    await waitFor(() =>
+      expect(navigator.clipboard.writeText).toHaveBeenCalled(),
+    );
+    // DETAIL is an unapproved AWAITING_REVIEW note — copy still fired.
+    expect(DETAIL.export_metadata.is_approved).toBe(false);
+  });
+
+  it("changing the template regenerates the note", async () => {
+    vi.mocked(regenerateNote).mockResolvedValue({
+      version: 2,
+      stage: 1,
+      completeness_score: 1,
+      provider_used: "anthropic",
+    } as never);
+    render(withIntl(<NoteReviewPage />));
+    const select = await screen.findByLabelText("Note template");
+    fireEvent.change(select, { target: { value: "orthopedic_surgery" } });
+    await waitFor(() =>
+      expect(regenerateNote).toHaveBeenCalledWith("sess-1", {
+        template_key: "orthopedic_surgery",
+      }),
+    );
+  });
+
+  it("a language switch that hits the loss gate confirms, then retries with confirm_discard", async () => {
+    const { RegenerateDiscardError } = await import("@/lib/api");
+    vi.mocked(regenerateNote)
+      .mockRejectedValueOnce(
+        new (RegenerateDiscardError as unknown as new (
+          c: Record<string, number>,
+        ) => Error)({ visual_claims: 2 } as Record<string, number>),
+      )
+      .mockResolvedValueOnce({
+        version: 3,
+        stage: 1,
+        completeness_score: 1,
+        provider_used: "anthropic",
+      } as never);
+    render(withIntl(<NoteReviewPage />));
+
+    fireEvent.click(await screen.findByText("Français"));
+    // First call carries no confirm — the 409 surfaces the confirm prompt.
+    await waitFor(() =>
+      expect(regenerateNote).toHaveBeenCalledWith("sess-1", {
+        output_language: "fr",
+      }),
+    );
+    const confirm = await screen.findByText("Regenerate anyway");
+    fireEvent.click(confirm);
+    // Second call carries confirm_discard so the backend proceeds.
+    await waitFor(() =>
+      expect(regenerateNote).toHaveBeenCalledWith("sess-1", {
+        output_language: "fr",
+        confirm_discard: true,
+      }),
+    );
   });
 });

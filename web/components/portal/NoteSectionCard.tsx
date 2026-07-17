@@ -49,6 +49,14 @@ interface NoteSectionCardProps {
   /** Macros available for inline expansion. Filtered upstream by
    * specialty; this component just hands them to tryExpand. */
   macros?: PhysicianMacro[];
+  /** `card` (default) = the bordered, one-paragraph section used in the
+   * legacy layout. `document` = chrome-less, one claim per line, part of the
+   * single continuous note document (loop-4). The format of each claim comes
+   * from the note itself — the renderer never imposes bullets. */
+  variant?: "card" | "document";
+  /** Render per-claim citation chips. Off by default in the document layout
+   * (citations are a super-user surface, loop-4b) — a day-1 note is clean. */
+  showCitations?: boolean;
 }
 
 export default function NoteSectionCard({
@@ -60,7 +68,10 @@ export default function NoteSectionCard({
   onResolveConflict,
   busy = false,
   macros = [],
+  variant = "card",
+  showCitations = true,
 }: NoteSectionCardProps) {
+  const isDocument = variant === "document";
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(() => joinClaims(section.claims));
   const [saving, setSaving] = useState(false);
@@ -79,10 +90,20 @@ export default function NoteSectionCard({
   return (
     <div
       id={`section-${section.id}`}
-      className="rounded-lg border border-gray-200 bg-white p-4"
+      className={
+        isDocument
+          ? "border-b border-hairline pb-6 last:border-b-0 last:pb-0"
+          : "rounded-lg border border-gray-200 bg-white p-4"
+      }
     >
       <div className="mb-2 flex items-center gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-navy-700">
+        <h3
+          className={
+            isDocument
+              ? "text-aurion-body font-semibold text-navy-800"
+              : "text-sm font-semibold uppercase tracking-wider text-navy-700"
+          }
+        >
           {section.title || section.id}
         </h3>
         {statusBadge}
@@ -186,18 +207,46 @@ export default function NoteSectionCard({
         </div>
       ) : section.claims.length === 0 ? (
         <p className="text-sm text-gray-500 italic">Not captured.</p>
+      ) : isDocument ? (
+        // Document mode: one claim per line. This mirrors the note's own
+        // structure without imposing a format — bullets vs prose live in the
+        // claim text (i.e. in the prompt), never in this renderer.
+        <div className="space-y-1.5">
+          {section.claims.map((claim) => (
+            <div
+              key={claim.id}
+              className="text-aurion-body leading-relaxed text-navy-800"
+            >
+              {claim.text}
+              {showCitations && (
+                <span className="ml-1 align-middle">
+                  <ClaimChip
+                    claim={claim}
+                    citation={citations[claim.id]}
+                    onClick={() => onClaimClick?.(claim)}
+                  />
+                </span>
+              )}
+              {claim.source_id === highlightedSourceId && (
+                <span className="sr-only">selected source</span>
+              )}
+            </div>
+          ))}
+        </div>
       ) : (
         <p className="text-sm leading-relaxed text-gray-800">
           {section.claims.map((claim, idx) => (
             <span key={claim.id} className="inline">
               {claim.text}
-              <span className="ml-1 align-middle">
-                <ClaimChip
-                  claim={claim}
-                  citation={citations[claim.id]}
-                  onClick={() => onClaimClick?.(claim)}
-                />
-              </span>
+              {showCitations && (
+                <span className="ml-1 align-middle">
+                  <ClaimChip
+                    claim={claim}
+                    citation={citations[claim.id]}
+                    onClick={() => onClaimClick?.(claim)}
+                  />
+                </span>
+              )}
               {idx < section.claims.length - 1 && " "}
               {/* Subtle highlight when the matching transcript source is selected */}
               {claim.source_id === highlightedSourceId && (

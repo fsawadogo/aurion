@@ -1,9 +1,9 @@
 "use client";
 
-import { AlertTriangle, BadgeCheck, Download } from "lucide-react";
-import { humanizeError } from "@/lib/api";
+import { AlertTriangle, ClipboardCheck, Copy, Download, Printer } from "lucide-react";
+import { humanizeError, RegenerateDiscardError, regenerateNote } from "@/lib/api";
 import { useTranslations } from "next-intl";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouteSegment } from "@/lib/use-route-segment";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
@@ -11,7 +11,6 @@ import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import CodingSuggestionsCard from "@/components/portal/CodingSuggestionsCard";
 import CompletenessRing from "@/components/portal/CompletenessRing";
 import EmrWriteBackCard from "@/components/portal/EmrWriteBackCard";
-import EncounterAudioCard from "@/components/portal/EncounterAudioCard";
 import LivePreviewCard from "@/components/portal/LivePreviewCard";
 import NoteAssistChat from "@/components/portal/NoteAssistChat";
 import NoteContextBadge from "@/components/portal/NoteContextBadge";
@@ -22,9 +21,7 @@ import PatientIdentifierEditor from "@/components/portal/PatientIdentifierEditor
 import PatientSummaryCard from "@/components/portal/PatientSummaryCard";
 import PreviewVsFinalCard from "@/components/portal/PreviewVsFinalCard";
 import StageTwoProgressBanner from "@/components/portal/StageTwoProgressBanner";
-import TranscriptPane, {
-  TranscriptPaneHandle,
-} from "@/components/portal/TranscriptPane";
+import { BUILT_IN_TEMPLATE_KEYS } from "@/components/portal/VisitTypeContextsEditor";
 import {
   approveAll,
   assistNote,
@@ -33,6 +30,7 @@ import {
   getNoteDetail,
   getPortalFeatureFlags,
   getSession,
+  listMyCustomTemplates,
   listMyMacros,
   resolveConflict,
 } from "@/lib/portal-api";
@@ -40,6 +38,7 @@ import { filterForSpecialty } from "@/lib/portal-macros-expand";
 import { humanSpecialty } from "@/lib/session-format";
 import type {
   Claim,
+  CustomTemplate,
   NoteAssistResponse,
   NoteDetail,
   PhysicianMacro,
@@ -47,26 +46,23 @@ import type {
 } from "@/types";
 
 /**
- * /portal/notes/[id] — the note review screen.
+ * /portal/notes/[id] — the note review screen (loop-4 redesign).
  *
- * Two-column layout: transcript pane (left) with the cited sources,
- * note sections (right) with citation chips. Clicking a chip scrolls
- * the transcript pane to its source and highlights it. Per-section
- * edit mode + three-action conflict resolver. Single-tap approve
- * fires approve-stage1 then approve sequentially (mirroring iOS
- * NoteReviewView).
+ * Single continuous note document (centre) + an action rail (right). The
+ * transcript/citation surface moved off the main screen (2026-07-15 weekly,
+ * Marie) — citations are a super-user surface and return behind their flag in
+ * loop-4b, so a day-1 note is clean. Copy to EHR is the primary action and is
+ * deliberately NOT gated on approval (product decision) — copying is not
+ * signing. Conflicts, per-section edit, and approve-blocked-on-conflicts are
+ * preserved exactly from the prior layout.
  *
- * Stage 2 progress is wired to the existing /ws/notes/{id} WebSocket
- * channel — banner stays visible while running, refetches the note on
- * `stage2_delivered`. Approval is blocked while conflicts remain
- * unresolved (iOS NoteReviewView lines 714-715).
+ * Template + language switch re-run Stage 1 via `regenerateNote`; on the
+ * backend's 409 loss gate (#590) the physician confirms before work that
+ * can't be rebuilt is dropped.
  */
 export default function NoteReviewPage() {
   const t = useTranslations("NoteReview");
-  const tActions = useTranslations("NoteReview.actions");
-  // Static-export gotcha — see web/lib/use-route-segment.ts. `useParams()`
-  // returns the build-time "_" sentinel under `output: "export"`; the
-  // hook reads from `usePathname()` so the real URL wins at runtime.
+  const tTemplates = useTranslations("Profile.contexts.templates");
   const sessionId = useRouteSegment("id");
 
   const [detail, setDetail] = useState<NoteDetail | null>(null);
@@ -74,46 +70,30 @@ export default function NoteReviewPage() {
   const [error, setError] = useState<string | null>(null);
   const [approving, setApproving] = useState(false);
   const [exporting, setExporting] = useState(false);
-  const [highlightedSourceId, setHighlightedSourceId] = useState<string | null>(
-    null,
-  );
+  const [copied, setCopied] = useState(false);
+  const [regenerating, setRegenerating] = useState(false);
   const [noNoteYet, setNoNoteYet] = useState(false);
-  // Session row is fetched alongside the note detail so the live
-  // preview card (#64) can gate on session state — the card is only
-  // useful while the encounter is mid-flight, and we need to know
-  // that even when the note doesn't exist yet.
   const [session, setSession] = useState<SessionRow | null>(null);
   const [macros, setMacros] = useState<PhysicianMacro[]>([]);
-  // "Fix this note" chat is gated on the portal flag (default off / DARK).
+  const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
   const [chatEnabled, setChatEnabled] = useState(false);
-  const transcriptRef = useRef<TranscriptPaneHandle>(null);
+  // Pending regenerate that hit the loss gate — holds the counts + the retry.
+  const [discardPrompt, setDiscardPrompt] = useState<{
+    counts: Record<string, number>;
+    onConfirm: () => void;
+  } | null>(null);
 
-  // Pull the user's macros once. Re-fetching on every render would
-  // burn API calls — physicians rarely tweak their macro library
-  // mid-review.
   useEffect(() => {
     let cancelled = false;
     void listMyMacros()
-      .then((xs) => {
-        if (!cancelled) setMacros(xs);
-      })
-      .catch(() => {
-        // Quiet failure — the review still works without macros.
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
+      .then((xs) => !cancelled && setMacros(xs))
+      .catch(() => {});
+    void listMyCustomTemplates()
+      .then((xs) => !cancelled && setCustomTemplates(xs))
+      .catch(() => {});
     void getPortalFeatureFlags()
-      .then((f) => {
-        if (!cancelled) setChatEnabled(f.note_review_chat_enabled);
-      })
-      .catch(() => {
-        // Quiet failure — the review works without the chat.
-      });
+      .then((f) => !cancelled && setChatEnabled(f.note_review_chat_enabled))
+      .catch(() => {});
     return () => {
       cancelled = true;
     };
@@ -124,9 +104,6 @@ export default function NoteReviewPage() {
     setError(null);
     setNoNoteYet(false);
     try {
-      // Fetch both in parallel — session row gives us state (for the
-      // live preview card gating) even when the note detail 404s on
-      // an in-flight recording session.
       const [d, s] = await Promise.allSettled([
         getNoteDetail(sessionId),
         getSession(sessionId),
@@ -135,19 +112,10 @@ export default function NoteReviewPage() {
         setDetail(d.value);
       } else {
         const msg = d.reason instanceof Error ? d.reason.message : t("loadError");
-        // /detail 404s when the session exists but has no note yet —
-        // typical for CONSENT_PENDING / RECORDING / freshly-discarded
-        // sessions. Surface a friendly empty state instead of a raw
-        // error.
-        if (/\b404\b/.test(msg)) {
-          setNoNoteYet(true);
-        } else {
-          setError(msg);
-        }
+        if (/\b404\b/.test(msg)) setNoNoteYet(true);
+        else setError(msg);
       }
-      if (s.status === "fulfilled") {
-        setSession(s.value);
-      }
+      if (s.status === "fulfilled") setSession(s.value);
     } finally {
       setLoading(false);
     }
@@ -156,11 +124,6 @@ export default function NoteReviewPage() {
   useEffect(() => {
     void load();
   }, [load]);
-
-  function focusSource(claim: Claim) {
-    setHighlightedSourceId(claim.source_id);
-    transcriptRef.current?.scrollToSource(claim.source_id);
-  }
 
   async function onSaveEdit(sectionId: string, newText: string) {
     if (!detail) return;
@@ -180,10 +143,54 @@ export default function NoteReviewPage() {
 
   async function onAssist(message: string): Promise<NoteAssistResponse> {
     const res = await assistNote(sessionId, message);
-    // Re-fetch the whole detail (like the edit flow) so citations, conflict
-    // state and export metadata stay consistent with the new version.
     if (res.applied) await load();
     return res;
+  }
+
+  // Template + language both re-run Stage 1. One handler so both share the
+  // loss-gate confirm: on a 409, stash the counts + a retry that carries
+  // confirm_discard, and let the physician decide.
+  const doRegenerate = useCallback(
+    async (payload: { template_key?: string; custom_template_id?: string; output_language?: string }) => {
+      setError(null);
+      setRegenerating(true);
+      try {
+        await regenerateNote(sessionId, payload);
+        await load();
+      } catch (e) {
+        if (e instanceof RegenerateDiscardError) {
+          setDiscardPrompt({
+            counts: e.wouldDiscard as unknown as Record<string, number>,
+            onConfirm: () => {
+              setDiscardPrompt(null);
+              void doRegenerate({ ...payload, confirm_discard: true } as typeof payload);
+            },
+          });
+        } else {
+          setError(humanizeError(e, t("regenerateError")));
+        }
+      } finally {
+        setRegenerating(false);
+      }
+    },
+    [sessionId, load, t],
+  );
+
+  function onCopy() {
+    if (!detail) return;
+    // TODO(loop-3): replace client assembly with GET /notes/{id}/text so web,
+    // DOCX and iOS share one canonical renderer.
+    const text = buildNoteText(detail);
+    void (navigator.clipboard?.writeText
+      ? navigator.clipboard.writeText(text)
+      : Promise.reject(new Error("clipboard unavailable"))
+    ).then(
+      () => {
+        setCopied(true);
+        window.setTimeout(() => setCopied(false), 2400);
+      },
+      () => setError(t("copyError")),
+    );
   }
 
   async function onApprove() {
@@ -205,7 +212,6 @@ export default function NoteReviewPage() {
     setError(null);
     try {
       const blob = await exportNote(sessionId);
-      // Browser download trick.
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
@@ -232,26 +238,19 @@ export default function NoteReviewPage() {
         eyebrow={t("eyebrow")}
         title={detail ? humanSpecialty(detail.note.specialty) : t("breadcrumbFallback")}
         description={
-          detail
-            ? <>
-                {t("stageMetaPrefix")} <span className="font-semibold text-navy-700">{detail.note.stage}</span>
-                {" · "}{t("stageVersion")}<span className="font-semibold text-navy-700">{detail.note.version}</span>
-                {" · "}{t("stageProvider")} <span className="font-semibold text-navy-700">{detail.note.provider_used}</span>
-              </>
-            : undefined
+          detail ? (
+            <>
+              {t("stageMetaPrefix")} <span className="font-semibold text-navy-700">{detail.note.stage}</span>
+              {" · "}{t("stageVersion")}<span className="font-semibold text-navy-700">{detail.note.version}</span>
+              {" · "}{t("stageProvider")} <span className="font-semibold text-navy-700">{detail.note.provider_used}</span>
+            </>
+          ) : undefined
         }
         actions={
           detail ? (
             <div className="flex items-center gap-2">
-              {/* #61 full slice — "Context-aware" badge surfaces when
-                  Stage 1 actually consumed prior encounters into the
-                  LLM prompt. Hidden when prior_context_used is null
-                  (cold-start session, pre-#61 backend) or its count
-                  is zero. Clicking routes to the patient timeline. */}
               <NoteContextBadge
-                encountersReferenced={
-                  detail.note.prior_context_used?.encounters_referenced ?? 0
-                }
+                encountersReferenced={detail.note.prior_context_used?.encounters_referenced ?? 0}
                 identifier={detail.export_metadata.external_reference_id}
               />
               <PatientIdentifierEditor
@@ -270,29 +269,12 @@ export default function NoteReviewPage() {
         </Card>
       ) : noNoteYet ? (
         <div className="space-y-4">
-          {/* Live preview (#64) — visible only while the session is
-              RECORDING / PAUSED / PROCESSING_STAGE1. The card gates
-              internally on the session state we just fetched. */}
-          {session && (
-            <LivePreviewCard
-              sessionId={sessionId}
-              sessionState={session.state}
-            />
-          )}
+          {session && <LivePreviewCard sessionId={sessionId} sessionState={session.state} />}
           <Card>
             <div className="text-center py-10">
-              <p className="aurion-headline text-navy-700 mb-1.5">
-                {t("noNoteTitle")}
-              </p>
-              <p className="aurion-callout text-navy-500 max-w-md mx-auto">
-                {t("noNoteHint")}
-              </p>
-              <Button
-                variant="secondary"
-                size="sm"
-                className="mt-5"
-                onClick={() => void load()}
-              >
+              <p className="aurion-headline text-navy-700 mb-1.5">{t("noNoteTitle")}</p>
+              <p className="aurion-callout text-navy-500 max-w-md mx-auto">{t("noNoteHint")}</p>
+              <Button variant="secondary" size="sm" className="mt-5" onClick={() => void load()}>
                 {t("checkAgain")}
               </Button>
             </div>
@@ -329,139 +311,166 @@ export default function NoteReviewPage() {
             />
           )}
 
-          {/* Encounter audio replay (#338) — physician replays the raw
-              audio of their OWN session in-browser. Fetches the presigned
-              URL only on the explicit "Play recording" click (each call
-              writes an EVIDENCE_REPLAYED audit row), and never offers a
-              download. The button always renders; the endpoint's 403
-              gracefully covers the media_review_retention_enabled flag-off
-              case since the portal can't read that backend flag directly. */}
-          <EncounterAudioCard sessionId={sessionId} />
+          {discardPrompt && (
+            <DiscardPrompt
+              counts={discardPrompt.counts}
+              onConfirm={discardPrompt.onConfirm}
+              onCancel={() => setDiscardPrompt(null)}
+            />
+          )}
 
-          {/* Two-column layout: transcript ↔ note */}
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-[600px]">
-            <div className="lg:sticky lg:top-4 h-[70vh] lg:h-[calc(100vh-200px)]">
-              <div className="mb-2 flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  {t("transcriptLabel")}
-                </h2>
-                <span className="text-[11px] text-gray-400">
-                  {t("transcriptCount", {
-                    count: Object.keys(detail.citations).length,
-                  })}
-                </span>
-              </div>
-              <TranscriptPane
-                ref={transcriptRef}
-                citations={detail.citations}
-                highlightedSourceId={highlightedSourceId}
-              />
-            </div>
-            <div>
-              <div className="mb-2 flex items-center justify-between">
-                <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-500">
-                  {t("noteLabel")}
-                </h2>
-                {/* Caption the ring — a bare percentage read as a mystery
-                    number in pilot feedback. */}
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] text-gray-500">
-                    {t("completenessCaption", {
-                      populated: detail.note.sections.filter(
-                        (s) => s.status === "populated",
-                      ).length,
-                      total: detail.note.sections.length,
-                    })}
-                  </span>
-                  <CompletenessRing sections={detail.note.sections} />
+          {/* Note document (centre) + action rail (right). */}
+          <div className="flex flex-col lg:flex-row gap-4 items-start">
+            <div className="flex-1 min-w-0 w-full space-y-4">
+              <Card>
+                {/* Toolbar — template · language · print · export · copy. */}
+                <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-hairline pb-4">
+                  <select
+                    aria-label={t("toolbar.templateLabel")}
+                    disabled={regenerating}
+                    defaultValue=""
+                    onChange={(e) => {
+                      const v = e.target.value;
+                      e.currentTarget.selectedIndex = 0;
+                      if (!v) return;
+                      if (v.startsWith("custom:")) {
+                        void doRegenerate({ custom_template_id: v.slice(7) });
+                      } else {
+                        void doRegenerate({ template_key: v });
+                      }
+                    }}
+                    className="form-input h-9 py-0 text-aurion-caption font-semibold"
+                  >
+                    <option value="">{t("toolbar.changeTemplate")}</option>
+                    <optgroup label={t("toolbar.builtInGroup")}>
+                      {BUILT_IN_TEMPLATE_KEYS.map((key) => (
+                        <option key={key} value={key}>
+                          {tTemplates(key)}
+                        </option>
+                      ))}
+                    </optgroup>
+                    {customTemplates.length > 0 && (
+                      <optgroup label={t("toolbar.customGroup")}>
+                        {customTemplates.map((c) => (
+                          <option key={c.id} value={`custom:${c.id}`}>
+                            {c.display_name}
+                          </option>
+                        ))}
+                      </optgroup>
+                    )}
+                  </select>
+
+                  <div className="inline-flex rounded-aurion-md bg-canvas p-0.5">
+                    {(["en", "fr"] as const).map((lng) => (
+                      <button
+                        key={lng}
+                        type="button"
+                        disabled={regenerating}
+                        onClick={() => void doRegenerate({ output_language: lng })}
+                        className="rounded-aurion-sm px-3 py-1 text-aurion-caption font-semibold text-navy-600 hover:bg-white disabled:opacity-50"
+                      >
+                        {t(`toolbar.lang_${lng}`)}
+                      </button>
+                    ))}
+                  </div>
+
+                  <div className="flex-1" />
+                  {regenerating && (
+                    <span className="text-aurion-caption text-navy-400">{t("toolbar.regenerating")}</span>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => window.print()}
+                    aria-label={t("toolbar.print")}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-hairline text-navy-600 hover:border-navy-200"
+                  >
+                    <Printer className="h-4 w-4" />
+                  </button>
+                  <Button variant="secondary" size="sm" onClick={() => void onExport()} loading={exporting} disabled={exporting || !detail.export_metadata.can_export}>
+                    <Download className="h-4 w-4 mr-1" />
+                    {t("actions.exportDocx")}
+                  </Button>
+                  <Button variant="primary" size="sm" onClick={onCopy}>
+                    {copied ? <ClipboardCheck className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+                    {copied ? t("toolbar.copied") : t("toolbar.copy")}
+                  </Button>
                 </div>
-              </div>
-              <div className="space-y-3">
-                {detail.note.sections.map((section) => (
-                  <NoteSectionCard
-                    key={section.id}
-                    section={section}
-                    citations={detail.citations}
-                    highlightedSourceId={highlightedSourceId}
-                    onClaimClick={focusSource}
-                    onSaveEdit={(text) => onSaveEdit(section.id, text)}
-                    onResolveConflict={onResolveConflict}
-                    macros={filterForSpecialty(macros, detail.note.specialty)}
-                    busy={
-                      approving ||
-                      detail.export_metadata.session_state ===
-                        "PROCESSING_STAGE2"
-                    }
-                  />
-                ))}
-              </div>
+
+                {/* The note document — one continuous block, format-neutral. */}
+                <div className="max-w-[720px]">
+                  <div className="mb-4 flex items-center justify-between">
+                    <h2 className="text-aurion-headline font-semibold text-navy-800">{t("noteLabel")}</h2>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[11px] text-navy-500">
+                        {t("completenessCaption", {
+                          populated: detail.note.sections.filter((s) => s.status === "populated").length,
+                          total: detail.note.sections.length,
+                        })}
+                      </span>
+                      <CompletenessRing sections={detail.note.sections} />
+                    </div>
+                  </div>
+                  <div className="space-y-6">
+                    {detail.note.sections.map((section) => (
+                      <NoteSectionCard
+                        key={section.id}
+                        section={section}
+                        citations={detail.citations}
+                        variant="document"
+                        showCitations={false}
+                        onSaveEdit={(text) => onSaveEdit(section.id, text)}
+                        onResolveConflict={onResolveConflict}
+                        macros={filterForSpecialty(macros, detail.note.specialty)}
+                        busy={approving || regenerating || detail.export_metadata.session_state === "PROCESSING_STAGE2"}
+                      />
+                    ))}
+                  </div>
+                </div>
+              </Card>
+
+              {chatEnabled && <NoteAssistChat onAssist={onAssist} />}
             </div>
+
+            <ActionRail
+              detail={detail}
+              approving={approving}
+              copied={copied}
+              onApprove={() => void onApprove()}
+              onCopy={onCopy}
+            />
           </div>
 
-          {/* "Fix this note" chat — Heidi-style grounded editor under the note.
-              DARK until note_review_chat_enabled. */}
-          {chatEnabled && <NoteAssistChat onAssist={onAssist} />}
-
-          {/* Orders card — extracted structured imaging/lab/referral/
-              prescription orders awaiting physician confirmation.
-              Same approval gate as the summary card (orders go to the
-              EMR; can't come from a draft note). */}
-          <OrdersCard
-            sessionId={sessionId}
-            noteApproved={detail.export_metadata.is_approved}
-          />
-
-          {/* Patient summary card — only visible after the note is
-              approved, since patient-facing output must come from a
-              physician-signed source. */}
-          <PatientSummaryCard
-            sessionId={sessionId}
-            noteApproved={detail.export_metadata.is_approved}
-          />
-
-          {/* Coding & billing suggestions — #69 strategic SEPARATE
-              inference surface. Approval-gated; never written back into
-              the clinical note's sections. The card itself carries the
-              "Assistive — physician must confirm" framing inline. */}
-          <CodingSuggestionsCard
-            sessionId={sessionId}
-            noteApproved={detail.export_metadata.is_approved}
-          />
-
-          {/* EMR write-back — #57 foundation. Approval-gated.
-              Foundation deployment only ships the `stub` connector;
-              real Oscar / Epic / generic-FHIR backends land in
-              follow-ups. The card surfaces the "Pilot mode" banner
-              when only stub is available, so the physician doesn't
-              think the note actually went to a chart system. */}
-          <EmrWriteBackCard
-            sessionId={sessionId}
-            noteApproved={detail.export_metadata.is_approved}
-          />
-
-          {/* Preview-vs-final diff (#64 follow-up). Approval-gated.
-              Collapsed-by-default evaluation surface: shows how the
-              last live preview compared to the canonical Stage 1
-              note. Read-only — eval team uses this to tune preview
-              cadence and compare providers. Doesn't render if no
-              previews exist for this session. */}
+          {/* Approval-gated add-on surfaces — only render post-approval. */}
+          <OrdersCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
+          <PatientSummaryCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
+          <CodingSuggestionsCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
+          <EmrWriteBackCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
           <PreviewVsFinalCard
             sessionId={sessionId}
             finalSections={detail.note.sections}
             noteApproved={detail.export_metadata.is_approved}
           />
-
-          <ActionBar
-            detail={detail}
-            approving={approving}
-            exporting={exporting}
-            onApprove={() => void onApprove()}
-            onExport={() => void onExport()}
-          />
         </div>
       ) : null}
     </div>
   );
+}
+
+/** Plain-text note for the clipboard. Interim client-side assembly until
+ * loop-3's GET /notes/{id}/text. Mirrors what's on screen. */
+function buildNoteText(detail: NoteDetail): string {
+  const lines: string[] = [];
+  for (const section of detail.note.sections) {
+    lines.push((section.title || section.id).toUpperCase());
+    if (section.claims.length === 0) {
+      lines.push("  [Not captured]");
+    } else {
+      for (const claim of section.claims) lines.push(claim.text);
+    }
+    lines.push("");
+  }
+  return lines.join("\n").trimEnd();
 }
 
 function ConflictsBanner({
@@ -479,8 +488,7 @@ function ConflictsBanner({
     >
       <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
       <div className="flex-1">
-        <span className="font-semibold">{t("summary", { count })}</span>{" "}
-        {t("blockedHint")}
+        <span className="font-semibold">{t("summary", { count })}</span> {t("blockedHint")}
       </div>
       {firstSectionId && (
         <a
@@ -494,22 +502,62 @@ function ConflictsBanner({
   );
 }
 
-function ActionBar({
+/** Loss-gate confirm (#590). The regenerate would drop work that can't be
+ * rebuilt — show the PHI-free counts and let the physician decide. */
+function DiscardPrompt({
+  counts,
+  onConfirm,
+  onCancel,
+}: {
+  counts: Record<string, number>;
+  onConfirm: () => void;
+  onCancel: () => void;
+}) {
+  const t = useTranslations("NoteReview.discard");
+  const total = Object.values(counts).reduce((a, b) => Math.max(a, b), 0);
+  return (
+    <div
+      className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm"
+      role="alertdialog"
+      aria-label={t("title")}
+    >
+      <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
+      <div className="min-w-0 flex-1">
+        <span className="font-semibold">{t("title")}</span> {t("body", { count: total })}
+      </div>
+      <button
+        type="button"
+        onClick={onCancel}
+        className="shrink-0 rounded-md border border-amber-400 bg-white px-3 py-1 text-xs font-semibold text-amber-900 hover:bg-amber-100"
+      >
+        {t("cancel")}
+      </button>
+      <button
+        type="button"
+        onClick={onConfirm}
+        className="shrink-0 rounded-md border border-amber-500 bg-amber-500 px-3 py-1 text-xs font-semibold text-white hover:bg-amber-600"
+      >
+        {t("confirm")}
+      </button>
+    </div>
+  );
+}
+
+function ActionRail({
   detail,
   approving,
-  exporting,
+  copied,
   onApprove,
-  onExport,
+  onCopy,
 }: {
   detail: NoteDetail;
   approving: boolean;
-  exporting: boolean;
+  copied: boolean;
   onApprove: () => void;
-  onExport: () => void;
+  onCopy: () => void;
 }) {
   const t = useTranslations("NoteReview.actions");
   const isApproved = detail.export_metadata.is_approved;
-  const canExport = detail.export_metadata.can_export;
   const state = detail.export_metadata.session_state;
   const blocked =
     detail.conflict_state.has_unresolved ||
@@ -517,36 +565,42 @@ function ActionBar({
     state === "PROCESSING_STAGE2";
 
   return (
-    <div className="sticky bottom-4 z-10 flex items-center gap-3 rounded-lg border border-gray-200 bg-white/95 backdrop-blur px-4 py-3 shadow-sm">
-      {isApproved ? (
-        <span className="inline-flex items-center gap-1.5 text-sm text-emerald-700">
-          <BadgeCheck className="h-5 w-5" />
-          {state === "EXPORTED" ? t("approvedExported") : t("approvedReady")}
-        </span>
-      ) : (
-        <Button
-          variant="primary"
-          onClick={onApprove}
-          loading={approving}
-          disabled={approving || blocked}
-        >
-          {blocked ? t("resolveToApprove") : t("approveAndSign")}
-        </Button>
-      )}
+    <aside className="w-full lg:w-[300px] lg:flex-none lg:sticky lg:top-4">
+      <Card>
+        <div className="space-y-3">
+          {isApproved ? (
+            <div className="rounded-aurion-md bg-green-50 border border-green-200 px-3 py-2.5">
+              <div className="text-aurion-caption font-semibold text-green-700">{t("signedTitle")}</div>
+              <div className="text-aurion-caption text-green-800 mt-0.5">
+                {state === "EXPORTED" ? t("approvedExported") : t("approvedReady")}
+              </div>
+            </div>
+          ) : (
+            <>
+              <Button
+                variant="primary"
+                className="w-full"
+                onClick={onApprove}
+                loading={approving}
+                disabled={approving || blocked}
+              >
+                {blocked ? t("resolveToApprove") : t("approveAndSign")}
+              </Button>
+              {blocked && detail.conflict_state.has_unresolved && (
+                <p className="text-aurion-caption text-amber-700">{t("blockedHint")}</p>
+              )}
+            </>
+          )}
 
-      <Button
-        variant="secondary"
-        onClick={onExport}
-        loading={exporting}
-        disabled={exporting || !canExport}
-      >
-        <Download className="h-4 w-4 mr-1" />
-        {t("exportDocx")}
-      </Button>
+          <Button variant={isApproved ? "primary" : "secondary"} className="w-full" onClick={onCopy}>
+            {copied ? <ClipboardCheck className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
+            {copied ? t("copied") : t("copyToEhr")}
+          </Button>
 
-      <span className="ml-auto text-xs text-gray-500">
-        {t("stateLabel", { state })}
-      </span>
-    </div>
+          <div className="h-px bg-hairline" />
+          <p className="text-aurion-caption text-navy-400 text-center">{t("copyHint")}</p>
+        </div>
+      </Card>
+    </aside>
   );
 }
