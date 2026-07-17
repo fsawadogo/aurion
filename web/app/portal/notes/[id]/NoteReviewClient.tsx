@@ -1,7 +1,12 @@
 "use client";
 
 import { AlertTriangle, ClipboardCheck, Copy, Download, Printer } from "lucide-react";
-import { humanizeError, RegenerateDiscardError, regenerateNote } from "@/lib/api";
+import {
+  humanizeError,
+  RegenerateDiscardError,
+  regenerateNote,
+  type RegenerateWouldDiscard,
+} from "@/lib/api";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { useRouteSegment } from "@/lib/use-route-segment";
@@ -79,7 +84,7 @@ export default function NoteReviewPage() {
   const [chatEnabled, setChatEnabled] = useState(false);
   // Pending regenerate that hit the loss gate — holds the counts + the retry.
   const [discardPrompt, setDiscardPrompt] = useState<{
-    counts: Record<string, number>;
+    counts: RegenerateWouldDiscard;
     onConfirm: () => void;
   } | null>(null);
 
@@ -151,7 +156,12 @@ export default function NoteReviewPage() {
   // loss-gate confirm: on a 409, stash the counts + a retry that carries
   // confirm_discard, and let the physician decide.
   const doRegenerate = useCallback(
-    async (payload: { template_key?: string; custom_template_id?: string; output_language?: string }) => {
+    async (payload: {
+      template_key?: string;
+      custom_template_id?: string;
+      output_language?: string;
+      confirm_discard?: boolean;
+    }) => {
       setError(null);
       setRegenerating(true);
       try {
@@ -160,10 +170,10 @@ export default function NoteReviewPage() {
       } catch (e) {
         if (e instanceof RegenerateDiscardError) {
           setDiscardPrompt({
-            counts: e.wouldDiscard as unknown as Record<string, number>,
+            counts: e.wouldDiscard,
             onConfirm: () => {
               setDiscardPrompt(null);
-              void doRegenerate({ ...payload, confirm_discard: true } as typeof payload);
+              void doRegenerate({ ...payload, confirm_discard: true });
             },
           });
         } else {
@@ -227,6 +237,12 @@ export default function NoteReviewPage() {
       setExporting(false);
     }
   }
+
+  // Filter macros once per render, not once per section — the args are the
+  // same for every card.
+  const specialtyMacros = detail
+    ? filterForSpecialty(macros, detail.note.specialty)
+    : [];
 
   return (
     <div className="aurion-page-padded aurion-container">
@@ -334,7 +350,7 @@ export default function NoteReviewPage() {
                       e.currentTarget.selectedIndex = 0;
                       if (!v) return;
                       if (v.startsWith("custom:")) {
-                        void doRegenerate({ custom_template_id: v.slice(7) });
+                        void doRegenerate({ custom_template_id: v.slice("custom:".length) });
                       } else {
                         void doRegenerate({ template_key: v });
                       }
@@ -421,7 +437,7 @@ export default function NoteReviewPage() {
                         showCitations={false}
                         onSaveEdit={(text) => onSaveEdit(section.id, text)}
                         onResolveConflict={onResolveConflict}
-                        macros={filterForSpecialty(macros, detail.note.specialty)}
+                        macros={specialtyMacros}
                         busy={approving || regenerating || detail.export_metadata.session_state === "PROCESSING_STAGE2"}
                       />
                     ))}
@@ -509,12 +525,12 @@ function DiscardPrompt({
   onConfirm,
   onCancel,
 }: {
-  counts: Record<string, number>;
+  counts: RegenerateWouldDiscard;
   onConfirm: () => void;
   onCancel: () => void;
 }) {
   const t = useTranslations("NoteReview.discard");
-  const total = Object.values(counts).reduce((a, b) => Math.max(a, b), 0);
+  const total = Math.max(0, ...Object.values(counts));
   return (
     <div
       className="flex flex-wrap items-center gap-3 rounded-lg border border-amber-400 bg-amber-50 px-4 py-3 text-sm text-amber-900 shadow-sm"

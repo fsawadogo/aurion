@@ -471,11 +471,6 @@ export async function deactivateUser(userId: string): Promise<void> {
   });
 }
 
-/** Re-run note generation on an already-uploaded encounter with a different
- * template/prompt (#590). No re-upload / re-transcribe — the backend reuses
- * the stored transcript. Gated server-side by the caller's
- * `prompt_testing_enabled` flag (403 otherwise) and owner-scoped to their own
- * session; returns the newly-generated note version. */
 /** Counts of work a regenerate would destroy, from the backend's 409
  * (#590 loss gate). All integers, PHI-free. Overlapping by design — do not
  * sum them (see backend regenerate_discard_summary). */

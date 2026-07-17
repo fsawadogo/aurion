@@ -227,9 +227,6 @@ export default function NoteSectionCard({
                   />
                 </span>
               )}
-              {claim.source_id === highlightedSourceId && (
-                <span className="sr-only">selected source</span>
-              )}
             </div>
           ))}
         </div>
