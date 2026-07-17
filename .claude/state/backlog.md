@@ -20,7 +20,6 @@ Faïçal, 2026-07-15: *"se concentrer sur l'achèvement de la boucle opérationn
 Mobile constraint: every capability lands server-side behind client-agnostic REST so Faïçal wires iOS afterwards with no server change. Prefer mechanisms needing zero client key lists — a seeded `is_shared` Library row resolves to iOS through the existing org visit-type map; a new built-in template key would need 5 web + 3 iOS files (incl. the Siri `AppEnum`).
 
 - [ ] loop-0 · Fix local DB SSL allowlist (`database.py:68` omits the `@postgres:` compose service name → API can't boot locally) — 0.2d — lane: backend — no blockers — UNBLOCKS the §9d "stack boots" gate for every task in every lane; see alerts.md 2026-07-15 20:05. One allowlist entry; do NOT key off APP_ENV (would drop TLS on a prod task with a misset env).
-- [ ] loop-1 · regenerate-note correctness — confirm-or-409 loss gate + session-pin template default + NOTE_REGENERATED audit — 2d — lane: backend — no blockers — PR #657 open, CI green, awaiting human review+merge
 - [ ] loop-1b · Close the same loss hole on `append-recording` (`transcription.py:437` rebuilds over a REVIEW_COMPLETE Stage-2 note with no gate → same conflict laundering) — 2d — lane: backend — depends on loop-1 — **needs a human call on the append UX first**; see alerts.md 2026-07-15 19:55. Correct fix moves the gate into `generate_stage1_note` so all 3 callers inherit it; gate must run BEFORE `transcribe_audio` or a 409 wastes a paid Whisper call. iOS must handle the new 409 → fold into loop-5.
 - [ ] loop-2 · Seed the Library with SOAP (starter_library/soap.json + idempotent scripts/seed_library.py, is_shared=True) — 2d — lane: backend — no blockers — closes "Localiser modèle SOAP"; source = Marie's 2026-06-12 S/O/A/P notes
 - [ ] loop-3 · Canonical note→text renderer + GET /notes/{id}/text (approved-only gate, NOTE_EXPORTED origin=clipboard) — 2d — lane: backend — no blockers — 8 renderers / 5 formats exist today; promote emr/fhir.py render_note_plain_text
@@ -66,7 +65,7 @@ Goal: create template → map to visit type → pick visit type → record → *
 
 ## In flight
 
-- [ ] loop-1 · regenerate-note correctness — lane: backend — branch `lane-backend/loop-1-regenerate-guard` — PR #657 — started 2026-07-15. CI green (lint+test). Independent review done (2 reviewers, 1 HIGH found + fixed in 689dd9a). **Human merges — never auto-merge** (standing instruction from Uzziel; overrides AURION-CODING-WORKFLOW.md §2 "auto-merge on green CI").
+- [ ] loop-0 · Fix local DB SSL allowlist — lane: backend — branch `lane-backend/loop-0-db-ssl-local` — started 2026-07-15. Unblocks the §9d gate for Cohort 6.
 
 ## Blocked
 
@@ -74,6 +73,7 @@ Goal: create template → map to visit type → pick visit type → record → *
 
 ## Done
 
+- [x] loop-1 Cohort 6 · regenerate-note correctness (confirm-or-409 loss gate + session-pin template default + built-in key validation + NOTE_REGENERATED audit) — merged 2026-07-15 (PR #657, 4 commits). Closed a conflict-laundering hole: regenerate dropped unresolved `conflict_*` claims, so a note `approve_note` refuses to sign became signable. Independent review (2 agents) caught a HIGH — unvalidated `body.template_key` → silent `general` fallback + unvalidated client text into the append-only audit log. `/simplify` §9f caught the `append-recording` twin hole → loop-1b. Plan: `docs/plans/loop-1.md`; receipt: `.claude/state/verify-receipt-loop-1.json` (AC-12 recorded UNVERIFIED — the loop-0 boot blocker).
 - [x] LLM Tier 2 F semantic trigger classifier — merged 2026-05-30 (PR #139, commit d334b03); embeddings fallback for paraphrases, opt-in via AURION_SEMANTIC_TRIGGER_ENABLED
 - [x] LLM Tier 2 E few-shot examples per specialty — merged 2026-05-30 (PR #138, commit 2af474f); 3 example files (ortho/peds/plastic), loader + render
 - [x] LLM Tier 2 G specialty-aware style snippets — merged 2026-05-30 (PR #137, commit 009aa5e); 8 specialties covered
