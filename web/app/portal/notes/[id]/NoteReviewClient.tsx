@@ -540,6 +540,13 @@ function DiscardPrompt({
       <AlertTriangle className="h-5 w-5 shrink-0 text-amber-600" />
       <div className="min-w-0 flex-1">
         <span className="font-semibold">{t("title")}</span> {t("body", { count: total })}
+        {/* Name the conflict explicitly — a generic "N items" hides that an
+            unresolved audio-vs-video CONFLICT is among what's dropped. */}
+        {counts.unresolved_conflicts > 0 && (
+          <span className="block mt-0.5 font-semibold">
+            {t("conflictWarning", { count: counts.unresolved_conflicts })}
+          </span>
+        )}
       </div>
       <button
         type="button"

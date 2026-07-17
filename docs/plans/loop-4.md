@@ -58,6 +58,7 @@ The current `NoteSectionCard` renders each section as a bordered card. The docum
 
 - **Citation visibility** — the super-user gate Uzziel described (flag + role/workspace/per-user targeting + a settings toggle). loop-4 hardwires `showCitations=false`; loop-4b builds the gate and flips it on.
 - **The collapsible Sources rail + per-claim citation chips + click-to-source.** Bundles with citation visibility. (This removes the always-on transcript column from the main screen now — exactly Marie's ask — and brings it back collapsed-behind-the-flag in loop-4b.)
+- **Encounter audio replay** (`EncounterAudioCard`, #338 — writes an `EVIDENCE_REPLAYED` audit row per play). Removed from the default screen with the transcript; it's a source-playback surface, so it returns in the Sources rail footer in loop-4b (where the approved design placed it). Backend endpoint untouched.
 - **Detail level** (Brief/Standard/Detailed) — no `NoteClaim` field; needs backend.
 - **Consultation letter** — downstream document transform; doesn't exist.
 - **SOAP in the template dropdown** — appears once loop-2 seeds `soap.json`.

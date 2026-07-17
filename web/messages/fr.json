@@ -1285,6 +1285,7 @@
     "discard": {
       "title": "Ceci supprimera un travail qui ne peut être reconstitué.",
       "body": "{count, plural, one {# élément de la vidéo/des modifications sera perdu.} other {# éléments de la vidéo/des modifications seront perdus.}} Continuer ?",
+      "conflictWarning": "{count, plural, one {Comprend # conflit non résolu — la régénération le supprime sans révision.} other {Comprend # conflits non résolus — la régénération les supprime sans révision.}}",
       "cancel": "Conserver la note",
       "confirm": "Régénérer quand même"
     },
