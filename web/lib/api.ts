@@ -471,20 +471,71 @@ export async function deactivateUser(userId: string): Promise<void> {
   });
 }
 
-/** Re-run note generation on an already-uploaded encounter with a different
- * template/prompt (#590). No re-upload / re-transcribe — the backend reuses
- * the stored transcript. Gated server-side by the caller's
- * `prompt_testing_enabled` flag (403 otherwise) and owner-scoped to their own
- * session; returns the newly-generated note version. */
+/** Counts of work a regenerate would destroy, from the backend's 409
+ * (#590 loss gate). All integers, PHI-free. Overlapping by design — do not
+ * sum them (see backend regenerate_discard_summary). */
+export interface RegenerateWouldDiscard {
+  visual_claims: number;
+  screen_claims: number;
+  measurement_claims: number;
+  physician_edits: number;
+  unresolved_conflicts: number;
+  other_claims: number;
+}
+
+/** Thrown by `regenerateNote` when the re-run would drop unrebuildable work
+ * and the caller hasn't confirmed. The UI shows the counts, then resends with
+ * `confirm_discard: true`. */
+export class RegenerateDiscardError extends Error {
+  readonly wouldDiscard: RegenerateWouldDiscard;
+  constructor(wouldDiscard: RegenerateWouldDiscard) {
+    super("Regenerate would discard unrebuildable work");
+    this.name = "RegenerateDiscardError";
+    this.wouldDiscard = wouldDiscard;
+  }
+}
+
+/** Re-run Stage 1 on the stored transcript with a different template or
+ * language (#590). Omitting both template fields reuses the session's own
+ * pinned template — not the specialty default. On the backend's 409 loss
+ * gate this throws {@link RegenerateDiscardError} carrying the counts, so the
+ * caller can confirm and retry with `confirm_discard: true`. */
 export async function regenerateNote(
   sessionId: string,
-  payload: { template_key?: string; custom_template_id?: string } = {},
+  payload: {
+    template_key?: string;
+    custom_template_id?: string;
+    output_language?: string;
+    confirm_discard?: boolean;
+  } = {},
 ): Promise<RegenerateNoteResult> {
-  const res = await fetchWithAuth(
-    `/api/v1/sessions/${sessionId}/regenerate-note`,
-    { method: "POST", body: JSON.stringify(payload) },
-  );
-  return res.json();
+  try {
+    const res = await fetchWithAuth(
+      `/api/v1/sessions/${sessionId}/regenerate-note`,
+      { method: "POST", body: JSON.stringify(payload) },
+    );
+    return res.json();
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 409) {
+      const discard = parseWouldDiscard(e.body);
+      if (discard) throw new RegenerateDiscardError(discard);
+    }
+    throw e;
+  }
+}
+
+function parseWouldDiscard(body: string): RegenerateWouldDiscard | null {
+  try {
+    const parsed = JSON.parse(body) as {
+      detail?: { code?: string; would_discard?: RegenerateWouldDiscard };
+    };
+    if (parsed?.detail?.code === "regenerate_would_discard") {
+      return parsed.detail.would_discard ?? null;
+    }
+  } catch {
+    /* body wasn't the structured 409 */
+  }
+  return null;
 }
 
 /* ─── Audit Log ──────────────────────────────────────────────────────────── */

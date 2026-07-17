@@ -1268,6 +1268,26 @@
     "transcriptCount": "{count} segments cités",
     "noteLabel": "Note",
     "completenessCaption": "{populated} sections sur {total} remplies",
+    "regenerateError": "Impossible de régénérer la note. Veuillez réessayer.",
+    "copyError": "Copie impossible — presse-papiers indisponible.",
+    "toolbar": {
+      "templateLabel": "Modèle de note",
+      "changeTemplate": "Changer de modèle…",
+      "builtInGroup": "Modèles de spécialité",
+      "customGroup": "Mes modèles",
+      "lang_en": "English",
+      "lang_fr": "Français",
+      "regenerating": "Régénération…",
+      "print": "Imprimer",
+      "copy": "Copier",
+      "copied": "Copié"
+    },
+    "discard": {
+      "title": "Ceci supprimera un travail qui ne peut être reconstitué.",
+      "body": "{count, plural, one {# élément de la vidéo/des modifications sera perdu.} other {# éléments de la vidéo/des modifications seront perdus.}} Continuer ?",
+      "cancel": "Conserver la note",
+      "confirm": "Régénérer quand même"
+    },
     "conflicts": {
       "summary": "{count, plural, one {# conflit non résolu.} other {# conflits non résolus.}}",
       "blockedHint": "L’approbation est bloquée tant que chaque conflit n’est pas résolu.",
@@ -1292,7 +1312,12 @@
       "approveAndSign": "Approuver et signer",
       "resolveToApprove": "Résolvez les conflits pour approuver",
       "exportDocx": "Exporter DOCX",
-      "stateLabel": "État : {state}"
+      "stateLabel": "État : {state}",
+      "signedTitle": "Signée",
+      "copyToEhr": "Copier vers le DME",
+      "copied": "Copié",
+      "copyHint": "Copie la note complète. Copier ne la signe pas.",
+      "blockedHint": "Résolvez le conflit pour signer."
     },
     "recording": {
       "title": "Audio de la consultation",

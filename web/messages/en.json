@@ -1268,6 +1268,26 @@
     "transcriptCount": "{count} cited segments",
     "noteLabel": "Note",
     "completenessCaption": "{populated} of {total} sections populated",
+    "regenerateError": "Couldn't regenerate the note. Please try again.",
+    "copyError": "Couldn't copy — clipboard unavailable.",
+    "toolbar": {
+      "templateLabel": "Note template",
+      "changeTemplate": "Change template…",
+      "builtInGroup": "Specialty templates",
+      "customGroup": "My templates",
+      "lang_en": "English",
+      "lang_fr": "Français",
+      "regenerating": "Regenerating…",
+      "print": "Print",
+      "copy": "Copy",
+      "copied": "Copied"
+    },
+    "discard": {
+      "title": "This will drop work that can't be rebuilt.",
+      "body": "{count, plural, one {# item from the video/edits will be lost.} other {# items from the video/edits will be lost.}} Continue?",
+      "cancel": "Keep the note",
+      "confirm": "Regenerate anyway"
+    },
     "conflicts": {
       "summary": "{count, plural, one {# unresolved conflict.} other {# unresolved conflicts.}}",
       "blockedHint": "Approval is blocked until every conflict is resolved.",
@@ -1292,7 +1312,12 @@
       "approveAndSign": "Approve & sign",
       "resolveToApprove": "Resolve conflicts to approve",
       "exportDocx": "Export DOCX",
-      "stateLabel": "State: {state}"
+      "stateLabel": "State: {state}",
+      "signedTitle": "Signed",
+      "copyToEhr": "Copy to EHR",
+      "copied": "Copied",
+      "copyHint": "Copies the full note. Copying doesn't sign it.",
+      "blockedHint": "Resolve the conflict to sign."
     },
     "recording": {
       "title": "Encounter audio",
