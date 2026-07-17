@@ -1285,7 +1285,6 @@
     "discard": {
       "title": "This will drop work that can't be rebuilt.",
       "body": "{count, plural, one {# item from the video/edits will be lost.} other {# items from the video/edits will be lost.}} Continue?",
-      "conflictWarning": "{count, plural, one {Includes # unresolved conflict — regenerating drops it unreviewed.} other {Includes # unresolved conflicts — regenerating drops them unreviewed.}}",
       "cancel": "Keep the note",
       "confirm": "Regenerate anyway"
     },
