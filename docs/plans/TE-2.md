@@ -20,10 +20,25 @@ Add a **public** resolver in `note_gen` and call it from the Stage-2 route.
 
 `_resolve_stage1_template` (`note_gen/service.py:741`) is private and takes loose args. Stage 2 must not reach into another module's privates, and it must resolve **the same template Stage 1 used** — not re-derive one from `specialty`, which would silently diverge whenever a session pinned a context/custom template.
 
-1. `note_gen/service.py` — new public `resolve_session_template(session, db) -> Template`, composing the two existing pieces: `stored_template_pin(session)` → `_resolve_stage1_template(...)`. One call, no new resolution logic.
-2. `api/v1/vision.py` — in `run_stage2_vision`, resolve the template right after `session_row` is loaded (already fetched at `:125-129` for the evidence mode) and hold it in scope.
+`note_gen/service.py` — new public `resolve_session_template(session, db) -> Template`, composing the two existing pieces: `stored_template_pin(session)` → `_resolve_stage1_template(...)`. One call, no new resolution logic.
 
-Nothing consumes it yet. TE-3/TE-4 do.
+### Scope adjusted during implementation (2026-07-17)
+
+The plan originally also wired the call into `run_stage2_vision` and held the
+result in scope. **Dropped** — `ruff` correctly flagged `F841 assigned but
+never used`, which was the honest signal: TE-2 as drafted shipped **dead code**
+plus, for custom-pinned sessions, a **discarded DB query** (the resolver only
+touches the DB when a `custom_template_id` is set).
+
+Suppressing it (`_stage_template` / `noqa`) would have silenced a correct lint
+rather than fixed the design. So the boundary moved: **TE-2 ships the tested
+resolver; TE-3 wires it at the point of use.** TE-3 is the slice that actually
+needs the template, so resolve-and-use land together and nothing inert merges.
+
+Consequence: original **AC-5 ("run_stage2_vision holds it in scope") moves to
+TE-3**. In its place TE-2 pins the *caller's contract* — the resolver works off
+exactly the ORM session-row shape Stage 2 already has, so TE-3 can't fail at
+runtime over a field Stage 2 doesn't carry.
 
 **Layering.** The resolution happens in the API/orchestration layer (`api/v1/vision.py`), which already imports `note_gen` (`get_latest_note` `:111`, `create_note_version` `:230`). `modules/vision/*` stays free of a `note_gen` dependency, per CLAUDE.md *"Modules never import each other."*
 
@@ -35,8 +50,8 @@ Nothing consumes it yet. TE-3/TE-4 do.
 - [ ] **AC-2:** same, for a session pinned to a **custom** `custom_template_id` — `::test_resolves_pinned_custom_template`
 - [ ] **AC-3:** an unpinned session resolves to the **specialty default** (byte-for-byte the pre-existing path) — `::test_unpinned_session_falls_back_to_specialty`
 - [ ] **AC-4:** a **stale/deleted** custom pin degrades to the specialty default and does **not** raise — `::test_stale_custom_pin_degrades_without_raising`
-- [ ] **AC-5:** `run_stage2_vision` holds the resolved template in scope — `::test_stage2_resolves_template_in_scope`
-- [ ] **AC-6:** **zero behaviour change** — Stage 2's merged note output is byte-identical to before for the existing fixtures; full `tests/unit/` green
+- [ ] **AC-5:** ~~`run_stage2_vision` holds the resolved template in scope~~ → **moved to TE-3** (see "Scope adjusted"). Replaced by: the resolver works off exactly the ORM session-row shape Stage 2 already has — `::test_accepts_the_session_row_shape_stage2_actually_has`
+- [ ] **AC-6:** **zero behaviour change** — no production caller yet, so Stage 2 output is untouched by construction; full `tests/unit/` green
 
 ## DRY / SOLID check
 
