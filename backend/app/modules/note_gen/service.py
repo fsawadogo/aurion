@@ -738,6 +738,50 @@ async def _enforce_transcript_guard(
 # ── Stage 1 template resolution (#318 / B3) ──────────────────────────────
 
 
+async def resolve_session_template(
+    session: SessionModel, db: AsyncSession
+) -> Template:
+    """The ``Template`` the session's CURRENT note was built with (TE-2).
+
+    Public entry point for callers OUTSIDE Stage 1 that need the session's
+    template — Stage 2 vision being the first (TE-3 aims frame captioning at
+    the right section; TE-4 formats the frame's contribution per that
+    section's guidance). They must see the SAME template Stage 1 used, so
+    this resolves the session's stored pin rather than re-deriving from
+    ``specialty`` — a session pinned to a context or custom template would
+    otherwise silently diverge between the two stages.
+
+    "Current" is load-bearing and depends on every note-writing path keeping
+    the pin honest. ``regenerate_note`` persists an explicitly-switched
+    template back onto the session for exactly this reason; if a future path
+    rebuilds a note under a different template WITHOUT updating the pin, this
+    function starts lying and Stage 2 aims at the wrong sections.
+
+    Composes the two pieces that already exist — ``stored_template_pin``
+    (the snapshot) and ``_resolve_stage1_template`` (the resolution) — and
+    adds no resolution logic of its own. It exists so callers don't reach
+    into this module's privates; ``_resolve_stage1_template`` stays internal.
+
+    ``session`` must be a real row — ``None`` is out of contract (callers
+    holding a ``scalar_one_or_none()`` result must guard first). A deleted or
+    unparseable custom pin degrades to the built-in / specialty path instead
+    of raising, so a stale binding alone can never break the caller.
+    """
+    # Lazy import: session.service imports note_gen.service in three places
+    # (its own lazy imports), so a module-level import here would risk a cycle
+    # the moment either side grows a top-level dependency. Mirrors the
+    # custom_templates import inside _resolve_stage1_template below.
+    from app.modules.session.service import stored_template_pin
+
+    template_key, custom_template_id = stored_template_pin(session)
+    return await _resolve_stage1_template(
+        template_key=template_key,
+        specialty=session.specialty,
+        custom_template_id=custom_template_id,
+        db=db,
+    )
+
+
 async def _resolve_stage1_template(
     *,
     template_key: Optional[str],
