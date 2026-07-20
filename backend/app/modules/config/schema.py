@@ -289,6 +289,23 @@ class FeatureFlagsConfig(BaseModel):
     # flag is the single switch the later GS slices (GS-1/3/4) read; adding it
     # here changes NO behaviour on its own.
     grounded_synthesis_enabled: bool = False
+    # ── Template Engine · generation core (Cohort 7) ──────────────────────
+    # Master gate for the template GOVERNING generation rather than merely
+    # naming sections. TE-3 aims frame captioning at the note section a frame
+    # will feed (so the vision model stops writing generic descriptions that
+    # get pasted in verbatim); TE-4 formats + routes the merged claim; TE-5
+    # binds the output schema to the template's sections.
+    #
+    # Ships DARK. When OFF every prompt and every output is byte-identical to
+    # pre-Cohort-7 — asserted in tests, same posture as
+    # `specialty_style_in_prompt_enabled`. Flipping it ON is gated on the
+    # baseline-vs-on eval receipt in docs/sign-off/ (adopted from the
+    # Template Engine v2 plan's eval gate).
+    #
+    # NOTE this never loosens grounding: template text reaching a vision
+    # prompt is banlist-screened and fenced BELOW the descriptive boundary,
+    # so a hostile template can degrade style, never grounding.
+    template_engine_enabled: bool = False
     # ── Prompt Studio (create & share, #524) ──────────────────────────────
     # Master gate for the admin Prompt Studio (/api/v1/admin/prompt-studio):
     # authoring + publishing global prompts. Ships DARK — every Studio route

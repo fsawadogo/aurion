@@ -31,6 +31,7 @@ from app.core.types import (
     NoteClaim,
     NoteSection,
     ProviderError,
+    Template,
     TranscriptSegment,
 )
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
@@ -39,6 +40,7 @@ from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
 from app.modules.config.schema import AppConfigSchema, VisualEvidenceMode
 from app.modules.providers.usage_service import try_record_provider_usage
+from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT
 from app.modules.vision.clip_metrics import ClipTelemetry
 
 # ── Visual evidence sentinel ─────────────────────────────────────────────
@@ -418,6 +420,8 @@ async def caption_visual_evidence(
     frame_system_prompt: Optional[str] = None,
     clip_system_prompt: Optional[str] = None,
     anchor_segments: Optional[list[TranscriptSegment]] = None,
+    template: Optional[Template] = None,
+    note: Optional[Note] = None,
 ) -> list[FrameCaption]:
     """Caption a mixed list of frames + clips using kind-routed providers.
 
@@ -562,6 +566,15 @@ async def caption_visual_evidence(
         system_for_kind = (
             clip_system_prompt if kind == "clip" else frame_system_prompt
         )
+        # TE-3 — aim the capture at the note section this frame will feed.
+        # APPENDED after the kind-routed prompt so the descriptive boundary
+        # (base constant or the physician's override) always comes first and
+        # intact; the block declares itself subordinate to it. `None` when
+        # there's no template, no predictable section, or the guidance failed
+        # the safety screen — in which case this is byte-identical to before.
+        focus = _section_focus_block(template, note, anchor.id)
+        if focus is not None:
+            system_for_kind = (system_for_kind or VISION_SYSTEM_PROMPT) + focus
         _started = time.monotonic()
         try:
             caption = await _dispatch_caption(
@@ -870,7 +883,7 @@ def merge_visual_citations(
             continue  # Discard silently
 
         # Find the target section based on the audio anchor
-        target_section = _find_target_section(note, caption)
+        target_section = _find_target_section(note, caption.audio_anchor_id)
         if not target_section:
             continue
 
@@ -912,15 +925,100 @@ def merge_visual_citations(
     return note
 
 
-def _find_target_section(note: Note, caption: FrameCaption) -> Optional[NoteSection]:
-    """Find the note section that should receive this visual citation.
+def _section_focus_block(
+    template: Optional[Template],
+    note: Optional[Note],
+    audio_anchor_id: Optional[str],
+) -> Optional[str]:
+    """The fenced SECTION FOCUS block for one frame's capture prompt (TE-3).
+
+    The single site where a template's clinician-authored text is composed
+    into a vision prompt. Returns ``None`` whenever the frame should be
+    captioned exactly as before — no template, no predictable section, no
+    guidance to give, or guidance that fails the safety screen.
+
+    **Why this exists.** The vision model is otherwise told only "describe
+    what is visible" plus the nearest transcript line, so it writes a generic
+    description that the merge pastes in verbatim — the irrelevant "physical
+    descriptions" cluttering pilot notes. The template already tells the
+    note-gen model what each section captures; this gives the vision model the
+    same instruction.
+
+    **Safety.** The description is physician-authored free text, so it is
+    screened with ``validate_specialty_guidance`` — the existing
+    banlist-without-anchors gate for text layered ONTO an always-present base
+    prompt (the descriptive boundary lives in ``VISION_SYSTEM_PROMPT``, which
+    the caller keeps first and intact). Rejected guidance is DROPPED, not
+    sanitised-and-used: captioning proceeds on the base prompt so a bad
+    template description degrades quality, never blocks a physician's Stage 2.
+    A hostile template may degrade style; it may never touch grounding.
+    """
+    if template is None or note is None:
+        return None
+    if not get_config().feature_flags.template_engine_enabled:
+        return None
+
+    section = _find_target_section(note, audio_anchor_id)
+    if section is None:
+        return None
+
+    # The note's section carries the id; the TEMPLATE carries the guidance.
+    spec = next((s for s in template.sections if s.id == section.id), None)
+    if spec is None:
+        return None
+    guidance = (spec.description or "").strip()
+    if not guidance:
+        return None
+
+    # Lazy import — prompts.safety pulls the AppConfig client, which vision
+    # otherwise reaches only through get_config().
+    from app.modules.prompts.safety import (
+        ValidationCode,
+        validate_specialty_guidance,
+    )
+
+    verdict = validate_specialty_guidance(guidance)
+    if verdict.code is not ValidationCode.OK:
+        # PHI-safe: the section id + the matched banned phrase only. The
+        # description itself is physician free text and never logged.
+        logger.warning(
+            "Template section guidance rejected for vision capture "
+            "(section=%s, reason=%s, matched=%s); captioning with the base "
+            "prompt",
+            section.id,
+            verdict.code.value,
+            verdict.matched_phrase,
+        )
+        return None
+
+    title = (spec.title or section.id).strip()
+    return (
+        "\n\n--- SECTION FOCUS (subordinate to the rules above) ---\n"
+        f'This frame is being captured for the note section "{title}".\n'
+        f"That section records: {guidance}\n"
+        "Describe only what is literally visible that bears on it. If nothing "
+        "relevant is visible, say so — never infer, diagnose, or fill a gap.\n"
+        "--- END SECTION FOCUS ---"
+    )
+
+
+def _find_target_section(
+    note: Note, audio_anchor_id: Optional[str]
+) -> Optional[NoteSection]:
+    """Find the note section that should receive this visual evidence.
+
+    Keyed on the ``audio_anchor_id`` rather than a whole ``FrameCaption`` (TE-3)
+    so it can also run BEFORE a caption exists — TE-3 predicts the target
+    section to aim the capture prompt, and the merge then routes the finished
+    caption through this same function. One router for both, so TE-4's
+    template-aware routing upgrade improves prediction and placement together.
 
     Looks for sections with pending_video status or physical_exam/imaging sections.
     """
     # First try: find a section that has the anchor segment
     for section in note.sections:
         for claim in section.claims:
-            if claim.source_id == caption.audio_anchor_id:
+            if claim.source_id == audio_anchor_id:
                 return section
 
     # Fallback: find imaging_review or physical_exam sections

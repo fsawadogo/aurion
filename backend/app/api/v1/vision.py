@@ -28,6 +28,7 @@ from app.modules.config.schema import VisualEvidenceMode
 from app.modules.note_gen.service import (
     create_note_version,
     get_latest_note,
+    resolve_session_template,
 )
 from app.modules.prompts import assemble_prompt
 from app.modules.vision.clip_metrics import ClipTelemetry, record_clip_metrics
@@ -197,6 +198,17 @@ async def run_stage2_vision(
         # #324: anchor clips against the FULL transcript (incidental speech
         # near a cadence clip), not just spoken triggers.
         anchor_segments=transcript.segments,
+        # TE-3: the template + note let captioning aim at the section each
+        # frame will feed, instead of describing generically. Resolved from
+        # the session's stored PIN so Stage 2 uses the SAME template Stage 1
+        # did. `None` session_row (scalar_one_or_none) degrades to today's
+        # template-blind behaviour rather than failing enrichment.
+        template=(
+            await resolve_session_template(session_row, db)
+            if session_row is not None
+            else None
+        ),
+        note=note,
     )
 
     # Drop low-confidence captions before conflict classification.

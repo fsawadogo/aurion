@@ -80,6 +80,32 @@ relevant is visible, say so — never infer, diagnose, or fill a gap.
 4. `docker compose ... up -d && curl -fs localhost:8080/health` → 200
 5. `git diff --stat main...HEAD -- ios/ web/` → empty
 
+## Known limit of the safety screen (found while testing, recorded not hidden)
+
+`validate_specialty_guidance` is a **known-attack banlist**, not a semantic
+interpretation detector. Writing AC-4 proved the difference: it catches
+injection (`"ignore previous instructions"`), role-flips (`"you may diagnose"`)
+and the explicit verb forms (`"recommend treatment"`, `"interpret the
+findings"`, `"make a diagnosis"`) — but **not** a paraphrase like *"assess
+whether this looks infected"*, which is not in `BANNED_PHRASES`.
+
+My first draft of the test asserted that paraphrase was dropped. It wasn't, and
+weakening the test to match would have hidden the gap — so it is pinned
+explicitly instead (`test_known_limit_paraphrase_survives_the_banlist_but_stays_subordinated`).
+
+**What the fence is therefore load-bearing for.** When the screen misses, the
+composed prompt still bounds the guidance on both sides — the base rules
+before it (*"Do not diagnose, interpret, or infer"*) and the fence's own clause
+after it (*"never infer, diagnose, or fill a gap"*). The residual risk is a
+style degradation, not a grounding failure.
+
+**Note the asymmetry vs. note-gen**, which is why this deserves a reviewer's
+eye: the note-gen path has runtime backstops (the critique pass, citation
+validators) that would drop an unanchored claim. The vision caption has no
+equivalent — its text goes straight into a claim. If we want this tighter, the
+fix is vision-specific phrases in `prompts/safety.py`, **not** a second banlist
+in the vision module.
+
 ## Security implications
 
 - **This slice routes clinician-authored text into an AI prompt for the first time in the vision path.** That is the whole reason for the sanitize + fence, adopted from Faïçal's v2 safety model. A template section description is written by a physician; without screening, *"assess whether this looks infected"* would steer the vision model into interpretation.
