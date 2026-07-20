@@ -875,49 +875,66 @@ def classify_conflicts(
 def merge_visual_citations(
     note: Note,
     captions: list[FrameCaption],
+    template: Optional[Template] = None,
 ) -> Note:
     """Merge frame citations into a Stage 1 note to produce Stage 2.
 
     - ENRICHES: inject visual description alongside audio claim
     - REPEATS: discard silently, audio stands alone
     - CONFLICTS: surface both, flag section for mandatory physician review
+
+    **Routing happens before ANY mutation** (TE-4). Tier 3 of
+    ``_find_target_section`` reads ``section.status``, and this function flips
+    ``pending_video`` → ``populated`` as it goes — so routing inside the apply
+    loop made the second caption see a different note than TE-3's capture-time
+    prediction did, and REPEATS being dropped in between shifted which caption
+    consumed which section. On a custom template (ids outside the legacy visual
+    tuple) two frames were captured under one section's guidance and filed
+    under two.
+
+    Capture-time prediction runs on this same ``Note`` object, and captioning
+    does not mutate it. So routing every caption against the unmutated note
+    makes placement identical to prediction **by construction**. That is the
+    whole fix; it needs no new state and no field on ``FrameCaption``.
+
+    ``template`` is ``None`` when the engine is off, which keeps the legacy
+    section tuple and today's behaviour byte-identical.
     """
     note.stage = 2
 
-    for caption in captions:
-        if caption.integration_status == "REPEATS":
-            continue  # Discard silently
+    # Route everything first, against the pristine note. REPEATS are dropped
+    # here so they cannot shift anyone else's tier-3 answer.
+    routed = [
+        (caption, _find_target_section(note, caption.audio_anchor_id, template))
+        for caption in captions
+        if caption.integration_status != "REPEATS"
+    ]
 
-        # Find the target section based on the audio anchor
-        target_section = _find_target_section(note, caption.audio_anchor_id)
-        if not target_section:
+    for caption, target_section in routed:
+        if target_section is None:
             continue
 
-        if caption.integration_status == "ENRICHES":
-            # Inject visual claim alongside audio
-            target_section.claims.append(
-                NoteClaim(
-                    id=f"vclaim_{caption.frame_id}",
-                    text=caption.visual_description,
-                    source_type="visual",
-                    source_id=caption.frame_id,
-                    source_quote=f"[Frame {caption.frame_id} at {caption.timestamp_ms}ms]",
-                )
+        claim = _build_visual_claim(caption, formatted=template is not None)
+        if claim is None:
+            # A caption reporting nothing relevant is the absence of evidence,
+            # not evidence. It must not become a claim — and must not flip the
+            # section to `populated`, which would overstate completeness.
+            logger.info(
+                "Dropped no-finding caption: frame=%s section=%s",
+                caption.frame_id, target_section.id,
             )
-            if target_section.status == "pending_video":
-                target_section.status = "populated"
+            continue
 
-        elif caption.integration_status == "CONFLICTS":
-            # Surface both — flag for mandatory physician review
-            target_section.claims.append(
-                NoteClaim(
-                    id=f"conflict_{caption.frame_id}",
-                    text=f"CONFLICT: Visual observation differs from audio — {caption.visual_description}",
-                    source_type="visual",
-                    source_id=caption.frame_id,
-                    source_quote=f"[Frame {caption.frame_id} at {caption.timestamp_ms}ms] {caption.conflict_detail or ''}",
-                )
-            )
+        target_section.claims.append(claim)
+
+        # Only ENRICHES marks a pending section satisfied. A CONFLICTS claim
+        # is an open question, not a populated section — preserved from the
+        # pre-TE-4 behaviour.
+        if (
+            caption.integration_status == "ENRICHES"
+            and target_section.status == "pending_video"
+        ):
+            target_section.status = "populated"
 
     # Update remaining pending_video sections to processing_failed if no captions matched
     for section in note.sections:
@@ -1106,38 +1123,61 @@ def _section_focus_block(
     )
 
 
+#: Sections that are visual by nature, for notes built without a template.
+#: TE-4 prefers the template's own declaration and falls back to this.
+_LEGACY_VISUAL_SECTIONS = (
+    "imaging_review",
+    "physical_exam",
+    "wound_assessment",
+    "functional_assessment",
+)
+
+
+def _template_visual_section_ids(template: Optional[Template]) -> tuple[str, ...]:
+    """Section ids the TEMPLATE declares as carrying visual evidence (TE-4).
+
+    A section is visual-by-nature when its template spec gives it
+    ``visual_trigger_keywords`` (the field exists precisely to mark "look here
+    when the physician says this") or ``measurement_output_expected``. Both
+    already exist on ``TemplateSection``; the former was unused at this stage.
+
+    Empty when there is no template, which is what keeps the legacy tuple in
+    play for the flag-off path.
+    """
+    if template is None:
+        return ()
+    return tuple(
+        s.id
+        for s in template.sections
+        if s.visual_trigger_keywords or s.measurement_output_expected
+    )
+
+
 def _find_target_section(
-    note: Note, audio_anchor_id: Optional[str]
+    note: Note,
+    audio_anchor_id: Optional[str],
+    template: Optional[Template] = None,
 ) -> Optional[NoteSection]:
     """Find the note section that should receive this visual evidence.
 
     Keyed on the ``audio_anchor_id`` rather than a whole ``FrameCaption`` (TE-3)
     so it can also run BEFORE a caption exists — TE-3 predicts the target
     section to aim the capture prompt, and the merge then routes the finished
-    caption through this same function. One router for both, so TE-4's
-    template-aware routing upgrade improves prediction and placement together.
+    caption through this same function. One router for both, so the
+    template-aware upgrade improves prediction and placement together.
 
-    **One router is not the same as one answer.** Tiers 1 and 2 are pure
-    functions of ``(note, anchor)`` and do agree between prediction and
-    placement. Tier 3 does not, and the divergence is real:
+    **Tier 2 is now the template's own answer** (TE-4). The hardcoded tuple
+    below only applies when no template is passed, which is also the flag-off
+    path — so a custom template's sections finally route their own frames
+    instead of falling through to a list of built-in section ids they don't use.
 
-      * ``merge_visual_citations`` flips its target from ``pending_video`` to
-        ``populated`` as it goes, so the second caption sees a different
-        note than prediction did;
-      * REPEATS captions are dropped between the two calls, shifting which
-        caption consumes which section.
-
-    So on a template whose section ids fall outside the tier-2 tuple below —
-    i.e. exactly the custom templates this epic exists for — two frames can be
-    captured under one section's guidance and filed under two. That is a
-    quality ceiling on TE-3, not a safety issue: the guidance only aims the
-    description, and the claim keeps its ``source_id`` either way.
-
-    **TE-4 is what fixes it**, by routing on the template's own sections and
-    keywords instead of the hardcoded tuple. Recorded here rather than papered
-    over, because the fix belongs in that slice.
-
-    Looks for sections with pending_video status or physical_exam/imaging sections.
+    **On prediction vs placement.** All three tiers are pure functions of
+    ``(note, anchor, template)``. Tier 3 reads ``status``, which the merge
+    MUTATES — so agreement depends on the caller not interleaving routing with
+    mutation. ``merge_visual_citations`` therefore routes every caption against
+    the unmutated note first and applies afterwards; see its docstring. That is
+    what makes placement identical to prediction by construction rather than by
+    luck, and it is the fix for the divergence TE-3's review recorded here.
     """
     # First try: find a section that has the anchor segment
     for section in note.sections:
@@ -1145,9 +1185,12 @@ def _find_target_section(
             if claim.source_id == audio_anchor_id:
                 return section
 
-    # Fallback: find imaging_review or physical_exam sections
+    # Fallback: a section that carries visual evidence. The TEMPLATE's own
+    # declaration wins; the legacy tuple applies only when there is no
+    # template (which is also the engine-off path, keeping it byte-identical).
+    visual_ids = _template_visual_section_ids(template) or _LEGACY_VISUAL_SECTIONS
     for section in note.sections:
-        if section.id in ("imaging_review", "physical_exam", "wound_assessment", "functional_assessment"):
+        if section.id in visual_ids:
             return section
 
     # Last resort: first section with pending_video status
@@ -1156,6 +1199,131 @@ def _find_target_section(
             return section
 
     return None
+
+
+#: Openers the vision models habitually prepend. They describe the MEDIUM, not
+#: the patient — "The image shows a healing incision" is an image caption;
+#: "A healing incision" is a clinical observation. Stripping is safe because it
+#: only ever REMOVES words, so it cannot introduce an inference.
+_IMAGE_META_OPENER = re.compile(
+    r"^(?:"
+    r"(?:in|from)\s+(?:this|the)\s+(?:image|frame|photo|photograph|picture|video|clip|still)\s*,?\s*"
+    r"|(?:this|the)\s+(?:image|frame|photo|photograph|picture|video|clip|still)\s+"
+    r"(?:shows|depicts|displays|captures|contains|reveals)\s*(?:that\s+)?"
+    r"|(?:visible|seen|shown)\s+in\s+(?:this|the)\s+"
+    r"(?:image|frame|photo|photograph|picture|video|clip|still)\s+(?:is|are)\s+"
+    r")",
+    re.IGNORECASE,
+)
+
+#: A caption reporting the ABSENCE of relevant evidence. TE-3's SECTION FOCUS
+#: block explicitly instructs the model to "say so" when nothing relevant is
+#: visible — so aiming the capture GUARANTEES these captions exist. Pasting
+#: them into the chart would be new clutter created by the fix for clutter.
+_NO_FINDING = re.compile(
+    r"\b(?:"
+    r"nothing\s+(?:relevant|of\s+(?:note|clinical\s+\w+)|clinically\s+\w+)"
+    r"|no\s+(?:relevant|visible|discernible|clinically\s+relevant)\s+"
+    r"(?:findings?|information|content|detail|evidence)"
+    r"|(?:is\s+)?not\s+(?:relevant|visible|discernible)"
+    r"|(?:nothing|none)\s+(?:is\s+)?visible"
+    r"|unable\s+to\s+(?:assess|determine|discern)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_no_finding_caption(text: str) -> bool:
+    """True when the caption reports the ABSENCE of relevant evidence (TE-4).
+
+    Not evidence — the absence of it. A note claim asserts something was
+    observed; "nothing relevant is visible" asserts the opposite and belongs
+    in neither the chart nor the completeness score.
+    """
+    return bool(_NO_FINDING.search(text))
+
+
+def _format_visual_claim_text(description: str) -> str:
+    """A caption rendered as a clinical observation (TE-4).
+
+    Deterministic string work only — strip the image-meta opener, normalise
+    whitespace, restore sentence case, ensure terminal punctuation. It never
+    ADDS clinical content, which is why it cannot introduce an inference: a
+    transform that only removes words cannot invent a finding.
+
+    A model call here would be the alternative, and would put a second,
+    unscreened generation between the caption and the patient's chart for
+    cosmetic gain. Not worth it.
+    """
+    text = _WHITESPACE_RUN.sub(" ", description).strip()
+    stripped = _IMAGE_META_OPENER.sub("", text).strip()
+    # Guard against a caption that is ONLY an opener — keep the original
+    # rather than emit an empty claim.
+    if not stripped:
+        return text
+    text = stripped[0].upper() + stripped[1:]
+    if text[-1] not in ".?!":
+        text += "."
+    return text
+
+
+def _build_visual_claim(
+    caption: FrameCaption, *, formatted: bool
+) -> Optional[NoteClaim]:
+    """The SINGLE place a visual ``NoteClaim`` is constructed (TE-4).
+
+    ``None`` when the caption should not become a claim at all.
+
+    ``formatted`` is the engine flag, threaded down as data. When ``False``
+    the text is the raw caption exactly as pre-TE-4 — the epic's "OFF is
+    byte-identical" contract covers merged OUTPUT, not just prompts, and the
+    formatter would otherwise change every note while the engine is nominally
+    dark. Gating is also causally right: the no-finding drop exists *because*
+    TE-3's SECTION FOCUS block tells the model to report when nothing relevant
+    is visible, and that block only ships when the engine is on.
+
+    D3 requirement from the epic: grounded fusion of a frame WITH its
+    transcript segment into one multi-cited statement is designed-for but
+    dark behind ``grounded_synthesis_enabled`` pending GS-9. Keeping
+    construction in one function is what lets that flag flip later populate
+    ``additional_sources`` without rearchitecting the merge.
+
+    Traceability is invariant: every claim keeps ``source_type="visual"`` and
+    ``source_id=frame_id``, and CONFLICTS keep the ``conflict_`` id prefix
+    that ``is_unresolved_conflict_claim`` — and therefore the approval gate —
+    keys off. Neither depends on the wording, which is why reformatting is
+    safe here.
+    """
+    body = (
+        _format_visual_claim_text(caption.visual_description)
+        if formatted
+        else caption.visual_description
+    )
+
+    if caption.integration_status == "CONFLICTS":
+        return NoteClaim(
+            id=f"conflict_{caption.frame_id}",
+            text=f"CONFLICT: Visual observation differs from audio — {body}",
+            source_type="visual",
+            source_id=caption.frame_id,
+            source_quote=(
+                f"[Frame {caption.frame_id} at {caption.timestamp_ms}ms] "
+                f"{caption.conflict_detail or ''}"
+            ),
+        )
+
+    # A conflict is reported even when the frame shows nothing relevant — the
+    # disagreement with the audio IS the finding. Only ENRICHES is dropped.
+    if formatted and _is_no_finding_caption(caption.visual_description):
+        return None
+
+    return NoteClaim(
+        id=f"vclaim_{caption.frame_id}",
+        text=body,
+        source_type="visual",
+        source_id=caption.frame_id,
+        source_quote=f"[Frame {caption.frame_id} at {caption.timestamp_ms}ms]",
+    )
 
 
 def has_unresolved_conflicts(captions: list[FrameCaption]) -> bool:
