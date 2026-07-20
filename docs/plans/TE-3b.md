@@ -63,6 +63,26 @@ Fix is a test, not an abstraction: assert every flag and group key in `FLAG_GROU
 4. `cd web && npm run build` → static export succeeds
 5. `git diff --stat main...HEAD -- ios/ backend/` → empty
 
+## Review findings (fixed)
+
+**1. The pass-through test was blind to exactly the expensive keys.** Its fixture was labelled *"a full snapshot"* and was five short of the backend's 27 — including the **four the backend declares with no default** (`meta_wearables_enabled`, `per_session_visual_evidence_mode_override`, `clip_video_interpretation_enabled`, `frame_by_frame_video_enabled`). Dropping any of those is a **422 on save**, and dropping `cross_clinician_chart_enabled` silently darks that feature. So the test proved round-tripping for the 21 cheap keys and covered none of the costly ones. Fixture completed, and the sent key **set** is now asserted against it so it cannot go short again.
+
+**2. The drift guard checked a key the page never reads.** It asserted `titleKey + "Hint"`; the page renders `t(group.hintKey)`. All seven groups happen to follow that convention, so it passed — but a group whose `hintKey` diverged would sail through, and since nothing scanned the **FR** DOM, FR would ship a card reading `FeatureFlags.<key>`. Now asserts `group.hintKey`, and the no-unresolved-key DOM scan runs in **both** locales.
+
+**3. `cross_clinician_chart_enabled` was missing from the web `FeatureFlags` type**, whose own comment claims field-for-field parity with the backend response. Pre-existing, not introduced here, but the comment was false. Not a live bug — `save()` spreads the whole draft and `JSON.stringify` serializes runtime properties, so the key round-trips today — but any future typed `pick`/parse would drop it. Added.
+
+**4. The copy said "frames"; the flag aims clips too.** `_section_focus_block` takes `evidence_kind="clip" if kind == "clip" else "frame"`, and TE-3 literally has a test named `test_clips_are_not_called_frames` because this mislabelling has bitten before — then I reintroduced it in the UI copy. An admin on a clip pipeline would have read it as irrelevant to their sessions. Reworded to "visual evidence / frame or clip" in both languages, and the flag renamed **Template-aimed capture** (which also fixes the group title and flag name rendering as the same string twice).
+
+**5. FR softened the gate EN sets.** EN said *"only after the eval receipt shows notes actually improve"*; FR said *"une fois le rapport d'évaluation concluant"* — which a conclusively **negative** receipt satisfies. Aligned. Also removed a `modèle` collision where the same word meant both *template* and *the vision model* inside one clause.
+
+**6. The warning was visual-only.** The description rendered in a bare `<p>` and the switch carried only `aria-label={name}`, so a screen-reader user heard *"Template-aimed capture, switch, off"* and never the "unproven" caveat — AC-4's entire safety story invisible to them, on the toggle where it matters most. Added `aria-describedby` wiring for every flag row, not just this one.
+
+**7. The new spec added a `tsc --noEmit` error** (a `FeatureFlags` → `Record<string, unknown>` cast). Neither `next lint` nor `next build` type-checks `tests/`, so CI would have stayed green. Fixed; the repo is back to its pre-existing 13 errors.
+
+Also fixed: two test names that over-claimed (a one-switch assertion called *"renders at FR parity"*; a card-count claim that counted nothing — it now counts), one vacuous assertion (`FLAG_GROUPS.length > 0` on a seven-entry `as const`), and `.claude/state/in-flight.json` had been reformatted from 3 compact lines to 20, rewriting lanes this branch doesn't own and guaranteeing a conflict with any concurrent lane. Restored to a one-line diff.
+
+**All three substantive fixes were mutation-tested** — a diverged `hintKey`, a dropped required flag, and a removed `aria-describedby` each fail their test.
+
 ## Security implications
 
 - **ADMIN-only, unchanged.** The page is role-gated in the Sidebar and the backend `POST /admin/feature-flags` is `require_role(ADMIN)`. This adds no new endpoint and no new permission.

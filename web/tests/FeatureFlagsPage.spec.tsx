@@ -31,12 +31,30 @@ vi.mock("@/lib/api", () => ({
 
 import { getFeatureFlags, updateFeatureFlags } from "@/lib/api";
 
-/** A full snapshot — the page round-trips every key it doesn't own. */
+/**
+ * A COMPLETE snapshot — all 27 fields of the backend `FeatureFlagsResponse`.
+ *
+ * Completeness is the whole point of the AC-2 pass-through assertion, and an
+ * earlier draft of this fixture was five keys short — including the four the
+ * backend declares with NO default (`meta_wearables_enabled`,
+ * `per_session_visual_evidence_mode_override`, `clip_video_interpretation_enabled`,
+ * `frame_by_frame_video_enabled`). Dropping any of those is a 422 on save, and
+ * dropping `cross_clinician_chart_enabled` silently darks the feature. So the
+ * short fixture proved pass-through for the cheap keys and was blind to
+ * exactly the expensive ones.
+ *
+ * The save test also pins the sent key SET against this fixture, so it cannot
+ * silently go short again when a flag is added server-side.
+ */
 const FLAGS = {
   screen_capture_enabled: true,
   note_versioning_enabled: true,
   session_pause_resume_enabled: true,
   per_session_provider_override: true,
+  meta_wearables_enabled: false,
+  per_session_visual_evidence_mode_override: false,
+  clip_video_interpretation_enabled: false,
+  frame_by_frame_video_enabled: false,
   orders_card_enabled: false,
   coding_card_enabled: false,
   patient_summary_card_enabled: false,
@@ -55,6 +73,7 @@ const FLAGS = {
   clinician_prompts_note_only: false,
   template_authoring_chat_enabled: false,
   note_review_chat_enabled: false,
+  cross_clinician_chart_enabled: false,
 } as const;
 
 beforeEach(() => {
@@ -71,7 +90,7 @@ describe("Feature Flags page — template engine toggle", () => {
     render(withIntl(<FeatureFlagsPage />));
 
     const toggle = await screen.findByRole("switch", {
-      name: /Template engine/i,
+      name: /Template-aimed capture/i,
     });
     // AC-1 — loaded value is false, so the switch reads off.
     expect(toggle).toHaveAttribute("aria-checked", "false");
@@ -79,23 +98,35 @@ describe("Feature Flags page — template engine toggle", () => {
 
   it("warns that the engine is unproven rather than reading as a neutral switch", async () => {
     render(withIntl(<FeatureFlagsPage />));
-    await screen.findByRole("switch", { name: /Template engine/i });
+    const toggle = await screen.findByRole("switch", {
+      name: /Template-aimed capture/i,
+    });
 
     // AC-4 — an admin flipping this must know what they're opting into.
     // `grounded_synthesis_enabled` sets the precedent for this copy.
+    expect(screen.getByText(/Unproven/i)).toBeInTheDocument();
     expect(
-      screen.getByText(/Unproven/i),
+      screen.getByText(/until the eval receipt shows notes actually improve/i),
     ).toBeInTheDocument();
+
+    // …and the warning must reach a screen reader, not just the eye. Without
+    // aria-describedby a screen-reader user hears "Template-aimed capture,
+    // switch, off" and never the caveat — making AC-4's whole safety story
+    // visual-only on the toggle where it matters most.
+    expect(toggle).toHaveAttribute(
+      "aria-describedby",
+      "flag-desc-template_engine_enabled",
+    );
     expect(
-      screen.getByText(/Leave OFF until the eval receipt is green/i),
-    ).toBeInTheDocument();
+      document.getElementById("flag-desc-template_engine_enabled")?.textContent,
+    ).toMatch(/Unproven/i);
   });
 
   it("saves the template engine flag without disturbing the others", async () => {
     render(withIntl(<FeatureFlagsPage />));
 
     const toggle = await screen.findByRole("switch", {
-      name: /Template engine/i,
+      name: /Template-aimed capture/i,
     });
     fireEvent.click(toggle);
 
@@ -106,25 +137,32 @@ describe("Feature Flags page — template engine toggle", () => {
     await waitFor(() => expect(updateFeatureFlags).toHaveBeenCalledTimes(1));
 
     // AC-2 — the flipped flag goes up…
-    const sent = vi.mocked(updateFeatureFlags).mock.calls[0][0] as Record<
-      string,
-      unknown
-    >;
+    const sent = vi.mocked(updateFeatureFlags).mock
+      .calls[0][0] as unknown as Record<string, unknown>;
     expect(sent.template_engine_enabled).toBe(true);
 
     // …and every other key round-trips verbatim, including the non-boolean
-    // `prompt_studio_roles` the page never owns.
+    // `prompt_studio_roles` the page never owns, and the four the backend
+    // declares with no default (dropping any is a 422, not a silent default).
     for (const [key, value] of Object.entries(FLAGS)) {
       if (key === "template_engine_enabled") continue;
-      expect(sent[key]).toEqual(value);
+      expect(sent[key], `${key} must round-trip`).toEqual(value);
     }
+
+    // The loop above only checks keys the fixture HAS. Pin the count too, so
+    // a flag added server-side without being added here is caught rather than
+    // quietly falling outside the assertion.
+    expect(Object.keys(sent).sort()).toEqual(Object.keys(FLAGS).sort());
   });
 
-  it("renders at FR parity", async () => {
+  it("resolves the FR flag name on the toggle", async () => {
+    // Named for what it asserts. It does NOT prove catalog parity — that is
+    // `tests/i18n-bootstrap.spec.ts` (bidirectional) plus the drift guard
+    // below.
     render(withIntl(<FeatureFlagsPage />, "fr"));
 
     expect(
-      await screen.findByRole("switch", { name: /Moteur de modèles/i }),
+      await screen.findByRole("switch", { name: /Capture orientée par le modèle/i }),
     ).toBeInTheDocument();
   });
 });
@@ -143,15 +181,18 @@ describe("Feature Flags page — catalog drift guard", () => {
     // own copy of the list, which would have tracked nothing — a group added
     // to the page but not to the test would pass while shipping a card
     // titled "FeatureFlags.newGroup".
-    expect(FLAG_GROUPS.length).toBeGreaterThan(0);
-
     for (const catalog of [enMessages, frMessages]) {
       const ff = catalog.FeatureFlags as Record<string, unknown> & {
         flags: Record<string, { name: string; description: string }>;
       };
       for (const group of FLAG_GROUPS) {
         expect(ff[group.titleKey], `group title ${group.titleKey}`).toBeTruthy();
-        expect(ff[`${group.titleKey}Hint`], `group hint ${group.titleKey}Hint`).toBeTruthy();
+        // `group.hintKey`, NOT a derived `titleKey + "Hint"`. The page renders
+        // `t(group.hintKey)`, and all seven groups currently happen to follow
+        // the derived convention — so asserting the derived name would pass
+        // for a group whose hintKey diverged, and FR (which nothing scans in
+        // the DOM) would ship a card reading "FeatureFlags.<key>".
+        expect(ff[group.hintKey], `group hint ${group.hintKey}`).toBeTruthy();
         for (const flag of group.flags) {
           expect(ff.flags[flag]?.name, `${flag}.name`).toBeTruthy();
           expect(ff.flags[flag]?.description, `${flag}.description`).toBeTruthy();
@@ -160,12 +201,23 @@ describe("Feature Flags page — catalog drift guard", () => {
     }
   });
 
-  it("the page renders one card per group, with no unresolved i18n keys", async () => {
-    const { container } = render(withIntl(<FeatureFlagsPage />));
-    await screen.findByRole("switch", { name: /Template engine/i });
+  it.each(["en", "fr"] as const)(
+    "renders every group with no unresolved i18n key (%s)",
+    async (locale) => {
+      const { container } = render(withIntl(<FeatureFlagsPage />, locale));
+      await screen.findAllByRole("switch");
 
-    // A missing key renders as the literal path — the failure mode this
-    // whole guard exists for.
-    expect(container.textContent).not.toMatch(/FeatureFlags\./);
-  });
+      // One switch per flag across all groups — proves every group actually
+      // rendered, rather than assuming it from the catalog check above.
+      const switches = screen.getAllByRole("switch");
+      expect(switches).toHaveLength(
+        FLAG_GROUPS.reduce((n, g) => n + g.flags.length, 0),
+      );
+
+      // A missing key renders as the literal path — the failure mode this
+      // whole guard exists for. Scanned in BOTH locales: an EN-only scan
+      // would let an FR-only gap ship.
+      expect(container.textContent).not.toMatch(/FeatureFlags\./);
+    },
+  );
 });

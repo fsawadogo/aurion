@@ -41,10 +41,16 @@ function ToggleSwitch({
   enabled,
   onChange,
   ariaLabel,
+  describedBy,
 }: {
   enabled: boolean;
   onChange: () => void;
   ariaLabel: string;
+  /** Id of the flag's description paragraph. Without it a screen-reader user
+   *  hears only "Template-aimed capture, switch, off" and never the caveat
+   *  that the feature is unproven — the whole warning would be visual-only,
+   *  on precisely the toggles where the warning is the point. */
+  describedBy?: string;
 }) {
   return (
     <button
@@ -52,6 +58,7 @@ function ToggleSwitch({
       role="switch"
       aria-checked={enabled}
       aria-label={ariaLabel}
+      aria-describedby={describedBy}
       onClick={onChange}
       className={
         "relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full " +
@@ -212,7 +219,10 @@ export default function FeatureFlagsPage() {
                           <p className="text-aurion-body font-semibold text-navy-800">
                             {name}
                           </p>
-                          <p className="mt-1 text-aurion-caption text-navy-500">
+                          <p
+                            id={`flag-desc-${key}`}
+                            className="mt-1 text-aurion-caption text-navy-500"
+                          >
                             {description}
                           </p>
                         </div>
@@ -228,6 +238,7 @@ export default function FeatureFlagsPage() {
                             enabled={enabled}
                             onChange={() => toggle(key)}
                             ariaLabel={name}
+                            describedBy={`flag-desc-${key}`}
                           />
                         </div>
                       </li>

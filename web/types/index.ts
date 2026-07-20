@@ -540,6 +540,13 @@ export interface FeatureFlags {
   // note-review "Fix this note" panel. Portal toggles; both ship dark.
   template_authoring_chat_enabled: boolean;
   note_review_chat_enabled: boolean;
+  // Cross-clinician Patient Chart. Server-authoritative, not a portal toggle,
+  // but listed for the field-for-field parity this block claims — it was the
+  // one field short of the backend response. `save()` spreads the whole draft
+  // so the key round-trips at runtime today regardless; declaring it keeps any
+  // future typed pick/parse from silently dropping it, which would default it
+  // to False server-side and dark the feature on an unrelated flag save.
+  cross_clinician_chart_enabled: boolean;
 }
 
 export interface UpdateFeatureFlagsResponse {
