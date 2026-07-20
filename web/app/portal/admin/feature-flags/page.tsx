@@ -33,55 +33,7 @@ import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import PageHeader from "@/components/portal/PageHeader";
 import { getFeatureFlags, updateFeatureFlags, humanizeError} from "@/lib/api";
 import type { FeatureFlags } from "@/types";
-
-/** The flags this page mutates, grouped by where they take effect. Each group
- *  renders as its own card with a heading + hint; order = display order. The
- *  `titleKey`/`hintKey` resolve under the `FeatureFlags` i18n namespace. */
-const FLAG_GROUPS = [
-  {
-    titleKey: "sectionCards",
-    hintKey: "sectionCardsHint",
-    flags: [
-      "orders_card_enabled",
-      "coding_card_enabled",
-      "patient_summary_card_enabled",
-      "emr_writeback_card_enabled",
-    ],
-  },
-  {
-    titleKey: "aiPrompts",
-    hintKey: "aiPromptsHint",
-    flags: ["prompt_studio_enabled", "clinician_prompts_note_only"],
-  },
-  {
-    titleKey: "groundedSynthesis",
-    hintKey: "groundedSynthesisHint",
-    flags: ["grounded_synthesis_enabled"],
-  },
-  {
-    titleKey: "videoImport",
-    hintKey: "videoImportHint",
-    flags: ["multi_clip_import_enabled"],
-  },
-  {
-    titleKey: "noteOptions",
-    hintKey: "noteOptionsHint",
-    flags: ["note_options_enabled"],
-  },
-  {
-    titleKey: "chatTools",
-    hintKey: "chatToolsHint",
-    flags: ["template_authoring_chat_enabled", "note_review_chat_enabled"],
-  },
-] as const satisfies readonly {
-  titleKey: string;
-  hintKey: string;
-  flags: readonly (keyof FeatureFlags)[];
-}[];
-
-const EDITABLE_FLAGS = FLAG_GROUPS.flatMap((g) => g.flags);
-
-type EditableFlag = (typeof EDITABLE_FLAGS)[number];
+import { EDITABLE_FLAGS, FLAG_GROUPS, type EditableFlag } from "./flagGroups";
 
 /** Mirror Theme.swift's toggle visual rhythm — gold rail when ON, neutral
  *  when OFF, gentle ease transition that matches AurionAnimation.spring. */

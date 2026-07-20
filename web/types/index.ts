@@ -522,6 +522,11 @@ export interface FeatureFlags {
   // v3.2 Grounded Synthesis Mode (#552) — gates cited A&P synthesis. Dark/OFF
   // until clinical + regulatory sign-off (#551).
   grounded_synthesis_enabled: boolean;
+  // Cohort 7 template engine (#664) — gates the template aiming frame capture
+  // at the note section it feeds. Dark/OFF until an eval receipt shows the
+  // notes actually improve; "flag OFF is byte-identical" only proves nothing
+  // broke.
+  template_engine_enabled: boolean;
   // Web-portal workspace tool — gates the Prompt Studio admin surface.
   prompt_studio_enabled: boolean;
   // Prompt Studio role allowlist. Server-authoritative (AppConfig-only, not a
