@@ -137,24 +137,100 @@ async def test_lookup_failure_degrades_without_raising():
 
 
 @pytest.mark.asyncio
-async def test_accepts_the_session_row_shape_stage2_actually_has():
+async def test_accepts_a_real_session_model_row():
     """Stage 2 will call this with the ORM `SessionModel` row it already loads
-    for the evidence mode (`api/v1/vision.py`), so the resolver must work off
-    exactly that shape — `specialty` + the two pin columns — and nothing else.
+    for the evidence mode (`api/v1/vision.py`), so the resolver is exercised
+    against a REAL `SessionModel` — not a namespace that merely resembles one.
 
-    Pinned here because TE-3 is what wires the call; if the resolver ever grew
-    a dependency on a field Stage 2 doesn't have, TE-3 would fail at runtime
-    rather than at review.
+    Uses the actual ORM class (no DB needed to construct it) so that renaming
+    a column breaks this test instead of breaking TE-3 at runtime.
     """
-    session = _session(specialty="musculoskeletal", template_key="musculoskeletal")
+    from app.core.models import SessionModel
+
+    session = SessionModel(
+        specialty="orthopedic_surgery",
+        template_key="musculoskeletal",
+        custom_template_id=None,
+    )
 
     resolved = await resolve_session_template(session, AsyncMock())
 
+    # The pin wins over the specialty — on the real ORM shape.
     assert resolved.key == "musculoskeletal"
-    # No attribute beyond specialty + the two pin fields was required.
-    assert set(vars(session)) == {
-        "id",
-        "specialty",
-        "template_key",
-        "custom_template_id",
-    }
+
+
+# ── The pin must track the note that actually exists ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_regenerating_with_a_new_template_repins_the_session():
+    """The resolver promises "the template the CURRENT note was built with",
+    and that promise only holds if every note-writing path keeps the pin
+    honest. `regenerate_note` is the one that can change it.
+
+    Reachable today: the shipped note-review screen has a template switcher
+    (`NoteReviewClient` → `regenerateNote`). Before this was fixed, switching
+    template rebuilt the note under the new template but left the session
+    pinned to the CREATE-time one — so Stage 2 would aim frame captioning at
+    sections the live note no longer has. That is precisely the Stage-1/
+    Stage-2 divergence TE-2 exists to prevent, arriving through a side door.
+    """
+    from app.api.v1.sessions import RegenerateNoteRequest, regenerate_note
+    from app.core.types import Note, Transcript
+
+    sid = uuid.uuid4()
+    session = SimpleNamespace(
+        id=sid,
+        specialty="plastic_surgery",
+        output_language="en",
+        encounter_context=None,
+        template_key=None,          # unpinned at create → specialty default
+        custom_template_id=None,
+    )
+    transcript = Transcript(session_id=str(sid), provider_used="whisper", segments=[])
+
+    db = AsyncMock()
+    db.get = AsyncMock(return_value=SimpleNamespace(prompt_testing_enabled=True))
+    result = SimpleNamespace(
+        scalar_one_or_none=lambda: SimpleNamespace(
+            transcript_json=transcript.model_dump_json()
+        )
+    )
+    db.execute = AsyncMock(return_value=result)
+
+    new_note = Note(
+        session_id=str(sid),
+        stage=1,
+        version=2,
+        provider_used="anthropic",
+        specialty="plastic_surgery",
+    )
+
+    with (
+        patch(
+            "app.api.v1.sessions.get_owned_session_or_404",
+            AsyncMock(return_value=session),
+        ),
+        patch(
+            "app.api.v1.sessions.get_latest_note", AsyncMock(return_value=None)
+        ),
+        patch("app.api.v1.sessions.write_audit", AsyncMock()),
+        patch(
+            "app.api.v1.sessions.generate_stage1_note",
+            AsyncMock(return_value=new_note),
+        ),
+    ):
+        await regenerate_note(
+            sid,
+            RegenerateNoteRequest(template_key="orthopedic_surgery"),
+            SimpleNamespace(user_id=uuid.uuid4(), role=None, email="x@x.com"),
+            db,
+        )
+
+    # The session now names the template the LATEST note was built with…
+    assert session.template_key == "orthopedic_surgery"
+    # …so the resolver Stage 2 uses agrees with reality, not the create-time
+    # specialty default.
+    resolved = await resolve_session_template(session, AsyncMock())
+    assert resolved.key == "orthopedic_surgery"
+    assert resolved.key != "plastic_surgery"

@@ -778,6 +778,18 @@ async def regenerate_note(
     custom_template_id = body.custom_template_id
     if template_key is None and custom_template_id is None:
         template_key, custom_template_id = stored_template_pin(session)
+    else:
+        # The physician switched template — persist it so the session's pin
+        # keeps naming the template the LATEST note was built with.
+        #
+        # Without this the pin goes stale the moment anyone uses the note
+        # review screen's template switcher: a later re-run that names no
+        # template would silently revert to the create-time template, and any
+        # downstream stage that trusts the pin (Stage 2 vision, TE-2 onward)
+        # would aim at sections the live note no longer has. Mirrors the
+        # encounter_context write-back above; committed in the same unit.
+        session.template_key = template_key
+        session.custom_template_id = custom_template_id
 
     try:
         note = await generate_stage1_note(
