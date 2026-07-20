@@ -587,6 +587,8 @@
     "aiPromptsHint": "Contrôles d’administration de l’expérience des invites IA — Studio d’invites et ce que voient les cliniciens. Activez ici ; l’accès reste limité par rôle. Les changements sont appliqués dans ~30 secondes.",
     "groundedSynthesis": "Synthèse fondée (v3.2)",
     "groundedSynthesisHint": "Permet à la note de synthétiser une évaluation et un plan cités à partir des éléments captés, au lieu d’une simple description. DÉSACTIVÉ par défaut — à laisser désactivé jusqu’à l’approbation clinique et réglementaire (#551). Même activé, chaque énoncé doit citer sa source. Les changements sont appliqués dans ~30 secondes.",
+    "templateEngine": "Moteur de modèles",
+    "templateEngineHint": "Fait en sorte que le modèle de note régisse aussi les éléments visuels, et non seulement la transcription : chaque image ou clip est capté pour la section de note qu’il alimente, de sorte qu’il produise une observation pertinente plutôt qu’une description physique générique. DÉSACTIVÉ par défaut — à n’activer qu’une fois que le rapport d’évaluation a démontré que les notes s’améliorent. Le mode descriptif n’est pas affecté ; le texte du modèle est filtré pour la sécurité dans les deux cas. Les changements sont appliqués dans ~30 secondes.",
     "videoImport": "Import vidéo",
     "videoImportHint": "Contrôles de l’expérience d’import vidéo. Les changements sont appliqués dans ~30 secondes.",
     "noteOptions": "Options de note",
@@ -619,6 +621,10 @@
       "grounded_synthesis_enabled": {
         "name": "Synthèse fondée",
         "description": "Générer une évaluation et un plan synthétisés et entièrement cités (chaque énoncé traçable à sa source) au lieu d’une simple description. À laisser DÉSACTIVÉ jusqu’à l’approbation clinique et réglementaire."
+      },
+      "template_engine_enabled": {
+        "name": "Capture orientée par le modèle",
+        "description": "Permet au modèle de note d’orienter la capture des éléments visuels : l’IA de vision sait quelle section de note l’image ou le clip alimente et ce que cette section consigne, au lieu de décrire de façon générique. Non éprouvé : nous avons seulement vérifié que DÉSACTIVÉ est identique à l’octet près et qu’un modèle hostile ne peut pas s’échapper, pas que les notes s’améliorent. À laisser DÉSACTIVÉ tant que le rapport d’évaluation n’a pas démontré que les notes s’améliorent."
       },
       "multi_clip_import_enabled": {
         "name": "Import multi-clips",

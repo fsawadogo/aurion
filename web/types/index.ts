@@ -522,6 +522,11 @@ export interface FeatureFlags {
   // v3.2 Grounded Synthesis Mode (#552) — gates cited A&P synthesis. Dark/OFF
   // until clinical + regulatory sign-off (#551).
   grounded_synthesis_enabled: boolean;
+  // Cohort 7 template engine (#664) — gates the template aiming frame capture
+  // at the note section it feeds. Dark/OFF until an eval receipt shows the
+  // notes actually improve; "flag OFF is byte-identical" only proves nothing
+  // broke.
+  template_engine_enabled: boolean;
   // Web-portal workspace tool — gates the Prompt Studio admin surface.
   prompt_studio_enabled: boolean;
   // Prompt Studio role allowlist. Server-authoritative (AppConfig-only, not a
@@ -535,6 +540,13 @@ export interface FeatureFlags {
   // note-review "Fix this note" panel. Portal toggles; both ship dark.
   template_authoring_chat_enabled: boolean;
   note_review_chat_enabled: boolean;
+  // Cross-clinician Patient Chart. Server-authoritative, not a portal toggle,
+  // but listed for the field-for-field parity this block claims — it was the
+  // one field short of the backend response. `save()` spreads the whole draft
+  // so the key round-trips at runtime today regardless; declaring it keeps any
+  // future typed pick/parse from silently dropping it, which would default it
+  // to False server-side and dark the feature on an unrelated flag save.
+  cross_clinician_chart_enabled: boolean;
 }
 
 export interface UpdateFeatureFlagsResponse {

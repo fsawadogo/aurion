@@ -587,6 +587,8 @@
     "aiPromptsHint": "Admin controls for the AI Prompts experience — Prompt Studio and what clinicians see. Toggle here; access stays role-gated. Changes apply within ~30 seconds.",
     "groundedSynthesis": "Grounded Synthesis (v3.2)",
     "groundedSynthesisHint": "Lets the note synthesize a cited Assessment & Plan from the captured findings instead of describe-only. OFF by default — keep it off until clinical + regulatory sign-off (#551). Even when on, every statement must cite its source. Changes apply within ~30 seconds.",
+    "templateEngine": "Template engine",
+    "templateEngineHint": "Makes the template govern the visual evidence as well as the transcript: each frame or clip is captured for the note section it feeds, so it produces a relevant observation instead of a generic physical description. OFF by default — flip it only after the eval receipt shows notes actually improve. Descriptive mode is unaffected; template text is safety-screened either way. Changes apply within ~30 seconds.",
     "videoImport": "Video import",
     "videoImportHint": "Controls for the video-import upload experience. Changes apply within ~30 seconds.",
     "noteOptions": "Note options",
@@ -619,6 +621,10 @@
       "grounded_synthesis_enabled": {
         "name": "Grounded synthesis",
         "description": "Generate a synthesized, fully-cited Assessment & Plan (every statement traceable to its source) instead of describe-only. Leave OFF until clinical + regulatory sign-off."
+      },
+      "template_engine_enabled": {
+        "name": "Template-aimed capture",
+        "description": "Let the template steer how visual evidence is captured — the vision model is told which note section a frame or clip feeds and what that section records, instead of describing generically. Unproven: we have verified only that OFF is byte-identical and that hostile templates cannot break out, not that notes get better. Leave OFF until the eval receipt shows notes actually improve."
       },
       "multi_clip_import_enabled": {
         "name": "Multi-clip import",
