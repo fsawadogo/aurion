@@ -24,6 +24,7 @@ from app.core.database import get_db
 from app.core.models import SessionModel, TranscriptModel
 from app.core.types import Note, SessionState, Transcript
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.config.appconfig_client import get_config
 from app.modules.config.schema import VisualEvidenceMode
 from app.modules.note_gen.service import (
     create_note_version,
@@ -203,9 +204,15 @@ async def run_stage2_vision(
         # the session's stored PIN so Stage 2 uses the SAME template Stage 1
         # did. `None` session_row (scalar_one_or_none) degrades to today's
         # template-blind behaviour rather than failing enrichment.
+        #
+        # Flag-checked HERE, not just at composition: a dark path must stay
+        # dark end-to-end. Resolving unconditionally would add a DB round-trip
+        # (plus a custom_templates load for pinned sessions) and a new failure
+        # surface to every Stage 2 run while the engine is supposedly off.
         template=(
             await resolve_session_template(session_row, db)
             if session_row is not None
+            and get_config().feature_flags.template_engine_enabled
             else None
         ),
         note=note,

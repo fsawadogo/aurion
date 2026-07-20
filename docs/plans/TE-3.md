@@ -70,7 +70,14 @@ relevant is visible, say so — never infer, diagnose, or fill a gap.
 - **Changing merge or routing behaviour** — TE-4. TE-3 only *reads* the predicted section to aim the prompt; the hardcoded fallback list stays until TE-4 replaces it.
 - Formatting the merged claim text (still `caption.visual_description` verbatim after this slice).
 - Multi-source frame+transcript fusion — grounded, GS-9, designed-for only.
-- The web control for the flag (admin Feature Flags page already renders flags generically).
+- **The portal toggle for the flag.** My original rationale here was *factually
+  wrong* — the admin Feature Flags page does **not** render flags generically;
+  `web/app/portal/admin/feature-flags/page.tsx` is a hardcoded `FLAG_GROUPS`
+  array, and the flag is also absent from `web/types` and the en/fr messages.
+  So `template_engine_enabled` currently needs a direct AppConfig write. Left
+  out of this backend slice deliberately, but it **must** land before the
+  rollout's "flip it in dev" step — otherwise nobody can turn the engine on.
+  Tracked as **TE-3b** (web, S).
 
 ## Test plan (executable)
 
@@ -79,6 +86,40 @@ relevant is visible, say so — never infer, diagnose, or fill a gap.
 3. `cd backend && .venv/Scripts/python.exe -m ruff check app/ tests/` → clean
 4. `docker compose ... up -d && curl -fs localhost:8080/health` → 200
 5. `git diff --stat main...HEAD -- ios/ web/` → empty
+
+## Review findings — two injection vectors the plan missed (fixed)
+
+An adversarial review found that the "sanitize + fence" design as planned was
+**not sufficient**, in two ways the banlist could never cover. Both reached a
+`NoteClaim` and therefore a patient's chart, and both are fixed.
+
+**1. `title` was interpolated with zero validation.** The plan screened only
+`description`. But the title is authored in the same editor, has no
+`max_length`, and on the custom-template **update** path skips the create-time
+section caps entirely (`_validate_custom_template_fields(..., check_section_caps=False)`).
+A title alone could carry `"you may diagnose"` into the prompt — and via admin
+shared templates it would reach every clinician in the org. Now flattened **and**
+screened, falling back to the section id (a code identifier) when it fails.
+
+**2. The fence delimiter was forgeable.** `validate_specialty_guidance` is a
+lowercase substring scan with no newline or delimiter handling. A description
+containing a `--- END SECTION FOCUS ---` line followed by a forged
+higher-priority block matched **no** banned phrase yet produced a top-level
+block structurally indistinguishable from an operator-authored one. **No
+banlist entry can fix that class** — it is structural.
+
+Fixed with `_prompt_safe_fragment`: **flatten structure before judging
+content.** Whitespace runs (newlines included) collapse to a single space so a
+forged block cannot occupy its own line; runs of 2+ hyphens are dropped so the
+delimiter is unforgeable; a hard length cap bounds per-frame token cost.
+Applied to title and description alike.
+
+Also fixed from the same review: the template was resolved on **every** Stage 2
+run regardless of the flag (a dark path must stay dark end-to-end — it added a
+DB round-trip and a failure surface); clips were told *"This frame"*, undoing a
+deliberate wording choice in the vision prompts; and two ACs cited tests that
+did not exist while the AC-3 test asserted on a string the test itself built
+rather than the production composition.
 
 ## Known limit of the safety screen (found while testing, recorded not hidden)
 
