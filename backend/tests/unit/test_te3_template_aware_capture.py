@@ -172,7 +172,7 @@ def test_block_is_self_declaring_subordinate():
 
     assert block is not None
     assert "subordinate to the rules above" in block
-    assert "never infer, diagnose, or fill a gap" in block
+    assert "Never infer, diagnose, or fill a gap" in block
     # It must never carry its own copy of the base rules — it is additive.
     assert VISION_SYSTEM_PROMPT not in block
 
@@ -268,7 +268,7 @@ def test_known_limit_paraphrase_survives_the_banlist_but_stays_subordinated():
     assert block is not None  # the screen did NOT catch it — documented limit
     # …but the fence's own trailing prohibition still follows it.
     assert block.index("Assess whether") < block.index(
-        "never infer, diagnose, or fill a gap"
+        "Never infer, diagnose, or fill a gap"
     )
 
 
@@ -668,7 +668,10 @@ def _stage2_harness(monkeypatch, *, session_row, flag_on, resolver):
     )
     monkeypatch.setattr(route, "assemble_prompt", lambda *_a, **_k: _async("PROMPT"))
     monkeypatch.setattr(route, "reconcile_captions", lambda *_a, **_k: _async([]))
-    monkeypatch.setattr(route, "merge_visual_citations", lambda note, _c: note)
+    # TE-4 gave merge a `template` arg — the same one that aimed capture.
+    monkeypatch.setattr(
+        route, "merge_visual_citations", lambda note, _c, _t=None, _a=None: note
+    )
     monkeypatch.setattr(route, "create_note_version", _noop_async)
     monkeypatch.setattr(route, "write_audit", _noop_async)
     monkeypatch.setattr(route, "record_clip_metrics", _noop_async)
