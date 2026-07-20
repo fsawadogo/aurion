@@ -1,5 +1,5 @@
 {
-  "backend": {"task_id": "TE-2", "branch": "lane-backend/te-2-template-into-stage2", "pr": null, "started_at": "2026-07-17T20:00:00Z"},
+  "backend": {"task_id": "TE-3", "branch": "lane-backend/te-3-template-aware-capture", "pr": null, "started_at": "2026-07-20T13:00:00Z"},
   "web": {"task_id": null, "branch": null, "pr": null, "started_at": null},
   "ios": {"task_id": null, "branch": null, "pr": null, "started_at": null}
 }
