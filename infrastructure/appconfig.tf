@@ -257,6 +257,11 @@ resource "aws_appconfig_configuration_profile" "main" {
             # backend Pydantic schema defaults it false (mode stays dark until
             # GS-9 sign-off).
             grounded_synthesis_enabled = { type = "boolean" }
+            # Template Engine · generation core (Cohort 7). Same reason as
+            # above: the backend dumps the full FeatureFlagsConfig on save and
+            # additionalProperties = false rejects unknown keys. NOT in
+            # `required` so older hosted documents keep validating.
+            template_engine_enabled = { type = "boolean" }
             # On-device visual measurement gate (#63). Had drifted out of this
             # validator — with additionalProperties = false that rejected EVERY
             # feature-flags hosted-version write (the backend publishes the full

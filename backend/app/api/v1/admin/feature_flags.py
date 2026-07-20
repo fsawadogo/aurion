@@ -99,6 +99,11 @@ class FeatureFlagsResponse(BaseModel):
     # safe OFF value rather than breaking the save. Surfaced so the portal can
     # flip it once GS-9 sign-off lands.
     grounded_synthesis_enabled: bool = False
+    # Template Engine · generation core (Cohort 7, TE-3+). Defaulted (like
+    # grounded_synthesis_enabled) so a save from a portal build predating this
+    # field can't 422, and a missing field resolves to the safe OFF value
+    # while the engine is dark.
+    template_engine_enabled: bool = False
     prompt_studio_enabled: bool
     prompt_studio_roles: list[str]
     clinician_prompts_note_only: bool
@@ -210,6 +215,7 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
             cfg_feature_flags.specialty_style_in_prompt_enabled
         ),
         grounded_synthesis_enabled=cfg_feature_flags.grounded_synthesis_enabled,
+        template_engine_enabled=cfg_feature_flags.template_engine_enabled,
         prompt_studio_enabled=cfg_feature_flags.prompt_studio_enabled,
         # Copy the list so the response never aliases the live config's.
         prompt_studio_roles=list(cfg_feature_flags.prompt_studio_roles),

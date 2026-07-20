@@ -22,12 +22,14 @@ from app.api.v1._helpers import get_owned_session_or_404, require_state, write_a
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import SessionModel, TranscriptModel
-from app.core.types import Note, SessionState, Transcript
+from app.core.types import Note, SessionState, Template, Transcript
 from app.modules.auth.service import CurrentUser, get_current_user
+from app.modules.config.appconfig_client import get_config
 from app.modules.config.schema import VisualEvidenceMode
 from app.modules.note_gen.service import (
     create_note_version,
     get_latest_note,
+    resolve_session_template,
 )
 from app.modules.prompts import assemble_prompt
 from app.modules.vision.clip_metrics import ClipTelemetry, record_clip_metrics
@@ -187,6 +189,35 @@ async def run_stage2_vision(
         if clinician_id is not None
         else None
     )
+    # TE-3: the template + note let captioning aim at the section each frame
+    # will feed, instead of describing generically. Resolved from the session's
+    # stored PIN so Stage 2 uses the SAME template Stage 1 did.
+    #
+    # Resolved ONCE, here, for two reasons:
+    #
+    #   * FAIL SAFE. Everything else in TE-3 degrades to None; this is the only
+    #     step that can raise. `resolve_session_template` reaches into
+    #     custom_templates (a table Stage 2 never touched before TE-3) and
+    #     `get_template` raises ValueError when a key resolves to nothing. An
+    #     escape here fails the whole Stage 2 job and fires a CRITICAL alert —
+    #     turning "your template guidance was unavailable" into "your note
+    #     didn't generate". A bad template must never block a physician.
+    #   * ONE CONFIG SNAPSHOT PER RUN. get_config() is a 30s poller, and Stage
+    #     2's SLA is under 5 minutes, so a mid-run flip is reachable. Reading
+    #     the flag per frame would let one note contain both aimed and unaimed
+    #     captions. Deciding once keeps a run internally consistent.
+    template_for_capture: Template | None = None
+    if session_row is not None and get_config().feature_flags.template_engine_enabled:
+        try:
+            template_for_capture = await resolve_session_template(session_row, db)
+        except Exception:
+            # PHI-safe: session id only, no template content.
+            logger.warning(
+                "Template resolution failed for session=%s; captioning with "
+                "the base prompt", session_id, exc_info=True,
+            )
+            template_for_capture = None
+
     clip_telemetry: list[ClipTelemetry] = []
     captions_raw = await caption_visual_evidence(
         evidence=evidence_items,
@@ -197,6 +228,8 @@ async def run_stage2_vision(
         # #324: anchor clips against the FULL transcript (incidental speech
         # near a cadence clip), not just spoken triggers.
         anchor_segments=transcript.segments,
+        template=template_for_capture,
+        note=note,
     )
 
     # Drop low-confidence captions before conflict classification.

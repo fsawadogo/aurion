@@ -423,6 +423,57 @@ def validate_specialty_guidance(text: str) -> ValidationResult:
     )
 
 
+def validate_vision_guidance(text: str) -> ValidationResult:
+    """Safety check for clinician text bound for a VISION prompt.
+
+    Same gates as :func:`validate_specialty_guidance`, with one deliberate
+    difference: the banlist is pinned to :data:`BANNED_PHRASES` — the
+    descriptive set — and does **not** follow
+    :func:`_active_safety_sets`.
+
+    Why this path does not get the grounded relaxation. Grounded Synthesis
+    Mode drops 13 phrases, every clinical role-flip among them (``you may
+    diagnose``, ``interpret the findings``, ``recommend treatment``). That is
+    sound for note generation, because a synthesized claim there must still
+    survive the critique pass and the citation validators — an ungrounded
+    statement gets dropped downstream. **A vision caption has no such
+    backstop**: its text becomes a ``NoteClaim`` directly. Inheriting the
+    relaxation would mean that flipping ``grounded_synthesis_enabled`` also
+    silently unlocks "you may diagnose" in a template section description,
+    on the one path where nothing downstream can catch it.
+
+    So the descriptive boundary is enforced here unconditionally. Grounded
+    mode changes what the NOTE may conclude; it does not change what a
+    template author may instruct a vision model to do.
+    """
+    stripped = text.strip() if text else ""
+    if not stripped:
+        return ValidationResult(
+            code=ValidationCode.EMPTY,
+            message="Guidance is empty.",
+        )
+    if len(stripped) > SPECIALTY_GUIDANCE_MAX_LENGTH:
+        return ValidationResult(
+            code=ValidationCode.TOO_LONG,
+            message=(
+                f"Guidance is {len(stripped)} characters — the maximum is "
+                f"{SPECIALTY_GUIDANCE_MAX_LENGTH}."
+            ),
+        )
+    lowered = stripped.lower()
+    for phrase in BANNED_PHRASES:
+        if phrase in lowered:
+            return ValidationResult(
+                code=ValidationCode.BANNED_PHRASE,
+                message=(
+                    "Guidance contains a phrase that would disable the "
+                    "descriptive-mode boundary on the vision path."
+                ),
+                matched_phrase=phrase,
+            )
+    return ValidationResult(code=ValidationCode.OK, message="Guidance accepted.")
+
+
 def _anchor_failure_message(group_idx: int, group: tuple[str, ...]) -> str:
     """Build a human-readable failure message naming the missing group.
 
