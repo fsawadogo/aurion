@@ -169,7 +169,11 @@ describe("NoteReview — actions while the note is being replaced", () => {
     render(withIntl(<NoteReviewPage />));
     await waitFor(() => expect(getNoteDetail).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole("button", { name: /Français|French|FR/i }));
+    // findByRole, not getByRole: the toolbar renders after getNoteDetail
+    // resolves + a re-render, so a synchronous query raced the mount in CI.
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Français|French|FR/i }),
+    );
     await waitFor(() => expect(regenerateNote).toHaveBeenCalled());
 
     // AC-1 — the bug: every note-reading control was live during regeneration.
@@ -194,7 +198,11 @@ describe("NoteReview — actions while the note is being replaced", () => {
     render(withIntl(<NoteReviewPage />));
     await waitFor(() => expect(getNoteDetail).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole("button", { name: /Français|French|FR/i }));
+    // findByRole, not getByRole: the toolbar renders after getNoteDetail
+    // resolves + a re-render, so a synchronous query raced the mount in CI.
+    fireEvent.click(
+      await screen.findByRole("button", { name: /Français|French|FR/i }),
+    );
 
     // AC-3 + AC-4 — a sighted user sees motion + dimming; a screen-reader
     // user gets aria-busy and a polite live region. Before this, both got a
