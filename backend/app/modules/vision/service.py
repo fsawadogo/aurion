@@ -578,6 +578,7 @@ async def caption_visual_evidence(
             note,
             anchor.id,
             evidence_kind="clip" if kind == "clip" else "frame",
+            anchor_text=anchor.text,
         )
         if focus is not None:
             system_for_kind = (system_for_kind or VISION_SYSTEM_PROMPT) + focus
@@ -876,6 +877,7 @@ def merge_visual_citations(
     note: Note,
     captions: list[FrameCaption],
     template: Optional[Template] = None,
+    anchor_texts: Optional[dict[str, str]] = None,
 ) -> Note:
     """Merge frame citations into a Stage 1 note to produce Stage 2.
 
@@ -883,34 +885,49 @@ def merge_visual_citations(
     - REPEATS: discard silently, audio stands alone
     - CONFLICTS: surface both, flag section for mandatory physician review
 
-    **Routing happens before ANY mutation** (TE-4). Tier 3 of
-    ``_find_target_section`` reads ``section.status``, and this function flips
-    ``pending_video`` → ``populated`` as it goes — so routing inside the apply
-    loop made the second caption see a different note than TE-3's capture-time
-    prediction did, and REPEATS being dropped in between shifted which caption
-    consumed which section. On a custom template (ids outside the legacy visual
-    tuple) two frames were captured under one section's guidance and filed
-    under two.
+    **With the engine on, routing happens before ANY mutation** (TE-4). Tier 4
+    of ``_find_target_section`` reads ``section.status``, and this function
+    flips ``pending_video`` → ``populated`` as it goes — so routing inside the
+    apply loop made the second caption see a different note than TE-3's
+    capture-time prediction did. On a custom template two frames were captured
+    under one section's guidance and filed under two.
 
     Capture-time prediction runs on this same ``Note`` object, and captioning
-    does not mutate it. So routing every caption against the unmutated note
-    makes placement identical to prediction **by construction**. That is the
-    whole fix; it needs no new state and no field on ``FrameCaption``.
+    does not mutate it, so routing everything up front makes placement match
+    prediction — provided both calls pass the same ``template`` and
+    ``anchor_texts``, which is the other half of the fix.
 
-    ``template`` is ``None`` when the engine is off, which keeps the legacy
-    section tuple and today's behaviour byte-identical.
+    **With the engine off the legacy in-loop routing is preserved**, because
+    hoisting is itself an output change and OFF must stay byte-identical.
     """
     note.stage = 2
+    anchor_texts = anchor_texts or {}
+    mergeable = [c for c in captions if c.integration_status != "REPEATS"]
 
-    # Route everything first, against the pristine note. REPEATS are dropped
-    # here so they cannot shift anyone else's tier-3 answer.
-    routed = [
-        (caption, _find_target_section(note, caption.audio_anchor_id, template))
-        for caption in captions
-        if caption.integration_status != "REPEATS"
-    ]
+    def _route(caption: FrameCaption) -> Optional[NoteSection]:
+        return _find_target_section(
+            note,
+            caption.audio_anchor_id,
+            template,
+            anchor_texts.get(caption.audio_anchor_id or ""),
+        )
+
+    # Route everything against the PRISTINE note, before any mutation — but
+    # only when the engine is on. Hoisting is itself an output change (tier 4
+    # reads `status`, which the apply loop flips), and with the engine off the
+    # epic promises byte-identical MERGED OUTPUT, not just identical prompts.
+    # Review measured the difference: on a note whose sections are all
+    # pending_video, hoisting both keeps a claim main dropped and moves
+    # another between sections.
+    routed: list[tuple[FrameCaption, Optional[NoteSection]]]
+    if template is not None:
+        routed = [(c, _route(c)) for c in mergeable]
+    else:
+        routed = [(c, None) for c in mergeable]
 
     for caption, target_section in routed:
+        if template is None:
+            target_section = _route(caption)  # legacy: route inside the loop
         if target_section is None:
             continue
 
@@ -1041,6 +1058,7 @@ def _section_focus_block(
     audio_anchor_id: Optional[str],
     *,
     evidence_kind: str = "frame",
+    anchor_text: Optional[str] = None,
 ) -> Optional[str]:
     """The fenced SECTION FOCUS block for one frame's capture prompt (TE-3).
 
@@ -1079,7 +1097,10 @@ def _section_focus_block(
     if template is None or note is None:
         return None
 
-    section = _find_target_section(note, audio_anchor_id)
+    # Same arguments the merge will pass. Omitting `template`/`anchor_text`
+    # here would aim the capture with one router and file the result with
+    # another — the divergence TE-4 exists to close, reopened one level up.
+    section = _find_target_section(note, audio_anchor_id, template, anchor_text)
     if section is None:
         return None
 
@@ -1117,8 +1138,10 @@ def _section_focus_block(
         "\n\n--- SECTION FOCUS (subordinate to the rules above) ---\n"
         f'This {evidence_kind} is being captured for the note section "{title}".\n'
         f"That section records: {guidance}\n"
-        "Describe only what is literally visible that bears on it. If nothing "
-        "relevant is visible, say so — never infer, diagnose, or fill a gap.\n"
+        "Describe only what is literally visible that bears on it. Never "
+        "infer, diagnose, or fill a gap.\n"
+        "If nothing relevant to this section is visible, say so AND report "
+        'confidence "low" — do not describe the scene instead.\n'
         "--- END SECTION FOCUS ---"
     )
 
@@ -1133,30 +1156,40 @@ _LEGACY_VISUAL_SECTIONS = (
 )
 
 
-def _template_visual_section_ids(template: Optional[Template]) -> tuple[str, ...]:
-    """Section ids the TEMPLATE declares as carrying visual evidence (TE-4).
+def _template_section_for_anchor_text(
+    template: Optional[Template], anchor_text: Optional[str]
+) -> Optional[str]:
+    """The template section whose trigger keywords the anchor text matches.
 
-    A section is visual-by-nature when its template spec gives it
-    ``visual_trigger_keywords`` (the field exists precisely to mark "look here
-    when the physician says this") or ``measurement_output_expected``. Both
-    already exist on ``TemplateSection``; the former was unused at this stage.
+    ``visual_trigger_keywords`` maps a SPOKEN PHRASE to the section that
+    should receive the resulting image — ``"looking at"``, ``"you can see"``,
+    ``"right here"``, ``"pulling up"``, alongside clinical nouns. Matching the
+    anchor's transcript text against it is what the field is for.
 
-    Empty when there is no template, which is what keeps the legacy tuple in
-    play for the flag-off path.
+    A first cut of TE-4 instead read "this section HAS keywords" as "this
+    section is a visual sink". That was flatly wrong, and review measured the
+    damage against the shipped templates: an unanchored frame would be filed
+    under ``vital_signs`` (emergency), ``past_medical_history`` (family and
+    internal medicine) or ``developmental_history`` (paediatrics), because
+    those sections happen to declare keywords like ``"diagnosed with"``.
+    Wound photos into Past Medical History. Matching the text instead keeps a
+    keyword doing the one job it was defined for.
     """
-    if template is None:
-        return ()
-    return tuple(
-        s.id
-        for s in template.sections
-        if s.visual_trigger_keywords or s.measurement_output_expected
-    )
+    if template is None or not anchor_text:
+        return None
+    haystack = anchor_text.lower()
+    for section in template.sections:
+        for keyword in section.visual_trigger_keywords:
+            if keyword and keyword.lower() in haystack:
+                return section.id
+    return None
 
 
 def _find_target_section(
     note: Note,
     audio_anchor_id: Optional[str],
     template: Optional[Template] = None,
+    anchor_text: Optional[str] = None,
 ) -> Optional[NoteSection]:
     """Find the note section that should receive this visual evidence.
 
@@ -1166,18 +1199,21 @@ def _find_target_section(
     caption through this same function. One router for both, so the
     template-aware upgrade improves prediction and placement together.
 
-    **Tier 2 is now the template's own answer** (TE-4). The hardcoded tuple
-    below only applies when no template is passed, which is also the flag-off
-    path — so a custom template's sections finally route their own frames
-    instead of falling through to a list of built-in section ids they don't use.
+    Four tiers, in order: the section holding the anchor's own claim; the
+    template section whose trigger keywords the anchor TEXT matches (TE-4);
+    the built-in visual sections; the first section still awaiting video.
 
-    **On prediction vs placement.** All three tiers are pure functions of
-    ``(note, anchor, template)``. Tier 3 reads ``status``, which the merge
-    MUTATES — so agreement depends on the caller not interleaving routing with
-    mutation. ``merge_visual_citations`` therefore routes every caption against
-    the unmutated note first and applies afterwards; see its docstring. That is
-    what makes placement identical to prediction by construction rather than by
-    luck, and it is the fix for the divergence TE-3's review recorded here.
+    **Every caller must pass the same arguments**, because the tiers are only
+    a shared answer if they are given a shared question. Prediction (TE-3,
+    ``_section_focus_block``) originally omitted ``template`` while the merge
+    passed it, which silently routed capture and placement through different
+    tiers — a wider divergence than the one TE-4 set out to close, and one
+    review caught before it shipped.
+
+    **Tier 4 reads ``status``, which the merge MUTATES.** Agreement therefore
+    also depends on the caller not interleaving routing with mutation;
+    ``merge_visual_citations`` routes every caption against the unmutated note
+    before applying any of them. See its docstring.
     """
     # First try: find a section that has the anchor segment
     for section in note.sections:
@@ -1185,12 +1221,19 @@ def _find_target_section(
             if claim.source_id == audio_anchor_id:
                 return section
 
-    # Fallback: a section that carries visual evidence. The TEMPLATE's own
-    # declaration wins; the legacy tuple applies only when there is no
-    # template (which is also the engine-off path, keeping it byte-identical).
-    visual_ids = _template_visual_section_ids(template) or _LEGACY_VISUAL_SECTIONS
+    # Second: the template's own trigger keywords, matched against what the
+    # physician actually said at this anchor.
+    keyed = _template_section_for_anchor_text(template, anchor_text)
+    if keyed is not None:
+        section = note.get_section(keyed)
+        if section is not None:
+            return section
+
+    # Third: the built-in visual sections. Reached whenever the template
+    # matched nothing — including every engine-off run, which is what keeps
+    # that path byte-identical.
     for section in note.sections:
-        if section.id in visual_ids:
+        if section.id in _LEGACY_VISUAL_SECTIONS:
             return section
 
     # Last resort: first section with pending_video status
@@ -1208,40 +1251,19 @@ def _find_target_section(
 _IMAGE_META_OPENER = re.compile(
     r"^(?:"
     r"(?:in|from)\s+(?:this|the)\s+(?:image|frame|photo|photograph|picture|video|clip|still)\s*,?\s*"
+    # NOT followed by "that": "shows that the drain is patent" scopes the
+    # claim to what one frame showed, and dropping the scope turns it into an
+    # unqualified assertion about the patient. The formatter's safety argument
+    # is "it only removes words" — but removing a QUALIFIER strengthens a
+    # claim without adding one, which is a descriptive-mode move. Leave hedged
+    # sentences alone.
     r"|(?:this|the)\s+(?:image|frame|photo|photograph|picture|video|clip|still)\s+"
-    r"(?:shows|depicts|displays|captures|contains|reveals)\s*(?:that\s+)?"
+    r"(?:shows|depicts|displays|captures|contains|reveals)\s+(?!that\b)"
     r"|(?:visible|seen|shown)\s+in\s+(?:this|the)\s+"
     r"(?:image|frame|photo|photograph|picture|video|clip|still)\s+(?:is|are)\s+"
     r")",
     re.IGNORECASE,
 )
-
-#: A caption reporting the ABSENCE of relevant evidence. TE-3's SECTION FOCUS
-#: block explicitly instructs the model to "say so" when nothing relevant is
-#: visible — so aiming the capture GUARANTEES these captions exist. Pasting
-#: them into the chart would be new clutter created by the fix for clutter.
-_NO_FINDING = re.compile(
-    r"\b(?:"
-    r"nothing\s+(?:relevant|of\s+(?:note|clinical\s+\w+)|clinically\s+\w+)"
-    r"|no\s+(?:relevant|visible|discernible|clinically\s+relevant)\s+"
-    r"(?:findings?|information|content|detail|evidence)"
-    r"|(?:is\s+)?not\s+(?:relevant|visible|discernible)"
-    r"|(?:nothing|none)\s+(?:is\s+)?visible"
-    r"|unable\s+to\s+(?:assess|determine|discern)"
-    r")\b",
-    re.IGNORECASE,
-)
-
-
-def _is_no_finding_caption(text: str) -> bool:
-    """True when the caption reports the ABSENCE of relevant evidence (TE-4).
-
-    Not evidence — the absence of it. A note claim asserts something was
-    observed; "nothing relevant is visible" asserts the opposite and belongs
-    in neither the chart nor the completeness score.
-    """
-    return bool(_NO_FINDING.search(text))
-
 
 def _format_visual_claim_text(description: str) -> str:
     """A caption rendered as a clinical observation (TE-4).
@@ -1261,10 +1283,33 @@ def _format_visual_claim_text(description: str) -> str:
     # rather than emit an empty claim.
     if not stripped:
         return text
-    text = stripped[0].upper() + stripped[1:]
-    if text[-1] not in ".?!":
+    text = _sentence_case(stripped)
+    # Sentence-ending punctuation already present in any form is left alone.
+    # An earlier version accepted only ".?!" and produced "The incision:." on
+    # a caption ending in a colon.
+    if text[-1] not in ".?!:;,":
         text += "."
     return text
+
+
+def _sentence_case(text: str) -> str:
+    """Capitalise the first letter — unless doing so would corrupt a token.
+
+    ``mg/dL`` upper-cases to ``Mg/dL``, and **Mg is magnesium**: a unit
+    silently becomes a different analyte inside a clinical note. Same class of
+    damage for ``pH`` → ``PH``, ``pRBC`` → ``PRBC``, and ``α-angle`` →
+    ``Α-angle`` (U+0391), where alpha-angle is a hip-impingement measurement
+    the orthopaedic pilot actually uses.
+
+    So capitalise only when the first token is unambiguously ordinary prose:
+    it starts with an ASCII letter and carries no interior capital of its own.
+    """
+    first = text.split(" ", 1)[0]
+    if not first[:1].isascii() or not first[:1].isalpha():
+        return text
+    if any(ch.isupper() for ch in first[1:]):
+        return text
+    return text[0].upper() + text[1:]
 
 
 def _build_visual_claim(
@@ -1311,11 +1356,6 @@ def _build_visual_claim(
                 f"{caption.conflict_detail or ''}"
             ),
         )
-
-    # A conflict is reported even when the frame shows nothing relevant — the
-    # disagreement with the audio IS the finding. Only ENRICHES is dropped.
-    if formatted and _is_no_finding_caption(caption.visual_description):
-        return None
 
     return NoteClaim(
         id=f"vclaim_{caption.frame_id}",

@@ -257,10 +257,15 @@ async def run_stage2_vision(
     # into the SESSION_STATS_RECOMPUTED audit row so dashboards can
     # tell "Stage 2 enrichment moved the needle" apart from
     # "physician edit moved the needle".
-    # TE-4: the same template that aimed capture also routes the merge, so a
-    # frame is filed under the section it was captured for. `None` (engine
-    # off) keeps the legacy hardcoded section tuple.
-    enriched = merge_visual_citations(note, captions, template_for_capture)
+    # TE-4: the merge must be given the SAME routing inputs capture was, or a
+    # frame is aimed at one section's guidance and filed under another. That
+    # means the template AND the anchor text its trigger keywords match on.
+    enriched = merge_visual_citations(
+        note,
+        captions,
+        template_for_capture,
+        {s.id: s.text for s in transcript.segments},
+    )
     enriched.session_id = str(session_id)
     enriched.stage = 2
     await create_note_version(
