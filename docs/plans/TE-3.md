@@ -51,10 +51,12 @@ relevant is visible, say so — never infer, diagnose, or fill a gap.
 - [ ] **AC-1:** flag ON — the caption system prompt contains the target section's title and its capture guidance — `test_te3_template_aware_capture.py::test_prompt_carries_section_guidance`
 - [ ] **AC-2:** **flag OFF → prompt byte-identical to today** — `::test_flag_off_prompt_byte_identical`
 - [ ] **AC-3:** the guidance is **fenced after** the base rules, never replacing them — `::test_base_rules_precede_and_survive_guidance`
-- [ ] **AC-4:** a section description containing a banned directive (e.g. *"assess whether this looks infected"*) is **dropped**, and captioning proceeds with the base prompt — `::test_banned_guidance_is_dropped_not_injected`
+- [ ] **AC-4:** a section description containing a **banlisted** directive (e.g. *"you may diagnose"*, *"recommend treatment"*) is **dropped**, and captioning proceeds with the base prompt — `::test_banned_guidance_is_dropped_not_injected`. **Corrected:** this AC originally named *"assess whether this looks infected"*, which the shipped code does **not** drop — that paraphrase is not in `BANNED_PHRASES`. The limit is pinned in `::test_known_limit_paraphrase_survives_the_banlist_but_stays_subordinated` and explained below; the AC now states what the code actually guarantees.
+- [ ] **AC-4b:** the screen does **not** follow `grounded_synthesis_enabled` — `::test_grounded_mode_does_not_unlock_diagnosis_on_the_vision_path`
 - [ ] **AC-5:** the guidance matches the **predicted target section** (a wound-context anchor yields wound-assessment guidance, not a generic section) — `::test_guidance_matches_predicted_section`
 - [ ] **AC-6:** `run_stage2_vision` resolves the template from the session row and threads it (moved from TE-2) — `::test_stage2_resolves_and_threads_template`
 - [ ] **AC-7:** `session_row is None` does not crash Stage 2 — `::test_null_session_row_degrades`
+- [ ] **AC-7b:** a template-resolution failure degrades to template-blind captioning, it does **not** fail Stage 2 — `::test_template_resolution_failure_does_not_fail_stage2`
 - [ ] **AC-8:** full `tests/unit/` green; `ruff` clean
 
 ## DRY / SOLID check
@@ -120,6 +122,97 @@ DB round-trip and a failure surface); clips were told *"This frame"*, undoing a
 deliberate wording choice in the vision prompts; and two ACs cited tests that
 did not exist while the AC-3 test asserted on a string the test itself built
 rather than the production composition.
+
+## Second review — the first fix was not enough either
+
+Two more independent reviews ran on the fix commit itself, because the review
+fixes were substantial new code that had not themselves been reviewed. That
+was the right call: **the sanitizer's own fallback reintroduced the exact
+structural forge it existed to stop.**
+
+**1. `section.id` was the hole (critical).** The first fix screened the title,
+then assigned `section.id` **raw** when it failed, on the strength of a code
+comment calling it *"a code identifier"*. It is not. `TemplateSection.id` is a
+bare `str` with no charset rule, and `_validate_custom_template_fields(...,
+check_section_caps=False)` on the **update** path returns *before* the
+per-section loop — so an id carries neither charset nor length bound. Verified:
+an id containing newlines and `---` runs emitted a fully forged top-level block.
+The same unverified-assumption pattern that caused the original bug, one layer
+down. Fixed at the class, not the instance: `_screened_fragment` is now the only
+way any clinician value reaches the prompt, fallbacks included, ending at a
+constant.
+
+**2. The sanitizer's character classes were incomplete.** Python's `\s` does not
+match zero-width characters, and `-{2,}` only ever matched U+002D. So
+`-<ZWSP>-<ZWSP>-` and `———` both sailed through, and `you may<ZWSP>diagnose`
+evaded the banlist while remaining invisible in any template editor. Now:
+invisibles → **space** (not deleted — deleting would rejoin the hyphens into a
+real fence *and* leave `you maydiagnose` unmatched; a space defangs the fence
+and reunites the phrase so the banlist fires), Unicode dashes normalise to
+ASCII, spaced hyphen runs collapse, tag-shaped runs go (Claude is XML-steered
+and `anthropic.py` is a live provider), and the title's quote delimiter is
+stripped. Legit clinical prose is untouched — `peri-wound`, `20-30 degrees`,
+`state-of-the-art`, `Lesion < 2cm` all survive byte-identical, asserted.
+
+**3. Grounded mode silently unlocked diagnosis on this path.** `validate_specialty_guidance`
+is mode-aware; with `grounded_synthesis_enabled` ON it drops **13** phrases —
+every clinical role-flip among them (`you may diagnose`, `interpret the
+findings`, `recommend treatment`). Sound for note-gen, where the critique pass
+and citation validators still catch an ungrounded claim. **Not** sound here: a
+caption becomes a `NoteClaim` directly. Flipping the grounded flag would have
+made "You may diagnose from the image" an acceptable template description on
+the one path with no backstop. New `validate_vision_guidance` pins this path to
+the descriptive banlist regardless of mode.
+
+**4. The one fail-CLOSED path.** `resolve_session_template` was awaited
+unguarded. Stage 2 has no degrading wrapper — `_run_stage2_in_background` marks
+the job FAILED and fires a CRITICAL alert — so a `ValueError` from `get_template`
+or a DB error inside `custom_templates` (a table Stage 2 never touched before
+this slice) turned *"your guidance was unavailable"* into *"your note didn't
+generate"*. Now wrapped; the plan's own "fail safe, never fail closed" rule is
+actually enforced.
+
+**5. The flag is now read once per run.** It was read per evidence item, and
+`get_config()` is a 30s poller against a <5-min Stage 2 SLA — so a mid-run flip
+could produce one note with half its captions aimed and half not. The decision
+moved to the route and `_section_focus_block` became a pure function of its
+inputs; `template is None` **is** the off switch.
+
+**6. `api/v1/vision.py` had zero test coverage**, and AC-6/AC-7 named tests that
+were never written (the earlier commit claimed this was fixed; only AC-3 was).
+The load-bearing "a dark path stays dark end-to-end" claim was entirely
+unasserted. Now four real route tests, including one proving the DB round-trip
+does not happen with the flag off.
+
+**Test-quality fixes from the same pass:** the tautological AC-3 test (which
+asserted on a string the test itself concatenated) is gone, replaced by
+properties that are actually properties of the block; the real-composition test
+now passes a physician override, because `SessionModel.clinician_id` is
+non-nullable and the previous version drove an `or VISION_SYSTEM_PROMPT`
+fallback that is **unreachable in production**; the length-cap assertion was
+loose enough to let `_FRAGMENT_MAX` regress from 600 to ~880 unnoticed; and two
+fixtures shared the string `"Wound assessment"` so a routing assertion could not
+tell correctness from coincidence.
+
+**All 11 fixes were mutation-tested** — each fix reverted in turn, confirming
+the corresponding test fails without it.
+
+## Known limit: prediction and placement can disagree (tier 3)
+
+`_find_target_section` is one router used for both prediction (TE-3) and
+placement (the merge), and tiers 1-2 genuinely agree. **Tier 3 does not.**
+`merge_visual_citations` flips its target from `pending_video` to `populated`
+as it goes, and REPEATS captions are dropped between the two calls — so on a
+custom template whose section ids fall outside the hardcoded tier-2 tuple
+(exactly the templates this epic exists for), two frames can be captured under
+one section's guidance and filed under two.
+
+A quality ceiling on TE-3, not a safety issue: guidance only aims the
+description, and the claim keeps its `source_id` either way. **TE-4 is the
+fix** — routing on the template's own sections and keywords instead of the
+hardcoded tuple. Pinned in `::test_tier3_prediction_and_placement_can_disagree`
+rather than papered over, and the docstring no longer claims consistency it
+doesn't have.
 
 ## Known limit of the safety screen (found while testing, recorded not hidden)
 

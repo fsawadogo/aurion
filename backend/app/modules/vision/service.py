@@ -931,7 +931,20 @@ def merge_visual_citations(
     return note
 
 
-_FENCE_RUN = re.compile(r"-{2,}")
+# Invisible / zero-width formatting characters. Python's ``\s`` does NOT
+# match these, so they slip through whitespace flattening untouched.
+_INVISIBLE = re.compile(r"[​-‏⁠﻿­᠎]")
+# Every Unicode character a model reads as a hyphen. ``-{2,}`` only ever
+# matched U+002D, so an em-dash fence sailed straight through.
+_DASHLIKE = re.compile(r"[‐-―−─﹘﹣－]")
+# Two or more hyphens, even when spaced apart — after invisibles become
+# spaces, ``-​-​-`` arrives here as ``- - -``.
+_FENCE_RUN = re.compile(r"(?:-[ \t]*){2,}")
+# Tag-shaped runs. Claude is XML-steered and ``providers/vision/anthropic.py``
+# is a live provider, so ``</instructions><system>`` is structure to it even
+# with no newline. Bounded length so a stray clinical ``<`` survives.
+_TAGLIKE = re.compile(r"<[^>\n]{0,80}>")
+_QUOTES = re.compile(r'["“”″]')
 _WHITESPACE_RUN = re.compile(r"\s+")
 _FRAGMENT_MAX = 600
 
@@ -951,18 +964,58 @@ def _prompt_safe_fragment(text: str, max_len: int = _FRAGMENT_MAX) -> str:
     indistinguishable from an operator-authored one, while matching no banned
     substring at all. No banlist entry can fix that class.
 
-    So structure is removed before content is judged:
-      * every whitespace run (newlines included) collapses to one space — a
-        forged block cannot occupy its own line;
-      * runs of 2+ hyphens are dropped — the fence delimiter is unforgeable;
-      * a hard length cap bounds the token cost of every frame prompt.
+    So structure is removed before content is judged. Order is load-bearing:
 
-    Applied to BOTH the section title and its description. Title is authored
-    in the same editor as description and, on the update path, skips the
-    create-time length caps entirely — so it is exactly as untrusted.
+      1. invisibles become a SPACE — not stripped. Stripping would rejoin
+         ``-<ZWSP>-<ZWSP>-`` into a real ``---``; a space defangs the fence
+         AND reunites ``you may<ZWSP>diagnose`` into a phrase the banlist
+         actually matches. Deleting them would defeat the banlist instead.
+      2. Unicode dashes normalise to ASCII so the fence rule can see them;
+      3. runs of 2+ hyphens (spaced or not) collapse — the delimiter is
+         unforgeable;
+      4. tag-shaped runs go, because Claude reads XML as structure;
+      5. double quotes go — the title is interpolated inside quotes, so a
+         quote is a delimiter in *our* template;
+      6. whitespace runs collapse to one space, so nothing can occupy its
+         own line;
+      7. a hard length cap bounds the token cost of every frame prompt.
+
+    Applied to EVERY clinician-authored value reaching the prompt — see
+    :func:`_screened_fragment`, which is the only sanctioned way in.
     """
-    flattened = _WHITESPACE_RUN.sub(" ", _FENCE_RUN.sub(" ", text)).strip()
-    return flattened[:max_len].strip()
+    flattened = _INVISIBLE.sub(" ", text)
+    flattened = _DASHLIKE.sub("-", flattened)
+    flattened = _FENCE_RUN.sub(" ", flattened)
+    flattened = _TAGLIKE.sub(" ", flattened)
+    flattened = _QUOTES.sub("", flattened)
+    return _WHITESPACE_RUN.sub(" ", flattened).strip()[:max_len].strip()
+
+
+def _screened_fragment(text: Optional[str], max_len: int) -> Optional[str]:
+    """Sanitize then screen. ``None`` unless the text is safe to interpolate.
+
+    The single gate for clinician-authored text entering a vision prompt.
+    TE-3's first cut had two interpolation sites and guarded only one — the
+    title's fallback assigned ``section.id`` raw, on the belief that a
+    section id is "a code identifier". It is not: ``TemplateSection.id`` is a
+    bare ``str`` with no charset rule, and the custom-template UPDATE path
+    skips the per-section validation loop wholesale, so it carries neither a
+    charset nor a length bound. That fallback reintroduced the exact
+    structural forge the sanitizer exists to stop.
+
+    Routing every value through one function is the fix for the *class*, not
+    just for that field.
+    """
+    if not text:
+        return None
+    fragment = _prompt_safe_fragment(text, max_len=max_len)
+    if not fragment:
+        return None
+    from app.modules.prompts.safety import ValidationCode, validate_vision_guidance
+
+    if validate_vision_guidance(fragment).code is not ValidationCode.OK:
+        return None
+    return fragment
 
 
 def _section_focus_block(
@@ -986,18 +1039,27 @@ def _section_focus_block(
     note-gen model what each section captures; this gives the vision model the
     same instruction.
 
-    **Safety.** The description is physician-authored free text, so it is
-    screened with ``validate_specialty_guidance`` — the existing
-    banlist-without-anchors gate for text layered ONTO an always-present base
-    prompt (the descriptive boundary lives in ``VISION_SYSTEM_PROMPT``, which
-    the caller keeps first and intact). Rejected guidance is DROPPED, not
+    **Safety.** Title and description are physician-authored free text, so
+    every interpolated value passes :func:`_screened_fragment` — flatten the
+    structure, then screen the content against the descriptive banlist. The
+    descriptive boundary itself lives in ``VISION_SYSTEM_PROMPT``, which the
+    caller keeps first and intact. Rejected guidance is DROPPED, not
     sanitised-and-used: captioning proceeds on the base prompt so a bad
     template description degrades quality, never blocks a physician's Stage 2.
     A hostile template may degrade style; it may never touch grounding.
+
+    The screen is :func:`validate_vision_guidance`, pinned to the descriptive
+    banlist, NOT the mode-aware ``validate_specialty_guidance``. Grounded mode
+    drops every clinical role-flip ban, which is safe for note-gen because the
+    critique pass and citation validators catch an ungrounded claim there. A
+    caption has no backstop — it becomes a ``NoteClaim`` directly.
     """
+    # No flag read here on purpose. `template_engine_enabled` is evaluated
+    # ONCE per Stage 2 run, in `run_stage2_vision`, which passes `template=None`
+    # when the engine is off — so this stays a pure function of its inputs and
+    # one note can never mix aimed and unaimed captions because a 30s config
+    # poll landed mid-run. `template is None` IS the off switch.
     if template is None or note is None:
-        return None
-    if not get_config().feature_flags.template_engine_enabled:
         return None
 
     section = _find_target_section(note, audio_anchor_id)
@@ -1008,41 +1070,28 @@ def _section_focus_block(
     spec = next((s for s in template.sections if s.id == section.id), None)
     if spec is None:
         return None
-    # Flatten STRUCTURE before judging CONTENT — see _prompt_safe_fragment.
-    guidance = _prompt_safe_fragment(spec.description or "")
-    if not guidance:
-        return None
 
-    # Lazy import — `prompts.registry` imports `vision.reconcile`, so a
-    # module-level import here risks closing that loop if either side grows a
-    # top-level dependency. Mirrors the custom_templates import inside
-    # _resolve_stage1_template.
-    from app.modules.prompts.safety import (
-        ValidationCode,
-        validate_specialty_guidance,
-    )
-
-    verdict = validate_specialty_guidance(guidance)
-    if verdict.code is not ValidationCode.OK:
-        # PHI-safe: the section id + the matched banned phrase only. The
-        # description itself is physician free text and never logged.
+    guidance = _screened_fragment(spec.description, _FRAGMENT_MAX)
+    if guidance is None:
+        # PHI-safe: the section id only. The description is physician free
+        # text and is never logged — nor is the matched phrase, which is a
+        # substring of it.
         logger.warning(
             "Template section guidance rejected for vision capture "
-            "(section=%s, reason=%s, matched=%s); captioning with the base "
-            "prompt",
+            "(section=%s); captioning with the base prompt",
             section.id,
-            verdict.code.value,
-            verdict.matched_phrase,
         )
         return None
 
-    # The title is authored in the same editor as the description and skips the
-    # create-time caps on the update path, so it is exactly as untrusted —
-    # flatten it AND screen it. Falling back to the section id (a code
-    # identifier) when it doesn't survive keeps the block useful.
-    title = _prompt_safe_fragment(spec.title or "", max_len=120)
-    if not title or validate_specialty_guidance(title).code is not ValidationCode.OK:
-        title = section.id
+    # Every interpolated value goes through the same gate, fallbacks included.
+    # `section.id` is NOT trustworthy: it is a bare `str` on TemplateSection
+    # and the custom-template update path skips per-section validation, so it
+    # carries neither charset nor length bound. The constant is the floor.
+    title = (
+        _screened_fragment(spec.title, 120)
+        or _screened_fragment(section.id, 120)
+        or "the target section"
+    )
 
     # "visual evidence", not "frame" — this block is applied to clips too, and
     # the vision prompts deliberately avoid image-specific wording because it
@@ -1067,6 +1116,26 @@ def _find_target_section(
     section to aim the capture prompt, and the merge then routes the finished
     caption through this same function. One router for both, so TE-4's
     template-aware routing upgrade improves prediction and placement together.
+
+    **One router is not the same as one answer.** Tiers 1 and 2 are pure
+    functions of ``(note, anchor)`` and do agree between prediction and
+    placement. Tier 3 does not, and the divergence is real:
+
+      * ``merge_visual_citations`` flips its target from ``pending_video`` to
+        ``populated`` as it goes, so the second caption sees a different
+        note than prediction did;
+      * REPEATS captions are dropped between the two calls, shifting which
+        caption consumes which section.
+
+    So on a template whose section ids fall outside the tier-2 tuple below —
+    i.e. exactly the custom templates this epic exists for — two frames can be
+    captured under one section's guidance and filed under two. That is a
+    quality ceiling on TE-3, not a safety issue: the guidance only aims the
+    description, and the claim keeps its ``source_id`` either way.
+
+    **TE-4 is what fixes it**, by routing on the template's own sections and
+    keywords instead of the hardcoded tuple. Recorded here rather than papered
+    over, because the fix belongs in that slice.
 
     Looks for sections with pending_video status or physical_exam/imaging sections.
     """
