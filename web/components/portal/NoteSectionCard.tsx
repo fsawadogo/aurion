@@ -177,7 +177,11 @@ export default function NoteSectionCard({
               size="sm"
               variant="primary"
               loading={saving}
-              disabled={saving || draft.trim().length === 0}
+              // `busy` too: entering edit mode is gated on `!busy`, but a
+              // section already open when a regenerate/Stage-2 starts kept a
+              // live Save that would race the replacement. Gate the exit as
+              // well as the entrance.
+              disabled={saving || busy || draft.trim().length === 0}
               onClick={async () => {
                 setSaving(true);
                 try {

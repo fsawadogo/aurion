@@ -109,12 +109,27 @@ const FLAGS = {
   note_review_chat_enabled: false,
 };
 
-/** The three controls that READ the note. */
+/**
+ * Every control that READS the note — BOTH copy buttons.
+ *
+ * There are two: the toolbar "Copy" and the action rail's primary "Copy to
+ * EHR" (the file's own stated primary action). An earlier version of this
+ * helper matched only `/^Copy$/i`, which excludes "Copy to EHR" by
+ * construction — so it passed while the primary button was wide open during
+ * regeneration. Review caught it; the rail copy is now asserted explicitly.
+ */
 function actions() {
   return {
     print: screen.getByRole("button", { name: "Print" }),
     exportDocx: screen.getByRole("button", { name: /Export/i }),
-    copy: screen.getByRole("button", { name: /^Copy$/i }),
+    copyToolbar: screen.getByRole("button", { name: /^Copy$/i }),
+    copyToEhr: screen.getByRole("button", { name: /Copy to EHR/i }),
+    // The approve button's LABEL changes when blocked ("Approve & sign" →
+    // "Resolve conflicts to approve"), so match either — otherwise the query
+    // silently returns null in exactly the busy state we're testing.
+    approve: screen.getByRole("button", {
+      name: /Approve & sign|Resolve conflicts to approve/i,
+    }),
   };
 }
 
@@ -135,7 +150,9 @@ describe("NoteReview — actions while the note is being replaced", () => {
     const a = actions();
     expect(a.print).toBeEnabled();
     expect(a.exportDocx).toBeEnabled();
-    expect(a.copy).toBeEnabled();
+    expect(a.copyToolbar).toBeEnabled();
+    expect(a.copyToEhr).toBeEnabled();
+    expect(a.approve).toBeEnabled();
     expect(screen.getByTestId("note-document")).toHaveAttribute(
       "aria-busy",
       "false",
@@ -155,10 +172,15 @@ describe("NoteReview — actions while the note is being replaced", () => {
     fireEvent.click(screen.getByRole("button", { name: /Français|French|FR/i }));
     await waitFor(() => expect(regenerateNote).toHaveBeenCalled());
 
-    // AC-1 — the bug: all three were live during regeneration.
+    // AC-1 — the bug: every note-reading control was live during regeneration.
+    // "Copy to EHR" is the PRIMARY one and was the review's HIGH finding — a
+    // clinician could paste the about-to-be-discarded note into the chart.
     await waitFor(() => expect(actions().print).toBeDisabled());
     expect(actions().exportDocx).toBeDisabled();
-    expect(actions().copy).toBeDisabled();
+    expect(actions().copyToolbar).toBeDisabled();
+    expect(actions().copyToEhr).toBeDisabled();
+    // …and approve must not race the in-flight Stage-1 replacement.
+    expect(actions().approve).toBeDisabled();
 
     release();
   });
@@ -204,10 +226,32 @@ describe("NoteReview — actions while the note is being replaced", () => {
 
     expect(actions().print).toBeDisabled();
     expect(actions().exportDocx).toBeDisabled();
-    expect(actions().copy).toBeDisabled();
+    expect(actions().copyToolbar).toBeDisabled();
+    expect(actions().copyToEhr).toBeDisabled();
+    expect(actions().approve).toBeDisabled();
     expect(screen.getByTestId("note-document")).toHaveAttribute(
       "aria-busy",
       "true",
+    );
+  });
+});
+
+describe("NoteReview — print leak guard", () => {
+  // Disabling the Print button blocks the in-app affordance, but Ctrl+P and
+  // the browser menu call window.print() directly. jsdom cannot evaluate an
+  // @media print block, so this asserts the source rule exists rather than
+  // simulating a print — a regression guard against silently dropping it.
+  it("hides a busy note document at print time", async () => {
+    const fs = await import("node:fs");
+    const path = await import("node:path");
+    const css = fs.readFileSync(
+      path.resolve(__dirname, "../app/globals.css"),
+      "utf-8",
+    );
+    const printBlock = css.slice(css.indexOf("@media print"));
+    expect(printBlock).toMatch(/@media print/);
+    expect(printBlock).toMatch(
+      /\[data-testid="note-document"\]\[aria-busy="true"\][\s\S]*display:\s*none/,
     );
   });
 });

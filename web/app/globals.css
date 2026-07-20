@@ -461,3 +461,14 @@ html[data-accent="slate"] {
   --accent-800: 30 41 59;
   --accent-900: 15 23 42;
 }
+
+/* A note that is being replaced must not be printed either — the disabled
+ * Print button blocks the in-app affordance, but Ctrl+P and the browser menu
+ * call window.print() directly. Hiding the busy note at print time closes that
+ * leak at the source, so an OS-level print can never emit the superseded note.
+ * TE-4b. */
+@media print {
+  [data-testid="note-document"][aria-busy="true"] {
+    display: none !important;
+  }
+}

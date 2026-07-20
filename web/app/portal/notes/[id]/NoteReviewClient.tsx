@@ -491,6 +491,7 @@ export default function NoteReviewPage() {
             <ActionRail
               detail={detail}
               approving={approving}
+              noteBusy={noteBusy}
               copied={copied}
               onApprove={() => void onApprove()}
               onCopy={onCopy}
@@ -602,12 +603,18 @@ function DiscardPrompt({
 function ActionRail({
   detail,
   approving,
+  noteBusy,
   copied,
   onApprove,
   onCopy,
 }: {
   detail: NoteDetail;
   approving: boolean;
+  /** The note is being replaced (regenerate / approve / Stage 2) — the same
+   *  derived value the toolbar uses. The rail carries the PRIMARY "Copy to
+   *  EHR" and "Approve & sign", so if it doesn't honour this the whole
+   *  guarantee has a hole exactly where it matters most. */
+  noteBusy: boolean;
   copied: boolean;
   onApprove: () => void;
   onCopy: () => void;
@@ -615,7 +622,12 @@ function ActionRail({
   const t = useTranslations("NoteReview.actions");
   const isApproved = detail.export_metadata.is_approved;
   const state = detail.export_metadata.session_state;
+  // `noteBusy` covers the regenerate window that `session_state` can't: the
+  // client doesn't refetch mid-regenerate, so the state never flips to
+  // PROCESSING_STAGE1 on screen — approve would otherwise race the in-flight
+  // Stage-1 replacement.
   const blocked =
+    noteBusy ||
     detail.conflict_state.has_unresolved ||
     state === "PROCESSING_STAGE1" ||
     state === "PROCESSING_STAGE2";
@@ -648,7 +660,7 @@ function ActionRail({
             </>
           )}
 
-          <Button variant={isApproved ? "primary" : "secondary"} className="w-full" onClick={onCopy}>
+          <Button variant={isApproved ? "primary" : "secondary"} className="w-full" onClick={onCopy} disabled={noteBusy}>
             {copied ? <ClipboardCheck className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
             {copied ? t("copied") : t("copyToEhr")}
           </Button>
