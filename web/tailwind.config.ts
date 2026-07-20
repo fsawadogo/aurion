@@ -162,6 +162,7 @@ const config: Config = {
         "aurion-scale-in": "aurion-scale-in 0.20s cubic-bezier(0.32, 0.72, 0, 1) both",
         "aurion-pulse":    "aurion-pulse 1.6s ease-in-out infinite",
         "aurion-glow":     "aurion-glow 3.2s ease-in-out infinite",
+        "aurion-indeterminate": "aurion-indeterminate 1.4s ease-in-out infinite",
         // Legacy aliases — keep so existing usage doesn't break.
         "fade-in":         "aurion-fade-in 0.32s cubic-bezier(0.32, 0.72, 0, 1) both",
         "slide-up":        "aurion-slide-up 0.32s cubic-bezier(0.32, 0.72, 0, 1) both",

@@ -356,6 +356,14 @@ html.dark .border-amber-400 { border-color: rgb(255 255 255 / 0.12); }
   100% { background-position: 200% 0; }
 }
 
+/* Indeterminate progress — a bar that sweeps because there is nothing
+ * honest to measure. Used by ProgressBanner when no percentage exists
+ * (note regeneration is one request that returns when it is done). */
+@keyframes aurion-indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
 /* Stagger helper — children animate in sequence on a single class.
  * Used on dashboard tile rows + filter chip groups. */
 .aurion-stagger > * { animation: aurion-slide-up 0.36s cubic-bezier(0.32, 0.72, 0, 1) both; }

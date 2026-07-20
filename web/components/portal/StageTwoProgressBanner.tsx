@@ -1,6 +1,7 @@
 "use client";
 
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle } from "lucide-react";
+import ProgressBanner from "@/components/ui/ProgressBanner";
 import { useStageTwoProgress } from "@/lib/portal-ws";
 
 /**
@@ -66,27 +67,18 @@ export default function StageTwoProgressBanner({
 
   const total = progress.framesTotal;
   const processed = progress.framesProcessed;
-  const pct = total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : 0;
 
+  // Determinate only once a frame count exists. Before that this used to show
+  // a hardcoded 10% bar, which claimed progress it did not have — the shared
+  // banner animates instead, which is the honest form of "starting…".
   return (
-    <div
-      className="mb-4 flex items-center gap-3 rounded-lg border border-navy-200 bg-navy-50 px-4 py-3 text-sm text-navy-700"
-      role="status"
-      aria-live="polite"
-    >
-      <RefreshCw className="h-5 w-5 shrink-0 animate-spin text-navy-500" />
-      <div className="flex-1">
-        <p className="font-medium">Finishing visual enrichment…</p>
-        <div className="mt-1.5 h-1.5 w-full rounded-full bg-white">
-          <div
-            className="h-full rounded-full bg-navy-500 transition-all duration-300"
-            style={{ width: total > 0 ? `${pct}%` : "10%" }}
-          />
-        </div>
-      </div>
-      <span className="shrink-0 tabular-nums text-xs font-medium text-navy-600">
-        {total > 0 ? `${processed} / ${total} frames` : "starting…"}
-      </span>
-    </div>
+    <ProgressBanner
+      message="Finishing visual enrichment…"
+      percent={
+        total > 0 ? Math.min(100, Math.round((processed / total) * 100)) : undefined
+      }
+      detail={total > 0 ? `${processed} / ${total} frames` : "starting…"}
+      testId="stage2-progress-banner"
+    />
   );
 }

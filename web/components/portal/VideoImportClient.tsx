@@ -192,11 +192,29 @@ export default function VideoImportClient({
   const [customTemplateId, setCustomTemplateId] = useState("");
 
   const [phase, setPhase] = useState<Phase>("form");
+  // Elapsed processing time. A stepper alone cannot distinguish "this stage
+  // is slow" from "this page is dead"; a ticking clock can.
+  const [elapsedSec, setElapsedSec] = useState(0);
   const [uploadPct, setUploadPct] = useState(0);
   const [stageIndex, setStageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const dragRef = useRef(false);
   const [, forceDrag] = useState(0);
+
+  // Tick only while processing; reset on entry so a retry starts from zero.
+  useEffect(() => {
+    if (phase !== "processing") {
+      setElapsedSec(0);
+      return;
+    }
+    const id = window.setInterval(() => setElapsedSec((s) => s + 1), 1000);
+    return () => window.clearInterval(id);
+  }, [phase]);
+
+  const elapsedLabel =
+    phase === "processing" && elapsedSec > 0
+      ? `${Math.floor(elapsedSec / 60)}:${String(elapsedSec % 60).padStart(2, "0")}`
+      : null;
 
   // Clinician-only: list the clinician's custom templates so they can apply one
   // (its structure + AI instructions) to the imported note. Admin/eval uploads
@@ -643,14 +661,30 @@ export default function VideoImportClient({
                 <span
                   className={
                     "h-2 w-2 rounded-full " +
-                    (i <= stageIndex ? "bg-aurion-gold" : "bg-gray-300")
+                    (i <= stageIndex ? "bg-aurion-gold " : "bg-gray-300 ") +
+                    // The ACTIVE stage pulses. Without motion a slow stage —
+                    // and "Extracting audio" on a real encounter takes
+                    // minutes — is pixel-identical to a hung page, which is
+                    // exactly how a healthy import came to look stuck.
+                    (i === stageIndex ? "animate-aurion-pulse" : "")
                   }
+                  data-testid={i === stageIndex ? "active-stage-dot" : undefined}
                 />
                 {t(`stages.${stage}`)}
               </li>
             ))}
           </ol>
-          <p className="mt-4 text-xs text-gray-400">{t("processing.leaveSafe")}</p>
+          <p className="mt-4 text-xs text-gray-400">
+            {t("processing.leaveSafe")}
+            {elapsedLabel && (
+              <>
+                {" "}
+                <span className="tabular-nums" data-testid="elapsed">
+                  {t("processing.elapsed", { time: elapsedLabel })}
+                </span>
+              </>
+            )}
+          </p>
         </Card>
       )}
 
