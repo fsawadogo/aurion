@@ -13,6 +13,7 @@ import { useRouteSegment } from "@/lib/use-route-segment";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import ProgressBanner from "@/components/ui/ProgressBanner";
 import CodingSuggestionsCard from "@/components/portal/CodingSuggestionsCard";
 import CompletenessRing from "@/components/portal/CompletenessRing";
 import EmrWriteBackCard from "@/components/portal/EmrWriteBackCard";
@@ -87,6 +88,22 @@ export default function NoteReviewPage() {
     counts: RegenerateWouldDiscard;
     onConfirm: () => void;
   } | null>(null);
+
+  /**
+   * The note on screen is about to be replaced — so nothing may READ it.
+   *
+   * This expression already existed, passed as `busy` to every
+   * NoteSectionCard, which is why inline editing was correctly blocked. But
+   * Print, Export and Copy were never part of any busy check, so a clinician
+   * could print or export a note mid-regeneration and walk away with the
+   * version that was about to be thrown away. Deriving it once and applying
+   * it to every control that reads the note fixes the class rather than the
+   * three instances.
+   */
+  const noteBusy =
+    regenerating ||
+    approving ||
+    detail?.export_metadata.session_state === "PROCESSING_STAGE2";
 
   useEffect(() => {
     let cancelled = false;
@@ -391,30 +408,53 @@ export default function NoteReviewPage() {
                   </div>
 
                   <div className="flex-1" />
-                  {regenerating && (
-                    <span className="text-aurion-caption text-navy-400">{t("toolbar.regenerating")}</span>
-                  )}
 
+                  {/* Print / Export / Copy all READ the note, so all three are
+                      gated on `noteBusy` — see its definition. Print is a
+                      plain button (not `Button`), so it needs the disabled
+                      styling spelled out. */}
                   <button
                     type="button"
                     onClick={() => window.print()}
                     aria-label={t("toolbar.print")}
-                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-hairline text-navy-600 hover:border-navy-200"
+                    disabled={noteBusy}
+                    className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-hairline text-navy-600 hover:border-navy-200 disabled:cursor-not-allowed disabled:opacity-50 disabled:hover:border-hairline"
                   >
                     <Printer className="h-4 w-4" />
                   </button>
-                  <Button variant="secondary" size="sm" onClick={() => void onExport()} loading={exporting} disabled={exporting || !detail.export_metadata.can_export}>
+                  <Button variant="secondary" size="sm" onClick={() => void onExport()} loading={exporting} disabled={exporting || noteBusy || !detail.export_metadata.can_export}>
                     <Download className="h-4 w-4 mr-1" />
                     {t("actions.exportDocx")}
                   </Button>
-                  <Button variant="primary" size="sm" onClick={onCopy}>
+                  <Button variant="primary" size="sm" onClick={onCopy} disabled={noteBusy}>
                     {copied ? <ClipboardCheck className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
                     {copied ? t("toolbar.copied") : t("toolbar.copy")}
                   </Button>
                 </div>
 
-                {/* The note document — one continuous block, format-neutral. */}
-                <div className="max-w-[720px]">
+                {/* Regeneration has no progress events — it is one request
+                    that returns when it is done — so the banner animates
+                    rather than claiming a percentage it cannot know. */}
+                {regenerating && (
+                  <ProgressBanner
+                    message={t("toolbar.regenerating")}
+                    detail={t("toolbar.regeneratingHint")}
+                    testId="regenerating-banner"
+                  />
+                )}
+
+                {/* The note document — one continuous block, format-neutral.
+                    While busy it is dimmed and marked aria-busy: what is on
+                    screen is the SUPERSEDED note, and both sighted and
+                    screen-reader users need to know that before they act. */}
+                <div
+                  className={
+                    "max-w-[720px] transition-opacity duration-short ease-aurion " +
+                    (noteBusy ? "opacity-50" : "opacity-100")
+                  }
+                  aria-busy={noteBusy}
+                  data-testid="note-document"
+                >
                   <div className="mb-4 flex items-center justify-between">
                     <h2 className="text-aurion-headline font-semibold text-navy-800">{t("noteLabel")}</h2>
                     <div className="flex items-center gap-2">
@@ -438,7 +478,7 @@ export default function NoteReviewPage() {
                         onSaveEdit={(text) => onSaveEdit(section.id, text)}
                         onResolveConflict={onResolveConflict}
                         macros={specialtyMacros}
-                        busy={approving || regenerating || detail.export_metadata.session_state === "PROCESSING_STAGE2"}
+                        busy={noteBusy}
                       />
                     ))}
                   </div>
@@ -451,6 +491,7 @@ export default function NoteReviewPage() {
             <ActionRail
               detail={detail}
               approving={approving}
+              noteBusy={noteBusy}
               copied={copied}
               onApprove={() => void onApprove()}
               onCopy={onCopy}
@@ -562,12 +603,18 @@ function DiscardPrompt({
 function ActionRail({
   detail,
   approving,
+  noteBusy,
   copied,
   onApprove,
   onCopy,
 }: {
   detail: NoteDetail;
   approving: boolean;
+  /** The note is being replaced (regenerate / approve / Stage 2) — the same
+   *  derived value the toolbar uses. The rail carries the PRIMARY "Copy to
+   *  EHR" and "Approve & sign", so if it doesn't honour this the whole
+   *  guarantee has a hole exactly where it matters most. */
+  noteBusy: boolean;
   copied: boolean;
   onApprove: () => void;
   onCopy: () => void;
@@ -575,7 +622,12 @@ function ActionRail({
   const t = useTranslations("NoteReview.actions");
   const isApproved = detail.export_metadata.is_approved;
   const state = detail.export_metadata.session_state;
+  // `noteBusy` covers the regenerate window that `session_state` can't: the
+  // client doesn't refetch mid-regenerate, so the state never flips to
+  // PROCESSING_STAGE1 on screen — approve would otherwise race the in-flight
+  // Stage-1 replacement.
   const blocked =
+    noteBusy ||
     detail.conflict_state.has_unresolved ||
     state === "PROCESSING_STAGE1" ||
     state === "PROCESSING_STAGE2";
@@ -608,7 +660,7 @@ function ActionRail({
             </>
           )}
 
-          <Button variant={isApproved ? "primary" : "secondary"} className="w-full" onClick={onCopy}>
+          <Button variant={isApproved ? "primary" : "secondary"} className="w-full" onClick={onCopy} disabled={noteBusy}>
             {copied ? <ClipboardCheck className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
             {copied ? t("copied") : t("copyToEhr")}
           </Button>

@@ -1286,7 +1286,8 @@
       "regenerating": "Régénération…",
       "print": "Imprimer",
       "copy": "Copier",
-      "copied": "Copié"
+      "copied": "Copié",
+      "regeneratingHint": "cela peut prendre jusqu’à une minute"
     },
     "discard": {
       "title": "Ceci supprimera un travail qui ne peut être reconstitué.",
@@ -1547,7 +1548,8 @@
     },
     "processing": {
       "title": "Traitement",
-      "leaveSafe": "Vous pouvez quitter cette page en toute sécurité — le traitement se poursuit et la note apparaîtra dans Mes notes."
+      "leaveSafe": "Vous pouvez quitter cette page en toute sécurité — le traitement se poursuit et la note apparaîtra dans Mes notes.",
+      "elapsed": "Temps écoulé {time}."
     },
     "stages": {
       "uploading": "Téléversé",

@@ -356,6 +356,14 @@ html.dark .border-amber-400 { border-color: rgb(255 255 255 / 0.12); }
   100% { background-position: 200% 0; }
 }
 
+/* Indeterminate progress — a bar that sweeps because there is nothing
+ * honest to measure. Used by ProgressBanner when no percentage exists
+ * (note regeneration is one request that returns when it is done). */
+@keyframes aurion-indeterminate {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX(300%); }
+}
+
 /* Stagger helper — children animate in sequence on a single class.
  * Used on dashboard tile rows + filter chip groups. */
 .aurion-stagger > * { animation: aurion-slide-up 0.36s cubic-bezier(0.32, 0.72, 0, 1) both; }
@@ -452,4 +460,15 @@ html[data-accent="slate"] {
   --accent-700: 51 65 85;
   --accent-800: 30 41 59;
   --accent-900: 15 23 42;
+}
+
+/* A note that is being replaced must not be printed either — the disabled
+ * Print button blocks the in-app affordance, but Ctrl+P and the browser menu
+ * call window.print() directly. Hiding the busy note at print time closes that
+ * leak at the source, so an OS-level print can never emit the superseded note.
+ * TE-4b. */
+@media print {
+  [data-testid="note-document"][aria-busy="true"] {
+    display: none !important;
+  }
 }

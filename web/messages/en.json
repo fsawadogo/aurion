@@ -1286,7 +1286,8 @@
       "regenerating": "Regenerating…",
       "print": "Print",
       "copy": "Copy",
-      "copied": "Copied"
+      "copied": "Copied",
+      "regeneratingHint": "this can take up to a minute"
     },
     "discard": {
       "title": "This will drop work that can't be rebuilt.",
@@ -1547,7 +1548,8 @@
     },
     "processing": {
       "title": "Processing",
-      "leaveSafe": "You can safely leave this page — processing continues and the note will appear in My Notes."
+      "leaveSafe": "You can safely leave this page — processing continues and the note will appear in My Notes.",
+      "elapsed": "Elapsed {time}."
     },
     "stages": {
       "uploading": "Uploaded",
