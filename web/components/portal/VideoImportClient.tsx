@@ -32,6 +32,7 @@ import {
   abortVideoImportMultipart,
   completeVideoImportMultipart,
   createVideoImport,
+  getMyProfile,
   getPortalFeatureFlags,
   getVideoImportStatus,
   listMyCustomTemplates,
@@ -40,7 +41,7 @@ import {
   type VideoImportStatus,
 } from "@/lib/portal-api";
 import { shouldStopPolling } from "@/lib/poll";
-import type { CustomTemplate } from "@/types";
+import type { CustomTemplate, PhysicianProfile } from "@/types";
 
 const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 // Above this, use S3 multipart (resumable per-part) instead of a single PUT.
@@ -56,6 +57,18 @@ const SPECIALTIES = [
 ];
 // Backend-canonical encounter types (the `team_patient` option was removed).
 const ENCOUNTER_TYPES = ["doctor_patient", "doctor_team_patient"];
+
+// Built-in visit-type labels (mirrors VisitTypesTab). Custom labels fall
+// through to the raw key, which IS the clinician's own text.
+const VISIT_TYPE_LABELS: Record<string, string> = {
+  new_patient: "New patient",
+  follow_up: "Follow-up",
+  pre_op: "Pre-op",
+  post_op: "Post-op",
+};
+function humanizeVisitType(key: string): string {
+  return VISIT_TYPE_LABELS[key] ?? key;
+}
 const POLL_MS = 4000;
 
 type Phase = "form" | "uploading" | "processing" | "error";
@@ -184,7 +197,15 @@ export default function VideoImportClient({
   const [files, setFiles] = useState<File[]>([]);
   const file = files[0] ?? null;
   const [multiClipEnabled, setMultiClipEnabled] = useState(false);
+  // Admin/eval surface keeps a specialty picker (no personal profile). The
+  // clinician surface takes specialty from the profile — TE-4d: specialty is
+  // a profile property, not a per-upload choice.
   const [specialty, setSpecialty] = useState("general");
+  const [profile, setProfile] = useState<PhysicianProfile | null>(null);
+  // TE-4d: visit type + context drive template resolution the same way iOS
+  // does. Empty = no specific visit context → the specialty default.
+  const [visitType, setVisitType] = useState("");
+  const [contextId, setContextId] = useState("");
   const [encounterType, setEncounterType] = useState("doctor_patient");
   const [language, setLanguage] = useState("en");
   const [consent, setConsent] = useState(false);
@@ -225,6 +246,14 @@ export default function VideoImportClient({
     listMyCustomTemplates()
       .then((rows) => {
         if (alive) setCustomTemplates(rows);
+      })
+      .catch(() => {});
+    // TE-4d: the clinician's profile drives specialty + the visit-type→context
+    // map. Best-effort — a fetch failure falls back to the specialty default
+    // (no visit-context picker, the pre-TE-4d behaviour).
+    getMyProfile()
+      .then((p) => {
+        if (alive) setProfile(p);
       })
       .catch(() => {});
     return () => {
@@ -366,10 +395,21 @@ export default function VideoImportClient({
     setUploadPct(0);
     try {
       const created = await api.create({
-        specialty,
+        // Clinician: specialty comes from the profile, not a picker. Admin/eval
+        // keeps its picker. Falls back to the picker value if the profile
+        // hasn't loaded.
+        specialty:
+          surface === "clinician"
+            ? profile?.primary_specialty ?? specialty
+            : specialty,
         encounter_type: encounterType,
         output_language: language,
         custom_template_id: customTemplateId || null,
+        // TE-4d: send the visit type + context so the backend resolves the
+        // mapped template via the same resolver iOS uses. Omitted when nothing
+        // is picked → the specialty default.
+        ...(visitType ? { consultation_type: visitType } : {}),
+        ...(contextId ? { context_id: contextId } : {}),
         consent_attested: true,
         consent_method: "attested",
         // Only send clip_count when there's more than one clip so single-file
@@ -536,20 +576,91 @@ export default function VideoImportClient({
 
           <Card title={t("form.title")}>
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-navy-700">
-                  {t("form.specialty")}
-                </span>
-                <select
-                  className="form-input"
-                  value={specialty}
-                  onChange={(e) => setSpecialty(e.target.value)}
-                >
-                  {SPECIALTIES.map((s) => (
-                    <option key={s} value={s}>{tSpec(s)}</option>
-                  ))}
-                </select>
-              </label>
+              {surface === "clinician" ? (
+                // TE-4d: specialty is a profile property, not a picker — show
+                // it read-only so the clinician knows which specialty template
+                // underlies the note.
+                <label className="block text-sm">
+                  <span className="mb-1 block font-medium text-navy-700">
+                    {t("form.specialty")}
+                  </span>
+                  <div
+                    className="form-input flex items-center bg-canvas text-navy-500"
+                    data-testid="video-import-specialty-readonly"
+                  >
+                    {tSpec(profile?.primary_specialty ?? specialty)}
+                  </div>
+                </label>
+              ) : (
+                <label className="block text-sm">
+                  <span className="mb-1 block font-medium text-navy-700">
+                    {t("form.specialty")}
+                  </span>
+                  <select
+                    className="form-input"
+                    value={specialty}
+                    onChange={(e) => setSpecialty(e.target.value)}
+                  >
+                    {SPECIALTIES.map((s) => (
+                      <option key={s} value={s}>{tSpec(s)}</option>
+                    ))}
+                  </select>
+                </label>
+              )}
+
+              {/* TE-4d — visit type → context, the same choice iOS offers.
+                  Resolves the mapped template server-side. Clinician surface
+                  only (admin/eval has no personal visit-type map). */}
+              {surface === "clinician" &&
+                (profile?.consultation_types.length ?? 0) > 0 && (
+                  <label className="block text-sm">
+                    <span className="mb-1 block font-medium text-navy-700">
+                      {t("form.visitType")}
+                    </span>
+                    <select
+                      className="form-input"
+                      value={visitType}
+                      onChange={(e) => {
+                        setVisitType(e.target.value);
+                        setContextId(""); // context belongs to a visit type
+                      }}
+                      data-testid="video-import-visit-type"
+                    >
+                      <option value="">{t("form.visitTypeDefault")}</option>
+                      {profile?.consultation_types.map((vt) => (
+                        <option key={vt} value={vt}>
+                          {humanizeVisitType(vt)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
+
+              {surface === "clinician" &&
+                visitType &&
+                (profile?.contexts_per_visit_type[visitType]?.length ?? 0) >
+                  0 && (
+                  <label className="block text-sm">
+                    <span className="mb-1 block font-medium text-navy-700">
+                      {t("form.visitContext")}
+                    </span>
+                    <select
+                      className="form-input"
+                      value={contextId}
+                      onChange={(e) => setContextId(e.target.value)}
+                      data-testid="video-import-visit-context"
+                    >
+                      <option value="">{t("form.visitContextDefault")}</option>
+                      {profile?.contexts_per_visit_type[visitType]?.map(
+                        (ctx) => (
+                          <option key={ctx.id} value={ctx.id}>
+                            {ctx.label}
+                          </option>
+                        ),
+                      )}
+                    </select>
+                  </label>
+                )}
               <label className="block text-sm">
                 <span className="mb-1 block font-medium text-navy-700">
                   {t("form.encounterType")}

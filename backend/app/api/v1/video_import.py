@@ -86,6 +86,12 @@ class CreateVideoImportRequest(BaseModel):
     specialty: str
     consultation_type: Optional[str] = None
     encounter_context: Optional[str] = None
+    # TE-4d: the chosen visit-type CONTEXT ("ctx_<8hex>"), same field iOS's
+    # /sessions carries. When set (and no explicit custom_template_id), the
+    # create resolves the template through the clinician/org visit-type map via
+    # `resolve_context_template_key` — the SAME resolver /sessions uses — so an
+    # uploaded encounter picks the template the clinician would get on iPad.
+    context_id: Optional[str] = None
     output_language: str = "en"
     encounter_type: str = "doctor_patient"
     capture_mode: str = "multimodal"
@@ -202,6 +208,13 @@ async def create_import_session(
     The caller validates the consent attestation before calling this (the
     hard gate) so the rejection message stays at the HTTP boundary.
     """
+    # Template precedence (TE-4d), keeping the direct picker as an override:
+    #   1. explicit custom_template_id → that template (existing tpl-03 path);
+    #   2. else a visit context/type → resolve through the clinician/org map
+    #      via the SAME resolver /sessions uses;
+    #   3. else neither → specialty default (both None), byte-identical to
+    #      pre-TE-4d.
+    resolved_template_key: Optional[str] = None
     resolved_custom_template_id: Optional[uuid.UUID] = None
     if body.custom_template_id:
         # tpl-03: apply a clinician-owned custom template (carries structure +
@@ -218,6 +231,22 @@ async def create_import_session(
         if owned is None:
             raise HTTPException(status_code=404, detail="Custom template not found")
         resolved_custom_template_id = owned.id
+    elif body.context_id or body.consultation_type:
+        # REUSE the shared resolver — do not reimplement precedence here, and
+        # never modify it (iOS's /sessions depends on it). Never raises; a
+        # stale/unknown pin degrades to the specialty default.
+        from app.modules.session.service import resolve_context_template_key
+
+        (
+            resolved_template_key,
+            resolved_custom_template_id,
+            _coerced_stale,
+        ) = await resolve_context_template_key(
+            db=db,
+            clinician_id=clinician_id,
+            consultation_type=body.consultation_type,
+            context_id=body.context_id,
+        )
 
     session = await create_session(
         db,
@@ -228,6 +257,8 @@ async def create_import_session(
         output_language=body.output_language,
         encounter_type=body.encounter_type,
         capture_mode=body.capture_mode,
+        context_id=body.context_id,
+        template_key=resolved_template_key,
         custom_template_id=resolved_custom_template_id,
     )
     session.import_source = "video_upload"

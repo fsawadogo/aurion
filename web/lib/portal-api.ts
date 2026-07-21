@@ -972,8 +972,14 @@ export interface VideoImportCreateBody {
   specialty: string;
   encounter_type: string;
   output_language: string;
+  /** TE-4d: the visit type + chosen context, so the backend resolves the
+   *  mapped template via the same resolver iOS's /sessions uses. Omit both →
+   *  the specialty default. `custom_template_id` still overrides these. */
+  consultation_type?: string;
+  context_id?: string;
   /** Optional custom template (tpl-03) to apply — its structure + any AI
-   *  instructions. Omit / null = the specialty default. */
+   *  instructions. Omit / null = the specialty default. Overrides the visit
+   *  context above. */
   custom_template_id?: string | null;
   /** Required-true: the clinician attests consent was obtained at the
    *  original recording (the import substitute for the live consent gate). */

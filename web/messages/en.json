@@ -1537,7 +1537,11 @@
       "langFr": "French",
       "template": "Note template",
       "templateDefault": "Default (by specialty)",
-      "submit": "Upload & process"
+      "submit": "Upload & process",
+      "visitType": "Visit type",
+      "visitTypeDefault": "— none (specialty default) —",
+      "visitContext": "Context",
+      "visitContextDefault": "— visit-type default —"
     },
     "consent": {
       "attestationLabel": "I confirm patient consent was obtained at the time this encounter was recorded."
