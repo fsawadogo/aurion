@@ -16,6 +16,7 @@ from app.api.v1._helpers import get_session_or_404, write_audit
 from app.api.v1.admin._shared import (
     EvalAssigneeResponse,
     EvalAssignmentRequest,
+    EvalRunResponse,
     EvalScoreRequest,
     EvalSessionDetailResponse,
     EvalSessionResponse,
@@ -26,11 +27,12 @@ from app.api.v1.admin._shared import (
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import EvalScoreModel, SessionModel, TranscriptModel
-from app.core.types import SessionState, UserRole
+from app.core.types import Note, SessionState, Transcript, UserRole
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.auth import users_repository as users_repo
 from app.modules.auth.service import CurrentUser, require_role
 from app.modules.eval import repository as eval_repo
+from app.modules.eval.metrics import compute_grounding_metrics, valid_source_ids
 from app.modules.note_gen import repository as note_repo
 
 router = APIRouter(prefix="/admin", tags=["admin"])
@@ -261,6 +263,81 @@ async def get_eval_session_detail(
         note_completeness_score=note_completeness,
         note_sections=note_sections,
     )
+
+
+@router.get(
+    "/eval/sessions/{session_id}/runs", response_model=list[EvalRunResponse]
+)
+async def get_eval_session_runs(
+    session_id: str,
+    user: CurrentUser = Depends(
+        require_role(UserRole.EVAL_TEAM, UserRole.ADMIN)
+    ),
+    db: AsyncSession = Depends(get_db),
+):
+    """Every note VERSION of a session as a comparable eval "run" (EVAL-1).
+
+    The compare lab renders these side by side: the settings each run was
+    generated with (`settings_snapshot`), deterministic metrics (claim count,
+    grounding rate, section completeness — no model call), and the note. Same
+    EVAL_TEAM/ADMIN gate and assignee visibility as the triad view.
+    """
+    try:
+        sid_uuid = uuid.UUID(session_id)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session = await db.get(SessionModel, sid_uuid)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # EVAL_TEAM sees only sessions assigned to them (mirrors the triad route).
+    assignment = await eval_repo.get_assignment(db, sid_uuid)
+    if user.role == UserRole.EVAL_TEAM and (
+        assignment is None or assignment.assignee_user_id != user.user_id
+    ):
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    # The transcript segment ids ground the metrics. Missing transcript → the
+    # grounding rate degrades safely (nothing verifiable), never a crash.
+    valid_ids: set[str] = set()
+    transcript_row = await db.get(TranscriptModel, sid_uuid)
+    if transcript_row is not None:
+        try:
+            valid_ids = valid_source_ids(
+                Transcript.model_validate_json(transcript_row.transcript_json)
+            )
+        except (ValueError, TypeError):
+            pass
+
+    runs: list[EvalRunResponse] = []
+    for v in await note_repo.get_all_versions(db, sid_uuid):
+        metrics: dict = {}
+        sections: list[dict] = []
+        try:
+            content = json.loads(v.content)
+            metrics = compute_grounding_metrics(
+                Note.model_validate(content), valid_ids
+            )
+            sections = content.get("sections", []) or []
+        except (json.JSONDecodeError, TypeError, ValueError):
+            pass
+        runs.append(
+            EvalRunResponse(
+                version=v.version,
+                stage=v.stage,
+                provider_used=v.provider_used,
+                completeness_score=v.completeness_score,
+                is_approved=v.is_approved,
+                created_at=v.created_at.isoformat() if v.created_at else "",
+                # Populated once the provenance migration lands; None on older
+                # rows (UI shows "settings unknown").
+                settings_snapshot=getattr(v, "settings_snapshot", None),
+                metrics=metrics,
+                note_sections=sections,
+            )
+        )
+    return runs
 
 
 @router.post("/eval/sessions/{session_id}/score", response_model=EvalSessionResponse)
