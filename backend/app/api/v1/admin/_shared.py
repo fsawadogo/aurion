@@ -333,6 +333,26 @@ class EvalSessionDetailResponse(EvalSessionResponse):
     note_sections: list[dict[str, Any]] = Field(default_factory=list)
 
 
+class EvalRunResponse(BaseModel):
+    """One note VERSION as a comparable eval "run" (EVAL-1).
+
+    A run is a note version + the settings that produced it + deterministic
+    metrics. `settings_snapshot` (flags + template at generation time) is
+    populated for versions created after the provenance migration; older rows
+    carry ``None`` and the UI shows "settings unknown".
+    """
+
+    version: int
+    stage: int
+    provider_used: str
+    completeness_score: float
+    is_approved: bool
+    created_at: str
+    settings_snapshot: Optional[dict[str, Any]] = None
+    metrics: dict[str, Any] = Field(default_factory=dict)
+    note_sections: list[dict[str, Any]] = Field(default_factory=list)
+
+
 # ── Config schemas ─────────────────────────────────────────────────────────
 
 
