@@ -1151,7 +1151,11 @@
     "fromNoteSeeding": "Opening…",
     "fromNoteLoadError": "Couldn't load your encounters.",
     "fromNoteError": "Couldn't start from that note.",
-    "fromNoteRetry": "Retry"
+    "fromNoteRetry": "Retry",
+    "visitsContextsTitle": "Sub-contexts",
+    "visitsContextsHint": "Add contexts under a visit type (e.g. “left knee”, “revision”) and pin each to a template. Leave on Specialty default to inherit.",
+    "visitsSaveButton": "Save contexts",
+    "visitsUnsaved": "Unsaved changes"
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Templates",

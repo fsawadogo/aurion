@@ -15,10 +15,11 @@ import {
   listMyCustomTemplates,
   updateMyProfile,
 } from "@/lib/portal-api";
-import {
+import VisitTypeContextsEditor, {
   BUILT_IN_TEMPLATE_KEYS,
   newContextId,
 } from "@/components/portal/VisitTypeContextsEditor";
+import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
 import type {
   CustomTemplate,
@@ -112,6 +113,14 @@ export default function VisitTypesTab() {
   const [contextsByVt, setContextsByVt] = useState<
     Record<string, VisitTypeContext[]>
   >({});
+  // TE-4f: the clinician's whole visit-type mapping (defaults + named
+  // contexts) is edited as ONE draft and saved together, so the flat default
+  // dropdown and the rich accordion — both editing contexts_per_visit_type —
+  // can't race each other's PUT. `contextsByVt` is the last saved snapshot.
+  const [draftContexts, setDraftContexts] = useState<
+    Record<string, VisitTypeContext[]>
+  >({});
+  const [savingContexts, setSavingContexts] = useState(false);
   const [customs, setCustoms] = useState<CustomTemplate[]>([]);
   const [savingVt, setSavingVt] = useState<string | null>(null);
 
@@ -128,6 +137,7 @@ export default function VisitTypesTab() {
       ]);
       setVisitTypes(profile.consultation_types ?? []);
       setContextsByVt(profile.contexts_per_visit_type ?? {});
+      setDraftContexts(profile.contexts_per_visit_type ?? {});
       setCustoms(allCustoms);
       if (admin) {
         const rows = await listOrgVisitTypeTemplates();
@@ -176,27 +186,38 @@ export default function VisitTypesTab() {
     }
   }
 
-  async function onClinicianChange(vt: string, value: string) {
-    setSavingVt(vt);
-    setSaveError(null);
+  // The flat default dropdown now edits the DRAFT (not an immediate PUT), so
+  // it shares one save with the accordion below.
+  function onClinicianChange(vt: string, value: string) {
     const nextForVt = withClinicianDefault(
-      contextsByVt[vt] ?? [],
+      draftContexts[vt] ?? [],
       visitTypeLabel(vt),
       value,
     );
-    const nextMap: Record<string, VisitTypeContext[]> = { ...contextsByVt };
-    if (nextForVt.length === 0) delete nextMap[vt];
-    else nextMap[vt] = nextForVt;
+    setDraftContexts((prev) => {
+      const next = { ...prev };
+      if (nextForVt.length === 0) delete next[vt];
+      else next[vt] = nextForVt;
+      return next;
+    });
+  }
+
+  const contextsDirty =
+    JSON.stringify(draftContexts) !== JSON.stringify(contextsByVt);
+
+  async function onSaveContexts() {
+    setSavingContexts(true);
+    setSaveError(null);
     try {
       await updateMyProfile({
         consultation_types: visitTypes,
-        contexts_per_visit_type: nextMap,
+        contexts_per_visit_type: draftContexts,
       });
-      setContextsByVt(nextMap);
+      setContextsByVt(draftContexts);
     } catch (e) {
       setSaveError(humanizeError(e, t("visitsSaveError")));
     } finally {
-      setSavingVt(null);
+      setSavingContexts(false);
     }
   }
 
@@ -292,7 +313,7 @@ export default function VisitTypesTab() {
                   )
                 : renderSelect(
                     vt,
-                    clinicianValue(contextsByVt[vt]),
+                    clinicianValue(draftContexts[vt]),
                     customs,
                     t("visitsMineGroup"),
                     onClinicianChange,
@@ -301,16 +322,51 @@ export default function VisitTypesTab() {
           ))}
         </ul>
       )}
-      {!isAdmin && (
-        <p className="mt-4 text-aurion-caption text-navy-500">
-          {t("visitsProfileSubcontexts")}{" "}
-          <Link
-            href="/portal/profile"
-            className="font-medium text-navy-500 hover:text-navy-800 transition-colors duration-short"
-          >
-            {t("visitsGoToProfile")}
-          </Link>
-        </p>
+
+      {/* TE-4f — the rich per-context accordion, same editor as My Profile,
+          for named sub-contexts under each visit type. Edits the same draft
+          as the default dropdowns above; one Save persists both. */}
+      {!isAdmin && visitTypes.length > 0 && (
+        <div className="mt-6 border-t border-hairline pt-5">
+          <h3 className="mb-1 text-aurion-callout font-semibold text-navy-800">
+            {t("visitsContextsTitle")}
+          </h3>
+          <p className="mb-3 text-aurion-caption text-navy-500">
+            {t("visitsContextsHint")}
+          </p>
+          <VisitTypeContextsEditor
+            visitTypes={visitTypes}
+            value={draftContexts}
+            onChange={setDraftContexts}
+            customTemplates={customs}
+          />
+          <div className="mt-4 flex items-center gap-3">
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => void onSaveContexts()}
+              loading={savingContexts}
+              disabled={!contextsDirty || savingContexts}
+              data-testid="visit-types-save"
+            >
+              {t("visitsSaveButton")}
+            </Button>
+            {contextsDirty && !savingContexts && (
+              <span className="text-aurion-caption text-navy-400">
+                {t("visitsUnsaved")}
+              </span>
+            )}
+          </div>
+          <p className="mt-4 text-aurion-caption text-navy-500">
+            {t("visitsProfileSubcontexts")}{" "}
+            <Link
+              href="/portal/profile"
+              className="font-medium text-navy-500 hover:text-navy-800 transition-colors duration-short"
+            >
+              {t("visitsGoToProfile")}
+            </Link>
+          </p>
+        </div>
       )}
     </div>
   );
