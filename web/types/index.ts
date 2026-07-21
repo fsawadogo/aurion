@@ -293,6 +293,22 @@ export interface NoteSection {
   claims: Claim[];
 }
 
+/** One note VERSION as a comparable eval "run" (EVAL-1): the version + the
+ * settings that produced it + deterministic metrics. Mirrors the backend
+ * `EvalRunResponse`. `settings_snapshot` is null on versions created before the
+ * provenance migration (the compare UI then shows "settings unknown"). */
+export interface EvalRun {
+  version: number;
+  stage: number;
+  provider_used: string;
+  completeness_score: number;
+  is_approved: boolean;
+  created_at: string;
+  settings_snapshot: Record<string, unknown> | null;
+  metrics: Record<string, number>;
+  note_sections: NoteSection[];
+}
+
 /** Slim, count-only summary of the prior-encounter context Stage 1
  * note-gen consumed for this note (#61, full slice).
  *

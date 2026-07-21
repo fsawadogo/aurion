@@ -9,6 +9,7 @@ import Card from "@/components/ui/Card";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
+import EvalCompareRuns from "./EvalCompareRuns";
 import {
   assignEvalSession,
   getEvalAssignees,
@@ -678,6 +679,10 @@ export default function EvalDetailClient(
                   {data.scored ? "Save changes" : "Submit score"}
                 </Button>
               </div>
+            </Card>
+
+            <Card className="mb-6" title="Compare runs">
+              <EvalCompareRuns sessionId={evalId} />
             </Card>
           </>
         )}

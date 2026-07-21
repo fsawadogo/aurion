@@ -8,6 +8,7 @@ import type {
   CurrentUser,
   EvalAssignee,
   EvalScoreSubmission,
+  EvalRun,
   EvalSession,
   EvalSessionDetail,
   FeatureFlags,
@@ -994,6 +995,13 @@ export async function getEvalSessions(): Promise<EvalSession[]> {
 
 export async function getEvalSession(id: string): Promise<EvalSessionDetail> {
   const res = await fetchWithAuth(`/api/v1/admin/eval/sessions/${id}`);
+  return res.json();
+}
+
+/** EVAL-1: every note VERSION of a session as a comparable "run" (settings +
+ * deterministic metrics + note). Drives the Compare-runs panel. */
+export async function getEvalSessionRuns(id: string): Promise<EvalRun[]> {
+  const res = await fetchWithAuth(`/api/v1/admin/eval/sessions/${id}/runs`);
   return res.json();
 }
 
