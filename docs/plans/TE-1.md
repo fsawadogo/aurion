@@ -37,7 +37,7 @@ The epic wanted web parity in-slice, but the backend graded directive + resoluti
 - [ ] **AC-2:** flag ON, `detail_level=None` or `detailed` → the exhaustive directive, verbatim — `::detailed_matches_today`
 - [ ] **AC-3:** flag ON, `brief` → a shorter directive that still names findings/decisions/medications/plan and forbids dropping clinical content — `::brief_trims_minor_not_essential`
 - [ ] **AC-4:** `standard` differs from both — `::standard_is_between`
-- [ ] **AC-5:** resolution order session > template > None — `::session_override_beats_template`
+- [ ] **AC-5:** ~~resolution order session > template > None~~ — **MOVED to TE-1b.** The per-session override needs a `SessionModel` column + create-flow wiring, which pairs naturally with the web Brief/Standard/Detailed control. TE-1 ships the TEMPLATE-level control (which already carries Marie's per-template verbosity); the session "just this once" override lands with the UI that sets it.
 - [ ] **AC-6:** the existing completeness lock still passes for the default case (not weakened) — existing test green
 - [ ] **AC-7:** no level relaxes descriptive mode (no "interpret/diagnose/infer" wording enters any directive) — `::no_level_authorizes_inference`
 - [ ] **AC-8:** full `tests/unit/` green; ruff clean; `/health` 200; zero iOS/web diff
