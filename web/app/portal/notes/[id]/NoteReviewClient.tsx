@@ -352,9 +352,11 @@ export default function NoteReviewPage() {
             />
           )}
 
-          {/* Note document (centre) + action rail (right). */}
-          <div className="flex flex-col lg:flex-row gap-4 items-start">
-            <div className="flex-1 min-w-0 w-full space-y-4">
+          {/* Landscape note — full width, one top toolbar, no side rail
+              (TE-4c). The 300px rail and the 720px note cap were what forced
+              the long vertical scroll; sign-off moved into the toolbar. */}
+          <div className="space-y-4">
+            <div className="min-w-0 w-full space-y-4">
               <Card>
                 {/* Toolbar — template · language · print · export · copy. */}
                 <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-hairline pb-4">
@@ -426,10 +428,22 @@ export default function NoteReviewPage() {
                     <Download className="h-4 w-4 mr-1" />
                     {t("actions.exportDocx")}
                   </Button>
-                  <Button variant="primary" size="sm" onClick={onCopy} disabled={noteBusy}>
+                  <Button variant="secondary" size="sm" onClick={onCopy} disabled={noteBusy} title={t("actions.copyHint")}>
                     {copied ? <ClipboardCheck className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
                     {copied ? t("toolbar.copied") : t("toolbar.copy")}
                   </Button>
+
+                  {/* Sign-off — the rail's job, now the toolbar's right end
+                      (TE-4c). Approved → the green Signed badge; otherwise the
+                      Approve & sign button, gated by `noteBusy` and the same
+                      conflict/stage guards the rail used. */}
+                  <div className="mx-1 hidden h-6 w-px bg-hairline sm:block" />
+                  <SignOffControl
+                    detail={detail}
+                    approving={approving}
+                    noteBusy={noteBusy}
+                    onApprove={() => void onApprove()}
+                  />
                 </div>
 
                 {/* Regeneration has no progress events — it is one request
@@ -449,7 +463,7 @@ export default function NoteReviewPage() {
                     screen-reader users need to know that before they act. */}
                 <div
                   className={
-                    "max-w-[720px] transition-opacity duration-short ease-aurion " +
+                    "transition-opacity duration-short ease-aurion " +
                     (noteBusy ? "opacity-50" : "opacity-100")
                   }
                   aria-busy={noteBusy}
@@ -487,15 +501,6 @@ export default function NoteReviewPage() {
 
               {chatEnabled && <NoteAssistChat onAssist={onAssist} />}
             </div>
-
-            <ActionRail
-              detail={detail}
-              approving={approving}
-              noteBusy={noteBusy}
-              copied={copied}
-              onApprove={() => void onApprove()}
-              onCopy={onCopy}
-            />
           </div>
 
           {/* Approval-gated add-on surfaces — only render post-approval. */}
@@ -600,75 +605,61 @@ function DiscardPrompt({
   );
 }
 
-function ActionRail({
+/**
+ * Sign-off at the right end of the note toolbar (TE-4c).
+ *
+ * Replaces the old 300px `ActionRail`. Approved → the green "Signed" badge in
+ * the toolbar; otherwise the "Approve & sign" button. Copy/Export/Print stay
+ * in the toolbar proper — this control owns ONLY sign-off, which is why the
+ * rail's "Copy to EHR" is gone (the toolbar's single Copy is the survivor).
+ */
+function SignOffControl({
   detail,
   approving,
   noteBusy,
-  copied,
   onApprove,
-  onCopy,
 }: {
   detail: NoteDetail;
   approving: boolean;
-  /** The note is being replaced (regenerate / approve / Stage 2) — the same
-   *  derived value the toolbar uses. The rail carries the PRIMARY "Copy to
-   *  EHR" and "Approve & sign", so if it doesn't honour this the whole
-   *  guarantee has a hole exactly where it matters most. */
+  /** The note is being replaced — approve must not race the in-flight
+   *  Stage-1 replacement. `session_state` can't see the regenerate window
+   *  (the client doesn't refetch mid-regenerate), so noteBusy carries it. */
   noteBusy: boolean;
-  copied: boolean;
   onApprove: () => void;
-  onCopy: () => void;
 }) {
   const t = useTranslations("NoteReview.actions");
   const isApproved = detail.export_metadata.is_approved;
   const state = detail.export_metadata.session_state;
-  // `noteBusy` covers the regenerate window that `session_state` can't: the
-  // client doesn't refetch mid-regenerate, so the state never flips to
-  // PROCESSING_STAGE1 on screen — approve would otherwise race the in-flight
-  // Stage-1 replacement.
   const blocked =
     noteBusy ||
     detail.conflict_state.has_unresolved ||
     state === "PROCESSING_STAGE1" ||
     state === "PROCESSING_STAGE2";
 
+  if (isApproved) {
+    return (
+      <span
+        className="inline-flex items-center gap-1.5 rounded-aurion-md border border-green-200 bg-green-50 px-3 py-1.5 text-aurion-caption font-semibold text-green-700"
+        title={state === "EXPORTED" ? t("approvedExported") : t("approvedReady")}
+      >
+        <ClipboardCheck className="h-4 w-4" />
+        {t("signedTitle")}
+      </span>
+    );
+  }
+
   return (
-    <aside className="w-full lg:w-[300px] lg:flex-none lg:sticky lg:top-4">
-      <Card>
-        <div className="space-y-3">
-          {isApproved ? (
-            <div className="rounded-aurion-md bg-green-50 border border-green-200 px-3 py-2.5">
-              <div className="text-aurion-caption font-semibold text-green-700">{t("signedTitle")}</div>
-              <div className="text-aurion-caption text-green-800 mt-0.5">
-                {state === "EXPORTED" ? t("approvedExported") : t("approvedReady")}
-              </div>
-            </div>
-          ) : (
-            <>
-              <Button
-                variant="primary"
-                className="w-full"
-                onClick={onApprove}
-                loading={approving}
-                disabled={approving || blocked}
-              >
-                {blocked ? t("resolveToApprove") : t("approveAndSign")}
-              </Button>
-              {blocked && detail.conflict_state.has_unresolved && (
-                <p className="text-aurion-caption text-amber-700">{t("blockedHint")}</p>
-              )}
-            </>
-          )}
-
-          <Button variant={isApproved ? "primary" : "secondary"} className="w-full" onClick={onCopy} disabled={noteBusy}>
-            {copied ? <ClipboardCheck className="h-4 w-4 mr-1" /> : <Copy className="h-4 w-4 mr-1" />}
-            {copied ? t("copied") : t("copyToEhr")}
-          </Button>
-
-          <div className="h-px bg-hairline" />
-          <p className="text-aurion-caption text-navy-400 text-center">{t("copyHint")}</p>
-        </div>
-      </Card>
-    </aside>
+    <Button
+      variant="primary"
+      size="sm"
+      onClick={onApprove}
+      loading={approving}
+      disabled={approving || blocked}
+      // Conflicts already surface in the ConflictsBanner at the top, so the
+      // label carries the reason without a second inline hint.
+      title={blocked ? t("blockedHint") : undefined}
+    >
+      {blocked ? t("resolveToApprove") : t("approveAndSign")}
+    </Button>
   );
 }

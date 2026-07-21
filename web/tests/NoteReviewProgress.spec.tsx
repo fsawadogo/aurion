@@ -110,20 +110,19 @@ const FLAGS = {
 };
 
 /**
- * Every control that READS the note — BOTH copy buttons.
+ * Every control that READS the note.
  *
- * There are two: the toolbar "Copy" and the action rail's primary "Copy to
- * EHR" (the file's own stated primary action). An earlier version of this
- * helper matched only `/^Copy$/i`, which excludes "Copy to EHR" by
- * construction — so it passed while the primary button was wide open during
- * regeneration. Review caught it; the rail copy is now asserted explicitly.
+ * TE-4c collapsed the two copy buttons into one: the old rail "Copy to EHR" is
+ * gone and the toolbar "Copy" is the survivor. Approve moved into the toolbar
+ * too (SignOffControl). The gating guarantee from #667 is unchanged — every
+ * one of these must be disabled while the note is being replaced — there is
+ * just one copy button to assert now.
  */
 function actions() {
   return {
     print: screen.getByRole("button", { name: "Print" }),
     exportDocx: screen.getByRole("button", { name: /Export/i }),
-    copyToolbar: screen.getByRole("button", { name: /^Copy$/i }),
-    copyToEhr: screen.getByRole("button", { name: /Copy to EHR/i }),
+    copy: screen.getByRole("button", { name: /^Copy$/i }),
     // The approve button's LABEL changes when blocked ("Approve & sign" →
     // "Resolve conflicts to approve"), so match either — otherwise the query
     // silently returns null in exactly the busy state we're testing.
@@ -150,8 +149,7 @@ describe("NoteReview — actions while the note is being replaced", () => {
     const a = actions();
     expect(a.print).toBeEnabled();
     expect(a.exportDocx).toBeEnabled();
-    expect(a.copyToolbar).toBeEnabled();
-    expect(a.copyToEhr).toBeEnabled();
+    expect(a.copy).toBeEnabled();
     expect(a.approve).toBeEnabled();
     expect(screen.getByTestId("note-document")).toHaveAttribute(
       "aria-busy",
@@ -177,12 +175,11 @@ describe("NoteReview — actions while the note is being replaced", () => {
     await waitFor(() => expect(regenerateNote).toHaveBeenCalled());
 
     // AC-1 — the bug: every note-reading control was live during regeneration.
-    // "Copy to EHR" is the PRIMARY one and was the review's HIGH finding — a
-    // clinician could paste the about-to-be-discarded note into the chart.
+    // Copy is the one a clinician would reach for to paste into the chart —
+    // and would get the about-to-be-discarded version.
     await waitFor(() => expect(actions().print).toBeDisabled());
     expect(actions().exportDocx).toBeDisabled();
-    expect(actions().copyToolbar).toBeDisabled();
-    expect(actions().copyToEhr).toBeDisabled();
+    expect(actions().copy).toBeDisabled();
     // …and approve must not race the in-flight Stage-1 replacement.
     expect(actions().approve).toBeDisabled();
 
@@ -234,8 +231,7 @@ describe("NoteReview — actions while the note is being replaced", () => {
 
     expect(actions().print).toBeDisabled();
     expect(actions().exportDocx).toBeDisabled();
-    expect(actions().copyToolbar).toBeDisabled();
-    expect(actions().copyToEhr).toBeDisabled();
+    expect(actions().copy).toBeDisabled();
     expect(actions().approve).toBeDisabled();
     expect(screen.getByTestId("note-document")).toHaveAttribute(
       "aria-busy",
