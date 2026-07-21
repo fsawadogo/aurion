@@ -9,9 +9,10 @@
  *   { event: "stage2_progress", frames_processed, frames_total }
  *
  * `useStageTwoProgress` subscribes to that channel and surfaces the
- * progress state to React. Falls back to polling `/stage2-status`
- * every 4 s if the socket can't connect or drops mid-session — the
- * iOS path stays on polling, so this is just a UX win for the web.
+ * progress state to React. Falls back to polling `/stage2-status` if the
+ * socket can't connect or drops mid-session — with exponential backoff and
+ * a give-up (NOT a fixed interval), so a blocked origin isn't kept blocked
+ * by our own polling. The iOS path stays on its own polling.
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -20,6 +21,14 @@ import { getStage2Status } from "@/lib/portal-api";
 import type { NoteWebSocketMessage, Stage2Status } from "@/types";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+
+/** Stage-2 status polling cadence (WS-fallback). Backoff, not a fixed
+ *  interval: base delay, doubling per consecutive failure up to a cap, then
+ *  give up so a blocked origin (e.g. a tripped WAF rate limit) isn't kept
+ *  blocked by our own polling. */
+const POLL_BASE_MS = 4000;
+const POLL_MAX_MS = 60000;
+const POLL_MAX_FAILURES = 6;
 
 function wsBaseFromApi(): string {
   // http(s)://host:port  →  ws(s)://host:port
@@ -90,29 +99,63 @@ export function useStageTwoProgress(
       });
     }
 
-    function pollOnce() {
-      if (cancelled || !sessionId) return;
+    // Self-scheduling poll with exponential backoff, NOT a fixed interval.
+    // A fixed 4s interval that catches-and-ignores errors keeps hammering a
+    // blocked origin forever — and when the block is a per-IP WAF rate limit,
+    // our own polling is what holds the window full so it never drains. Back
+    // off on consecutive failures and give up after a few, so the origin can
+    // recover; a page reload restarts a healthy poll.
+    let pollActive = false;
+    let pollFailures = 0;
+
+    function scheduleNextPoll(delayMs: number) {
+      pollTimer.current = window.setTimeout(runPoll, delayMs);
+    }
+
+    function runPoll() {
+      pollTimer.current = null;
+      if (cancelled || !sessionId) {
+        pollActive = false;
+        return;
+      }
       void getStage2Status(sessionId)
         .then((s) => {
+          pollFailures = 0;
           applyStatus(s);
           if (s.status === "completed" || s.status === "failed") {
             stopPoll();
+            return;
           }
+          scheduleNextPoll(POLL_BASE_MS);
         })
         .catch(() => {
-          /* network blip; next interval will retry */
+          pollFailures += 1;
+          if (pollFailures >= POLL_MAX_FAILURES) {
+            // Stop hammering — let the rate window drain. The user can reload
+            // to resume; the note itself is unaffected (Stage 2 runs server
+            // side regardless of whether we're watching).
+            stopPoll();
+            return;
+          }
+          scheduleNextPoll(
+            Math.min(POLL_BASE_MS * 2 ** pollFailures, POLL_MAX_MS),
+          );
         });
     }
 
     function startPoll() {
-      stopPoll();
-      pollOnce();
-      pollTimer.current = window.setInterval(pollOnce, 4000);
+      // Self-guarding so the WS error/close fallbacks can call it freely
+      // without stacking timers.
+      if (pollActive) return;
+      pollActive = true;
+      pollFailures = 0;
+      runPoll();
     }
 
     function stopPoll() {
+      pollActive = false;
       if (pollTimer.current != null) {
-        window.clearInterval(pollTimer.current);
+        window.clearTimeout(pollTimer.current);
         pollTimer.current = null;
       }
     }
@@ -152,7 +195,7 @@ export function useStageTwoProgress(
       ws.onerror = () => {
         // Socket couldn't open or hit an error; fall back to polling
         // so the user still sees something move.
-        if (!cancelled && pollTimer.current == null) startPoll();
+        if (!cancelled) startPoll();
       };
 
       ws.onclose = (ev) => {
@@ -160,13 +203,13 @@ export function useStageTwoProgress(
         // 1000 = normal closure (server-side intentional). Any other
         // close before we got `completed` means we should poll until
         // we know the job state.
-        if (ev.code !== 1000 && pollTimer.current == null) startPoll();
+        if (ev.code !== 1000) startPoll();
       };
     }
 
-    // Always seed with one poll so the UI doesn't sit empty waiting
-    // for the first event.
-    pollOnce();
+    // Seed with one poll so the UI doesn't sit empty waiting for the
+    // first event; startPoll self-guards against the WS fallbacks.
+    startPoll();
     openSocket();
 
     return () => {
