@@ -108,13 +108,16 @@ describe("VideoImportClient — visit context → template (TE-4d)", () => {
     render(withIntl(<VideoImportClient />));
     await waitFor(() => expect(getMyProfile).toHaveBeenCalled());
 
-    // AC-5 — no specialty <select>; the profile's specialty is shown read-only.
+    // TE-4e — specialty is implied from the profile: no picker AND no
+    // read-only field on the upload form (Uzziel: "no need to keep specialty
+    // there, it's already implied from profile"). It still rides the request
+    // from the profile, asserted below.
     expect(
       screen.queryByRole("combobox", { name: /specialty/i }),
     ).toBeNull();
     expect(
-      screen.getByTestId("video-import-specialty-readonly"),
-    ).toBeInTheDocument();
+      screen.queryByTestId("video-import-specialty-readonly"),
+    ).toBeNull();
 
     const body = await fillAndSubmit();
     expect(body.specialty).toBe("plastic_surgery"); // from PROFILE, not "general"

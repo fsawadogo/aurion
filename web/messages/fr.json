@@ -1545,6 +1545,10 @@
       "visitType": "Type de visite",
       "visitTypeDefault": "— aucun (modèle de la spécialité) —",
       "visitContext": "Contexte",
+      "contextNote": "Détails du contexte",
+      "contextNotePlaceholder": "Motif de la consultation, antécédents pertinents, points à aborder…",
+      "templateApplied": "Modèle",
+      "templateCustomFallback": "Modèle personnalisé",
       "visitContextDefault": "— défaut du type de visite —"
     },
     "consent": {
