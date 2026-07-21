@@ -549,6 +549,14 @@ resource "aws_ecs_task_definition" "api" {
         # verbosity locally, not on a deployed task.
         { name = "LOG_LEVEL", value = "INFO" },
         { name = "AWS_DEFAULT_REGION", value = var.region },
+        # KMS key for PHI-column encryption (patient identifiers via
+        # core/kms_encryption.py). Without this, the app falls back to its
+        # code default `alias/aurion-phi`, which is NOT provisioned in any
+        # account — the real alias is `alias/aurion-key-<env>` (s3.tf). That
+        # mismatch makes kms:Encrypt raise NotFoundException, surfacing as a
+        # 500 on PATCH /sessions/{id}/identifier. The task role already holds
+        # kms:Encrypt on this key (see the api-task policy above).
+        { name = "KMS_KEY_ID", value = aws_kms_alias.main.name },
         { name = "COGNITO_USER_POOL_ID", value = aws_cognito_user_pool.main.id },
         { name = "COGNITO_CLIENT_ID", value = aws_cognito_user_pool_client.main.id },
         { name = "DYNAMODB_AUDIT_TABLE", value = aws_dynamodb_table.audit_log.name },
