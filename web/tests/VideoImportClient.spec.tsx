@@ -20,6 +20,7 @@ import { withIntl } from "./helpers/intl";
 
 vi.mock("@/lib/portal-api", () => ({
   getPortalFeatureFlags: vi.fn(),
+  getMyProfile: vi.fn(),
   listMyCustomTemplates: vi.fn(),
   createVideoImport: vi.fn(),
   processVideoImport: vi.fn(),
@@ -39,6 +40,7 @@ vi.mock("@/lib/api", () => ({
 import {
   createVideoImport,
   getPortalFeatureFlags,
+  getMyProfile,
   listMyCustomTemplates,
   processVideoImport,
 } from "@/lib/portal-api";
@@ -81,6 +83,7 @@ beforeEach(() => {
   (globalThis as unknown as { XMLHttpRequest: unknown }).XMLHttpRequest =
     FakeXHR as unknown as typeof XMLHttpRequest;
   vi.mocked(listMyCustomTemplates).mockResolvedValue([]);
+  vi.mocked(getMyProfile).mockResolvedValue({ primary_specialty: "general", consultation_types: [], contexts_per_visit_type: {} } as never);
   vi.mocked(processVideoImport).mockResolvedValue({} as never);
 });
 

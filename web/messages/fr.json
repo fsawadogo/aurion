@@ -1537,7 +1537,11 @@
       "langFr": "Français",
       "template": "Modèle de note",
       "templateDefault": "Par défaut (selon la spécialité)",
-      "submit": "Téléverser et traiter"
+      "submit": "Téléverser et traiter",
+      "visitType": "Type de visite",
+      "visitTypeDefault": "— aucun (modèle de la spécialité) —",
+      "visitContext": "Contexte",
+      "visitContextDefault": "— défaut du type de visite —"
     },
     "consent": {
       "attestationLabel": "Je confirme que le consentement du patient a été obtenu au moment de l’enregistrement de cette consultation."
