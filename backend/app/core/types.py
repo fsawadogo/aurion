@@ -57,6 +57,13 @@ class Template(BaseModel):
     # the template shapes structure only. Validated against the descriptive-mode
     # gate (`validate_user_prompt`) whenever a custom template is written.
     system_prompt: Optional[str] = None
+    # TE-1: how verbose the note should be. Governs the completeness directive
+    # in `build_user_prompt` — `detailed` captures every distinct point (the
+    # historical default), `standard` the clinically significant ones, `brief`
+    # the essentials. `None` = the historical exhaustive behaviour. NEVER
+    # relaxes descriptive mode; it changes HOW MUCH is captured, never whether
+    # the model may interpret. A per-session override on `SessionModel` wins.
+    detail_level: Optional[Literal["brief", "standard", "detailed"]] = None
 
 
 # ── Note Types ─────────────────────────────────────────────────────────────

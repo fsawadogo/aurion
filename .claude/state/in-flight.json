@@ -1,5 +1,20 @@
 {
-  "backend": {"task_id": null, "branch": null, "pr": null, "started_at": null},
-  "web": {"task_id": "TE-4b", "branch": "lane-web/te-4b-progress-feedback", "pr": null, "started_at": "2026-07-20T19:30:00Z"},
-  "ios": {"task_id": null, "branch": null, "pr": null, "started_at": null}
+  "backend": {
+    "task_id": "TE-1",
+    "branch": "lane-backend/te-1-detail-level",
+    "pr": null,
+    "started_at": "2026-07-20T23:45:00Z"
+  },
+  "web": {
+    "task_id": "TE-4b",
+    "branch": "lane-web/te-4b-progress-feedback",
+    "pr": null,
+    "started_at": "2026-07-20T19:30:00Z"
+  },
+  "ios": {
+    "task_id": null,
+    "branch": null,
+    "pr": null,
+    "started_at": null
+  }
 }
