@@ -181,7 +181,7 @@ describe("NoteReviewPage — loop-4 copy + regenerate wiring", () => {
 
   it("Copy writes the full note to the clipboard — not gated on approval", async () => {
     render(withIntl(<NoteReviewPage />));
-    // Two Copy affordances (toolbar + rail); the toolbar one is unambiguous.
+    // One Copy button (toolbar) since TE-4c removed the rail's Copy to EHR.
     const copyBtn = await screen.findByText("Copy");
     fireEvent.click(copyBtn);
     await waitFor(() =>

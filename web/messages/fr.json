@@ -1286,7 +1286,6 @@
       "regenerating": "Régénération…",
       "print": "Imprimer",
       "copy": "Copier",
-      "copied": "Copié",
       "regeneratingHint": "cela peut prendre jusqu’à une minute"
     },
     "discard": {
@@ -1320,9 +1319,8 @@
       "resolveToApprove": "Résolvez les conflits pour approuver",
       "exportDocx": "Exporter DOCX",
       "stateLabel": "État : {state}",
-      "signedTitle": "Signée",
-      "copyToEhr": "Copier vers le DME",
-      "copied": "Copié",
+      "signedTitle": "Signée"
+      ,
       "copyHint": "Copie la note complète. Copier ne la signe pas.",
       "blockedHint": "Résolvez le conflit pour signer."
     },

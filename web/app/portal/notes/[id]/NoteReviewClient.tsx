@@ -355,9 +355,8 @@ export default function NoteReviewPage() {
           {/* Landscape note — full width, one top toolbar, no side rail
               (TE-4c). The 300px rail and the 720px note cap were what forced
               the long vertical scroll; sign-off moved into the toolbar. */}
-          <div className="space-y-4">
-            <div className="min-w-0 w-full space-y-4">
-              <Card>
+          <div className="min-w-0 w-full space-y-4">
+            <Card>
                 {/* Toolbar — template · language · print · export · copy. */}
                 <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-hairline pb-4">
                   <select
@@ -499,8 +498,7 @@ export default function NoteReviewPage() {
                 </div>
               </Card>
 
-              {chatEnabled && <NoteAssistChat onAssist={onAssist} />}
-            </div>
+            {chatEnabled && <NoteAssistChat onAssist={onAssist} />}
           </div>
 
           {/* Approval-gated add-on surfaces — only render post-approval. */}
@@ -637,13 +635,17 @@ function SignOffControl({
     state === "PROCESSING_STAGE2";
 
   if (isApproved) {
+    // The export state is VISIBLE text, not a title tooltip — the pilot is
+    // iPad-first and touch never fires `title`, so a tooltip here would leave
+    // "exported" indistinguishable from "approved · ready" on the actual
+    // devices.
     return (
-      <span
-        className="inline-flex items-center gap-1.5 rounded-aurion-md border border-green-200 bg-green-50 px-3 py-1.5 text-aurion-caption font-semibold text-green-700"
-        title={state === "EXPORTED" ? t("approvedExported") : t("approvedReady")}
-      >
+      <span className="inline-flex items-center gap-1.5 rounded-aurion-md border border-green-200 bg-green-50 px-3 py-1.5 text-aurion-caption font-semibold text-green-700">
         <ClipboardCheck className="h-4 w-4" />
         {t("signedTitle")}
+        <span className="font-normal text-green-800">
+          · {state === "EXPORTED" ? t("approvedExported") : t("approvedReady")}
+        </span>
       </span>
     );
   }
