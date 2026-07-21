@@ -79,14 +79,30 @@ def test_brief_trims_minor_not_essential():
     prompt = _prompt("brief", engine_on=True)
     assert _DIRECTIVE_BRIEF in prompt
     assert _DIRECTIVE_DETAILED not in prompt
-    # Genuinely graded down: brief < standard < detailed.
-    assert len(_DIRECTIVE_BRIEF) < len(_DIRECTIVE_STANDARD) < len(_DIRECTIVE_DETAILED)
-    # …but the essentials are still explicitly demanded, and dropping clinical
-    # content is explicitly forbidden — brief != incomplete.
+    # The essentials are still explicitly demanded, and dropping clinical
+    # content is forbidden — brief != incomplete. (Directive TEXT length is not
+    # the proxy for note brevity: protecting pertinent negatives makes the
+    # instruction longer while the resulting note is shorter.)
     lower = _DIRECTIVE_BRIEF.lower()
     for essential in ("finding", "medication", "plan"):
         assert essential in lower
     assert "never drop" in lower
+
+
+def test_brief_protects_pertinent_negatives():
+    """Review finding: 'omit routine negatives unless clinically relevant' is
+    the WRONG polarity — it defaults to dropping a negative and offloads the
+    safety call to the model. A pertinent negative ("no chest pain" in a
+    cardiac workup) is exactly what that phrasing would drop. Brief must
+    DEFAULT-KEEP pertinent negatives, not default-drop them."""
+    lower = _DIRECTIVE_BRIEF.lower()
+    # Default-keep, explicitly.
+    assert "pertinent negative" in lower
+    # …and the never-drop backstop names them, so it can't be read as
+    # covering only positive findings.
+    assert "or pertinent negative" in lower
+    # The old default-drop polarity must not return.
+    assert "omit routine negatives" not in lower
 
 
 def test_standard_is_between():

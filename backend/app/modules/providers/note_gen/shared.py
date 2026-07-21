@@ -40,8 +40,10 @@ _DIRECTIVE_STANDARD = (
 
 _DIRECTIVE_BRIEF = (
     "Be concise: capture the key findings, decisions, medications, and plan as "
-    "distinct claims. Omit routine negatives and minor detail unless "
-    "clinically relevant. Never drop a finding, medication, or plan item."
+    "distinct claims. Keep every pertinent negative that bears on the "
+    "assessment (e.g. a denied symptom that shapes the differential); omit "
+    "only incidental detail, small talk, and repetition. Never drop a finding, "
+    "medication, plan item, or pertinent negative to save space."
 )
 
 
