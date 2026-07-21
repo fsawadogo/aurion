@@ -12,6 +12,57 @@ import json
 import logging
 
 from app.core.types import Note, NoteClaim, NoteSection, Template, Transcript
+from app.modules.config.appconfig_client import get_config
+
+# ── Completeness directives (TE-1) ─────────────────────────────────────────
+#
+# How much of the transcript becomes claims. The historical behaviour is
+# EXHAUSTIVE — every distinct point — and it stays the default (and the
+# flag-off / `detailed` / `None` behaviour) so nothing regresses. `standard`
+# and `brief` trim VERBOSITY on minor/incidental material; both still demand
+# the essentials and neither relaxes descriptive mode. The one hard line:
+# fewer words, never fewer findings.
+
+_DIRECTIVE_DETAILED = (
+    "Be thorough: capture EVERY distinct point in the transcript as its own "
+    "claim — each history detail, exam finding, discussed option, risk, "
+    "medication, instruction, cost, and next step. Do not summarize away or "
+    "drop points that were discussed; a complete encounter yields many claims "
+    "spread across the sections, not a handful."
+)
+
+_DIRECTIVE_STANDARD = (
+    "Capture each clinically significant point as its own claim — the history, "
+    "exam findings, assessments discussed, options, risks, medications, and "
+    "the plan. Group closely related minor details together and omit "
+    "incidental repetition. Never drop a finding, medication, or plan item."
+)
+
+_DIRECTIVE_BRIEF = (
+    "Be concise: capture the key findings, decisions, medications, and plan as "
+    "distinct claims. Keep every pertinent negative that bears on the "
+    "assessment (e.g. a denied symptom that shapes the differential); omit "
+    "only incidental detail, small talk, and repetition. Never drop a finding, "
+    "medication, plan item, or pertinent negative to save space."
+)
+
+
+def _completeness_directive(template: Template) -> str:
+    """The transcript-completeness directive for this template (TE-1).
+
+    Flag-gated by ``template_engine_enabled``: OFF (or ``detail_level`` unset /
+    ``detailed``) returns the historical exhaustive directive verbatim, so the
+    prompt is byte-identical to pre-TE-1. ON with ``brief`` / ``standard``
+    returns a graded directive that trims verbosity on incidental material
+    while still demanding every finding, medication and plan item.
+    """
+    if not get_config().feature_flags.template_engine_enabled:
+        return _DIRECTIVE_DETAILED
+    if template.detail_level == "brief":
+        return _DIRECTIVE_BRIEF
+    if template.detail_level == "standard":
+        return _DIRECTIVE_STANDARD
+    return _DIRECTIVE_DETAILED
 
 logger = logging.getLogger("aurion.note_gen.parse")
 
@@ -248,6 +299,7 @@ def build_user_prompt(
     # physician's override upstream). Ends with its own blank line so the
     # following sections read cleanly; empty/None contributes nothing.
     specialty_block = f"{specialty_prefix.rstrip()}\n\n" if specialty_prefix else ""
+    completeness_directive = _completeness_directive(template)
     return f"""Generate a Stage {stage} clinical note for specialty: {template.key}
 {language_instruction}
 {specialty_block}Template sections (generate each):
@@ -256,7 +308,7 @@ def build_user_prompt(
 {context_block}{participants_block}{prior_block}Transcript segments:
 {segments_text}
 
-Be thorough: capture EVERY distinct point in the transcript as its own claim — each history detail, exam finding, discussed option, risk, medication, instruction, cost, and next step. Do not summarize away or drop points that were discussed; a complete encounter yields many claims spread across the sections, not a handful.
+{completeness_directive}
 
 Return JSON with this schema:
 {{

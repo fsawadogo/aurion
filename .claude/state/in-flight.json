@@ -1,20 +1,5 @@
 {
-  "backend": {
-    "task_id": null,
-    "branch": null,
-    "pr": null,
-    "started_at": null
-  },
-  "web": {
-    "task_id": "TE-4f",
-    "branch": "lane-web/te-4f-visit-types-contexts",
-    "pr": null,
-    "started_at": "2026-07-20T23:00:00Z"
-  },
-  "ios": {
-    "task_id": null,
-    "branch": null,
-    "pr": null,
-    "started_at": null
-  }
+  "backend": {"task_id": null, "branch": null, "pr": null, "started_at": null},
+  "web": {"task_id": null, "branch": null, "pr": null, "started_at": null},
+  "ios": {"task_id": null, "branch": null, "pr": null, "started_at": null}
 }
