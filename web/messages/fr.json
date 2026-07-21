@@ -1151,7 +1151,11 @@
     "fromNoteSeeding": "Ouverture…",
     "fromNoteLoadError": "Impossible de charger vos consultations.",
     "fromNoteError": "Impossible de démarrer à partir de cette note.",
-    "fromNoteRetry": "Réessayer"
+    "fromNoteRetry": "Réessayer",
+    "visitsContextsTitle": "Sous-contextes",
+    "visitsContextsHint": "Ajoutez des contextes sous un type de visite (p. ex. « genou gauche », « révision ») et associez chacun à un modèle. Laissez sur le modèle de la spécialité pour hériter.",
+    "visitsSaveButton": "Enregistrer les contextes",
+    "visitsUnsaved": "Modifications non enregistrées"
   },
   "TemplateNew": {
     "breadcrumbTemplates": "Modèles",

@@ -27,6 +27,10 @@ vi.mock("next/link", () => ({
 }));
 // Keep the real i18n keys but avoid pulling the full editor component tree.
 vi.mock("@/components/portal/VisitTypeContextsEditor", () => ({
+  // The rich accordion is exercised in its own spec (VisitTypeContexts.spec);
+  // here it's a stub so the tab renders. The flat default dropdown + Save
+  // button (the tab's own logic) are what these tests drive.
+  default: () => null,
   BUILT_IN_TEMPLATE_KEYS: ["general", "orthopedic_surgery", "plastic_surgery"],
   newContextId: () => "ctx_test1234",
 }));
@@ -100,13 +104,18 @@ describe("VisitTypesTab", () => {
     );
   });
 
-  it("clinician: sets their own per-visit default via an is_default context; never fetches org defaults", async () => {
+  it("clinician: sets their own per-visit default via an is_default context; saves on the Save button; never fetches org defaults", async () => {
     vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
     render(withIntl(<VisitTypesTab />));
 
     const sel = await screen.findByTestId("visit-type-template-follow_up");
+    // TE-4f: selecting edits the DRAFT — no immediate PUT (the flat dropdown
+    // and the accordion share one save).
     fireEvent.change(sel, { target: { value: "custom:c1" } });
+    expect(updateMyProfile).not.toHaveBeenCalled();
 
+    // Save persists the whole draft.
+    fireEvent.click(screen.getByTestId("visit-types-save"));
     await waitFor(() => expect(updateMyProfile).toHaveBeenCalled());
     const arg = vi.mocked(updateMyProfile).mock.calls.at(-1)![0] as {
       contexts_per_visit_type: Record<
@@ -142,5 +151,30 @@ describe("VisitTypesTab", () => {
     expect(
       screen.queryByText("Org visit-type defaults are set by your admin."),
     ).toBeNull();
+  });
+
+  it("clinician: Save is disabled until a change makes the draft dirty (TE-4f)", async () => {
+    vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
+    render(withIntl(<VisitTypesTab />));
+
+    const save = await screen.findByTestId("visit-types-save");
+    // Clean draft on load → nothing to save.
+    expect(save).toBeDisabled();
+
+    fireEvent.change(
+      await screen.findByTestId("visit-type-template-follow_up"),
+      { target: { value: "custom:c1" } },
+    );
+    // Draft now differs from the saved snapshot → Save enabled.
+    expect(save).toBeEnabled();
+  });
+
+  it("admin: no clinician sub-contexts editor or Save button", async () => {
+    vi.mocked(getMe).mockResolvedValue({ role: "ADMIN" } as never);
+    render(withIntl(<VisitTypesTab />));
+
+    await screen.findByTestId("visit-type-template-follow_up");
+    // The accordion + Save are the clinician surface only.
+    expect(screen.queryByTestId("visit-types-save")).toBeNull();
   });
 });
