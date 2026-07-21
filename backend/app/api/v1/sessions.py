@@ -10,6 +10,7 @@ import logging
 import uuid
 from typing import Literal, Optional
 
+from botocore.exceptions import BotoCoreError, ClientError
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 from sqlalchemy import select
@@ -518,14 +519,45 @@ async def set_session_external_reference_id(
         session.external_reference_id_encrypted = None
         session.external_reference_id_hash = None
     else:
-        session.external_reference_id_encrypted = encrypt_str(raw)
-        # Recompute the deterministic hash alongside the ciphertext so
-        # the indexed lookup (#61) and the rail (#61 foundation) stay
-        # in lockstep. Both columns are NULL together / non-NULL
-        # together; the longitudinal-context query filters on the hash
-        # column directly and would silently miss any row that has
-        # ciphertext but no hash.
-        session.external_reference_id_hash = hash_identifier(raw)
+        # Both AWS-backed calls run before we mutate the row, and the
+        # whole pair is guarded: a KMS Encrypt failure (misconfigured
+        # key / missing IAM / KMS unreachable) or a Secrets Manager
+        # failure inside hash_identifier (the HMAC-key fetch on a cold
+        # cache) must surface as a clean handled error, never a raw 500.
+        # Compute ciphertext + hash into locals first so a mid-pair
+        # failure leaves BOTH columns untouched — preserving the
+        # NULL-together / non-NULL-together invariant the longitudinal-
+        # context lookup (#61) relies on.
+        try:
+            ciphertext = encrypt_str(raw)
+            # Recompute the deterministic hash alongside the ciphertext so
+            # the indexed lookup (#61) and the rail (#61 foundation) stay
+            # in lockstep. The longitudinal-context query filters on the
+            # hash column directly and would silently miss any row that
+            # has ciphertext but no hash.
+            identifier_hash = hash_identifier(raw)
+        except (BotoCoreError, ClientError) as exc:
+            # PHI-safe: log a truncated session id + the botocore error
+            # only. The raw identifier is NEVER logged — botocore error
+            # strings carry the AWS error code + operation name, not our
+            # Plaintext argument. The response body is a static message
+            # for the same reason: no identifier value, no KMS/Secrets
+            # detail (mirrors the 502-on-AWS-failure contract used by
+            # the AppConfig admin routes).
+            logger.warning(
+                "Patient-identifier encryption failed for session=%s: %s",
+                str(session.id)[:12],
+                exc,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_502_BAD_GATEWAY,
+                detail=(
+                    "Could not securely store the patient identifier — "
+                    "encryption service error."
+                ),
+            ) from exc
+        session.external_reference_id_encrypted = ciphertext
+        session.external_reference_id_hash = identifier_hash
     await db.flush()
 
     # Audit row carries only the bool — never the identifier value

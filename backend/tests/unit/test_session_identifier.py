@@ -13,6 +13,10 @@ Locks the five contract guarantees of the #61 foundation slice:
   5. Decryption failure during the response build is logged and the
      field is dropped, not a 500 — protects the response path during
      CMK rotation.
+  6. A KMS / Secrets Manager failure on the WRITE path surfaces as a
+     clean 502 (never a raw 500), leaks no identifier value, and leaves
+     both columns untouched (the NULL-together invariant). This is the
+     fix for the `alias/aurion-phi` misconfig 500 seen on dev.
 
 Route-level row authorization (owner-only) is locked by the
 test_assert_owner.py suite already; we don't re-prove it here.
@@ -134,3 +138,46 @@ def test_encrypt_then_decrypt_roundtrips(stub_kms):
     # (The stub embeds the plaintext for test convenience; the real KMS
     # blob is opaque. The contract we care about is roundtrip-fidelity.)
     assert decrypt_str(ciphertext) == "MRN_FOLLOWUP_42"
+
+
+async def test_identifier_set_kms_failure_returns_502(monkeypatch):
+    """Guarantee 6 — a KMS Encrypt failure on the WRITE path is a clean 502,
+    never a raw 500. It leaks no identifier value and leaves both columns
+    untouched (NULL-together). This is the exact `alias/aurion-phi` misconfig
+    that 500'd on dev: KMS raises NotFoundException → the guard maps it to 502."""
+    from types import SimpleNamespace
+
+    from botocore.exceptions import ClientError
+    from fastapi import HTTPException
+
+    # A row with both identifier columns clear, as a fresh session has.
+    session = _row()
+    session.external_reference_id_hash = None
+
+    async def fake_get_owned(_db, _session_id, _user):
+        return session
+
+    class _FakeDB:
+        async def flush(self):  # pragma: no cover — must not run after failure
+            raise AssertionError("flush must not run after an encrypt failure")
+
+    def boom(*_a, **_k):
+        raise ClientError({"Error": {"Code": "NotFoundException"}}, "Encrypt")
+
+    monkeypatch.setattr(sessions_route, "get_owned_session_or_404", fake_get_owned)
+    monkeypatch.setattr(sessions_route, "encrypt_str", boom)
+
+    body = sessions_route.ExternalReferenceIdRequest(external_reference_id="MRN_01")
+    user = SimpleNamespace(user_id=uuid.uuid4())
+
+    with pytest.raises(HTTPException) as excinfo:
+        await sessions_route.set_session_external_reference_id(
+            session_id=session.id, body=body, user=user, db=_FakeDB()
+        )
+
+    assert excinfo.value.status_code == 502
+    # No PHI in the client-facing detail …
+    assert "MRN_01" not in str(excinfo.value.detail)
+    # … and neither column was mutated (both still NULL, together).
+    assert session.external_reference_id_encrypted is None
+    assert session.external_reference_id_hash is None
