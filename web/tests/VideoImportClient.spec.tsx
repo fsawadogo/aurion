@@ -236,3 +236,80 @@ describe("VideoImportClient — flag ON (multi-clip)", () => {
     expect(screen.queryByText(/first\.mp4/)).toBeNull();
   });
 });
+
+describe("VideoImportClient — clinician visit-type → context flow (TE-4e)", () => {
+  it("drops specialty + template pickers, prefills the context box, shows the resolved template, and sends context_id + encounter_context", async () => {
+    vi.mocked(getPortalFeatureFlags).mockResolvedValue({
+      video_import_enabled: true,
+      multi_clip_import_enabled: false,
+    });
+    // A profile whose "follow_up" visit type has one saved context, bound to a
+    // custom template and carrying a saved note.
+    vi.mocked(getMyProfile).mockResolvedValue({
+      primary_specialty: "plastic_surgery",
+      consultation_types: ["follow_up"],
+      contexts_per_visit_type: {
+        follow_up: [
+          {
+            id: "ctx_aaaa1111",
+            label: "Bunion consult",
+            template_key: null,
+            template_ref: "tpl-1",
+            description: "Left foot bunion, 6 weeks post-op",
+          },
+        ],
+      },
+    } as never);
+    vi.mocked(listMyCustomTemplates).mockResolvedValue([
+      { id: "tpl-1", display_name: "Ortho Follow-up" },
+    ] as never);
+    vi.mocked(createVideoImport).mockResolvedValue({
+      session_id: "s1",
+      job_id: "j1",
+      upload_url: "https://s3/one",
+      s3_key: "k1",
+    });
+
+    render(withIntl(<VideoImportClient />));
+    const user = userEvent.setup();
+
+    // The specialty field and the old standalone template dropdown are gone.
+    const visitType = await screen.findByTestId("video-import-visit-type");
+    expect(screen.queryByTestId("video-import-specialty-readonly")).toBeNull();
+    expect(screen.queryByTestId("video-import-template")).toBeNull();
+
+    // Pick the visit type → its context appears; pick the context.
+    await user.selectOptions(visitType, "follow_up");
+    const ctxSelect = await screen.findByTestId("video-import-visit-context");
+    await user.selectOptions(ctxSelect, "ctx_aaaa1111");
+
+    // The context box is prefilled with the context's saved note …
+    const note = screen.getByTestId(
+      "video-import-context-note",
+    ) as HTMLTextAreaElement;
+    expect(note.value).toBe("Left foot bunion, 6 weeks post-op");
+    // … and the resolved template (from the context's ref) is shown.
+    expect(await screen.findByText("Ortho Follow-up")).toBeInTheDocument();
+
+    // Submit → create carries the visit type, context id, and the note as
+    // encounter_context; no custom_template_id (template comes from context).
+    await user.upload(
+      screen.getByTestId("video-import-file-input"),
+      mkFile("a.mp4"),
+    );
+    await user.click(screen.getByLabelText(/consent was obtained/i));
+    await user.click(screen.getByRole("button", { name: /Upload & process/i }));
+
+    await waitFor(() =>
+      expect(vi.mocked(processVideoImport)).toHaveBeenCalled(),
+    );
+    const body = vi.mocked(createVideoImport).mock.calls[0][0];
+    expect(body).toMatchObject({
+      specialty: "plastic_surgery",
+      consultation_type: "follow_up",
+      context_id: "ctx_aaaa1111",
+      encounter_context: "Left foot bunion, 6 weeks post-op",
+    });
+    expect(body).not.toHaveProperty("custom_template_id");
+  });
+});

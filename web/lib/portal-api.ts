@@ -977,6 +977,11 @@ export interface VideoImportCreateBody {
    *  the specialty default. `custom_template_id` still overrides these. */
   consultation_type?: string;
   context_id?: string;
+  /** Free-text encounter context (iOS `encounter_context`). On the clinician
+   *  upload it's prefilled from a picked context's saved note and editable;
+   *  the backend stores it and it reaches the note-generation prompt. Can be
+   *  PHI — rides only this POST body. */
+  encounter_context?: string;
   /** Optional custom template (tpl-03) to apply — its structure + any AI
    *  instructions. Omit / null = the specialty default. Overrides the visit
    *  context above. */

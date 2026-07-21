@@ -1545,6 +1545,10 @@
       "visitType": "Visit type",
       "visitTypeDefault": "— none (specialty default) —",
       "visitContext": "Context",
+      "contextNote": "Context details",
+      "contextNotePlaceholder": "Reason for the visit, relevant history, what to focus on…",
+      "templateApplied": "Template",
+      "templateCustomFallback": "Custom template",
       "visitContextDefault": "— visit-type default —"
     },
     "consent": {

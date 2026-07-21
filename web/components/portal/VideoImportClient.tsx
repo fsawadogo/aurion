@@ -12,6 +12,7 @@
 import {
   ArrowDown,
   ArrowUp,
+  FileText,
   Film,
   ShieldCheck,
   UploadCloud,
@@ -23,6 +24,10 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Button from "@/components/ui/Button";
 import Card from "@/components/ui/Card";
 import PageHeader from "@/components/portal/PageHeader";
+import {
+  BUILT_IN_TEMPLATE_KEYS,
+  MAX_CONTEXT_DESCRIPTION_LEN,
+} from "@/components/portal/VisitTypeContextsEditor";
 import {
   createAdminVideoImport,
   getAdminVideoImportStatus,
@@ -41,7 +46,11 @@ import {
   type VideoImportStatus,
 } from "@/lib/portal-api";
 import { shouldStopPolling } from "@/lib/poll";
-import type { CustomTemplate, PhysicianProfile } from "@/types";
+import type {
+  CustomTemplate,
+  PhysicianProfile,
+  VisitTypeContext,
+} from "@/types";
 
 const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
 // Above this, use S3 multipart (resumable per-part) instead of a single PUT.
@@ -173,6 +182,9 @@ export default function VideoImportClient({
 }: VideoImportClientProps) {
   const t = useTranslations("VideoImport");
   const tSpec = useTranslations("Specialties");
+  // Reuse the profile editor's localized built-in template names so the
+  // resolved-template line reads exactly as it does in the clinician's profile.
+  const tTemplates = useTranslations("Profile.contexts.templates");
 
   const api =
     surface === "admin"
@@ -210,7 +222,9 @@ export default function VideoImportClient({
   const [language, setLanguage] = useState("en");
   const [consent, setConsent] = useState(false);
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
-  const [customTemplateId, setCustomTemplateId] = useState("");
+  // Free-text encounter context (iOS `encounter_context`). Prefilled from a
+  // picked context's saved note; the clinician can add to it before upload.
+  const [contextNote, setContextNote] = useState("");
 
   const [phase, setPhase] = useState<Phase>("form");
   // Elapsed processing time. A stepper alone cannot distinguish "this stage
@@ -348,6 +362,39 @@ export default function VideoImportClient({
 
   const canSubmit = files.length > 0 && consent && phase === "form";
 
+  // The saved context the clinician picked (if any) — drives the resolved-
+  // template line and prefilled the context box. Only the clinician surface
+  // has a visit-type→context map.
+  const selectedContext: VisitTypeContext | null =
+    visitType && contextId
+      ? profile?.contexts_per_visit_type[visitType]?.find(
+          (c) => c.id === contextId,
+        ) ?? null
+      : null;
+
+  // Localized name of the template a picked context pins EXPLICITLY: a custom
+  // ref → its display name; a built-in key → the shared localized label.
+  // Returns null when the context inherits (no explicit binding) — the web
+  // can't predict the server's clinician/org-default resolution, so we don't
+  // assert a template name we might get wrong.
+  const resolvedTemplateName: string | null = (() => {
+    if (!selectedContext) return null;
+    if (selectedContext.template_ref) {
+      return (
+        customTemplates.find((c) => c.id === selectedContext.template_ref)
+          ?.display_name ?? t("form.templateCustomFallback")
+      );
+    }
+    if (selectedContext.template_key) {
+      return (BUILT_IN_TEMPLATE_KEYS as readonly string[]).includes(
+        selectedContext.template_key,
+      )
+        ? tTemplates(selectedContext.template_key)
+        : selectedContext.template_key;
+    }
+    return null;
+  })();
+
   function mapStage(s: VideoImportStatus): number {
     if (s.status === "completed" || s.session_state === "AWAITING_REVIEW")
       return STAGES.indexOf("ready");
@@ -404,12 +451,15 @@ export default function VideoImportClient({
             : specialty,
         encounter_type: encounterType,
         output_language: language,
-        custom_template_id: customTemplateId || null,
         // TE-4d: send the visit type + context so the backend resolves the
         // mapped template via the same resolver iOS uses. Omitted when nothing
-        // is picked → the specialty default.
+        // is picked → the specialty default. The template now comes from the
+        // context (no standalone template picker) — no custom_template_id.
         ...(visitType ? { consultation_type: visitType } : {}),
         ...(contextId ? { context_id: contextId } : {}),
+        // Free-text encounter context (iOS `encounter_context`) — prefilled
+        // from a picked context's saved note, editable before upload.
+        ...(contextNote.trim() ? { encounter_context: contextNote.trim() } : {}),
         consent_attested: true,
         consent_method: "attested",
         // Only send clip_count when there's more than one clip so single-file
@@ -575,23 +625,147 @@ export default function VideoImportClient({
           )}
 
           <Card title={t("form.title")}>
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              {surface === "clinician" ? (
-                // TE-4d: specialty is a profile property, not a picker — show
-                // it read-only so the clinician knows which specialty template
-                // underlies the note.
+            {surface === "clinician" ? (
+              // TE-4e: mirror the iOS capture flow — visit type → context →
+              // context box — with the template coming FROM the picked context
+              // (no standalone template picker) and specialty taken from the
+              // profile (so no specialty field here). Sends the same
+              // consultation_type / context_id / encounter_context fields iOS's
+              // /sessions carries; iOS itself is untouched.
+              <div className="space-y-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {(profile?.consultation_types.length ?? 0) > 0 && (
+                    <label className="block text-sm">
+                      <span className="mb-1 block font-medium text-navy-700">
+                        {t("form.visitType")}
+                      </span>
+                      <select
+                        className="form-input"
+                        value={visitType}
+                        onChange={(e) => {
+                          setVisitType(e.target.value);
+                          // Context belongs to a visit type — reset both the
+                          // pick and the prefilled note when the type changes.
+                          setContextId("");
+                          setContextNote("");
+                        }}
+                        data-testid="video-import-visit-type"
+                      >
+                        <option value="">{t("form.visitTypeDefault")}</option>
+                        {profile?.consultation_types.map((vt) => (
+                          <option key={vt} value={vt}>
+                            {humanizeVisitType(vt)}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  )}
+                  <label className="block text-sm">
+                    <span className="mb-1 block font-medium text-navy-700">
+                      {t("form.encounterType")}
+                    </span>
+                    <select
+                      className="form-input"
+                      value={encounterType}
+                      onChange={(e) => setEncounterType(e.target.value)}
+                    >
+                      {ENCOUNTER_TYPES.map((v) => (
+                        <option key={v} value={v}>
+                          {t(`form.encounter.${v}`)}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                </div>
+
+                {/* The visit type's saved contexts. Picking one resolves its
+                    pinned template server-side and prefills the context box
+                    with the context's saved note. */}
+                {visitType &&
+                  (profile?.contexts_per_visit_type[visitType]?.length ?? 0) >
+                    0 && (
+                    <label className="block text-sm">
+                      <span className="mb-1 block font-medium text-navy-700">
+                        {t("form.visitContext")}
+                      </span>
+                      <select
+                        className="form-input"
+                        value={contextId}
+                        onChange={(e) => {
+                          const id = e.target.value;
+                          setContextId(id);
+                          const ctx = profile?.contexts_per_visit_type[
+                            visitType
+                          ]?.find((c) => c.id === id);
+                          setContextNote(ctx?.description ?? "");
+                        }}
+                        data-testid="video-import-visit-context"
+                      >
+                        <option value="">
+                          {t("form.visitContextDefault")}
+                        </option>
+                        {profile?.contexts_per_visit_type[visitType]?.map(
+                          (ctx) => (
+                            <option key={ctx.id} value={ctx.id}>
+                              {ctx.label}
+                            </option>
+                          ),
+                        )}
+                      </select>
+                    </label>
+                  )}
+
+                {/* Resolved template — shown when the picked context pins one
+                    explicitly (the "pull up its template" feedback). */}
+                {resolvedTemplateName && (
+                  <p
+                    className="flex items-center gap-2 text-sm text-navy-600"
+                    data-testid="video-import-resolved-template"
+                  >
+                    <FileText className="h-4 w-4 flex-shrink-0 text-navy-400" />
+                    <span>
+                      {t("form.templateApplied")}:{" "}
+                      <span className="font-medium text-navy-800">
+                        {resolvedTemplateName}
+                      </span>
+                    </span>
+                  </p>
+                )}
+
+                {/* Context box — free text that travels to the note as
+                    encounter context (iOS `encounter_context`). */}
                 <label className="block text-sm">
                   <span className="mb-1 block font-medium text-navy-700">
-                    {t("form.specialty")}
+                    {t("form.contextNote")}
                   </span>
-                  <div
-                    className="form-input flex items-center bg-canvas text-navy-500"
-                    data-testid="video-import-specialty-readonly"
-                  >
-                    {tSpec(profile?.primary_specialty ?? specialty)}
-                  </div>
+                  <textarea
+                    className="form-input min-h-[80px] resize-y"
+                    value={contextNote}
+                    maxLength={MAX_CONTEXT_DESCRIPTION_LEN}
+                    placeholder={t("form.contextNotePlaceholder")}
+                    onChange={(e) => setContextNote(e.target.value)}
+                    data-testid="video-import-context-note"
+                  />
                 </label>
-              ) : (
+
+                <label className="block text-sm sm:max-w-xs">
+                  <span className="mb-1 block font-medium text-navy-700">
+                    {t("form.language")}
+                  </span>
+                  <select
+                    className="form-input"
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                  >
+                    <option value="en">{t("form.langEn")}</option>
+                    <option value="fr">{t("form.langFr")}</option>
+                  </select>
+                </label>
+              </div>
+            ) : (
+              // Admin/eval surface — no personal profile: keep the specialty
+              // picker + encounter type + language exactly as before.
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <label className="block text-sm">
                   <span className="mb-1 block font-medium text-navy-700">
                     {t("form.specialty")}
@@ -602,113 +776,43 @@ export default function VideoImportClient({
                     onChange={(e) => setSpecialty(e.target.value)}
                   >
                     {SPECIALTIES.map((s) => (
-                      <option key={s} value={s}>{tSpec(s)}</option>
-                    ))}
-                  </select>
-                </label>
-              )}
-
-              {/* TE-4d — visit type → context, the same choice iOS offers.
-                  Resolves the mapped template server-side. Clinician surface
-                  only (admin/eval has no personal visit-type map). */}
-              {surface === "clinician" &&
-                (profile?.consultation_types.length ?? 0) > 0 && (
-                  <label className="block text-sm">
-                    <span className="mb-1 block font-medium text-navy-700">
-                      {t("form.visitType")}
-                    </span>
-                    <select
-                      className="form-input"
-                      value={visitType}
-                      onChange={(e) => {
-                        setVisitType(e.target.value);
-                        setContextId(""); // context belongs to a visit type
-                      }}
-                      data-testid="video-import-visit-type"
-                    >
-                      <option value="">{t("form.visitTypeDefault")}</option>
-                      {profile?.consultation_types.map((vt) => (
-                        <option key={vt} value={vt}>
-                          {humanizeVisitType(vt)}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                )}
-
-              {surface === "clinician" &&
-                visitType &&
-                (profile?.contexts_per_visit_type[visitType]?.length ?? 0) >
-                  0 && (
-                  <label className="block text-sm">
-                    <span className="mb-1 block font-medium text-navy-700">
-                      {t("form.visitContext")}
-                    </span>
-                    <select
-                      className="form-input"
-                      value={contextId}
-                      onChange={(e) => setContextId(e.target.value)}
-                      data-testid="video-import-visit-context"
-                    >
-                      <option value="">{t("form.visitContextDefault")}</option>
-                      {profile?.contexts_per_visit_type[visitType]?.map(
-                        (ctx) => (
-                          <option key={ctx.id} value={ctx.id}>
-                            {ctx.label}
-                          </option>
-                        ),
-                      )}
-                    </select>
-                  </label>
-                )}
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-navy-700">
-                  {t("form.encounterType")}
-                </span>
-                <select
-                  className="form-input"
-                  value={encounterType}
-                  onChange={(e) => setEncounterType(e.target.value)}
-                >
-                  {ENCOUNTER_TYPES.map((v) => (
-                    <option key={v} value={v}>{t(`form.encounter.${v}`)}</option>
-                  ))}
-                </select>
-              </label>
-              <label className="block text-sm">
-                <span className="mb-1 block font-medium text-navy-700">
-                  {t("form.language")}
-                </span>
-                <select
-                  className="form-input"
-                  value={language}
-                  onChange={(e) => setLanguage(e.target.value)}
-                >
-                  <option value="en">{t("form.langEn")}</option>
-                  <option value="fr">{t("form.langFr")}</option>
-                </select>
-              </label>
-              {surface === "clinician" && customTemplates.length > 0 && (
-                <label className="block text-sm">
-                  <span className="mb-1 block font-medium text-navy-700">
-                    {t("form.template")}
-                  </span>
-                  <select
-                    className="form-input"
-                    value={customTemplateId}
-                    onChange={(e) => setCustomTemplateId(e.target.value)}
-                    data-testid="video-import-template"
-                  >
-                    <option value="">{t("form.templateDefault")}</option>
-                    {customTemplates.map((tpl) => (
-                      <option key={tpl.id} value={tpl.id}>
-                        {tpl.display_name}
+                      <option key={s} value={s}>
+                        {tSpec(s)}
                       </option>
                     ))}
                   </select>
                 </label>
-              )}
-            </div>
+                <label className="block text-sm">
+                  <span className="mb-1 block font-medium text-navy-700">
+                    {t("form.encounterType")}
+                  </span>
+                  <select
+                    className="form-input"
+                    value={encounterType}
+                    onChange={(e) => setEncounterType(e.target.value)}
+                  >
+                    {ENCOUNTER_TYPES.map((v) => (
+                      <option key={v} value={v}>
+                        {t(`form.encounter.${v}`)}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="block text-sm">
+                  <span className="mb-1 block font-medium text-navy-700">
+                    {t("form.language")}
+                  </span>
+                  <select
+                    className="form-input"
+                    value={language}
+                    onChange={(e) => setLanguage(e.target.value)}
+                  >
+                    <option value="en">{t("form.langEn")}</option>
+                    <option value="fr">{t("form.langFr")}</option>
+                  </select>
+                </label>
+              </div>
+            )}
           </Card>
 
           <div className="flex items-start gap-2 rounded-aurion-md border border-amber-200 bg-amber-50 px-4 py-3">
