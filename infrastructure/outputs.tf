@@ -209,6 +209,11 @@ output "portal_nameservers" {
   value       = aws_route53_zone.portal.name_servers
 }
 
+output "portal_extra_nameservers" {
+  description = "Per-domain NS records for var.web_portal_extra_domains. For each domain, add 4 NS records at its apex DNS (e.g. the peritwin.com Cloudflare zone: NS records named 'portal' pointing at these) — then Amplify cert verification completes and the domain goes live."
+  value       = { for d, z in aws_route53_zone.portal_extra : d => z.name_servers }
+}
+
 output "amplify_app_id" {
   description = "Amplify app ID — needed for CLI deploys (`aws amplify create-deployment --app-id <ID>`), dashboard URLs, and the GitHub Actions `AMPLIFY_APP_ID` repo variable."
   value       = aws_amplify_app.web_portal.id

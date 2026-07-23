@@ -361,6 +361,37 @@ resource "aws_amplify_domain_association" "portal" {
 }
 
 # -----------------------------------------------------------------------------
+# Extra portal domains (rebrand/dual-domain, e.g. portal.peritwin.com)
+# -----------------------------------------------------------------------------
+# Same zone + association pattern as the primary domain, one pair per
+# entry in var.web_portal_extra_domains. Amplify auto-manages the ACM
+# cert validation records once the zone is NS-delegated from the
+# domain's apex DNS (output portal_extra_nameservers). The primary
+# domain stays live alongside — iOS Universal Links + the Meta
+# Wearables app-link are pinned to it.
+
+resource "aws_route53_zone" "portal_extra" {
+  for_each = toset(var.web_portal_extra_domains)
+  name     = each.value
+
+  tags = {
+    Name = each.value
+  }
+}
+
+resource "aws_amplify_domain_association" "portal_extra" {
+  for_each              = toset(var.web_portal_extra_domains)
+  app_id                = aws_amplify_app.web_portal.id
+  domain_name           = each.value
+  wait_for_verification = false
+
+  sub_domain {
+    branch_name = aws_amplify_branch.main.branch_name
+    prefix      = "" # apex of the zone — the domain itself
+  }
+}
+
+# -----------------------------------------------------------------------------
 # IAM service role for Amplify (build + log access)
 # -----------------------------------------------------------------------------
 # Amplify still needs a service role even in manual-deploy mode —
