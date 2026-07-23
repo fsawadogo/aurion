@@ -584,7 +584,7 @@ resource "aws_ecs_task_definition" "api" {
         # into the FastAPI CORS middleware. iOS/iPad clients are unaffected
         # (CORS is a browser policy only) but skipping this would silently
         # block portal-dev.aurionclinical.com fetches.
-        { name = "CORS_ALLOWED_ORIGINS", value = "https://${var.web_portal_subdomain}" },
+        { name = "CORS_ALLOWED_ORIGINS", value = join(",", concat(["https://${var.web_portal_subdomain}"], [for d in var.web_portal_extra_domains : "https://${d}"])) },
         # Self-hosted Whisper ASR endpoint via Cloud Map (service_discovery.tf).
         # Read by providers/transcription/whisper.py when
         # providers.transcription = "whisper" in AppConfig. Without this the

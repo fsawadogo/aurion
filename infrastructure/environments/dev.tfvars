@@ -19,6 +19,11 @@ api_domain = "api-dev.aurionclinical.com"
 # comes online, rename this to `portal-dev.` and reserve `portal.` for
 # prod via prod.tfvars. CTO decision 2026-06-03.
 web_portal_subdomain = "portal.aurionclinical.com"
+# Peritwin rebrand (2026-07-23): second live domain on the same Amplify app.
+# The aurionclinical domain stays — iOS Universal Links + the Meta Wearables
+# app-link are pinned to it. NS delegation for 'portal' lives in the
+# peritwin.com Cloudflare zone (see output portal_extra_nameservers).
+web_portal_extra_domains = ["portal.peritwin.com"]
 
 # Email delivery recipients (#76 / #77) — ACTIVATE the CRITICAL operational-
 # alert email sink + the scheduled compliance-report delivery on the live

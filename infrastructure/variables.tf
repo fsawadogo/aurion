@@ -126,6 +126,12 @@ variable "web_portal_subdomain" {
   default     = "portal-dev.aurionclinical.com"
 }
 
+variable "web_portal_extra_domains" {
+  description = "Additional fully qualified domains served by the SAME Amplify portal app (rebrand/dual-domain, e.g. ['portal.peritwin.com']). Each gets its own Route 53 zone + Amplify domain association; the apex DNS must delegate 4 NS records per domain (see output portal_extra_nameservers). The primary var.web_portal_subdomain stays live — iOS Universal Links and the Meta Wearables app-link are pinned to it, so it must NOT be removed while any shipped build references it."
+  type        = list(string)
+  default     = []
+}
+
 variable "alert_email_recipients" {
   description = "Comma-separated recipient list for the #76 CRITICAL operational-alert email sink (e.g. 'ops@aurionclinical.com,compliance@aurionclinical.com'). Empty = the email sink is a no-op (alerts stay portal-only + Slack). Not a secret — plain addresses; injected as the ALERT_EMAIL_RECIPIENTS task env. Delivery also requires the Resend email service configured (RESEND_API_KEY + verified sender)."
   type        = string
