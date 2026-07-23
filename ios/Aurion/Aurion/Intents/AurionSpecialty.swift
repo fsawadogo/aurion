@@ -15,7 +15,7 @@ enum AurionSpecialty: String, AppEnum {
     case general = "general"
 
     static var typeDisplayRepresentation: TypeDisplayRepresentation =
-        TypeDisplayRepresentation(name: "Aurion Specialty")
+        TypeDisplayRepresentation(name: "Peritwin Specialty")
 
     static var caseDisplayRepresentations: [AurionSpecialty: DisplayRepresentation] = [
         .orthopedic: DisplayRepresentation(
