@@ -1,4 +1,4 @@
-/* Peritwin — English Localization */
+/* PeriTwin — English Localization */
 
 /* ── Tabs ─────────────────────────────────────────────── */
 "tabs.home" = "Home";
@@ -353,7 +353,7 @@
 "audio_upload_recording_lost" = "Recording lost \U2014 please re-record.";
 
 /* ── Login ─────────────────────────────────────────────── */
-"login.appName" = "Peritwin";
+"login.appName" = "PeriTwin";
 "login.tagline" = "CLINICAL AI";
 "login.email" = "Email";
 "login.emailPlaceholder" = "physician@hospital.org";
@@ -388,7 +388,7 @@
 "setup.practice.surgical.sub" = "Procedural facility";
 "setup.practice.hospital.sub" = "Inpatient setting";
 "setup.autoUpload.title" = "Auto-upload on stop";
-"setup.autoUpload.sub" = "Send capture to Peritwin as soon as recording ends.";
+"setup.autoUpload.sub" = "Send capture to PeriTwin as soon as recording ends.";
 "setup.localRetention.title" = "Local retention";
 "setup.localRetention.sub" = "Keep notes on this device for review.";
 "setup.consentReprompt.title" = "Consent re-prompt";
@@ -449,7 +449,7 @@
 "onboarding.biometric.scrollA11yHint" = "Scroll the consent text to the bottom to enable the confirmation toggle.";
 "onboarding.biometric.agree" = "I Agree \U2014 Create Voice Profile";
 "onboarding.biometric.goBack" = "Go Back";
-"onboarding.biometric.consentText" = "Peritwin requests your consent to collect and process a short voice recording for the purpose of creating a speaker voice profile.\n\n**What we collect:** A 30-60 second voice recording read from clinical sentences.\n\n**How it is used:** The recording is processed entirely on this device to create a voice embedding (a mathematical representation of your voice). This embedding is used during clinical sessions to distinguish your speech from your patient\U2019s.\n\n**Storage:** The voice embedding is stored exclusively in this device\U2019s secure Keychain. It is never transmitted to any server.\n\n**Recording deletion:** The raw voice recording is deleted from device memory immediately after the voice embedding is generated. It is never stored on disk or uploaded.\n\n**Your rights:** You may delete your voice profile at any time from Settings. You may also re-record your voice profile. Declining does not affect your ability to use Peritwin \U2014 the system will function without speaker separation.\n\nThis consent is governed by applicable biometric data protection laws including Quebec\U2019s Law 25 and PIPEDA.";
+"onboarding.biometric.consentText" = "PeriTwin requests your consent to collect and process a short voice recording for the purpose of creating a speaker voice profile.\n\n**What we collect:** A 30-60 second voice recording read from clinical sentences.\n\n**How it is used:** The recording is processed entirely on this device to create a voice embedding (a mathematical representation of your voice). This embedding is used during clinical sessions to distinguish your speech from your patient\U2019s.\n\n**Storage:** The voice embedding is stored exclusively in this device\U2019s secure Keychain. It is never transmitted to any server.\n\n**Recording deletion:** The raw voice recording is deleted from device memory immediately after the voice embedding is generated. It is never stored on disk or uploaded.\n\n**Your rights:** You may delete your voice profile at any time from Settings. You may also re-record your voice profile. Declining does not affect your ability to use PeriTwin \U2014 the system will function without speaker separation.\n\nThis consent is governed by applicable biometric data protection laws including Quebec\U2019s Law 25 and PIPEDA.";
 "onboarding.voiceProc.creating" = "Creating your voice profile\U2026";
 "onboarding.voiceProc.saved" = "Voice profile saved to this device";
 "onboarding.voiceProc.savedSub" = "You can update or delete your voice profile anytime in Settings.";
@@ -457,8 +457,8 @@
 "onboarding.voiceProc.step1" = "Analyzing voice patterns\U2026";
 "onboarding.voiceProc.step2" = "Generating voice embedding\U2026";
 "onboarding.voiceProc.step3" = "Securing in Keychain\U2026";
-"onboarding.voiceExpl.title" = "Help Peritwin recognize your voice";
-"onboarding.voiceExpl.body" = "Peritwin uses a short voice sample to separate your observations from your patient\U2019s during visits.\n\nYour recording is processed on this device only and deleted immediately. Nothing is sent to our servers.";
+"onboarding.voiceExpl.title" = "Help PeriTwin recognize your voice";
+"onboarding.voiceExpl.body" = "PeriTwin uses a short voice sample to separate your observations from your patient\U2019s during visits.\n\nYour recording is processed on this device only and deleted immediately. Nothing is sent to our servers.";
 "onboarding.voiceExpl.skip" = "Skip for now";
 "onboarding.voiceRec.instruction" = "Read aloud in your normal clinical voice";
 "onboarding.voiceRec.rerecord" = "Re-record";
@@ -501,12 +501,12 @@
 "profile.title" = "Profile";
 "profile.defaultName" = "Physician";
 "profile.voiceEnrolled" = "Voice ID set up";
-"profile.voiceEnrolledSub" = "Peritwin can tell your voice apart from your patient\U2019s.";
+"profile.voiceEnrolledSub" = "PeriTwin can tell your voice apart from your patient\U2019s.";
 "profile.rerecordVoice" = "Re-record Voice ID";
 "profile.deleteVoice" = "Delete Voice ID";
 "profile.noVoice" = "No voice profile";
 "profile.setupVoice" = "Set up your Voice ID";
-"profile.setupVoiceSub" = "Record 4 short sentences so Peritwin knows which voice is yours.";
+"profile.setupVoiceSub" = "Record 4 short sentences so PeriTwin knows which voice is yours.";
 "profile.startVoice" = "Start Voice ID";
 "profile.sectionVoice" = "Voice ID";
 "profile.sectionTeam" = "Team Members";
@@ -532,7 +532,7 @@
 "profile.teamEditor.editHint" = "Double tap to edit this member";
 /* #275 / I2 — per-row "working today" roster toggle (VoiceOver label). */
 "profile.teamEditor.workingToday" = "Working today";
-"profile.teamEditor.footer" = "These are the people who typically work alongside you during visits — nurses, scribes, residents, MOAs. Peritwin uses this list to attribute non-physician speech in your transcripts.";
+"profile.teamEditor.footer" = "These are the people who typically work alongside you during visits — nurses, scribes, residents, MOAs. PeriTwin uses this list to attribute non-physician speech in your transcripts.";
 "profile.teamEditor.saveFailed" = "Couldn't save team members. Check your connection and try again.";
 "profile.signOut" = "Sign Out";
 "profile.practiceType" = "Practice Type";
@@ -611,7 +611,7 @@
 /* ── Login (extended) ─────────────────────────────────── */
 "login.signedIn" = "Signed in";
 "login.signingIn" = "Signing in\U2026";
-"login.firstTimeHint" = "First-time access? Use the temporary password your administrator sent \U2014 Peritwin will prompt you to set a new one.";
+"login.firstTimeHint" = "First-time access? Use the temporary password your administrator sent \U2014 PeriTwin will prompt you to set a new one.";
 "login.backendLookupFailed" = "Signed in but backend lookup failed: %@";
 
 /* ── Login errors (account-enumeration safe) ──────────── */
@@ -619,8 +619,8 @@
 "login.error.accountLocked" = "Too many failed sign-in attempts. Please wait about 15 minutes and try again.";
 "login.error.passwordTooWeak" = "That password doesn\U2019t meet the policy. Use 12+ characters with mixed case, a digit, and a symbol.";
 "login.error.invalidResetToken" = "That reset link has expired or already been used. Request a new one.";
-"login.error.network" = "Couldn\U2019t reach Peritwin. Check your connection and try again.";
-"login.error.malformed" = "Peritwin returned a response we couldn\U2019t read. Try again, or contact support if it keeps happening.";
+"login.error.network" = "Couldn\U2019t reach PeriTwin. Check your connection and try again.";
+"login.error.malformed" = "PeriTwin returned a response we couldn\U2019t read. Try again, or contact support if it keeps happening.";
 
 /* ── MFA: daily TOTP challenge ───────────────────────── */
 "login.mfa.challenge.title" = "Verification code";
@@ -645,9 +645,9 @@
 "login.mfa.recovery.cantAccess" = "Can\U2019t access your code?";
 "login.mfa.recovery.a11yHint" = "Opens recovery guidance for a lost authenticator app.";
 "login.mfa.recovery.title" = "Lost access to your authenticator?";
-"login.mfa.recovery.body" = "Your authenticator app generates the 6-digit codes. If you\U2019ve lost the device or removed the app, you can\U2019t generate a new code yourself.\n\nFor security, two-factor authentication can only be reset by your clinic administrator. Contact your administrator or Peritwin support and we\U2019ll restore access to your account.";
+"login.mfa.recovery.body" = "Your authenticator app generates the 6-digit codes. If you\U2019ve lost the device or removed the app, you can\U2019t generate a new code yourself.\n\nFor security, two-factor authentication can only be reset by your clinic administrator. Contact your administrator or PeriTwin support and we\U2019ll restore access to your account.";
 "login.mfa.recovery.emailButton" = "Email support";
-"login.mfa.recovery.emailA11yHint" = "Opens a new email to Peritwin support.";
+"login.mfa.recovery.emailA11yHint" = "Opens a new email to PeriTwin support.";
 
 /* ── Forgot password (email-link reset) ──────────────── */
 "login.forgotPassword.linkText" = "Forgot password?";
@@ -658,7 +658,7 @@
 "login.resetCode.submit" = "Open reset";
 "login.resetCode.invalid" = "That doesn't look like a valid reset link or token.";
 "login.forgotPassword.title" = "Reset your password";
-"login.forgotPassword.subtitle" = "Enter the email tied to your Peritwin account. We\U2019ll send a reset link if it matches an active account.";
+"login.forgotPassword.subtitle" = "Enter the email tied to your PeriTwin account. We\U2019ll send a reset link if it matches an active account.";
 "login.forgotPassword.emailLabel" = "Email";
 "login.forgotPassword.sendButton" = "Send reset link";
 "login.forgotPassword.sending" = "Sending\U2026";
@@ -667,7 +667,7 @@
 
 /* ── Reset password (Universal Link in-app surface) ──── */
 "login.resetPassword.title" = "Set a new password";
-"login.resetPassword.subtitle" = "Choose a new password for your Peritwin account. You\U2019ll sign in with it on every device.";
+"login.resetPassword.subtitle" = "Choose a new password for your PeriTwin account. You\U2019ll sign in with it on every device.";
 "login.resetPassword.newPasswordLabel" = "New password";
 "login.resetPassword.confirmLabel" = "Confirm password";
 "login.resetPassword.submitButton" = "Set new password";
@@ -744,7 +744,7 @@
 /* ── Encounter Type Sheet ─────────────────────────────── */
 "encounter.title" = "Encounter Type";
 "encounter.whoInRoom" = "Who\U2019s in the room?";
-"encounter.adjustSub" = "Peritwin will adjust capture and consent accordingly.";
+"encounter.adjustSub" = "PeriTwin will adjust capture and consent accordingly.";
 "encounter.doctorPatient.title" = "Doctor + Patient";
 "encounter.doctorPatient.sub" = "Standard one-on-one visit";
 "encounter.doctorTeam.title" = "Doctor + team member(s) + Patient";
@@ -774,16 +774,16 @@
 /* ── Pre-Encounter Context Sheet ──────────────────────── */
 "context.title" = "Context";
 "context.question" = "What brings the patient in today?";
-"context.required" = "Required. Peritwin uses this to focus the note on the right specialty template.";
+"context.required" = "Required. PeriTwin uses this to focus the note on the right specialty template.";
 "context.placeholder" = "e.g. Right knee pain, 3 weeks post-op meniscus repair.";
-"context.tip" = "Peritwin uses this to focus the structured note. Stays on-device.";
+"context.tip" = "PeriTwin uses this to focus the structured note. Stays on-device.";
 "context.minHint" = "Enter at least a few words of context to start the session.";
 "context.chooseSub" = "Pick a saved context, or choose Other to describe it.";
 "context.selectHint" = "Select a context to start the session.";
 "context.other" = "Other";
 "context.otherSub" = "Describe this encounter yourself";
 "context.captureMode" = "Capture mode";
-"context.captureModeSub" = "How should Peritwin observe this encounter?";
+"context.captureModeSub" = "How should PeriTwin observe this encounter?";
 
 /* ── Capture Modes ────────────────────────────────────── */
 "captureMode.multimodal.title" = "Multimodal";
@@ -823,7 +823,7 @@
 "a11y.startEncounterHint" = "Starts a new encounter";
 "a11y.profileAvatar" = "Profile avatar";
 "a11y.progress" = "Progress";
-"a11y.logoTagline" = "Peritwin \U2014 the gold standard in clinical AI";
+"a11y.logoTagline" = "PeriTwin \U2014 your clinical digital twin. Ask Peri.";
 "a11y.sortSessions" = "Sort sessions";
 
 /* ── Common (extended) ────────────────────────────────── */
@@ -973,10 +973,10 @@
 "quote.generating" = "Drafting quote\U2026";
 "quote.saving" = "Saving\U2026";
 "quote.emptyTitle" = "No quote yet";
-"quote.emptySub" = "Draft a quote from the approved note. Peritwin lists the procedures discussed \U2014 you add the fees.";
+"quote.emptySub" = "Draft a quote from the approved note. PeriTwin lists the procedures discussed \U2014 you add the fees.";
 "quote.lockedTitle" = "Approve the note first";
 "quote.lockedSub" = "A surgery quote can be generated once the note is approved.";
-"quote.editorHint" = "Peritwin drafted the procedures discussed. Add or edit line items and enter your fees.";
+"quote.editorHint" = "PeriTwin drafted the procedures discussed. Add or edit line items and enter your fees.";
 "quote.addLine" = "Add line item";
 "quote.removeLine" = "Remove line item";
 "quote.procedure" = "Procedure";
@@ -1009,12 +1009,12 @@
 /* ── App Lock (security) ──────────────────────────────── */
 "profile.sectionSecurity" = "Security";
 "profile.appLock" = "App Lock";
-"profile.appLockHelp" = "Require Face ID / Touch ID (or your passcode) to open Peritwin. Protects patient data if your phone is unlocked and left unattended.";
+"profile.appLockHelp" = "Require Face ID / Touch ID (or your passcode) to open PeriTwin. Protects patient data if your phone is unlocked and left unattended.";
 "profile.autoLock" = "Auto-lock";
-"applock.title" = "Peritwin is locked";
+"applock.title" = "PeriTwin is locked";
 "applock.subtitle" = "Authenticate to continue.";
 "applock.unlock" = "Unlock";
-"applock.reason" = "Unlock Peritwin to access patient data.";
+"applock.reason" = "Unlock PeriTwin to access patient data.";
 "applock.timeout.0" = "Immediately";
 "applock.timeout.60" = "After 1 minute";
 "applock.timeout.300" = "After 5 minutes";
@@ -1038,10 +1038,10 @@
 "sessions.discardConfirmTitle" = "Discard this session?";
 "sessions.discardConfirmMessage" = "This permanently deletes the session and its note. This can\U2019t be undone.";
 /* ── First-run tour ───────────────────────────────────── */
-"tour.welcome.title" = "Welcome to Peritwin";
+"tour.welcome.title" = "Welcome to PeriTwin";
 "tour.welcome.body" = "A quick tour of how you\U2019ll capture and review encounters \U2014 about 20 seconds.";
 "tour.start.title" = "Start an encounter";
-"tour.start.body" = "Tap a Quick Start card to begin recording. Peritwin captures audio, video, and screen together.";
+"tour.start.body" = "Tap a Quick Start card to begin recording. PeriTwin captures audio, video, and screen together.";
 "tour.review.title" = "Review with confidence";
 "tour.review.body" = "Finished encounters appear here. Every claim traces back to what was said or shown.";
 "tour.explore.title" = "Find your way around";
@@ -1054,7 +1054,7 @@
 "login.rememberMeWith" = "Remember me with %@";
 "login.signInWith" = "Sign in with %@";
 "login.forgetSaved" = "Forget saved login";
-"login.biometricPrompt" = "Sign in to Peritwin";
+"login.biometricPrompt" = "Sign in to PeriTwin";
 "login.biometricExpired" = "Saved login expired. Please sign in with your password.";
 "login.or" = "or";
 "biometric.passcode" = "Passcode";
@@ -1173,7 +1173,7 @@
 "measurement.error.disabled" = "Measurement isn\U2019t enabled for this account.";
 "measurement.error.offline" = "You appear to be offline. Try again when connected.";
 
-/* Status chips (PeritwinStatusKind) */
+/* Status chips (PeriTwinStatusKind) */
 "status.completed" = "Completed";
 "status.pending" = "Pending";
 "status.rec" = "REC";

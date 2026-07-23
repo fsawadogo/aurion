@@ -533,7 +533,7 @@
 				DEVELOPMENT_TEAM = 2W2Z75Q5ZA;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Peritwin;
+				INFOPLIST_KEY_CFBundleDisplayName = PeriTwin;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.aurionclinical.physician;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -566,7 +566,7 @@
 				DEVELOPMENT_TEAM = 2W2Z75Q5ZA;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = Peritwin;
+				INFOPLIST_KEY_CFBundleDisplayName = PeriTwin;
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKCompanionAppBundleIdentifier = com.aurionclinical.physician;
 				LD_RUNPATH_SEARCH_PATHS = (

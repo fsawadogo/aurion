@@ -358,7 +358,7 @@
   },
   "Login": {
     "title": "Connexion",
-    "subtitle": "Portail clinique Peritwin",
+    "subtitle": "Portail clinique PeriTwin",
     "emailLabel": "Courriel",
     "passwordLabel": "Mot de passe",
     "signIn": "Se connecter",
@@ -369,7 +369,7 @@
   "Auth": {
     "forgotPassword": {
       "title": "Mot de passe oublié?",
-      "subtitle": "Saisissez le courriel associé à votre compte Peritwin. Nous vous enverrons un lien de réinitialisation.",
+      "subtitle": "Saisissez le courriel associé à votre compte PeriTwin. Nous vous enverrons un lien de réinitialisation.",
       "emailLabel": "Courriel",
       "emailPlaceholder": "vous@aurionclinical.com",
       "submit": "Envoyer le lien",
@@ -377,7 +377,7 @@
       "backToSignIn": "Retour à la connexion",
       "confirmationTitle": "Vérifiez votre boîte de réception",
       "confirmationBody": "Si ce courriel est enregistré, un lien de réinitialisation est en route. Vérifiez votre boîte de réception dans quelques minutes.",
-      "transportError": "Impossible de joindre Peritwin pour le moment. Vérifiez votre connexion et réessayez."
+      "transportError": "Impossible de joindre PeriTwin pour le moment. Vérifiez votre connexion et réessayez."
     },
     "resetPassword": {
       "title": "Définir un nouveau mot de passe",
@@ -396,7 +396,7 @@
         "expiredHint": "Votre lien de réinitialisation a peut-être expiré. Demandez-en un nouveau depuis l'écran de connexion.",
         "usedHint": "Ce lien de réinitialisation a déjà été utilisé. Demandez-en un nouveau depuis l'écran de connexion.",
         "invalidHint": "Ce lien de réinitialisation n'est pas valide. Vérifiez le lien dans le courriel ou demandez-en un nouveau.",
-        "transport": "Impossible de joindre Peritwin pour le moment. Vérifiez votre connexion et réessayez."
+        "transport": "Impossible de joindre PeriTwin pour le moment. Vérifiez votre connexion et réessayez."
       }
     },
     "loginToast": {
@@ -485,7 +485,7 @@
     "eyebrow": "Transparence",
     "title": "Invites IA",
     "subtitle": "Les instructions exactes que chaque modèle d’IA reçoit lors de l’analyse de vos consultations.",
-    "descriptiveModeCallout": "Chaque invite ci-dessous applique le mode descriptif : l’IA est invitée à décrire ce qui a été capté, jamais à interpréter, diagnostiquer ou suggérer une conclusion clinique. C’est la limite de sécurité du pilote Peritwin.",
+    "descriptiveModeCallout": "Chaque invite ci-dessous applique le mode descriptif : l’IA est invitée à décrire ce qui a été capté, jamais à interpréter, diagnostiquer ou suggérer une conclusion clinique. C’est la limite de sécurité du pilote PeriTwin.",
     "phaseAReadOnlyChip": "Phase A : lecture seule",
     "phaseBHint": "Lorsque vous enregistrez votre propre invite, elle remplace l’invite système par défaut pour vos sessions. L’invite système par défaut ci-dessous sert de repli lorsque vous n’en avez pas enregistré.",
     "searchPlaceholder": "Filtrer par nom ou rôle…",
@@ -521,7 +521,7 @@
     "editor": {
       "title": "Modifier votre invite",
       "systemDefaultLabel": "Invite système par défaut (utilisée si vous n’en avez pas enregistré)",
-      "systemDefaultHint": "Limite de sécurité du mode descriptif d’Peritwin",
+      "systemDefaultHint": "Limite de sécurité du mode descriptif d’PeriTwin",
       "yourPromptLabel": "Votre invite",
       "yourPromptPlaceholder": "Vous êtes un assistant de documentation clinique. Décrivez uniquement ce qui a été directement capté pendant la consultation. Documentez les plaintes du patient et les observations visibles. N’interprétez pas, ne diagnostiquez pas et n’inférez aucune signification clinique.",
       "charCount": "{used}/{max}",
@@ -566,7 +566,7 @@
       "save": "Enregistrer la directive",
       "cancel": "Annuler",
       "resetToDefault": "Rétablir le texte par défaut",
-      "useDefault": "Utiliser la valeur par défaut d’Peritwin",
+      "useDefault": "Utiliser la valeur par défaut d’PeriTwin",
       "errorSaving": "Impossible d’enregistrer votre directive. Veuillez réessayer.",
       "inactiveWarning": "La directive de spécialité n’est pas appliquée aux notes générées pour l’instant — un administrateur doit l’activer. Vos modifications sont enregistrées et prendront effet une fois activée."
     }
@@ -896,7 +896,7 @@
   "Profile": {
     "eyebrow": "Portail du clinicien",
     "title": "Mon profil",
-    "description": "Comment Peritwin configure les enregistrements et la génération de notes pour vous.",
+    "description": "Comment PeriTwin configure les enregistrements et la génération de notes pour vous.",
     "accountSettings": "Paramètres du compte",
     "loadError": "Impossible de charger le profil.",
     "saveError": "Échec de l’enregistrement.",
@@ -1022,7 +1022,7 @@
     },
     "noteLanguage": {
       "title": "Langue des notes générées",
-      "description": "La langue qu’Peritwin utilise pour générer les notes à partir de vos transcriptions. Indépendante de la langue de l’interface du portail.",
+      "description": "La langue qu’PeriTwin utilise pour générer les notes à partir de vos transcriptions. Indépendante de la langue de l’interface du portail.",
       "setAria": "Définir la langue des notes générées à {label}",
       "english": "Anglais",
       "french": "Français"
@@ -1145,7 +1145,7 @@
     "visitsProfileSubcontexts": "Besoin de modèles par contexte (p. ex. « genou gauche »)? Gérez-les dans Mon profil.",
     "fromNote": "À partir d’une consultation",
     "fromNoteTitle": "Créer un modèle à partir d’une note",
-    "fromNoteHint": "Choisissez une consultation — Peritwin en extrait un modèle réutilisable à partir de sa note, que vous affinez ensuite par clavardage. Aucune donnée du patient n’est copiée dans le modèle.",
+    "fromNoteHint": "Choisissez une consultation — PeriTwin en extrait un modèle réutilisable à partir de sa note, que vous affinez ensuite par clavardage. Aucune donnée du patient n’est copiée dans le modèle.",
     "fromNoteEmpty": "Aucune consultation avec une note pour l’instant.",
     "fromNoteUntitled": "Consultation sans titre",
     "fromNoteSeeding": "Ouverture…",
@@ -1215,7 +1215,7 @@
     "keyHint": "Lettres minuscules, chiffres et tirets bas — l’identifiant stable utilisé pour référencer ce modèle.",
     "aiInstructions": "Instructions IA (facultatif)",
     "aiInstructionsPlaceholder": "ex. Décrivez uniquement ce qui a été observé et consigné. N’interprétez pas, ne diagnostiquez pas et n’inférez pas.",
-    "aiInstructionsHint": "Remplace l’invite de génération de note par défaut pour les notes créées avec ce modèle. Laissez vide pour utiliser la valeur par défaut. Doit respecter le mode descriptif d’Peritwin — décrire, ne pas diagnostiquer.",
+    "aiInstructionsHint": "Remplace l’invite de génération de note par défaut pour les notes créées avec ce modèle. Laissez vide pour utiliser la valeur par défaut. Doit respecter le mode descriptif d’PeriTwin — décrire, ne pas diagnostiquer.",
     "sectionsHeading": "Sections",
     "addSection": "Ajouter une section",
     "sectionsLimit": "{max} sections maximum.",
@@ -1315,7 +1315,7 @@
       "chipAddMissed": "Ajouter ce que j’ai oublié",
       "chipTidy": "Nettoyer les sections vides",
       "youLabel": "Vous",
-      "assistantLabel": "Peritwin"
+      "assistantLabel": "PeriTwin"
     },
     "actions": {
       "approvedExported": "Approuvée · exportée",
@@ -1522,7 +1522,7 @@
   "VideoImport": {
     "eyebrow": "Portail clinicien",
     "title": "Téléverser une vidéo de consultation",
-    "description": "Téléversez une consultation enregistrée et Peritwin la traitera dans le même pipeline d’IA qu’une séance en direct, puis produira une note à réviser.",
+    "description": "Téléversez une consultation enregistrée et PeriTwin la traitera dans le même pipeline d’IA qu’une séance en direct, puis produira une note à réviser.",
     "dropzone": {
       "prompt": "Déposez votre vidéo ici ou cliquez pour la sélectionner",
       "accepted": "MP4, MOV ou WebM · jusqu’à 2 Go",

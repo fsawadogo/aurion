@@ -467,7 +467,7 @@ struct SessionNoteView: View {
         // persistentIdentifier; AurionApp.onContinueUserActivity matches
         // on it and routes the user back here.
         .userActivity(AppNavigation.sessionActivityType, isActive: !isLoading) { activity in
-            activity.title = "Peritwin · \(displaySpecialty)"
+            activity.title = "PeriTwin · \(displaySpecialty)"
             activity.userInfo = ["session_id": session.id]
             activity.persistentIdentifier = session.id
             activity.isEligibleForSearch = true

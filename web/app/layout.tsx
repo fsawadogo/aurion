@@ -8,9 +8,9 @@ import { DEFAULT_LOCALE } from "@/i18n/config";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Peritwin — Admin Portal",
+  title: "PeriTwin — Admin Portal",
   description:
-    "Administration and compliance portal for the Peritwin clinical pilot.",
+    "Administration and compliance portal for the PeriTwin clinical pilot.",
 };
 
 /**

@@ -18,7 +18,7 @@ enum NoteDocumentBuilder {
     /// claim text on the second. Skips empty sections so the export
     /// doesn't carry "not_captured" stubs.
     static func makePlainText(_ note: NoteResponse, sessionId: String) -> Data {
-        var out = "Peritwin Clinical Note\n"
+        var out = "PeriTwin Clinical Note\n"
         out += "Session: \(sessionId)\n"
         out += "Specialty: \(note.specialty)\n"
         out += "Version: \(note.version)\n\n"

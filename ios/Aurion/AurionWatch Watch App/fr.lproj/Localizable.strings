@@ -1,4 +1,4 @@
-/* #65 — Copie de l\U2019interface Peritwin Watch. Cl\U00E9s align\U00E9es sur
+/* #65 — Copie de l\U2019interface PeriTwin Watch. Cl\U00E9s align\U00E9es sur
    WL(cl\U00E9, d\U00E9faut). Parit\U00E9 EN+FR (CLAUDE.md). Terminologie
    align\U00E9e sur l\U2019app iOS (Enregistrement / En pause / Reprendre /
    Arr\U00EAter / Formulaire papier|num\U00E9rique). La montre n\U2019affiche
@@ -20,5 +20,5 @@
 "watch.processing.title" = "Traitement";
 "watch.processing.sub" = "Finalisation sur l\U2019iPhone\U2026";
 "watch.review.title" = "Pr\U00EAt \U00E0 r\U00E9viser";
-"watch.review.sub" = "Ouvrez Peritwin sur l\U2019iPhone";
+"watch.review.sub" = "Ouvrez PeriTwin sur l\U2019iPhone";
 "watch.done.title" = "Rencontre termin\U00E9e";
