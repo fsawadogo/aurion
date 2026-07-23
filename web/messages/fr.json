@@ -358,7 +358,7 @@
   },
   "Login": {
     "title": "Connexion",
-    "subtitle": "Portail Aurion Clinical AI",
+    "subtitle": "Portail clinique Peritwin",
     "emailLabel": "Courriel",
     "passwordLabel": "Mot de passe",
     "signIn": "Se connecter",

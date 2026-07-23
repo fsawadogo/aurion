@@ -358,7 +358,7 @@
   },
   "Login": {
     "title": "Sign in",
-    "subtitle": "Aurion Clinical AI portal",
+    "subtitle": "Peritwin clinical portal",
     "emailLabel": "Email",
     "passwordLabel": "Password",
     "signIn": "Sign in",
