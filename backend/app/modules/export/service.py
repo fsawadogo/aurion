@@ -57,7 +57,7 @@ async def export_note_docx(
     # ── Title ─────────────────────────────────────────────────────────
     title = doc.add_heading("Clinical Note", level=0)
     title_run = title.runs[0] if title.runs else title.add_run()
-    title_run.font.color.rgb = RGBColor(0x0D, 0x1B, 0x3E)  # Aurion navy
+    title_run.font.color.rgb = RGBColor(0x0F, 0x13, 0x34)  # PeriTwin indigo
 
     # ── Metadata paragraph ────────────────────────────────────────────
     meta = doc.add_paragraph()
@@ -74,7 +74,7 @@ async def export_note_docx(
     for section in note.sections:
         heading = doc.add_heading(section.title or section.id, level=1)
         heading_run = heading.runs[0] if heading.runs else heading.add_run()
-        heading_run.font.color.rgb = RGBColor(0x0D, 0x1B, 0x3E)
+        heading_run.font.color.rgb = RGBColor(0x0F, 0x13, 0x34)
 
         if section.status in ("not_captured", "processing_failed"):
             status_para = doc.add_paragraph()

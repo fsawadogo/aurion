@@ -22,9 +22,9 @@ extension Color {
     // (sampled from `Logo.png` corner pixels: RGB(12, 27, 55) = #0C1B37).
     // Any surface using `aurionNavy` will now blend seamlessly with the
     // lockup — no visible "logo box" sitting on top.
-    static let aurionNavy = Color(red: 12/255, green: 27/255, blue: 55/255)       // #0C1B37 (brand — matches Logo.png)
-    static let aurionNavyLight = Color(red: 22/255, green: 40/255, blue: 78/255)  // #16284E (lighter shade, kept for accents)
-    static let aurionNavyDark = Color(red: 8/255, green: 18/255, blue: 38/255)    // #081226 (deeper, for gradient base)
+    static let aurionNavy = Color(red: 15/255, green: 19/255, blue: 52/255)       // #0F1334 (PeriTwin indigo — hue from the logo wordmark)
+    static let aurionNavyLight = Color(red: 22/255, green: 28/255, blue: 78/255)  // #161C4E (lighter shade, kept for accents)
+    static let aurionNavyDark = Color(red: 10/255, green: 13/255, blue: 36/255)   // #0A0D24 (deeper, for gradient base)
 
     // Gold ramp — #418: these read the physician's chosen `AurionAccent`
     // so selecting an accent recolors every gold-token surface at once

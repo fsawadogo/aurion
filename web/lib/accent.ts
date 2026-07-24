@@ -21,7 +21,7 @@ export type AccentKey = (typeof ACCENT_KEYS)[number];
 /** Representative swatch fill — the 500 step of each scale, matching the
  *  `globals.css` triplets 1:1. Used only to paint the picker chips. */
 export const ACCENT_SWATCH: Record<AccentKey, string> = {
-  gold: "#C9A84C",
+  gold: "#4159D4", // PeriTwin periwinkle (brand default; key name is legacy)
   teal: "#14B8A6",
   indigo: "#6366F1",
   rose: "#F43F5E",

@@ -32,17 +32,19 @@ const config: Config = {
       colors: {
         // ── Brand ────────────────────────────────────────────────
         navy: {
-          DEFAULT: "#0C1B37",
-          50: "#E8EBF2",
-          100: "#C5CCE0",
-          200: "#9EAACB",
-          300: "#7788B6",
-          400: "#5066A1",
-          500: "#2A448C",
-          600: "#16284E", // aurionNavyLight
-          700: "#0C1B37", // aurionNavy (canonical)
-          800: "#081226", // aurionNavyDark
-          900: "#050A15",
+          // PeriTwin indigo foundation (hue from the logo wordmark),
+          // same lightness ladder as the legacy navy so contrast holds.
+          DEFAULT: "#0F1334",
+          50: "#E3E5F7",
+          100: "#BABFEB",
+          200: "#8B94DE",
+          300: "#5C68D1",
+          400: "#3543BC",
+          500: "#28338E",
+          600: "#161C4E", // aurionNavyLight
+          700: "#0F1334", // aurionNavy (canonical)
+          800: "#0A0D24", // aurionNavyDark
+          900: "#060714",
         },
         // #418 accent theming: the gold scale reads CSS variables
         // (RGB triplets so /NN opacity modifiers compose). :root holds

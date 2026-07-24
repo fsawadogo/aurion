@@ -398,20 +398,21 @@ html.dark .border-amber-400 { border-color: rgb(255 255 255 / 0.12); }
 
 /* ── #418 accent theming ──────────────────────────────────────────────
    RGB triplets consumed by the Tailwind gold scale (rgb(var()/alpha)).
-   :root = the canonical Aurion gold (default; no data-accent attr).
+   :root = the canonical PeriTwin periwinkle (default; no data-accent
+   attr) — brand palette from the PeriTwin logo, 2026-07-23.
    html[data-accent=X] swaps the full scale. Compliance colors are
    separate tokens and deliberately NOT routed through these vars. */
 :root {
-  --accent-50: 252 248 238;
-  --accent-100: 245 236 205;
-  --accent-200: 237 223 171;
-  --accent-300: 229 208 130;
-  --accent-400: 214 188 98;
-  --accent-500: 201 168 76;
-  --accent-600: 181 149 61;
-  --accent-700: 138 113 46;
-  --accent-800: 101 82 34;
-  --accent-900: 64 52 22;
+  --accent-50: 239 241 251;
+  --accent-100: 206 212 244;
+  --accent-200: 172 182 236;
+  --accent-300: 132 147 227;
+  --accent-400: 93 114 219;
+  --accent-500: 65 89 212;
+  --accent-600: 44 69 198;
+  --accent-700: 34 53 150;
+  --accent-800: 25 39 110;
+  --accent-900: 16 25 70;
 }
 html[data-accent="teal"] {
   --accent-50: 240 253 250;

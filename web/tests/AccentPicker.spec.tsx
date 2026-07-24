@@ -112,10 +112,11 @@ describe("AccentPicker (AC-1)", () => {
 describe("AccentPicker — FR catalog parity", () => {
   it("renders with the FR swatch labels", () => {
     render(withIntl(<AccentPicker value="gold" />, "fr"));
-    // "Or" is the FR label for gold; assert it resolved (no MISSING_MESSAGE).
+    // "PeriTwin" is the (locale-invariant) brand label for the default
+    // accent; assert it resolved (no MISSING_MESSAGE).
     expect(screen.getByTestId("accent-swatch-gold")).toHaveAttribute(
       "title",
-      "Or",
+      "PeriTwin",
     );
   });
 });

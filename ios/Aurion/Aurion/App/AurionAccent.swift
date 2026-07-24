@@ -22,7 +22,7 @@ enum AurionAccent: String, CaseIterable, Identifiable {
     /// 500-step base — the primary accent (buttons, active rails, icons).
     var base: Color {
         switch self {
-        case .gold:   return Color(red: 201/255, green: 168/255, blue: 76/255)   // #C9A84C
+        case .gold:   return Color(red: 65/255,  green: 89/255,  blue: 212/255)  // #4159D4 PeriTwin periwinkle (key name is legacy)
         case .teal:   return Color(red: 20/255,  green: 184/255, blue: 166/255)  // #14B8A6
         case .indigo: return Color(red: 99/255,  green: 102/255, blue: 241/255)  // #6366F1
         case .rose:   return Color(red: 244/255, green: 63/255,  blue: 94/255)   // #F43F5E
@@ -33,7 +33,7 @@ enum AurionAccent: String, CaseIterable, Identifiable {
     /// 300-step light — gradient top / highlight.
     var light: Color {
         switch self {
-        case .gold:   return Color(red: 229/255, green: 208/255, blue: 130/255)  // #E5D082
+        case .gold:   return Color(red: 132/255, green: 147/255, blue: 227/255)  // #8493E3
         case .teal:   return Color(red: 94/255,  green: 234/255, blue: 212/255)  // #5EEAD4
         case .indigo: return Color(red: 165/255, green: 180/255, blue: 252/255)  // #A5B4FC
         case .rose:   return Color(red: 253/255, green: 164/255, blue: 175/255)  // #FDA4AF
@@ -44,7 +44,7 @@ enum AurionAccent: String, CaseIterable, Identifiable {
     /// 600-step dark — gradient bottom / pressed.
     var dark: Color {
         switch self {
-        case .gold:   return Color(red: 181/255, green: 149/255, blue: 61/255)   // #B5953D
+        case .gold:   return Color(red: 44/255,  green: 69/255,  blue: 198/255)  // #2C45C6
         case .teal:   return Color(red: 13/255,  green: 148/255, blue: 136/255)  // #0D9488
         case .indigo: return Color(red: 79/255,  green: 70/255,  blue: 229/255)  // #4F46E5
         case .rose:   return Color(red: 225/255, green: 29/255,  blue: 72/255)   // #E11D48
@@ -60,8 +60,8 @@ enum AurionAccent: String, CaseIterable, Identifiable {
         switch self {
         case .gold:
             return Color(
-                light: Color(red: 251/255, green: 246/255, blue: 230/255),  // #FBF6E6 (legacy)
-                dark:  Color(red: 44/255,  green: 38/255,  blue: 26/255)    // #2C261A (legacy)
+                light: Color(red: 239/255, green: 241/255, blue: 251/255),  // #EFF1FB PeriTwin tint
+                dark:  Color(red: 24/255,  green: 27/255,  blue: 46/255)    // #181B2E
             )
         case .teal:
             return Color(
