@@ -492,10 +492,7 @@ struct LoginView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color.aurionNavy, Color.aurionNavyDark],
-                startPoint: .top, endPoint: .bottom
-            ).ignoresSafeArea()
+            AurionBrandScreenBackground()
 
             // #271 — wrap the sign-in column in a scroll view so every control
             // (email, password, Remember-me, Sign In, Forgot password, the
@@ -506,8 +503,8 @@ struct LoginView: View {
             GeometryReader { proxy in
             ScrollView(showsIndicators: false) {
             VStack(spacing: 0) {
-                AurionLogoLockup(size: 1.2, dark: true)
-                    .padding(.top, 80)
+                AurionLogoLockup(size: 1.0)
+                    .padding(.top, 64)
                     .opacity(loginAppeared ? 1 : 0)
                     .scaleEffect(loginAppeared ? 1 : 0.92)
                     .offset(y: loginAppeared ? 0 : -20)
@@ -521,7 +518,7 @@ struct LoginView: View {
                 VStack(spacing: 16) {
                     Text(L("login.signIn"))
                         .aurionFont(20, weight: .semibold, relativeTo: .title3)
-                        .foregroundColor(.white)
+                        .foregroundColor(.aurionNavy)
                         .frame(maxWidth: .infinity, alignment: .leading)
 
                     VStack(spacing: 12) {
@@ -563,7 +560,7 @@ struct LoginView: View {
                         HStack(alignment: .center, spacing: 12) {
                             Text(L("login.rememberMeWith", BiometricAuth.typeLabel))
                                 .aurionFont(13, relativeTo: .footnote)
-                                .foregroundColor(.white.opacity(0.85))
+                                .foregroundColor(Color.aurionNavy.opacity(0.75))
                                 .fixedSize(horizontal: false, vertical: true)
                                 .frame(maxWidth: .infinity, alignment: .leading)
                             Toggle("", isOn: $rememberMe)
@@ -580,10 +577,10 @@ struct LoginView: View {
                             if signInSucceeded {
                                 Image(systemName: "checkmark.circle.fill")
                                     .font(.system(size: 16, weight: .bold))
-                                    .foregroundColor(.aurionNavy)
+                                    .foregroundColor(.white)
                                 Text(L("login.signedIn"))
                             } else if isSigningIn {
-                                ProgressView().tint(.aurionNavy)
+                                ProgressView().tint(.white)
                                 Text(L("login.signingIn"))
                             } else {
                                 Image(systemName: "arrow.right.circle.fill")
@@ -601,7 +598,7 @@ struct LoginView: View {
                     if let loginError {
                         Text(loginError)
                             .aurionFont(12, relativeTo: .caption)
-                            .foregroundColor(Color.aurionOnNavyError)
+                            .foregroundColor(.aurionRed)
                             .multilineTextAlignment(.center)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
@@ -646,19 +643,20 @@ struct LoginView: View {
 
                     Text(L("login.firstTimeHint"))
                         .aurionFont(11, relativeTo: .caption2)
-                        .foregroundColor(Color.aurionOnNavyFootnote)
+                        .foregroundColor(Color.aurionTextSecondary)
                         .multilineTextAlignment(.leading)
                         .lineSpacing(3)
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.top, 4)
                 }
                 .padding(24)
-                .background(Color.white.opacity(0.06))
+                .background(Color.white)
                 .cornerRadius(18)
                 .overlay(
                     RoundedRectangle(cornerRadius: 18)
-                        .stroke(Color.white.opacity(0.10), lineWidth: 1)
+                        .stroke(Color.aurionNavy.opacity(0.08), lineWidth: 1)
                 )
+                .shadow(color: Color.aurionNavy.opacity(0.07), radius: 24, x: 0, y: 10)
                 .padding(.horizontal, 24)
                 .opacity(loginAppeared ? 1 : 0)
                 .offset(y: loginAppeared ? 0 : 24)
@@ -674,13 +672,13 @@ struct LoginView: View {
                     Text(L("login.footer"))
                         .aurionFont(12, relativeTo: .caption)
                         .tracking(0.4)
-                        .foregroundColor(Color.aurionOnNavyFootnote)
+                        .foregroundColor(Color.aurionTextSecondary)
                     // #352 — discreet build stamp so pilot users can report the
                     // exact version in TestFlight feedback. Reads CFBundle*
                     // from the bundle via AppVersion.
                     Text(AppVersion.displayLabel)
                         .aurionFont(11, relativeTo: .caption2)
-                        .foregroundColor(Color.aurionOnNavyFootnote.opacity(0.8))
+                        .foregroundColor(Color.aurionTextSecondary.opacity(0.8))
                 }
                 .padding(.bottom, 40)
                 .opacity(loginAppeared ? 1 : 0)
@@ -754,7 +752,7 @@ struct LoginView: View {
             Text(label)
                 .aurionFont(11, weight: .semibold, relativeTo: .caption2)
                 .tracking(0.5)
-                .foregroundColor(Color.aurionOnNavyFootnote)
+                .foregroundColor(Color.aurionTextSecondary)
             Group {
                 if secure {
                     SecureField("", text: text)
@@ -772,15 +770,20 @@ struct LoginView: View {
             .autocorrectionDisabled()
             .keyboardType(keyboard)
             .textContentType(content)
-            .foregroundColor(.white)
+            .foregroundColor(.aurionTextPrimary)
             .tint(.aurionGold)
             .padding(.horizontal, 12)
             .padding(.vertical, 11)
-            .background(Color.white.opacity(0.08))
+            .background(Color.aurionNavy.opacity(0.04))
             .cornerRadius(10)
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .stroke(Color.white.opacity(focusedField == field ? 0.35 : 0.10), lineWidth: 1)
+                    .stroke(
+                        focusedField == field
+                            ? Color.aurionGold.opacity(0.55)
+                            : Color.aurionNavy.opacity(0.12),
+                        lineWidth: 1
+                    )
             )
         }
     }
@@ -790,11 +793,11 @@ struct LoginView: View {
     private var biometricSignInSection: some View {
         VStack(spacing: 12) {
             HStack(spacing: 10) {
-                Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+                Rectangle().fill(Color.aurionNavy.opacity(0.12)).frame(height: 1)
                 Text(L("login.or"))
                     .aurionFont(11, relativeTo: .caption2)
-                    .foregroundColor(Color.aurionOnNavyFootnote)
-                Rectangle().fill(Color.white.opacity(0.12)).frame(height: 1)
+                    .foregroundColor(Color.aurionTextSecondary)
+                Rectangle().fill(Color.aurionNavy.opacity(0.12)).frame(height: 1)
             }
 
             Button {
@@ -807,14 +810,14 @@ struct LoginView: View {
                     Text(L("login.signInWith", BiometricAuth.typeLabel))
                         .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
                 }
-                .foregroundColor(.white)
+                .foregroundColor(.aurionGold)
                 .frame(maxWidth: .infinity)
                 .padding(.vertical, 13)
-                .background(Color.white.opacity(0.08))
+                .background(Color.aurionGoldBg)
                 .cornerRadius(10)
                 .overlay(
                     RoundedRectangle(cornerRadius: 10)
-                        .stroke(Color.aurionGold.opacity(0.5), lineWidth: 1)
+                        .stroke(Color.aurionGold.opacity(0.45), lineWidth: 1)
                 )
             }
             .disabled(isSigningIn || signInSucceeded)
@@ -824,7 +827,7 @@ struct LoginView: View {
             } label: {
                 Text(L("login.forgetSaved"))
                     .aurionFont(12, relativeTo: .caption)
-                    .foregroundColor(Color.aurionOnNavyFootnote)
+                    .foregroundColor(Color.aurionTextSecondary)
                     .frame(minHeight: AurionSpacing.hitMin)
                     .contentShape(Rectangle())
             }
