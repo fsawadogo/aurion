@@ -36,9 +36,12 @@ struct AurionAccentTests {
     /// always shipped (#C9A84C / #E5D082 / #B5953D) so existing users see
     /// no change. Compare resolved RGB to ~1/255 tolerance.
     @Test func goldDefault_isByteIdenticalToBrand() {
-        assertRGB(AurionAccent.gold.base, 201, 168, 76)
-        assertRGB(AurionAccent.gold.light, 229, 208, 130)
-        assertRGB(AurionAccent.gold.dark, 181, 149, 61)
+        // "gold" is the legacy KEY for the default accent; since the
+        // PeriTwin rebrand (2026-07-23) its VALUES are the PeriTwin
+        // periwinkle scale anchored to the logo stroke.
+        assertRGB(AurionAccent.gold.base, 65, 89, 212)    // #4159D4
+        assertRGB(AurionAccent.gold.light, 132, 147, 227) // #8493E3
+        assertRGB(AurionAccent.gold.dark, 44, 69, 198)    // #2C45C6
     }
 
     private func assertRGB(_ color: Color, _ r: Int, _ g: Int, _ b: Int) {
