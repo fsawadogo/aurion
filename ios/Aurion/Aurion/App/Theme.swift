@@ -335,14 +335,15 @@ struct AurionPrimaryButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .aurionFont(16, weight: .semibold, relativeTo: .body)
-            // Brand-navy on gold — fixed in both modes.
-            .foregroundColor(.aurionNavy)
+            // White on the accent (PeriTwin periwinkle by default) —
+            // fixed in both modes.
+            .foregroundColor(.white)
             .padding(.horizontal, 22)
             .padding(.vertical, 14)
             .background(Color.aurionGold)
             .cornerRadius(12)
             .shadow(
-                color: Color(red: 201/255, green: 168/255, blue: 76/255).opacity(0.24),
+                color: Color.aurionGold.opacity(0.28),
                 radius: 8, x: 0, y: 4
             )
             .scaleEffect(configuration.isPressed ? 0.97 : 1.0)
@@ -905,11 +906,28 @@ struct AurionLogoLockup: View {
         Image("AurionLogoFull")
             .resizable()
             .scaledToFit()
-            // 200pt base height tuned to the previous hex+wordmark footprint
-            // at size=1.0 — login screens that passed size=1.2 now land at
-            // 240pt, matching what they expected visually.
-            .frame(height: 200 * size)
+            // Width-fitted since the PeriTwin rebrand: the lockup is a wide
+            // card (≈1.8:1), so sizing by width keeps it comfortably inside
+            // the screen. size=1.0 → 300pt wide (≈166pt tall).
+            .frame(maxWidth: 300 * size)
             .accessibilityLabel(L("a11y.logoTagline"))
+    }
+}
+
+/// Always-light background for the brand screens (splash / login / app
+/// lock) — white into the PeriTwin periwinkle tint. The PeriTwin lockup
+/// card is white, so on this surface it reads as one seamless piece
+/// instead of a floating rectangle.
+struct AurionBrandScreenBackground: View {
+    var body: some View {
+        LinearGradient(
+            colors: [
+                Color.white,
+                Color(red: 239/255, green: 241/255, blue: 251/255), // #EFF1FB
+            ],
+            startPoint: .top, endPoint: .bottom
+        )
+        .ignoresSafeArea()
     }
 }
 

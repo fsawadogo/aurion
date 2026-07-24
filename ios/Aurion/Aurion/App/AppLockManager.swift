@@ -120,13 +120,10 @@ struct AppLockView: View {
 
     var body: some View {
         ZStack {
-            LinearGradient(
-                colors: [Color.aurionNavy, Color.aurionNavyDark],
-                startPoint: .top, endPoint: .bottom
-            ).ignoresSafeArea()
+            AurionBrandScreenBackground()
 
             VStack(spacing: 20) {
-                AurionLogoLockup(size: 1.0, dark: true)
+                AurionLogoLockup(size: 0.85)
                     .padding(.bottom, 8)
 
                 Image(systemName: "lock.fill")
@@ -135,10 +132,10 @@ struct AppLockView: View {
 
                 Text(L("applock.title"))
                     .aurionFont(20, weight: .semibold, relativeTo: .title3)
-                    .foregroundColor(.white)
+                    .foregroundColor(.aurionNavy)
                 Text(L("applock.subtitle"))
                     .aurionFont(14, relativeTo: .subheadline)
-                    .foregroundColor(Color.aurionOnNavySecondary)
+                    .foregroundColor(Color.aurionTextSecondary)
 
                 Button {
                     AurionHaptics.impact(.medium)

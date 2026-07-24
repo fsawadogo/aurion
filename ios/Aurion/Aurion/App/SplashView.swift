@@ -15,19 +15,22 @@ struct SplashView: View {
 
     var body: some View {
         ZStack {
-            AurionGradients.captureBackground.ignoresSafeArea()
+            AurionBrandScreenBackground()
 
-            // Soft gold halo behind the lockup — breathes (0.18 ↔ 0.08
-            // opacity) so the splash has motion before the lockup itself
+            // Soft halo behind the lockup in the logo's circuit purple —
+            // breathes so the splash has motion before the lockup itself
             // arrives. Sits *behind* the lockup image so it reads as glow,
             // not as a circle on top.
             ZStack {
                 Circle()
-                    .fill(Color.aurionGold.opacity(glow ? 0.22 : 0.08))
-                    .frame(width: 280, height: 280)
-                    .blur(radius: 48)
+                    .fill(
+                        Color(red: 166/255, green: 149/255, blue: 214/255) // #A695D6
+                            .opacity(glow ? 0.30 : 0.12)
+                    )
+                    .frame(width: 300, height: 300)
+                    .blur(radius: 56)
 
-                AurionLogoLockup(size: 1.3, dark: true)
+                AurionLogoLockup(size: 1.05)
             }
         }
         .onAppear {

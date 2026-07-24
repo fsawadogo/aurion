@@ -35,7 +35,7 @@
   --surface-card:     #FFFFFF;
   --surface-muted:    #EEF0F3;
   --surface-hairline: #E6E9EE;
-  --text-primary:     #0C1B37; /* navy-700 */
+  --text-primary:     #0F1334; /* navy-700 (PeriTwin indigo) */
   --text-secondary:   #475569;
   --text-tertiary:    #94A3B8;
 }
@@ -143,8 +143,8 @@ html.dark .border-amber-400 { border-color: rgb(255 255 255 / 0.12); }
   :focus-visible {
     outline: none;
     box-shadow:
-      0 0 0 3px rgba(201, 168, 76, 0.35),
-      0 0 0 1px rgba(201, 168, 76, 0.75);
+      0 0 0 3px rgb(var(--accent-500) / 0.35),
+      0 0 0 1px rgb(var(--accent-500) / 0.75);
   }
 
   /* Quiet the default input focus — components opt in to the gold ring. */
@@ -293,13 +293,21 @@ html.dark .border-amber-400 { border-color: rgb(255 255 255 / 0.12); }
     border-color: rgba(255, 255, 255, 0.16);
   }
 
-  /* ── Premium navy chrome (login background, hero sections). ── */
+  /* ── Premium navy chrome (sidebar; deep PeriTwin indigo). ── */
   .aurion-chrome-navy {
-    background: radial-gradient(120% 80% at 50% 0%, #16284E 0%, #0C1B37 55%, #081226 100%);
+    background: radial-gradient(120% 80% at 50% 0%, #161C4E 0%, #0F1334 55%, #0A0D24 100%);
+  }
+  /* ── Light brand chrome (auth hero) — white into the PeriTwin
+     periwinkle tint with a whisper of accent; the white logo lockup
+     card blends seamlessly on it. ── */
+  .aurion-chrome-brand {
+    background:
+      radial-gradient(90% 70% at 72% 18%, rgb(var(--accent-500) / 0.08) 0%, transparent 62%),
+      linear-gradient(180deg, #ffffff 0%, #eff1fb 100%);
   }
   /* Subtle gold orbital glow used behind logo lockups. */
   .aurion-glow-gold {
-    background: radial-gradient(circle, rgba(201, 168, 76, 0.18) 0%, transparent 70%);
+    background: radial-gradient(circle, rgb(var(--accent-500) / 0.18) 0%, transparent 70%);
   }
 
   /* ── Section / table chrome ── */
@@ -378,7 +386,7 @@ html.dark .border-amber-400 { border-color: rgb(255 255 255 / 0.12); }
 
 /* Gradient-text helper. */
 .text-gradient-gold {
-  background: linear-gradient(135deg, #C9A84C 0%, #E5D082 60%, #C9A84C 100%);
+  background: linear-gradient(135deg, rgb(var(--accent-400)) 0%, rgb(var(--accent-200)) 60%, rgb(var(--accent-400)) 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
