@@ -1,0 +1,85 @@
+name: iOS — ASC set app name
+
+# Manual-only. Renames the App Store Connect app record (the name shown in
+# TestFlight and, later, the App Store listing) — NOT the on-device name,
+# which is CFBundleDisplayName in the build. Peritwin rebrand: the build
+# already says "PeriTwin"; this flips the ASC record to match.
+#
+# Standalone workflow (not a lane in ios/Aurion/fastlane) on purpose:
+# ios/** pushes trigger a full TestFlight build+upload, and an ASC
+# metadata edit must not burn an Apple upload. The lane is materialized
+# into a temp Fastfile at run time so spaceship resolves from the
+# runner's preinstalled fastlane toolchain. Input is env-routed (no
+# shell injection).
+
+on:
+  workflow_dispatch:
+    inputs:
+      name:
+        description: "New app name for the ASC record"
+        required: true
+        type: string
+        default: "PeriTwin"
+
+permissions:
+  contents: read
+
+jobs:
+  rename:
+    runs-on: macos-26
+    env:
+      APP_STORE_CONNECT_KEY_ID:    ${{ secrets.APP_STORE_CONNECT_KEY_ID }}
+      APP_STORE_CONNECT_ISSUER_ID: ${{ secrets.APP_STORE_CONNECT_ISSUER_ID }}
+      APP_STORE_CONNECT_KEY_P8:    ${{ secrets.APP_STORE_CONNECT_KEY_P8 }}
+      NEW_APP_NAME:                ${{ inputs.name }}
+    steps:
+      - name: Skip if Apple Dev account not yet wired
+        id: gate
+        run: |
+          if [ -z "$APP_STORE_CONNECT_KEY_ID" ] || \
+             [ -z "$APP_STORE_CONNECT_ISSUER_ID" ] || \
+             [ -z "$APP_STORE_CONNECT_KEY_P8" ]; then
+            echo "::notice::App Store Connect secrets not set — skipping."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Rename ASC app record
+        if: ${{ steps.gate.outputs.skip == 'false' }}
+        run: |
+          mkdir -p /tmp/asc-rename/fastlane
+          cat > /tmp/asc-rename/fastlane/Fastfile <<'RUBY'
+          skip_docs
+
+          lane :rename_app do
+            name = ENV.fetch("NEW_APP_NAME").strip
+            UI.user_error!("NEW_APP_NAME is empty") if name.empty?
+
+            Spaceship::ConnectAPI.token = Spaceship::ConnectAPI::Token.create(
+              key_id:    ENV.fetch("APP_STORE_CONNECT_KEY_ID"),
+              issuer_id: ENV.fetch("APP_STORE_CONNECT_ISSUER_ID"),
+              key:       Base64.decode64(ENV.fetch("APP_STORE_CONNECT_KEY_P8")),
+              duration:  1200,
+            )
+
+            app = Spaceship::ConnectAPI::App.find("com.aurionclinical.physician")
+            UI.user_error!("App not found") unless app
+
+            info = app.fetch_edit_app_info || app.fetch_live_app_info
+            UI.user_error!("No editable app info") unless info
+
+            locs = info.get_app_info_localizations
+            UI.user_error!("No app info localizations") if locs.empty?
+            locs.each do |loc|
+              if loc.name == name
+                UI.message("  = #{loc.locale}: already '#{name}'")
+              else
+                loc.update(attributes: { name: name })
+                UI.success("  ✓ #{loc.locale}: '#{loc.name}' → '#{name}'")
+              end
+            end
+            UI.success("Done. TestFlight shows the new name once ASC propagates.")
+          end
+          RUBY
+          cd /tmp/asc-rename && fastlane rename_app
