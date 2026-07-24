@@ -1,4 +1,4 @@
-/* Peritwin — Localisation fran\U00E7aise */
+/* PeriTwin — Localisation fran\U00E7aise */
 
 /* ── Onglets ──────────────────────────────────────────── */
 "tabs.home" = "Accueil";
@@ -342,7 +342,7 @@
 "audio_upload_recording_lost" = "Enregistrement perdu \U2014 veuillez r\U00E9enregistrer.";
 
 /* ── Connexion ────────────────────────────────────────── */
-"login.appName" = "Peritwin";
+"login.appName" = "PeriTwin";
 "login.tagline" = "IA CLINIQUE";
 "login.email" = "Courriel";
 "login.emailPlaceholder" = "medecin@hopital.ca";
@@ -377,7 +377,7 @@
 "setup.practice.surgical.sub" = "\U00C9tablissement proc\U00E9dural";
 "setup.practice.hospital.sub" = "Milieu hospitalier";
 "setup.autoUpload.title" = "T\U00E9l\U00E9versement auto \U00E0 l\U2019arr\U00EAt";
-"setup.autoUpload.sub" = "Envoie la capture \U00E0 Peritwin d\U00E8s la fin de l\U2019enregistrement.";
+"setup.autoUpload.sub" = "Envoie la capture \U00E0 PeriTwin d\U00E8s la fin de l\U2019enregistrement.";
 "setup.localRetention.title" = "Conservation locale";
 "setup.localRetention.sub" = "Conserver les notes sur cet appareil pour r\U00E9vision.";
 "setup.consentReprompt.title" = "Redemander le consentement";
@@ -438,7 +438,7 @@
 "onboarding.biometric.scrollA11yHint" = "Faites d\U00E9filer le texte de consentement jusqu\U2019en bas pour activer la case de confirmation.";
 "onboarding.biometric.agree" = "J\U2019accepte \U2014 cr\U00E9er l\U2019identit\U00E9 vocale";
 "onboarding.biometric.goBack" = "Retour";
-"onboarding.biometric.consentText" = "Peritwin demande votre consentement pour collecter et traiter un court enregistrement vocal afin de cr\U00E9er un profil vocal de locuteur.\n\n**Ce que nous collectons :** Un enregistrement vocal de 30 \U00E0 60 secondes lu \U00E0 partir de phrases cliniques.\n\n**Comment il est utilis\U00E9 :** L\U2019enregistrement est trait\U00E9 enti\U00E8rement sur cet appareil pour cr\U00E9er une empreinte vocale (une repr\U00E9sentation math\U00E9matique de votre voix). Cette empreinte sert pendant les sessions cliniques \U00E0 distinguer votre voix de celle de votre patient.\n\n**Stockage :** L\U2019empreinte vocale est stock\U00E9e exclusivement dans le trousseau s\U00E9curis\U00E9 de cet appareil. Elle n\U2019est jamais transmise \U00E0 un serveur.\n\n**Suppression de l\U2019enregistrement :** L\U2019enregistrement vocal brut est supprim\U00E9 de la m\U00E9moire de l\U2019appareil imm\U00E9diatement apr\U00E8s la g\U00E9n\U00E9ration de l\U2019empreinte vocale. Il n\U2019est jamais stock\U00E9 sur disque ni t\U00E9l\U00E9vers\U00E9.\n\n**Vos droits :** Vous pouvez supprimer votre profil vocal \U00E0 tout moment dans les r\U00E9glages. Vous pouvez aussi le r\U00E9enregistrer. Le refus n\U2019affecte pas votre capacit\U00E9 \U00E0 utiliser Peritwin \U2014 le syst\U00E8me fonctionnera sans s\U00E9paration des locuteurs.\n\nCe consentement est r\U00E9gi par les lois applicables sur la protection des donn\U00E9es biom\U00E9triques, dont la Loi 25 du Qu\U00E9bec et la LPRPDE.";
+"onboarding.biometric.consentText" = "PeriTwin demande votre consentement pour collecter et traiter un court enregistrement vocal afin de cr\U00E9er un profil vocal de locuteur.\n\n**Ce que nous collectons :** Un enregistrement vocal de 30 \U00E0 60 secondes lu \U00E0 partir de phrases cliniques.\n\n**Comment il est utilis\U00E9 :** L\U2019enregistrement est trait\U00E9 enti\U00E8rement sur cet appareil pour cr\U00E9er une empreinte vocale (une repr\U00E9sentation math\U00E9matique de votre voix). Cette empreinte sert pendant les sessions cliniques \U00E0 distinguer votre voix de celle de votre patient.\n\n**Stockage :** L\U2019empreinte vocale est stock\U00E9e exclusivement dans le trousseau s\U00E9curis\U00E9 de cet appareil. Elle n\U2019est jamais transmise \U00E0 un serveur.\n\n**Suppression de l\U2019enregistrement :** L\U2019enregistrement vocal brut est supprim\U00E9 de la m\U00E9moire de l\U2019appareil imm\U00E9diatement apr\U00E8s la g\U00E9n\U00E9ration de l\U2019empreinte vocale. Il n\U2019est jamais stock\U00E9 sur disque ni t\U00E9l\U00E9vers\U00E9.\n\n**Vos droits :** Vous pouvez supprimer votre profil vocal \U00E0 tout moment dans les r\U00E9glages. Vous pouvez aussi le r\U00E9enregistrer. Le refus n\U2019affecte pas votre capacit\U00E9 \U00E0 utiliser PeriTwin \U2014 le syst\U00E8me fonctionnera sans s\U00E9paration des locuteurs.\n\nCe consentement est r\U00E9gi par les lois applicables sur la protection des donn\U00E9es biom\U00E9triques, dont la Loi 25 du Qu\U00E9bec et la LPRPDE.";
 "onboarding.voiceProc.creating" = "Cr\U00E9ation de votre identit\U00E9 vocale\U2026";
 "onboarding.voiceProc.saved" = "Identit\U00E9 vocale enregistr\U00E9e sur cet appareil";
 "onboarding.voiceProc.savedSub" = "Vous pouvez modifier ou supprimer votre identit\U00E9 vocale \U00E0 tout moment dans les r\U00E9glages.";
@@ -446,8 +446,8 @@
 "onboarding.voiceProc.step1" = "Analyse des sch\U00E9mas vocaux\U2026";
 "onboarding.voiceProc.step2" = "G\U00E9n\U00E9ration de l\U2019empreinte vocale\U2026";
 "onboarding.voiceProc.step3" = "S\U00E9curisation dans le trousseau\U2026";
-"onboarding.voiceExpl.title" = "Aidez Peritwin \U00E0 reconna\U00EEtre votre voix";
-"onboarding.voiceExpl.body" = "Peritwin utilise un court \U00E9chantillon vocal pour distinguer vos observations de celles de votre patient pendant les visites.\n\nVotre enregistrement est trait\U00E9 uniquement sur cet appareil et supprim\U00E9 imm\U00E9diatement. Rien n\U2019est envoy\U00E9 \U00E0 nos serveurs.";
+"onboarding.voiceExpl.title" = "Aidez PeriTwin \U00E0 reconna\U00EEtre votre voix";
+"onboarding.voiceExpl.body" = "PeriTwin utilise un court \U00E9chantillon vocal pour distinguer vos observations de celles de votre patient pendant les visites.\n\nVotre enregistrement est trait\U00E9 uniquement sur cet appareil et supprim\U00E9 imm\U00E9diatement. Rien n\U2019est envoy\U00E9 \U00E0 nos serveurs.";
 "onboarding.voiceExpl.skip" = "Passer pour l\U2019instant";
 "onboarding.voiceRec.instruction" = "Lisez \U00E0 voix haute avec votre voix clinique habituelle";
 "onboarding.voiceRec.rerecord" = "R\U00E9enregistrer";
@@ -489,12 +489,12 @@
 "profile.title" = "Profil";
 "profile.defaultName" = "M\U00E9decin";
 "profile.voiceEnrolled" = "Identit\U00E9 vocale configur\U00E9e";
-"profile.voiceEnrolledSub" = "Peritwin peut distinguer votre voix de celle de votre patient.";
+"profile.voiceEnrolledSub" = "PeriTwin peut distinguer votre voix de celle de votre patient.";
 "profile.rerecordVoice" = "R\U00E9enregistrer l\U2019identit\U00E9 vocale";
 "profile.deleteVoice" = "Supprimer l\U2019identit\U00E9 vocale";
 "profile.noVoice" = "Aucune identit\U00E9 vocale";
 "profile.setupVoice" = "Configurer votre identit\U00E9 vocale";
-"profile.setupVoiceSub" = "Enregistrez 4 courtes phrases pour qu\U2019Peritwin sache quelle voix est la v\U00F4tre.";
+"profile.setupVoiceSub" = "Enregistrez 4 courtes phrases pour qu\U2019PeriTwin sache quelle voix est la v\U00F4tre.";
 "profile.startVoice" = "Configurer l\U2019identit\U00E9 vocale";
 "profile.sectionVoice" = "Identit\U00E9 vocale";
 "profile.sectionTeam" = "Membres de l\U2019\U00E9quipe";
@@ -520,7 +520,7 @@
 "profile.teamEditor.editHint" = "Toucher deux fois pour modifier ce membre";
 /* #275 / I2 — interrupteur \U00AB pr\U00E9sent aujourd\U2019hui \U00BB par ligne (libell\U00E9 VoiceOver). */
 "profile.teamEditor.workingToday" = "Pr\U00E9sent aujourd\U2019hui";
-"profile.teamEditor.footer" = "Voici les personnes qui travaillent habituellement avec vous pendant les visites \U2014 infirmi\U00E8res, scribes, r\U00E9sidents, secr\U00E9taires m\U00E9dicales. Peritwin utilise cette liste pour attribuer les paroles non m\U00E9dicales dans vos transcriptions.";
+"profile.teamEditor.footer" = "Voici les personnes qui travaillent habituellement avec vous pendant les visites \U2014 infirmi\U00E8res, scribes, r\U00E9sidents, secr\U00E9taires m\U00E9dicales. PeriTwin utilise cette liste pour attribuer les paroles non m\U00E9dicales dans vos transcriptions.";
 "profile.teamEditor.saveFailed" = "Impossible d\U2019enregistrer les membres. V\U00E9rifiez votre connexion et r\U00E9essayez.";
 "profile.signOut" = "Se d\U00E9connecter";
 "profile.practiceType" = "Type de pratique";
@@ -599,7 +599,7 @@
 /* ── Connexion (suite) ────────────────────────────────── */
 "login.signedIn" = "Connect\U00E9";
 "login.signingIn" = "Connexion\U2026";
-"login.firstTimeHint" = "Premier acc\U00E8s\U202F? Utilisez le mot de passe temporaire envoy\U00E9 par votre administrateur \U2014 Peritwin vous invitera \U00E0 en d\U00E9finir un nouveau.";
+"login.firstTimeHint" = "Premier acc\U00E8s\U202F? Utilisez le mot de passe temporaire envoy\U00E9 par votre administrateur \U2014 PeriTwin vous invitera \U00E0 en d\U00E9finir un nouveau.";
 "login.backendLookupFailed" = "Connect\U00E9, mais la r\U00E9cup\U00E9ration c\U00F4t\U00E9 serveur a \U00E9chou\U00E9 : %@";
 
 /* ── Erreurs de connexion (anti-\U00E9num\U00E9ration) ────────── */
@@ -607,8 +607,8 @@
 "login.error.accountLocked" = "Trop de tentatives de connexion \U00E9chou\U00E9es. Veuillez patienter environ 15 minutes, puis r\U00E9essayer.";
 "login.error.passwordTooWeak" = "Ce mot de passe ne respecte pas la politique. Utilisez 12\U00A0caract\U00E8res ou plus, avec majuscules, minuscules, un chiffre et un symbole.";
 "login.error.invalidResetToken" = "Ce lien de r\U00E9initialisation est expir\U00E9 ou d\U00E9j\U00E0 utilis\U00E9. Demandez-en un nouveau.";
-"login.error.network" = "Impossible de joindre Peritwin. V\U00E9rifiez votre connexion et r\U00E9essayez.";
-"login.error.malformed" = "Peritwin a renvoy\U00E9 une r\U00E9ponse illisible. R\U00E9essayez ou contactez le support si le probl\U00E8me persiste.";
+"login.error.network" = "Impossible de joindre PeriTwin. V\U00E9rifiez votre connexion et r\U00E9essayez.";
+"login.error.malformed" = "PeriTwin a renvoy\U00E9 une r\U00E9ponse illisible. R\U00E9essayez ou contactez le support si le probl\U00E8me persiste.";
 
 /* ── MFA : v\U00E9rification quotidienne ────────────────────── */
 "login.mfa.challenge.title" = "Code de v\U00E9rification";
@@ -633,9 +633,9 @@
 "login.mfa.recovery.cantAccess" = "Vous n\U2019avez pas acc\U00E8s \U00E0 votre code\U00A0?";
 "login.mfa.recovery.a11yHint" = "Ouvre les conseils de r\U00E9cup\U00E9ration en cas de perte de l\U2019application d\U2019authentification.";
 "login.mfa.recovery.title" = "Acc\U00E8s perdu \U00E0 votre authentificateur\U00A0?";
-"login.mfa.recovery.body" = "Votre application d\U2019authentification g\U00E9n\U00E8re les codes \U00E0 6 chiffres. Si vous avez perdu l\U2019appareil ou supprim\U00E9 l\U2019application, vous ne pouvez pas g\U00E9n\U00E9rer de nouveau code vous-m\U00EAme.\n\nPour des raisons de s\U00E9curit\U00E9, l\U2019authentification \U00E0 deux facteurs ne peut \U00EAtre r\U00E9initialis\U00E9e que par l\U2019administrateur de votre clinique. Contactez votre administrateur ou le support Peritwin et nous r\U00E9tablirons l\U2019acc\U00E8s \U00E0 votre compte.";
+"login.mfa.recovery.body" = "Votre application d\U2019authentification g\U00E9n\U00E8re les codes \U00E0 6 chiffres. Si vous avez perdu l\U2019appareil ou supprim\U00E9 l\U2019application, vous ne pouvez pas g\U00E9n\U00E9rer de nouveau code vous-m\U00EAme.\n\nPour des raisons de s\U00E9curit\U00E9, l\U2019authentification \U00E0 deux facteurs ne peut \U00EAtre r\U00E9initialis\U00E9e que par l\U2019administrateur de votre clinique. Contactez votre administrateur ou le support PeriTwin et nous r\U00E9tablirons l\U2019acc\U00E8s \U00E0 votre compte.";
 "login.mfa.recovery.emailButton" = "Contacter le support";
-"login.mfa.recovery.emailA11yHint" = "Ouvre un nouvel e-mail au support Peritwin.";
+"login.mfa.recovery.emailA11yHint" = "Ouvre un nouvel e-mail au support PeriTwin.";
 
 /* ── Mot de passe oubli\U00E9 (r\U00E9initialisation par e-mail) ──── */
 "login.forgotPassword.linkText" = "Mot de passe oubli\U00E9\U00A0?";
@@ -646,7 +646,7 @@
 "login.resetCode.submit" = "Ouvrir la r\U00E9initialisation";
 "login.resetCode.invalid" = "Ceci ne ressemble pas \U00E0 un lien ou un jeton valide.";
 "login.forgotPassword.title" = "R\U00E9initialiser votre mot de passe";
-"login.forgotPassword.subtitle" = "Entrez l\U2019adresse e-mail associ\U00E9e \U00E0 votre compte Peritwin. Nous enverrons un lien de r\U00E9initialisation si elle correspond \U00E0 un compte actif.";
+"login.forgotPassword.subtitle" = "Entrez l\U2019adresse e-mail associ\U00E9e \U00E0 votre compte PeriTwin. Nous enverrons un lien de r\U00E9initialisation si elle correspond \U00E0 un compte actif.";
 "login.forgotPassword.emailLabel" = "E-mail";
 "login.forgotPassword.sendButton" = "Envoyer le lien";
 "login.forgotPassword.sending" = "Envoi\U2026";
@@ -655,7 +655,7 @@
 
 /* ── R\U00E9initialiser le mot de passe (lien universel in-app) ──── */
 "login.resetPassword.title" = "D\U00E9finir un nouveau mot de passe";
-"login.resetPassword.subtitle" = "Choisissez un nouveau mot de passe pour votre compte Peritwin. Il sera utilis\U00E9 sur tous vos appareils.";
+"login.resetPassword.subtitle" = "Choisissez un nouveau mot de passe pour votre compte PeriTwin. Il sera utilis\U00E9 sur tous vos appareils.";
 "login.resetPassword.newPasswordLabel" = "Nouveau mot de passe";
 "login.resetPassword.confirmLabel" = "Confirmer le mot de passe";
 "login.resetPassword.submitButton" = "D\U00E9finir le nouveau mot de passe";
@@ -732,7 +732,7 @@
 /* ── Type de consultation ─────────────────────────────── */
 "encounter.title" = "Type de consultation";
 "encounter.whoInRoom" = "Qui est dans la pi\U00E8ce ?";
-"encounter.adjustSub" = "Peritwin ajustera la capture et le consentement en cons\U00E9quence.";
+"encounter.adjustSub" = "PeriTwin ajustera la capture et le consentement en cons\U00E9quence.";
 "encounter.doctorPatient.title" = "M\U00E9decin + patient";
 "encounter.doctorPatient.sub" = "Visite individuelle standard";
 "encounter.doctorTeam.title" = "M\U00E9decin + membre(s) de l\U2019\U00E9quipe + patient";
@@ -762,16 +762,16 @@
 /* ── Contexte pr\U00E9-consultation ───────────────────── */
 "context.title" = "Contexte";
 "context.question" = "Quelle est la raison de la visite ?";
-"context.required" = "Requis. Peritwin s\U2019en sert pour orienter la note vers le bon mod\U00E8le de sp\U00E9cialit\U00E9.";
+"context.required" = "Requis. PeriTwin s\U2019en sert pour orienter la note vers le bon mod\U00E8le de sp\U00E9cialit\U00E9.";
 "context.placeholder" = "p. ex. Douleur au genou droit, 3 semaines apr\U00E8s r\U00E9paration du m\U00E9nisque.";
-"context.tip" = "Peritwin s\U2019en sert pour orienter la note structur\U00E9e. Reste sur l\U2019appareil.";
+"context.tip" = "PeriTwin s\U2019en sert pour orienter la note structur\U00E9e. Reste sur l\U2019appareil.";
 "context.minHint" = "Saisissez au moins quelques mots de contexte pour d\U00E9marrer la session.";
 "context.chooseSub" = "Choisissez un contexte enregistr\U00E9, ou Autre pour le d\U00E9crire.";
 "context.selectHint" = "S\U00E9lectionnez un contexte pour d\U00E9marrer la session.";
 "context.other" = "Autre";
 "context.otherSub" = "D\U00E9crivez vous-m\U00EAme cette consultation";
 "context.captureMode" = "Mode de capture";
-"context.captureModeSub" = "Comment Peritwin doit-il observer cette consultation ?";
+"context.captureModeSub" = "Comment PeriTwin doit-il observer cette consultation ?";
 
 /* ── Modes de capture ─────────────────────────────────── */
 "captureMode.multimodal.title" = "Multimodal";
@@ -811,7 +811,7 @@
 "a11y.startEncounterHint" = "D\U00E9marre une nouvelle consultation";
 "a11y.profileAvatar" = "Avatar du profil";
 "a11y.progress" = "Progression";
-"a11y.logoTagline" = "Peritwin \U2014 la r\U00E9f\U00E9rence en IA clinique";
+"a11y.logoTagline" = "PeriTwin \U2014 votre jumeau num\U00E9rique clinique. Demandez \U00E0 Peri.";
 "a11y.sortSessions" = "Trier les sessions";
 
 /* ── Commun (suite) ───────────────────────────────────── */
@@ -961,10 +961,10 @@
 "quote.generating" = "R\U00E9daction du devis\U2026";
 "quote.saving" = "Enregistrement\U2026";
 "quote.emptyTitle" = "Aucun devis";
-"quote.emptySub" = "G\U00E9n\U00E9rez un devis \U00E0 partir de la note approuv\U00E9e. Peritwin \U00E9num\U00E8re les interventions discut\U00E9es \U2014 vous ajoutez les honoraires.";
+"quote.emptySub" = "G\U00E9n\U00E9rez un devis \U00E0 partir de la note approuv\U00E9e. PeriTwin \U00E9num\U00E8re les interventions discut\U00E9es \U2014 vous ajoutez les honoraires.";
 "quote.lockedTitle" = "Approuvez d\U2019abord la note";
 "quote.lockedSub" = "Un devis chirurgical peut \U00EAtre g\U00E9n\U00E9r\U00E9 une fois la note approuv\U00E9e.";
-"quote.editorHint" = "Peritwin a r\U00E9dig\U00E9 les interventions discut\U00E9es. Ajoutez ou modifiez des lignes et saisissez vos honoraires.";
+"quote.editorHint" = "PeriTwin a r\U00E9dig\U00E9 les interventions discut\U00E9es. Ajoutez ou modifiez des lignes et saisissez vos honoraires.";
 "quote.addLine" = "Ajouter une ligne";
 "quote.removeLine" = "Supprimer la ligne";
 "quote.procedure" = "Intervention";
@@ -997,12 +997,12 @@
 /* ── Verrouillage de l\U2019application ─────────────────── */
 "profile.sectionSecurity" = "S\U00E9curit\U00E9";
 "profile.appLock" = "Verrouillage de l\U2019application";
-"profile.appLockHelp" = "Exiger Face ID / Touch ID (ou votre code) pour ouvrir Peritwin. Prot\U00E8ge les donn\U00E9es des patients si votre t\U00E9l\U00E9phone est d\U00E9verrouill\U00E9 et laiss\U00E9 sans surveillance.";
+"profile.appLockHelp" = "Exiger Face ID / Touch ID (ou votre code) pour ouvrir PeriTwin. Prot\U00E8ge les donn\U00E9es des patients si votre t\U00E9l\U00E9phone est d\U00E9verrouill\U00E9 et laiss\U00E9 sans surveillance.";
 "profile.autoLock" = "Verrouillage automatique";
-"applock.title" = "Peritwin est verrouill\U00E9";
+"applock.title" = "PeriTwin est verrouill\U00E9";
 "applock.subtitle" = "Authentifiez-vous pour continuer.";
 "applock.unlock" = "D\U00E9verrouiller";
-"applock.reason" = "D\U00E9verrouillez Peritwin pour acc\U00E9der aux donn\U00E9es des patients.";
+"applock.reason" = "D\U00E9verrouillez PeriTwin pour acc\U00E9der aux donn\U00E9es des patients.";
 "applock.timeout.0" = "Imm\U00E9diatement";
 "applock.timeout.60" = "Apr\U00E8s 1 minute";
 "applock.timeout.300" = "Apr\U00E8s 5 minutes";
@@ -1026,10 +1026,10 @@
 "sessions.discardConfirmTitle" = "Supprimer cette session ?";
 "sessions.discardConfirmMessage" = "Cette action supprime d\U00E9finitivement la session et sa note. Elle est irr\U00E9versible.";
 /* ── Guide de premi\U00E8re utilisation ───────────────────── */
-"tour.welcome.title" = "Bienvenue sur Peritwin";
+"tour.welcome.title" = "Bienvenue sur PeriTwin";
 "tour.welcome.body" = "Un bref aper\U00E7u de la capture et de la r\U00E9vision des consultations \U2014 environ 20 secondes.";
 "tour.start.title" = "D\U00E9marrer une consultation";
-"tour.start.body" = "Touchez une carte D\U00E9marrage rapide pour lancer l\U2019enregistrement. Peritwin capture l\U2019audio, la vid\U00E9o et l\U2019\U00E9cran ensemble.";
+"tour.start.body" = "Touchez une carte D\U00E9marrage rapide pour lancer l\U2019enregistrement. PeriTwin capture l\U2019audio, la vid\U00E9o et l\U2019\U00E9cran ensemble.";
 "tour.review.title" = "R\U00E9viser en toute confiance";
 "tour.review.body" = "Les consultations termin\U00E9es apparaissent ici. Chaque \U00E9nonc\U00E9 est tra\U00E7able \U00E0 ce qui a \U00E9t\U00E9 dit ou montr\U00E9.";
 "tour.explore.title" = "Se rep\U00E9rer";
@@ -1042,7 +1042,7 @@
 "login.rememberMeWith" = "Se souvenir de moi avec %@";
 "login.signInWith" = "Se connecter avec %@";
 "login.forgetSaved" = "Oublier la connexion enregistr\U00E9e";
-"login.biometricPrompt" = "Se connecter \U00E0 Peritwin";
+"login.biometricPrompt" = "Se connecter \U00E0 PeriTwin";
 "login.biometricExpired" = "Connexion enregistr\U00E9e expir\U00E9e. Veuillez vous connecter avec votre mot de passe.";
 "login.or" = "ou";
 "biometric.passcode" = "Code";
@@ -1161,7 +1161,7 @@
 "measurement.error.disabled" = "La mesure n\U2019est pas activ\U00E9e pour ce compte.";
 "measurement.error.offline" = "Vous semblez hors ligne. R\U00E9essayez une fois connect\U00E9.";
 
-/* Status chips (PeritwinStatusKind) */
+/* Status chips (PeriTwinStatusKind) */
 "status.completed" = "Termin\U00E9";
 "status.pending" = "En attente";
 "status.rec" = "REC";

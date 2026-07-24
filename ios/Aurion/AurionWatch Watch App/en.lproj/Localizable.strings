@@ -1,4 +1,4 @@
-/* #65 — Peritwin Watch control-surface copy. Keys mirror WL(key, default)
+/* #65 — PeriTwin Watch control-surface copy. Keys mirror WL(key, default)
    in the watch source (search `WL(`). Kept at EN+FR parity per CLAUDE.md
    / the premium-UI memory. The watch shows control state only — no PHI. */
 "watch.consent.title" = "Confirm consent";
@@ -18,5 +18,5 @@
 "watch.processing.title" = "Processing";
 "watch.processing.sub" = "Finishing on iPhone\U2026";
 "watch.review.title" = "Ready to review";
-"watch.review.sub" = "Open Peritwin on iPhone";
+"watch.review.sub" = "Open PeriTwin on iPhone";
 "watch.done.title" = "Encounter complete";

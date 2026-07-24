@@ -358,7 +358,7 @@
   },
   "Login": {
     "title": "Sign in",
-    "subtitle": "Peritwin clinical portal",
+    "subtitle": "PeriTwin clinical portal",
     "emailLabel": "Email",
     "passwordLabel": "Password",
     "signIn": "Sign in",
@@ -369,7 +369,7 @@
   "Auth": {
     "forgotPassword": {
       "title": "Forgot your password?",
-      "subtitle": "Enter the email tied to your Peritwin account. We'll send a reset link.",
+      "subtitle": "Enter the email tied to your PeriTwin account. We'll send a reset link.",
       "emailLabel": "Email",
       "emailPlaceholder": "you@aurionclinical.com",
       "submit": "Send reset link",
@@ -377,7 +377,7 @@
       "backToSignIn": "Back to sign in",
       "confirmationTitle": "Check your inbox",
       "confirmationBody": "If that email is on file, a reset link is on its way. Check your inbox in a few minutes.",
-      "transportError": "Couldn't reach Peritwin right now. Check your network and try again."
+      "transportError": "Couldn't reach PeriTwin right now. Check your network and try again."
     },
     "resetPassword": {
       "title": "Set a new password",
@@ -396,7 +396,7 @@
         "expiredHint": "Your reset link may have expired. Request a new one from the sign-in screen.",
         "usedHint": "This reset link has already been used. Request a new one from the sign-in screen.",
         "invalidHint": "This reset link isn't valid. Double-check the link in the email, or request a new one.",
-        "transport": "Couldn't reach Peritwin right now. Check your network and try again."
+        "transport": "Couldn't reach PeriTwin right now. Check your network and try again."
       }
     },
     "loginToast": {
@@ -485,7 +485,7 @@
     "eyebrow": "Transparency",
     "title": "AI Prompts",
     "subtitle": "The exact instructions every AI model receives when analyzing your encounters.",
-    "descriptiveModeCallout": "Every prompt below enforces descriptive mode: the AI is told to describe what was captured, never to interpret, diagnose, or suggest clinical conclusions. This is the safety boundary Peritwin's pilot operates under.",
+    "descriptiveModeCallout": "Every prompt below enforces descriptive mode: the AI is told to describe what was captured, never to interpret, diagnose, or suggest clinical conclusions. This is the safety boundary PeriTwin's pilot operates under.",
     "phaseAReadOnlyChip": "Phase A: read-only",
     "phaseBHint": "When you save your own prompt, it replaces the system default for your own sessions. The system default below is the fallback used when you haven't saved one.",
     "searchPlaceholder": "Filter by name or purpose…",
@@ -521,7 +521,7 @@
     "editor": {
       "title": "Edit your prompt",
       "systemDefaultLabel": "System default (used when you haven't saved your own)",
-      "systemDefaultHint": "Peritwin's descriptive-mode safety boundary",
+      "systemDefaultHint": "PeriTwin's descriptive-mode safety boundary",
       "yourPromptLabel": "Your prompt",
       "yourPromptPlaceholder": "You are a clinical documentation assistant. Describe only what was directly captured during the encounter. Document the patient's complaints and visible findings. Do not interpret findings, do not diagnose, and do not infer clinical meaning.",
       "charCount": "{used}/{max}",
@@ -566,7 +566,7 @@
       "save": "Save guidance",
       "cancel": "Cancel",
       "resetToDefault": "Reset to default text",
-      "useDefault": "Use Peritwin default",
+      "useDefault": "Use PeriTwin default",
       "errorSaving": "Couldn't save your guidance. Please try again.",
       "inactiveWarning": "Specialty guidance is not currently applied to generated notes — an administrator must enable it. Your edits are saved and will take effect once it's on."
     }
@@ -896,7 +896,7 @@
   "Profile": {
     "eyebrow": "Clinician portal",
     "title": "My Profile",
-    "description": "How Peritwin configures recordings + note generation for you.",
+    "description": "How PeriTwin configures recordings + note generation for you.",
     "accountSettings": "Account settings",
     "loadError": "Failed to load profile.",
     "saveError": "Save failed.",
@@ -1022,7 +1022,7 @@
     },
     "noteLanguage": {
       "title": "Generated note language",
-      "description": "The language Peritwin uses when generating notes from your transcripts. Independent of the portal interface language.",
+      "description": "The language PeriTwin uses when generating notes from your transcripts. Independent of the portal interface language.",
       "setAria": "Set generated note language to {label}",
       "english": "English",
       "french": "Français"
@@ -1145,7 +1145,7 @@
     "visitsProfileSubcontexts": "Need per-context templates (e.g. \"left knee\")? Manage them in My Profile.",
     "fromNote": "From a past encounter",
     "fromNoteTitle": "Create a template from a past note",
-    "fromNoteHint": "Pick an encounter — Peritwin reverse-engineers a reusable template from its note, then you refine it in chat. No patient details are copied into the template.",
+    "fromNoteHint": "Pick an encounter — PeriTwin reverse-engineers a reusable template from its note, then you refine it in chat. No patient details are copied into the template.",
     "fromNoteEmpty": "No past encounters with a note yet.",
     "fromNoteUntitled": "Untitled encounter",
     "fromNoteSeeding": "Opening…",
@@ -1215,7 +1215,7 @@
     "keyHint": "Lowercase letters, numbers and underscores — the stable id used to reference this template.",
     "aiInstructions": "AI instructions (optional)",
     "aiInstructionsPlaceholder": "e.g. Describe only what was observed and recorded. Do not interpret, diagnose, or infer.",
-    "aiInstructionsHint": "Replaces the default note-generation prompt for notes built with this template. Leave blank to use the default. Must keep Peritwin's descriptive-mode boundary — describe, don't diagnose.",
+    "aiInstructionsHint": "Replaces the default note-generation prompt for notes built with this template. Leave blank to use the default. Must keep PeriTwin's descriptive-mode boundary — describe, don't diagnose.",
     "sectionsHeading": "Sections",
     "addSection": "Add section",
     "sectionsLimit": "{max} sections maximum.",
@@ -1315,7 +1315,7 @@
       "chipAddMissed": "Add anything I missed",
       "chipTidy": "Tidy empty sections",
       "youLabel": "You",
-      "assistantLabel": "Peritwin"
+      "assistantLabel": "PeriTwin"
     },
     "actions": {
       "approvedExported": "Approved · exported",
@@ -1522,7 +1522,7 @@
   "VideoImport": {
     "eyebrow": "Clinician portal",
     "title": "Upload encounter video",
-    "description": "Upload a recorded encounter and Peritwin will process it through the same AI pipeline as a live session, then produce a note for you to review.",
+    "description": "Upload a recorded encounter and PeriTwin will process it through the same AI pipeline as a live session, then produce a note for you to review.",
     "dropzone": {
       "prompt": "Drop your video here or click to select",
       "accepted": "MP4, MOV or WebM · up to 2 GB",

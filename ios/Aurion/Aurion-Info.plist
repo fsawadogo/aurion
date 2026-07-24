@@ -2,11 +2,11 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-	<!-- Peritwin rebrand (user-visible only): home-screen name. Bundle id,
+	<!-- PeriTwin rebrand (user-visible only): home-screen name. Bundle id,
 	     URL schemes, and entitlements deliberately stay on the Aurion
 	     identifiers — see docs/plans/peritwin-user-visible-rebrand.md. -->
 	<key>CFBundleDisplayName</key>
-	<string>Peritwin</string>
+	<string>PeriTwin</string>
 	<key>CFBundleURLTypes</key>
 	<array>
 		<dict>
