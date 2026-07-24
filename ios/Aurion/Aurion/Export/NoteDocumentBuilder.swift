@@ -90,9 +90,9 @@ enum NoteDocumentBuilder {
 
     // Aurion brand palette (hex, no #) — matches Theme.swift / the backend
     // DOCX + the iOS PDF redesign so every export surface reads identically.
-    private static let navyHex = "0C1B37"
-    private static let navyMidHex = "2A448C"
-    private static let goldHex = "C9A84C"
+    private static let navyHex = "0F1334"
+    private static let navyMidHex = "28338E"
+    private static let goldHex = "4159D4"
     private static let amberHex = "D9941F"
     private static let grayHex = "6B7280"
     private static let inkHex = "1A1F29"

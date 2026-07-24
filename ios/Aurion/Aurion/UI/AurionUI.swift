@@ -294,8 +294,8 @@ struct AurionStatusPill: View {
 
 // MARK: - Avatar
 //
-// Initials on the gold radial gradient (#E5C97A → #B5953D, off-center
-// highlight at 30% 30%). Initials sized to ~36% of the circle diameter.
+// Initials on the accent radial gradient (light → dark accent,
+// off-center highlight at 30% 30%). Initials ~36% of the diameter.
 
 struct AurionAvatar: View {
     let initials: String
@@ -306,7 +306,7 @@ struct AurionAvatar: View {
             Circle()
                 .fill(
                     RadialGradient(
-                        colors: [Color(red: 229/255, green: 201/255, blue: 122/255), .aurionGoldDark],
+                        colors: [Color.aurionGoldLight, .aurionGoldDark],
                         center: UnitPoint(x: 0.3, y: 0.3),
                         startRadius: 2,
                         endRadius: size * 0.7

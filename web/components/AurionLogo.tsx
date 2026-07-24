@@ -108,7 +108,7 @@ export function AurionLogoLockup({
       )}
       <Image
         src="/brand/aurion-logo-full.png"
-        alt="Aurion — the gold standard in clinical AI"
+        alt="PeriTwin — your clinical digital twin. Ask Peri."
         width={height}
         height={height}
         priority

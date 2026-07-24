@@ -39,7 +39,7 @@ export default function AurionSplash({ variant = "root" }: AurionSplashProps) {
         className="absolute inset-0"
         style={{
           background:
-            "radial-gradient(120% 90% at 50% 42%, #16284E 0%, #0C1B37 48%, #081226 100%)",
+            "radial-gradient(120% 90% at 50% 42%, #161C4E 0%, #0F1334 48%, #0A0D24 100%)",
         }}
       />
       {/* Soft pulsing gold halo behind the mark. */}

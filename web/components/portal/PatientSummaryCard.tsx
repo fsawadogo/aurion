@@ -136,9 +136,9 @@ export default function PatientSummaryCard({
     const style = doc.createElement("style");
     style.textContent =
       "body { font-family: -apple-system, system-ui, sans-serif;" +
-      "       padding: 32px; line-height: 1.55; color: #0C1B37;" +
+      "       padding: 32px; line-height: 1.55; color: #0F1334;" +
       "       max-width: 600px; margin: 0 auto; }" +
-      "h1 { font-size: 18px; margin: 0 0 16px 0; color: #0C1B37; }" +
+      "h1 { font-size: 18px; margin: 0 0 16px 0; color: #0F1334; }" +
       "p  { font-size: 14px; white-space: pre-wrap; }" +
       ".footer { margin-top: 24px; padding-top: 12px;" +
       "          border-top: 1px solid #E6E9EE; font-size: 11px;" +
