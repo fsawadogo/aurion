@@ -294,7 +294,7 @@ export default function Sidebar() {
    *  mobile path always passes false. */
   const navContent = (forCollapsed: boolean) => (
     <div className="flex h-full flex-col">
-      {/* Brand header — squircle icon (iOS app icon) + Aurion wordmark + role pill.
+      {/* Brand header — squircle icon (iOS app icon) + PeriTwin wordmark + role pill.
           In collapsed mode the wordmark + role pill hide; the squircle centers. */}
       <div
         className={
@@ -306,7 +306,7 @@ export default function Sidebar() {
         {!forCollapsed && (
           <div className="flex items-baseline gap-2">
             <span className="text-[17px] font-semibold tracking-tight text-white">
-              Aurion
+              PeriTwin
             </span>
             <span className="rounded-md bg-white/[0.08] px-1.5 py-0.5 text-[10px] font-semibold tracking-[0.08em] text-gold-300 uppercase">
               {user?.role === "CLINICIAN" ? t("portal") : t("admin")}
