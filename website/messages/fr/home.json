@@ -1,0 +1,205 @@
+{
+  "hero": {
+    "badge": "Jumeau numérique clinique — en projet pilote avec des équipes chirurgicales montréalaises",
+    "titleLead": "Votre jumeau clinique intelligent.",
+    "titleAccent": "Demandez à Peri.",
+    "subtitle": "Peri écoute dans la pièce, rédige la note et se souvient du patient. Chaque phrase qu'il écrit est traçable jusqu'à sa source.",
+    "scheduleDemo": "Réserver une démo",
+    "watchVideo": "Voir la démo",
+    "trustedBy": "La confiance des grandes institutions chirurgicales",
+    "callout": {
+      "name": "Ask Peri",
+      "quote": "Dre Miller, d'après vos préférences opératoires antérieures…"
+    },
+    "imageAlt": "Technologie de jumeau numérique PeriTwin — modèle holographique d'un patient dans un laboratoire de recherche clinique",
+    "subtitleSource": "Comment ça marche : chaque énoncé d'une note PeriTwin porte une citation vers le segment audio, l'image ou la valeur de laboratoire exacte dont il provient. Survolez une pastille pour voir la preuve.",
+    "stat1": "44",
+    "stat1Label": "consultations pilotes documentées",
+    "stat2": "2",
+    "stat2Label": "spécialités chirurgicales actives",
+    "stat3": "FR · EN",
+    "stat3Label": "notes bilingues",
+    "note": {
+      "appName": "PeriTwin — note ancrée",
+      "chipLabel": "Chaque énoncé cité",
+      "patientLabel": "Post-op · jour 14 · genou",
+      "title": "Note de suivi",
+      "line1": "Amplitude articulaire 0–110°; incision propre et sèche.",
+      "line1Source": "« …on est à zéro–cent dix aujourd'hui, et la plaie est propre et sèche. » — audio de la consultation, 00:14",
+      "line2": "Le patient marche sans aide; évite encore les escaliers.",
+      "line2Source": "« Je marche bien maintenant, les escaliers me font encore un peu peur. » — audio de la consultation, 00:41",
+      "askQ": "Peri, comment l'amplitude a-t-elle évolué depuis la dernière visite?",
+      "askA": "Flexion améliorée de 15° depuis le 10 juillet (95° → 110°).",
+      "askASource": "Calculé à partir des notes du 10 et du 24 juillet — les deux mesures sont citées dans chaque note."
+    },
+    "photoAlt": "Une clinicienne portant les lunettes de capture PeriTwin pendant une consultation",
+    "recChip": "REC · masqué sur l'appareil"
+  },
+  "continuum": {
+    "title": "Le parcours du patient",
+    "subtitle": "Pour que l'intelligence ne se perde jamais. PeriTwin accompagne le patient de l'admission au rétablissement.",
+    "stages": [
+      {
+        "title": "Urgences",
+        "body": "Saisie des données initiales critiques et des signes vitaux."
+      },
+      {
+        "title": "Clinique",
+        "body": "Synthèse de l'historique longitudinal et des notes cliniques."
+      },
+      {
+        "title": "Préopératoire",
+        "body": "Optimisation de la planification chirurgicale et de la préparation du patient."
+      },
+      {
+        "title": "Bloc opératoire",
+        "body": "Captation ambiante en temps réel de la technique chirurgicale.",
+        "cta": "Rejoindre le projet pilote"
+      },
+      {
+        "title": "Postopératoire",
+        "body": "Suivi des étapes de rétablissement et des données de congé."
+      }
+    ]
+  },
+  "wearable": {
+    "eyebrow": "La captation",
+    "title": "Peri écoute et observe dans la pièce",
+    "body": "Des lunettes portées par le clinicien captent la rencontre au moment où elle se déroule — la conversation, l'examen, ce qui s'affiche à l'écran. Pas de dictée, pas de scribe dans le coin : vous regardez le patient, et la pièce se documente elle-même.",
+    "ledgerLabel": "Ce qui quitte la pièce — et ce qui ne la quitte jamais",
+    "rows": [
+      {
+        "item": "Images vidéo",
+        "chip": "masquées sur l'appareil"
+      },
+      {
+        "item": "Audio",
+        "chip": "purgé après transcription"
+      },
+      {
+        "item": "Profil vocal",
+        "chip": "ne quitte jamais le téléphone"
+      },
+      {
+        "item": "Chaque constat",
+        "chip": "cité à sa source"
+      }
+    ],
+    "footer": "Le masquage est vérifié et consigné avant tout téléversement."
+  },
+  "intelligence": {
+    "eyebrow": "Intelligence personnalisée",
+    "title": "Une intelligence qui apprend de vous",
+    "subtitle": "Un scribe générique écrit la même note pour tous les chirurgiens. Peri apprend votre voix — et porte l'histoire de chaque patient d'une visite à l'autre.",
+    "voice": {
+      "kicker": "Votre voix",
+      "title": "Il écrit comme vous écrivez",
+      "body": "Chaque correction est une leçon. Peri retient vos formulations, votre ordre d'examen, vos valeurs par défaut — pour que la première ébauche vous ressemble, pas à un gabarit.",
+      "artifactLabel": "Examen physique · première ébauche",
+      "before": "Amplitude de mouvement dans les limites fonctionnelles.",
+      "after": "ROM 0–110°, symétrique au côté controlatéral.",
+      "tag": "Appris de 12 de vos corrections"
+    },
+    "memory": {
+      "kicker": "Vos patients",
+      "title": "Il retient toute l'histoire",
+      "body": "Chaque rencontre alimente le jumeau du patient — l'examen de février reste à portée de main en juillet, et rien de ce que vous documentez ne se perd entre les visites.",
+      "artifactLabel": "Jumeau patient · genou droit",
+      "rows": [
+        {
+          "date": "3 févr.",
+          "label": "Urgence — chute sur la glace, imagerie initiale",
+          "claims": "12 citations"
+        },
+        {
+          "date": "12 juin",
+          "label": "Clinique — planification chirurgicale",
+          "claims": "18 citations"
+        },
+        {
+          "date": "10 juil.",
+          "label": "Bloc — réduction ouverte, fixation interne",
+          "claims": "22 citations"
+        },
+        {
+          "date": "24 juil.",
+          "label": "Post-op jour 14 — ROM 0–110°",
+          "claims": "9 citations"
+        }
+      ],
+      "footer": "61 affirmations citées · un seul récit continu"
+    }
+  },
+  "workbench": {
+    "title": "Le tableau de bord clinique",
+    "subtitle": "Une prise de décision optimisée grâce à des analyses cliniques adaptées à votre pratique.",
+    "patientView": "Dossier patient : Marcus Reed",
+    "patientTag": "Surveillance de lambeau postop",
+    "labCard": {
+      "title": "Tendances labo : CRP",
+      "caption": "Protéine C-réactive (mg/L) — 5 derniers jours"
+    },
+    "imagingCard": {
+      "title": "Analyse radiographique",
+      "measurement": "Angle fémoral : 85,4°",
+      "caption": "Genou de face — mesure d'angle automatisée",
+      "imageAlt": "Radiographie du genou de face dans le planificateur chirurgical, annotée de l'angle fémoral et des mesures condyliennes"
+    },
+    "chat": {
+      "title": "Ask Peri",
+      "question": "Peri, comment l'amplitude articulaire a-t-elle évolué sur les 3 dernières visites ?",
+      "answerLabel": "Peri",
+      "answer": "L'amplitude du genou s'est améliorée de 30° en extension et en flexion. Il reste un déficit de 5° en extension et de 20° en flexion.",
+      "suggestedLabel": "Questions suggérées",
+      "suggested": [
+        "Peri, quelle est la tendance de la CRP de ce patient ?",
+        "Peri, peux-tu mesurer l'AFDL de ce patient sur les radiographies ?"
+      ],
+      "placeholder": "Demandez à Peri…",
+      "send": "Envoyer le message",
+      "sources": [
+        "10 juil. · examen en clinique",
+        "24 juil. · examen postop"
+      ]
+    },
+    "nav": {
+      "dashboard": "Tableau de bord",
+      "patients": "Patients",
+      "analytics": "Analyses",
+      "history": "Historique",
+      "settings": "Paramètres"
+    },
+    "xrayLabel": "Genou de face • G",
+    "eyebrow": "Le poste de travail",
+    "portalChip": "portal.peritwin.com"
+  },
+  "colleague": {
+    "title": "Votre collègue numérique",
+    "body": "Peri est votre jumeau clinique intelligent — un collègue avec qui réfléchir aux cas les plus complexes. Il rompt l'isolement clinique, allège votre charge cognitive et vous permet de vous consacrer à l'essentiel : le patient.",
+    "eyebrow": "Au-delà de la documentation",
+    "items": [
+      {
+        "kicker": "Interopérabilité",
+        "title": "Intégration au DME",
+        "body": "Les constats alimentent les systèmes que vous utilisez déjà. Peri renvoie des notes structurées vers Epic et Cerner, pour que le dossier reflète la rencontre sans seconde saisie en fin de journée."
+      },
+      {
+        "kicker": "Imputabilité",
+        "title": "Solidité médicolégale",
+        "body": "Chaque constat est traçable jusqu'au moment de sa captation. Médias sources horodatés, révision par le clinicien avant toute signature, et piste d'audit continue de l'observation au constat documenté."
+      }
+    ]
+  },
+  "philosophy": {
+    "title": "Conçu par des médecins, pour des médecins.",
+    "body": "Notre mission : remettre la médecine centrée sur le patient au premier plan. Rejoignez la communauté de cliniciens qui reprennent la main sur leur pratique grâce à l'intelligence numérique personnalisée.",
+    "cta": "Rejoindre le projet pilote",
+    "eyebrow": "Notre philosophie",
+    "pilotLine": "En projet pilote avec des équipes chirurgicales au CREOQ et à la CLLC — Montréal"
+  },
+  "video": {
+    "title": "PeriTwin en pratique",
+    "description": "Découvrez comment Peri capte une rencontre clinique et la transforme en note structurée.",
+    "close": "Fermer la vidéo"
+  }
+}

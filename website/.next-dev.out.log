@@ -1,0 +1,101 @@
+
+> my-project@0.1.0 dev
+> next dev --port 3000
+
+▲ Next.js 16.2.0 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://10.0.0.27:3000
+✓ Ready in 462ms
+
+ GET /en/prototype 200 in 1036ms (next.js: 623ms, proxy.ts: 77ms, generate-params: 427ms, application-code: 336ms)
+ GET /manifest.webmanifest 200 in 91ms (next.js: 76ms, application-code: 15ms)
+ GET /en 200 in 2.7s (next.js: 475ms, proxy.ts: 4ms, generate-params: 427ms, application-code: 2.2s)
+ GET /en 200 in 610ms (next.js: 22ms, proxy.ts: 9ms, generate-params: 12ms, application-code: 579ms)
+ GET /manifest.webmanifest 200 in 14ms (next.js: 5ms, application-code: 9ms)
+ GET /en/prototype 200 in 75ms (next.js: 15ms, proxy.ts: 8ms, generate-params: 7ms, application-code: 53ms)
+ GET /manifest.webmanifest 200 in 15ms (next.js: 7ms, application-code: 8ms)
+✓ Compiled in 1219ms
+ GET /en/prototype 200 in 948ms (next.js: 234ms, proxy.ts: 105ms, generate-params: 16ms, application-code: 609ms)
+ GET /en/prototype 200 in 385ms (next.js: 54ms, proxy.ts: 33ms, generate-params: 83µs, application-code: 298ms)
+ GET /en/prototype 200 in 158ms (next.js: 18ms, proxy.ts: 18ms, generate-params: 54µs, application-code: 122ms)
+ GET /manifest.webmanifest 200 in 63ms (next.js: 52ms, application-code: 11ms)
+✓ Compiled in 453ms
+✓ Compiled in 368ms
+ GET /en/prototype 200 in 458ms (next.js: 139ms, proxy.ts: 8ms, generate-params: 8ms, application-code: 311ms)
+ GET /manifest.webmanifest 200 in 19ms (next.js: 4ms, application-code: 15ms)
+ GET /en 200 in 385ms (next.js: 46ms, proxy.ts: 7ms, generate-params: 8ms, application-code: 332ms)
+ GET /manifest.webmanifest 200 in 11ms (next.js: 5ms, application-code: 6ms)
+ GET /en/prototype 200 in 54ms (next.js: 17ms, proxy.ts: 6ms, generate-params: 6ms, application-code: 31ms)
+ GET /manifest.webmanifest 200 in 9ms (next.js: 4ms, application-code: 5ms)
+✓ Compiled in 212ms
+✓ Compiled in 202ms
+✓ Compiled in 470ms
+✓ Compiled in 955ms
+✓ Compiled in 207ms
+✓ Compiled in 576ms
+✓ Compiled in 121ms
+✓ Compiled in 405ms
+✓ Compiled in 418ms
+✓ Compiled in 290ms
+✓ Compiled in 188ms
+✓ Compiled in 214ms
+✓ Compiled in 451ms
+✓ Compiled in 202ms
+✓ Compiled in 152ms
+✓ Compiled in 195ms
+✓ Compiled in 209ms
+✓ Compiled in 389ms
+✓ Compiled in 261ms
+✓ Compiled in 619ms
+ GET /en/prototype 200 in 1059ms (next.js: 234ms, proxy.ts: 105ms, generate-params: 18ms, application-code: 720ms)
+ GET /en/prototype 200 in 465ms (next.js: 241ms, proxy.ts: 18ms, generate-params: 135µs, application-code: 206ms)
+ GET /manifest.webmanifest 200 in 112ms (next.js: 93ms, application-code: 18ms)
+✓ Compiled in 119ms
+✓ Compiled in 264ms
+ GET /en/prototype 200 in 725ms (next.js: 265ms, proxy.ts: 6ms, generate-params: 12ms, application-code: 455ms)
+ GET /en/prototype 200 in 255ms (next.js: 48ms, proxy.ts: 24ms, generate-params: 135µs, application-code: 183ms)
+ GET /manifest.webmanifest 200 in 18ms (next.js: 6ms, application-code: 12ms)
+✓ Compiled in 159ms
+ GET /en/prototype 200 in 119ms (next.js: 17ms, proxy.ts: 6ms, generate-params: 8ms, application-code: 96ms)
+ GET /manifest.webmanifest 200 in 12ms (next.js: 4ms, application-code: 9ms)
+ GET /en/prototype 200 in 542ms (next.js: 215ms, proxy.ts: 7ms, generate-params: 11ms, application-code: 320ms)
+ GET /en/prototype 200 in 141ms (next.js: 17ms, proxy.ts: 8ms, generate-params: 48µs, application-code: 115ms)
+ GET /manifest.webmanifest 200 in 13ms (next.js: 5ms, application-code: 8ms)
+✓ Compiled in 1038ms
+✓ Compiled in 789ms
+ GET /en/prototype 200 in 3.9s (next.js: 175ms, proxy.ts: 6ms, generate-params: 12ms, application-code: 3.7s)
+✓ Compiled in 0ms
+ GET /en/prototype 200 in 4.7s (next.js: 1068ms, proxy.ts: 134ms, generate-params: 136µs, application-code: 3.5s)
+ GET /en/prototype 200 in 2.6s (next.js: 404ms, proxy.ts: 22ms, generate-params: 22ms, application-code: 2.1s)
+ GET /en/prototype 200 in 1644ms (next.js: 359ms, proxy.ts: 24ms, generate-params: 509µs, application-code: 1261ms)
+ GET /en/prototype 200 in 1640ms (next.js: 770ms, proxy.ts: 29ms, generate-params: 49µs, application-code: 841ms)
+ GET /en/prototype 200 in 1647ms (next.js: 610ms, proxy.ts: 27ms, generate-params: 57µs, application-code: 1010ms)
+ GET /en/prototype 200 in 1614ms (next.js: 1199ms, proxy.ts: 16ms, generate-params: 110µs, application-code: 399ms)
+ GET /en/prototype 200 in 1177ms (next.js: 339ms, proxy.ts: 13ms, generate-params: 11ms, application-code: 826ms)
+ GET /en/prototype 200 in 1137ms (next.js: 543ms, proxy.ts: 9ms, generate-params: 37µs, application-code: 585ms)
+ GET /en/prototype 200 in 447ms (next.js: 18ms, proxy.ts: 7ms, generate-params: 51µs, application-code: 422ms)
+ GET /en/prototype 200 in 311ms (next.js: 38ms, proxy.ts: 13ms, generate-params: 49µs, application-code: 260ms)
+ GET /en/prototype 200 in 309ms (next.js: 178ms, proxy.ts: 11ms, generate-params: 49µs, application-code: 119ms)
+ GET /en/prototype 200 in 745ms (next.js: 258ms, proxy.ts: 8ms, generate-params: 52µs, application-code: 480ms)
+✓ Compiled in 382ms
+ GET /en/prototype 200 in 1158ms (next.js: 591ms, proxy.ts: 15ms, generate-params: 13ms, application-code: 552ms)
+ GET /en/prototype 200 in 316ms (next.js: 15ms, proxy.ts: 7ms, generate-params: 63µs, application-code: 294ms)
+ GET /en/prototype 200 in 204ms (next.js: 17ms, proxy.ts: 8ms, generate-params: 59µs, application-code: 179ms)
+ GET /manifest.webmanifest 200 in 17ms (next.js: 6ms, application-code: 11ms)
+✓ Compiled in 279ms
+✓ Compiled in 309ms
+ GET /en/prototype 200 in 165ms (next.js: 26ms, proxy.ts: 21ms, generate-params: 10ms, application-code: 117ms)
+ GET /manifest.webmanifest 200 in 14ms (next.js: 4ms, application-code: 10ms)
+✓ Compiled in 241ms
+ GET /en/prototype 200 in 112ms (next.js: 24ms, proxy.ts: 7ms, generate-params: 8ms, application-code: 81ms)
+ GET /manifest.webmanifest 200 in 13ms (next.js: 5ms, application-code: 9ms)
+✓ Compiled in 128ms
+ GET /en/prototype 200 in 101ms (next.js: 14ms, proxy.ts: 5ms, generate-params: 7ms, application-code: 82ms)
+ GET /manifest.webmanifest 200 in 12ms (next.js: 4ms, application-code: 8ms)
+✓ Compiled in 162ms
+ GET /en/prototype 200 in 378ms (next.js: 116ms, proxy.ts: 4ms, generate-params: 10ms, application-code: 258ms)
+ GET /en/prototype 200 in 105ms (next.js: 11ms, proxy.ts: 6ms, generate-params: 42µs, application-code: 87ms)
+ GET /manifest.webmanifest 200 in 8ms (next.js: 3ms, application-code: 5ms)
+ GET /en/prototype 200 in 587ms (next.js: 201ms, proxy.ts: 6ms, generate-params: 10ms, application-code: 380ms)
+ GET /en/prototype 200 in 235ms (next.js: 24ms, proxy.ts: 11ms, generate-params: 56µs, application-code: 200ms)
+ GET /manifest.webmanifest 200 in 15ms (next.js: 4ms, application-code: 10ms)

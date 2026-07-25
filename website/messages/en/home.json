@@ -1,0 +1,205 @@
+{
+  "hero": {
+    "badge": "Clinical digital twin — in pilot with Montréal surgical teams",
+    "titleLead": "Your clinical digital twin.",
+    "titleAccent": "Ask Peri.",
+    "subtitle": "Peri listens in the room, builds the note, and remembers the patient. Every sentence it writes is traceable to its source.",
+    "scheduleDemo": "Book a demo",
+    "watchVideo": "Watch the demo",
+    "trustedBy": "Trusted by leading surgical institutions",
+    "callout": {
+      "name": "Ask Peri",
+      "quote": "Dr. Miller, based on your previous OR preferences…"
+    },
+    "imageAlt": "PeriTwin digital twin technology — a holographic patient model displayed in a clinical research lab",
+    "subtitleSource": "How it works: each statement in a PeriTwin note carries a citation to the exact audio segment, image, or lab value it came from. Hover any chip on this page for the receipt.",
+    "stat1": "44",
+    "stat1Label": "pilot encounters documented",
+    "stat2": "2",
+    "stat2Label": "surgical specialties live",
+    "stat3": "EN · FR",
+    "stat3Label": "bilingual notes",
+    "note": {
+      "appName": "PeriTwin — grounded note",
+      "chipLabel": "Every claim cited",
+      "patientLabel": "Post-op · day 14 · knee",
+      "title": "Follow-up note",
+      "line1": "Range of motion 0–110°; incision clean and dry.",
+      "line1Source": "“…we're at zero to one-ten today, and the wound looks clean and dry.” — encounter audio, 00:14",
+      "line2": "Patient walking without aid; still avoids stairs.",
+      "line2Source": "“I'm walking fine now, stairs still scare me a little.” — encounter audio, 00:41",
+      "askQ": "Peri, how has ROM evolved since the last visit?",
+      "askA": "Flexion improved 15° since July 10 (95° → 110°).",
+      "askASource": "Computed from the July 10 and July 24 encounter notes — both measurements cited in each note."
+    },
+    "photoAlt": "A clinician wearing PeriTwin capture glasses during a consultation",
+    "recChip": "REC · masked on device"
+  },
+  "continuum": {
+    "title": "The Patient Journey",
+    "subtitle": "Ensuring intelligence is never lost. PeriTwin is with the patient from intake through recovery.",
+    "stages": [
+      {
+        "title": "ER Intake",
+        "body": "Capturing critical initial data and vital statistics."
+      },
+      {
+        "title": "Clinic",
+        "body": "Synthesizing longitudinal history and clinical notes."
+      },
+      {
+        "title": "Pre-op",
+        "body": "Optimizing surgical planning and patient readiness."
+      },
+      {
+        "title": "OR / Procedure",
+        "body": "Real-time ambient capture of surgical technique.",
+        "cta": "Join the pilot"
+      },
+      {
+        "title": "Post-op",
+        "body": "Tracking recovery milestones and discharge data."
+      }
+    ]
+  },
+  "wearable": {
+    "eyebrow": "The capture",
+    "title": "Peri listens and observes in the room",
+    "body": "Clinician-worn glasses capture the encounter as it happens — the conversation, the exam, what's on the screen. No dictation, no scribe in the corner: you look at the patient, and the room documents itself.",
+    "ledgerLabel": "What leaves the room — and what never does",
+    "rows": [
+      {
+        "item": "Video frames",
+        "chip": "masked on device"
+      },
+      {
+        "item": "Audio",
+        "chip": "purged after transcription"
+      },
+      {
+        "item": "Voice profile",
+        "chip": "never leaves the phone"
+      },
+      {
+        "item": "Every finding",
+        "chip": "cited to its source"
+      }
+    ],
+    "footer": "Masking is verified and logged before anything uploads."
+  },
+  "intelligence": {
+    "eyebrow": "Personalized intelligence",
+    "title": "Intelligence that learns from you",
+    "subtitle": "A generic scribe writes the same note for every surgeon. Peri learns your voice — and carries each patient's story forward.",
+    "voice": {
+      "kicker": "Your voice",
+      "title": "It writes the way you write",
+      "body": "Every edit you make is a lesson. Peri picks up your phrasing, your exam order, your defaults — so the first draft sounds like you, not like a template.",
+      "artifactLabel": "Physical exam · first draft",
+      "before": "Range of motion is within functional limits.",
+      "after": "ROM 0–110°, symmetric to the contralateral side.",
+      "tag": "Learned from 12 of your edits"
+    },
+    "memory": {
+      "kicker": "Your patients",
+      "title": "It remembers the whole story",
+      "body": "Every encounter joins the patient's twin — so February's exam is still at hand in July, and nothing you documented gets lost between visits.",
+      "artifactLabel": "Patient twin · right knee",
+      "rows": [
+        {
+          "date": "Feb 03",
+          "label": "ER intake — fall on ice, initial imaging",
+          "claims": "12 claims"
+        },
+        {
+          "date": "Jun 12",
+          "label": "Clinic — surgical planning",
+          "claims": "18 claims"
+        },
+        {
+          "date": "Jul 10",
+          "label": "OR — open reduction, internal fixation",
+          "claims": "22 claims"
+        },
+        {
+          "date": "Jul 24",
+          "label": "Post-op day 14 — ROM 0–110°",
+          "claims": "9 claims"
+        }
+      ],
+      "footer": "61 cited claims · one continuous narrative"
+    }
+  },
+  "workbench": {
+    "title": "The Clinical Dashboard",
+    "subtitle": "Optimized decision-making through assistive clinical insights tailored to you.",
+    "patientView": "Patient View: Marcus Reed",
+    "patientTag": "Post-op Flap Monitoring",
+    "labCard": {
+      "title": "Lab Trends: CRP",
+      "caption": "C-Reactive Protein (mg/L) — last 5 days"
+    },
+    "imagingCard": {
+      "title": "Radiographic Analysis",
+      "measurement": "Femoral angle: 85.4°",
+      "caption": "AP knee — automated angle measurement",
+      "imageAlt": "Anteroposterior knee radiograph in the surgical planner, annotated with femoral angle and condyle measurements"
+    },
+    "chat": {
+      "title": "Ask Peri",
+      "question": "Peri, how has this patient's ROM evolved over the last 3 visits?",
+      "answerLabel": "Peri",
+      "answer": "Knee ROM has improved in extension and flexion by 30°. Still limited by 5° in extension and 20° in flexion.",
+      "suggestedLabel": "Suggested queries",
+      "suggested": [
+        "Peri, what is this patient's CRP trend?",
+        "Peri, can you measure this patient's LDFA on the x-rays?"
+      ],
+      "placeholder": "Ask Peri…",
+      "send": "Send message",
+      "sources": [
+        "Jul 10 · clinic exam",
+        "Jul 24 · post-op exam"
+      ]
+    },
+    "nav": {
+      "dashboard": "Dashboard",
+      "patients": "Patients",
+      "analytics": "Analytics",
+      "history": "History",
+      "settings": "Settings"
+    },
+    "xrayLabel": "AP Knee X-ray • L",
+    "eyebrow": "The workbench",
+    "portalChip": "portal.peritwin.com"
+  },
+  "colleague": {
+    "title": "Your Digital Colleague",
+    "body": "Peri serves as your clinical digital twin — a colleague to bounce ideas off for tough cases. It removes clinical isolation, decreases cognitive burden, and lets you return to the heart of medicine: patient care.",
+    "eyebrow": "Beyond documentation",
+    "items": [
+      {
+        "kicker": "Interoperability",
+        "title": "EHR integration",
+        "body": "Findings flow into the systems you already run on. Peri writes structured notes back to Epic and Cerner, so the record reflects the encounter without a second pass of data entry at the end of your day."
+      },
+      {
+        "kicker": "Accountability",
+        "title": "Medico-legally robust",
+        "body": "Every insight is traceable to the moment it was captured. Timestamped source media, clinician review before anything is signed, and an auditable trail from observation to documented finding."
+      }
+    ]
+  },
+  "philosophy": {
+    "title": "Built for doctors, by doctors.",
+    "body": "Our mission is to return the focus to patient-centered medicine. Join the community of clinicians reclaiming their practice through personalized digital intelligence.",
+    "cta": "Join the pilot",
+    "eyebrow": "Our philosophy",
+    "pilotLine": "In pilot with surgical teams at CREOQ & CLLC — Montréal"
+  },
+  "video": {
+    "title": "PeriTwin in practice",
+    "description": "See how Peri captures a clinical encounter and turns it into a structured note.",
+    "close": "Close video"
+  }
+}
