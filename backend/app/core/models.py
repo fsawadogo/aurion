@@ -1749,3 +1749,29 @@ class PasswordResetTokenModel(Base):
     consumed_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
+
+
+class WaitlistSignupModel(Base):
+    """Public marketing-site waitlist / contact submission (peritwin.com).
+
+    Written by the unauthenticated ``POST /api/v1/public/waitlist`` endpoint
+    — the static marketing site has no server of its own. Lead PII (name,
+    email), NOT clinical PHI; never log field values. No update path: rows
+    are insert-only and read straight from the database for now.
+    """
+
+    __tablename__ = "waitlist_signups"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    name: Mapped[str] = mapped_column(String(200), nullable=False)
+    email: Mapped[str] = mapped_column(String(320), nullable=False)
+    reason: Mapped[str] = mapped_column(String(40), nullable=False)
+    specialty: Mapped[str | None] = mapped_column(String(200), nullable=True)
+    source: Mapped[str] = mapped_column(
+        String(40), nullable=False, default="website"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False, default=utcnow
+    )
