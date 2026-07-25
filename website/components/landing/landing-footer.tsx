@@ -26,15 +26,24 @@ export async function LandingFooter() {
     <footer className="w-full border-t border-outline-variant/20 bg-surface-container-low py-unit-12 md:py-unit-16">
       <div className="mx-auto grid max-w-(--breakpoint-2xl) grid-cols-1 gap-unit-12 px-margin-mobile md:grid-cols-2 md:px-margin-desktop lg:grid-cols-4 lg:gap-gutter">
 
-        <div className="space-y-unit-4">
-          {/* Full lockup — the tagline is part of the artwork, so no separate line */}
-          <Image
-            src="/peritwin-logo.png"
-            alt={`${t("brand")} — ${t("footer.tagline")}`}
-            width={1248}
-            height={667}
-            className="h-auto w-full max-w-[260px]"
-          />
+        <div className="space-y-unit-3">
+          {/* Live-type brand row (same grammar as the nav) — the lockup PNG's
+              dark-navy wordmark disappeared on the dark theme. */}
+          <div className="flex items-center gap-2.5">
+            <Image
+              src="/peritwin-mark.png"
+              alt=""
+              aria-hidden
+              width={600}
+              height={600}
+              className="h-9 w-auto"
+            />
+            <span className="font-display text-[22px] leading-none font-bold tracking-[-0.02em]">
+              <span className="text-[#5D72DB]">Peri</span>
+              <span className="text-secondary">Twin</span>
+            </span>
+          </div>
+          <p className="text-[13px] text-on-surface-variant">{t("footer.tagline")}</p>
         </div>
 
         <div className="hidden space-y-unit-4 lg:block">

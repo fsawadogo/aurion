@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl"
 import { useState } from "react"
 
 import { LanguageSwitcher } from "@/components/language-switcher"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/i18n/navigation"
 import { SITE } from "@/lib/site"
@@ -92,6 +93,7 @@ export function LandingHeader() {
             </a>
           </nav>
 
+          <ThemeToggle />
           <LanguageSwitcher />
 
           <Button

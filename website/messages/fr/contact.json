@@ -5,7 +5,7 @@
   },
   "eyebrow": "Nous joindre",
   "title": "Parlons-en.",
-  "subtitle": "Que vous vouliez une démo, joindre un pilote, explorer un partenariat ou simplement poser une question — dites-nous en un peu plus et nous vous répondrons. Jamais de pourriel.",
+  "subtitle": "Que vous vouliez une démo, joindre un pilote, explorer un partenariat ou simplement poser une question : dites-nous en un peu plus et nous vous répondrons. Jamais de pourriel.",
   "fields": {
     "name": "Nom complet",
     "email": "Courriel professionnel",
@@ -26,7 +26,7 @@
   },
   "submit": "Envoyer le message",
   "submitting": "Envoi…",
-  "success": "Merci — votre message est bien reçu. Nous vous contacterons sous peu.",
+  "success": "Merci. Votre message est bien reçu et nous vous contacterons sous peu.",
   "error": "Une erreur s'est produite. Veuillez réessayer dans un instant.",
   "validation": {
     "required": "Ce champ est obligatoire.",
@@ -39,6 +39,6 @@
     "responseKicker": "Réponse",
     "responseLine": "Nous répondons en un jour ouvrable.",
     "pilotKicker": "Pilote",
-    "pilotLine": "En projet pilote avec des équipes chirurgicales au CREOQ et à la CLLC — Montréal."
+    "pilotLine": "En projet pilote avec des équipes chirurgicales au CREOQ et à la CLLC, à Montréal."
   }
 }

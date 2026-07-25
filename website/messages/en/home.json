@@ -1,6 +1,6 @@
 {
   "hero": {
-    "badge": "Clinical digital twin — in pilot with Montréal surgical teams",
+    "badge": "Clinical digital twin · in pilot with Montréal surgical teams",
     "titleLead": "Your clinical digital twin.",
     "titleAccent": "Ask Peri.",
     "subtitle": "Peri listens in the room, builds the note, and remembers the patient. Every sentence it writes is traceable to its source.",
@@ -11,7 +11,7 @@
       "name": "Ask Peri",
       "quote": "Dr. Miller, based on your previous OR preferences…"
     },
-    "imageAlt": "PeriTwin digital twin technology — a holographic patient model displayed in a clinical research lab",
+    "imageAlt": "PeriTwin digital twin technology: a holographic patient model displayed in a clinical research lab",
     "subtitleSource": "How it works: each statement in a PeriTwin note carries a citation to the exact audio segment, image, or lab value it came from. Hover any chip on this page for the receipt.",
     "stat1": "44",
     "stat1Label": "pilot encounters documented",
@@ -20,17 +20,17 @@
     "stat3": "EN · FR",
     "stat3Label": "bilingual notes",
     "note": {
-      "appName": "PeriTwin — grounded note",
+      "appName": "PeriTwin · grounded note",
       "chipLabel": "Every claim cited",
       "patientLabel": "Post-op · day 14 · knee",
       "title": "Follow-up note",
       "line1": "Range of motion 0–110°; incision clean and dry.",
-      "line1Source": "“…we're at zero to one-ten today, and the wound looks clean and dry.” — encounter audio, 00:14",
+      "line1Source": "“…we're at zero to one-ten today, and the wound looks clean and dry.” (encounter audio, 00:14)",
       "line2": "Patient walking without aid; still avoids stairs.",
-      "line2Source": "“I'm walking fine now, stairs still scare me a little.” — encounter audio, 00:41",
+      "line2Source": "“I'm walking fine now, stairs still scare me a little.” (encounter audio, 00:41)",
       "askQ": "Peri, how has ROM evolved since the last visit?",
       "askA": "Flexion improved 15° since July 10 (95° → 110°).",
-      "askASource": "Computed from the July 10 and July 24 encounter notes — both measurements cited in each note."
+      "askASource": "Computed from the July 10 and July 24 encounter notes; both measurements are cited in each note."
     },
     "photoAlt": "A clinician wearing PeriTwin capture glasses during a consultation",
     "recChip": "REC · masked on device"
@@ -65,8 +65,8 @@
   "wearable": {
     "eyebrow": "The capture",
     "title": "Peri listens and observes in the room",
-    "body": "Clinician-worn glasses capture the encounter as it happens — the conversation, the exam, what's on the screen. No dictation, no scribe in the corner: you look at the patient, and the room documents itself.",
-    "ledgerLabel": "What leaves the room — and what never does",
+    "body": "Clinician-worn glasses capture the encounter as it happens: the conversation, the exam, what's on the screen. No dictation, no scribe in the corner. You look at the patient, and the room documents itself.",
+    "ledgerLabel": "What leaves the room, and what never does",
     "rows": [
       {
         "item": "Video frames",
@@ -90,11 +90,11 @@
   "intelligence": {
     "eyebrow": "Personalized intelligence",
     "title": "Intelligence that learns from you",
-    "subtitle": "A generic scribe writes the same note for every surgeon. Peri learns your voice — and carries each patient's story forward.",
+    "subtitle": "A generic scribe writes the same note for every surgeon. Peri learns your voice and carries each patient's story forward.",
     "voice": {
       "kicker": "Your voice",
       "title": "It writes the way you write",
-      "body": "Every edit you make is a lesson. Peri picks up your phrasing, your exam order, your defaults — so the first draft sounds like you, not like a template.",
+      "body": "Every edit you make is a lesson. Peri picks up your phrasing, your exam order, your defaults, so the first draft sounds like you, not like a template.",
       "artifactLabel": "Physical exam · first draft",
       "before": "Range of motion is within functional limits.",
       "after": "ROM 0–110°, symmetric to the contralateral side.",
@@ -103,27 +103,27 @@
     "memory": {
       "kicker": "Your patients",
       "title": "It remembers the whole story",
-      "body": "Every encounter joins the patient's twin — so February's exam is still at hand in July, and nothing you documented gets lost between visits.",
+      "body": "Every encounter joins the patient's twin, so February's exam is still at hand in July, and nothing you documented gets lost between visits.",
       "artifactLabel": "Patient twin · right knee",
       "rows": [
         {
           "date": "Feb 03",
-          "label": "ER intake — fall on ice, initial imaging",
+          "label": "ER intake · fall on ice, initial imaging",
           "claims": "12 claims"
         },
         {
           "date": "Jun 12",
-          "label": "Clinic — surgical planning",
+          "label": "Clinic · surgical planning",
           "claims": "18 claims"
         },
         {
           "date": "Jul 10",
-          "label": "OR — open reduction, internal fixation",
+          "label": "OR · open reduction, internal fixation",
           "claims": "22 claims"
         },
         {
           "date": "Jul 24",
-          "label": "Post-op day 14 — ROM 0–110°",
+          "label": "Post-op day 14 · ROM 0–110°",
           "claims": "9 claims"
         }
       ],
@@ -137,12 +137,12 @@
     "patientTag": "Post-op Flap Monitoring",
     "labCard": {
       "title": "Lab Trends: CRP",
-      "caption": "C-Reactive Protein (mg/L) — last 5 days"
+      "caption": "C-Reactive Protein (mg/L) · last 5 days"
     },
     "imagingCard": {
       "title": "Radiographic Analysis",
       "measurement": "Femoral angle: 85.4°",
-      "caption": "AP knee — automated angle measurement",
+      "caption": "AP knee · automated angle measurement",
       "imageAlt": "Anteroposterior knee radiograph in the surgical planner, annotated with femoral angle and condyle measurements"
     },
     "chat": {
@@ -175,7 +175,7 @@
   },
   "colleague": {
     "title": "Your Digital Colleague",
-    "body": "Peri serves as your clinical digital twin — a colleague to bounce ideas off for tough cases. It removes clinical isolation, decreases cognitive burden, and lets you return to the heart of medicine: patient care.",
+    "body": "Peri serves as your clinical digital twin: a colleague to bounce ideas off for tough cases. It removes clinical isolation, decreases cognitive burden, and lets you return to the heart of medicine, patient care.",
     "eyebrow": "Beyond documentation",
     "items": [
       {
@@ -195,7 +195,7 @@
     "body": "Our mission is to return the focus to patient-centered medicine. Join the community of clinicians reclaiming their practice through personalized digital intelligence.",
     "cta": "Join the pilot",
     "eyebrow": "Our philosophy",
-    "pilotLine": "In pilot with surgical teams at CREOQ & CLLC — Montréal"
+    "pilotLine": "In pilot with surgical teams at CREOQ & CLLC in Montréal"
   },
   "video": {
     "title": "PeriTwin in practice",
