@@ -205,7 +205,7 @@ export async function WorkbenchSection() {
             </div>
           </div>
 
-          <div className="flex-1 overflow-y-auto bg-surface-bright p-unit-12">
+          <div className="flex-1 overflow-y-auto bg-surface-bright p-unit-12 dark:bg-surface-container-low">
             <div className="mb-unit-8 flex flex-wrap items-center justify-between gap-unit-4">
               <h3 className="font-display text-headline-md font-semibold text-on-surface">
                 {t("workbench.patientView")}
