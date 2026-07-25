@@ -40,7 +40,7 @@ export function LandingHeader() {
         <Link
           href="/"
           className="group/logo flex min-h-11 shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-          aria-label={`${t("brand")} — ${t("nav.home")}`}
+          aria-label={`${t("brand")} · ${t("nav.home")}`}
         >
           <Image
             src="/peritwin-mark.png"
