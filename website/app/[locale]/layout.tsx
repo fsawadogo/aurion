@@ -38,7 +38,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
           url: "/peritwin-logo.png",
           width: 1491,
           height: 1055,
-          alt: `${SITE.productName} — ${SITE.companyLegalName}`,
+          alt: `${SITE.productName} · ${SITE.companyLegalName}`,
         },
       ],
     },
