@@ -56,11 +56,14 @@ export default function AuthScreenShell({
             width={600}
             height={600}
             priority
-            className="h-8 w-auto"
+            className="h-10 w-auto"
           />
-          <span className="font-display text-[22px] font-bold leading-none tracking-tight">
-            <span className="text-gold-500">Peri</span>
-            <span className="text-navy-900">Twin</span>
+          {/* Brand hexes on purpose (not theme tokens): the wordmark sits
+              on the light brand field in BOTH themes, and navy-900 flips
+              near-white in dark mode — which made "Twin" invisible. */}
+          <span className="font-display text-[24px] font-bold leading-none tracking-tight">
+            <span className="text-[#5D72DB]">Peri</span>
+            <span className="text-[#25349B]">Twin</span>
           </span>
         </div>
 
