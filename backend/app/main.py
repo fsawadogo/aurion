@@ -18,6 +18,7 @@ from app.api.v1.clips import router as clips_router
 from app.api.v1.config import router as config_router
 from app.api.v1.export import router as export_router
 from app.api.v1.frames import router as frames_router
+from app.api.v1.public_waitlist import router as public_waitlist_router
 from app.api.v1.health import router as health_router
 from app.api.v1.me import router as me_router
 from app.api.v1.me_measurements import router as me_measurements_router
@@ -160,4 +161,5 @@ app.include_router(me_prompts_router, prefix="/api/v1")
 app.include_router(me_security_router, prefix="/api/v1")
 app.include_router(vision_router, prefix="/api/v1")
 app.include_router(export_router, prefix="/api/v1")
+app.include_router(public_waitlist_router, prefix="/api/v1")
 app.include_router(ws_router)
