@@ -37,5 +37,9 @@
       "body": "Book a demo, join a pilot, or ask us anything.",
       "submit": "Contact us"
     }
+  },
+  "theme": {
+    "light": "Switch to light mode",
+    "dark": "Switch to dark mode"
   }
 }

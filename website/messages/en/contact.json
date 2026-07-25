@@ -5,7 +5,7 @@
   },
   "eyebrow": "Contact us",
   "title": "Let's talk.",
-  "subtitle": "Whether you want a demo, to join a pilot, to explore a partnership, or just have a question — tell us a little and we'll follow up. No spam, ever.",
+  "subtitle": "Whether you want a demo, to join a pilot, to explore a partnership, or just have a question: tell us a little and we'll follow up. No spam, ever.",
   "fields": {
     "name": "Full name",
     "email": "Work email",
@@ -26,7 +26,7 @@
   },
   "submit": "Send message",
   "submitting": "Sending…",
-  "success": "Thank you — your message is in. We'll be in touch shortly.",
+  "success": "Thank you. Your message is in, and we'll be in touch shortly.",
   "error": "Something went wrong. Please try again in a moment.",
   "validation": {
     "required": "This field is required.",
@@ -39,6 +39,6 @@
     "responseKicker": "Response",
     "responseLine": "We reply within one business day.",
     "pilotKicker": "Pilot",
-    "pilotLine": "In pilot with surgical teams at CREOQ & CLLC — Montréal."
+    "pilotLine": "In pilot with surgical teams at CREOQ & CLLC in Montréal."
   }
 }

@@ -297,6 +297,13 @@
   border: 1px solid rgb(255 255 255 / 0.6);
 }
 
+/* Dark theme: same glass, dark tint — the light-tinted bar over dark
+   content read as a muddy gray band. */
+.dark .glass-panel {
+  background-color: rgb(19 19 24 / 0.75);
+  border-color: rgb(255 255 255 / 0.08);
+}
+
 /* Continuum connector line — data flowing across the care journey. */
 .journey-line {
   background: linear-gradient(

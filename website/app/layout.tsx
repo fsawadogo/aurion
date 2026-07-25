@@ -1,6 +1,8 @@
 import { Analytics } from "@vercel/analytics/next"
 import { Inter, JetBrains_Mono, Schibsted_Grotesk } from "next/font/google"
 
+import { ThemeProvider } from "@/components/theme-provider"
+
 import "./globals.css"
 
 /** Body — clinical notes and patient data. Chosen for legibility at length. */
@@ -40,7 +42,11 @@ export default function RootLayout({
       suppressHydrationWarning
     >
       <body className="font-sans antialiased">
-        {children}
+        {/* class-attribute theming: follows the OS until the visitor picks
+            via the header ThemeToggle; tokens live in globals.css (.dark). */}
+        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
+          {children}
+        </ThemeProvider>
         {enableVercelAnalytics && <Analytics />}
       </body>
     </html>
