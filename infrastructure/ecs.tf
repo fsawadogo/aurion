@@ -610,6 +610,9 @@ resource "aws_ecs_task_definition" "api" {
         { name = "AUTH_EMAIL_ENABLED", value = "true" },
         { name = "EMAIL_PROVIDER", value = "resend" },
         { name = "AUTH_EMAIL_FROM", value = "noreply@aurionclinical.com" },
+        # Marketing-site contact-form notifications (public waitlist
+        # endpoint) — where "someone filled the peritwin.com form" lands.
+        { name = "WAITLIST_NOTIFY_EMAIL", value = "faical.sawadogo@aurionclinical.com" },
         { name = "AUTH_PASSWORD_RESET_URL_BASE", value = "https://${var.web_portal_subdomain}/reset-password" },
         # #76 CRITICAL operational-alert email sink. Empty by default →
         # no-op (alerts stay portal-only + Slack). Set var.alert_email_recipients

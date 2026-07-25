@@ -102,3 +102,81 @@ async def test_create_signup_without_specialty() -> None:
 
     assert resp.ok is True
     assert db.add.call_args[0][0].specialty is None
+
+
+# ---------------------------------------------------------------------------
+# Notification email — best-effort, never breaks the form
+# ---------------------------------------------------------------------------
+
+
+def _mock_db() -> MagicMock:
+    db = MagicMock()
+    db.add = MagicMock()
+    db.commit = AsyncMock()
+    return db
+
+
+@pytest.mark.asyncio
+async def test_notification_sent_when_configured(monkeypatch) -> None:
+    monkeypatch.setenv("WAITLIST_NOTIFY_EMAIL", "team@example.com")
+    sent = AsyncMock()
+    monkeypatch.setattr("app.api.v1.public_waitlist.send_email", sent)
+
+    resp = await create_waitlist_signup(
+        WaitlistSignupRequest(**_valid_payload()), _mock_db()
+    )
+
+    assert resp.ok is True
+    assert sent.await_count == 1
+    kwargs = sent.await_args.kwargs
+    assert kwargs["to"] == "team@example.com"
+    assert "pilot" in kwargs["subject"]
+    assert "surgeon@example.com" in kwargs["text_body"]
+
+
+@pytest.mark.asyncio
+async def test_notification_skipped_when_unconfigured(monkeypatch) -> None:
+    monkeypatch.delenv("WAITLIST_NOTIFY_EMAIL", raising=False)
+    sent = AsyncMock()
+    monkeypatch.setattr("app.api.v1.public_waitlist.send_email", sent)
+
+    resp = await create_waitlist_signup(
+        WaitlistSignupRequest(**_valid_payload()), _mock_db()
+    )
+
+    assert resp.ok is True
+    assert sent.await_count == 0
+
+
+@pytest.mark.asyncio
+async def test_send_failure_does_not_break_form(monkeypatch) -> None:
+    from app.core.email_sender import EmailSendError
+
+    monkeypatch.setenv("WAITLIST_NOTIFY_EMAIL", "team@example.com")
+    sent = AsyncMock(side_effect=EmailSendError("resend 500"))
+    monkeypatch.setattr("app.api.v1.public_waitlist.send_email", sent)
+
+    resp = await create_waitlist_signup(
+        WaitlistSignupRequest(**_valid_payload()), _mock_db()
+    )
+
+    assert resp.ok is True  # the signup is stored; email failure is swallowed
+    assert sent.await_count == 1
+
+
+@pytest.mark.asyncio
+async def test_notification_escapes_html_in_lead_fields(monkeypatch) -> None:
+    monkeypatch.setenv("WAITLIST_NOTIFY_EMAIL", "team@example.com")
+    sent = AsyncMock()
+    monkeypatch.setattr("app.api.v1.public_waitlist.send_email", sent)
+
+    await create_waitlist_signup(
+        WaitlistSignupRequest(
+            **_valid_payload(name="<img src=x onerror=alert(1)>")
+        ),
+        _mock_db(),
+    )
+
+    html_body = sent.await_args.kwargs["html_body"]
+    assert "<img" not in html_body
+    assert "&lt;img" in html_body
