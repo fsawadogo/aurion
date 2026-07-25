@@ -1,0 +1,41 @@
+{
+  "brand": "PeriTwin",
+  "company": "Aurion Intelligence",
+  "nav": {
+    "home": "Home",
+    "continuum": "Patient journey",
+    "platform": "Platform",
+    "workbench": "Dashboard",
+    "colleague": "Digital Colleague",
+    "requestDemo": "Request demo",
+    "physicianPortal": "Physician portal",
+    "partners": "Partners",
+    "pilots": "Pilots",
+    "contact": "Contact us",
+    "openMenu": "Open menu",
+    "closeMenu": "Close menu"
+  },
+  "footer": {
+    "tagline": "Your clinical digital twin. Ask Peri.",
+    "copyright": "© {year} {company}. PeriTwin AI. Clinical intelligence for the future of care.",
+    "platform": {
+      "title": "Platform",
+      "digitalTwin": "Digital twin core",
+      "diagnostics": "AI diagnostics",
+      "continuum": "Patient journey",
+      "interoperability": "Interoperability"
+    },
+    "company": {
+      "title": "Company",
+      "physicianPortal": "Physician portal",
+      "partners": "Partners",
+      "pilots": "Pilots",
+      "contact": "Contact us"
+    },
+    "connect": {
+      "title": "Get in touch",
+      "body": "Book a demo, join a pilot, or ask us anything.",
+      "submit": "Contact us"
+    }
+  }
+}

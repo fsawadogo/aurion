@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "title": "Nous joindre | PeriTwin",
+    "description": "Demandez une démo, joignez un pilote, explorez un partenariat ou posez une question. Dites-nous en un peu plus et nous vous répondrons."
+  },
+  "eyebrow": "Nous joindre",
+  "title": "Parlons-en.",
+  "subtitle": "Que vous vouliez une démo, joindre un pilote, explorer un partenariat ou simplement poser une question — dites-nous en un peu plus et nous vous répondrons. Jamais de pourriel.",
+  "fields": {
+    "name": "Nom complet",
+    "email": "Courriel professionnel",
+    "reason": "Comment pouvons-nous aider ?",
+    "specialty": "Spécialité ou organisation (facultatif)"
+  },
+  "reasonOptions": {
+    "placeholder": "Choisissez un motif…",
+    "demo": "Demander une démo",
+    "pilot": "Joindre un pilote",
+    "partnership": "Explorer un partenariat",
+    "general": "Question générale"
+  },
+  "placeholders": {
+    "name": "Dr Jane Smith",
+    "email": "vous@etablissement.org",
+    "specialty": "p. ex. Chirurgie orthopédique"
+  },
+  "submit": "Envoyer le message",
+  "submitting": "Envoi…",
+  "success": "Merci — votre message est bien reçu. Nous vous contacterons sous peu.",
+  "error": "Une erreur s'est produite. Veuillez réessayer dans un instant.",
+  "validation": {
+    "required": "Ce champ est obligatoire.",
+    "email": "Entrez une adresse courriel valide.",
+    "reason": "Veuillez choisir un motif."
+  },
+  "errorNotConfigured": "La messagerie est temporairement indisponible. Réessayez plus tard.",
+  "backHome": "Retour à l'accueil",
+  "facts": {
+    "responseKicker": "Réponse",
+    "responseLine": "Nous répondons en un jour ouvrable.",
+    "pilotKicker": "Pilote",
+    "pilotLine": "En projet pilote avec des équipes chirurgicales au CREOQ et à la CLLC — Montréal."
+  }
+}

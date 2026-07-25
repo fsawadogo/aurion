@@ -1,0 +1,41 @@
+{
+  "brand": "PeriTwin",
+  "company": "Aurion Intelligence",
+  "nav": {
+    "home": "Accueil",
+    "continuum": "Parcours du patient",
+    "platform": "Plateforme",
+    "workbench": "Tableau de bord",
+    "colleague": "Collègue numérique",
+    "requestDemo": "Demander une démo",
+    "physicianPortal": "Portail médecin",
+    "partners": "Partenaires",
+    "pilots": "Pilotes",
+    "contact": "Nous joindre",
+    "openMenu": "Ouvrir le menu",
+    "closeMenu": "Fermer le menu"
+  },
+  "footer": {
+    "tagline": "Votre jumeau clinique intelligent. Demandez à Peri.",
+    "copyright": "© {year} {company}. PeriTwin AI. L'intelligence clinique au service des soins de demain.",
+    "platform": {
+      "title": "Plateforme",
+      "digitalTwin": "Noyau du jumeau numérique",
+      "diagnostics": "Diagnostics IA",
+      "continuum": "Parcours du patient",
+      "interoperability": "Interopérabilité"
+    },
+    "company": {
+      "title": "Entreprise",
+      "physicianPortal": "Portail médecin",
+      "partners": "Partenaires",
+      "pilots": "Pilotes",
+      "contact": "Nous joindre"
+    },
+    "connect": {
+      "title": "Écrivez-nous",
+      "body": "Réservez une démo, joignez un pilote ou posez-nous vos questions.",
+      "submit": "Nous joindre"
+    }
+  }
+}

@@ -116,3 +116,10 @@ ResendAPIKey.txt
 # Autopilot maintenance system — local state (findings ledger, run logs, digests)
 .claude/autopilot/state/
 ~/aurion-autopilot-worktrees/
+
+# Marketing site (website/) build artifacts
+website/node_modules/
+website/.next/
+website/out/
+website/out.zip
+website/tsconfig.tsbuildinfo

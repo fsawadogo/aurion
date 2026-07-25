@@ -1,0 +1,44 @@
+{
+  "meta": {
+    "title": "Contact us | PeriTwin",
+    "description": "Request a demo, join a pilot, explore a partnership, or ask a question. Tell us a little and we'll be in touch."
+  },
+  "eyebrow": "Contact us",
+  "title": "Let's talk.",
+  "subtitle": "Whether you want a demo, to join a pilot, to explore a partnership, or just have a question — tell us a little and we'll follow up. No spam, ever.",
+  "fields": {
+    "name": "Full name",
+    "email": "Work email",
+    "reason": "How can we help?",
+    "specialty": "Specialty or organization (optional)"
+  },
+  "reasonOptions": {
+    "placeholder": "Select a reason…",
+    "demo": "Request a demo",
+    "pilot": "Join a pilot",
+    "partnership": "Explore a partnership",
+    "general": "General inquiry"
+  },
+  "placeholders": {
+    "name": "Dr. Jane Smith",
+    "email": "you@healthsystem.org",
+    "specialty": "e.g. Orthopedic surgery"
+  },
+  "submit": "Send message",
+  "submitting": "Sending…",
+  "success": "Thank you — your message is in. We'll be in touch shortly.",
+  "error": "Something went wrong. Please try again in a moment.",
+  "validation": {
+    "required": "This field is required.",
+    "email": "Enter a valid email address.",
+    "reason": "Please choose a reason."
+  },
+  "errorNotConfigured": "Messages are temporarily unavailable. Please try again later.",
+  "backHome": "Back to home",
+  "facts": {
+    "responseKicker": "Response",
+    "responseLine": "We reply within one business day.",
+    "pilotKicker": "Pilot",
+    "pilotLine": "In pilot with surgical teams at CREOQ & CLLC — Montréal."
+  }
+}
