@@ -18,7 +18,6 @@ from app.api.v1.clips import router as clips_router
 from app.api.v1.config import router as config_router
 from app.api.v1.export import router as export_router
 from app.api.v1.frames import router as frames_router
-from app.api.v1.public_waitlist import router as public_waitlist_router
 from app.api.v1.health import router as health_router
 from app.api.v1.me import router as me_router
 from app.api.v1.me_measurements import router as me_measurements_router
@@ -27,6 +26,7 @@ from app.api.v1.me_security import router as me_security_router
 from app.api.v1.notes import router as notes_router
 from app.api.v1.privacy import router as privacy_router
 from app.api.v1.profile import router as profile_router
+from app.api.v1.public_waitlist import router as public_waitlist_router
 from app.api.v1.screen import router as screen_router
 from app.api.v1.sessions import router as sessions_router
 from app.api.v1.transcription import router as transcription_router
