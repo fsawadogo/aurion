@@ -20,6 +20,8 @@ struct DeviceHubView: View {
     /// stacks and the permissions grid collapses to one column at
     /// accessibility text sizes.
     @Environment(\.dynamicTypeSize) private var dynamicTypeSize
+    /// Step-by-step glasses guide sheet (Devices card + not-connected hint).
+    @State private var showGlassesGuide = false
 
     var body: some View {
         NavigationStack {
@@ -61,6 +63,9 @@ struct DeviceHubView: View {
             .contentMargins(.bottom, 24, for: .scrollContent)
             .background(Color.aurionBackground)
             .navigationBarHidden(true)
+            .sheet(isPresented: $showGlassesGuide) {
+                GlassesGuideView()
+            }
             .onAppear {
                 builtIn.refreshPermissions()
             }
@@ -225,6 +230,48 @@ struct DeviceHubView: View {
                     }
                     .padding(.horizontal, 4)
                 }
+
+                // Returned from Meta AI still unregistered — explain the most
+                // likely cause (Meta disables its Connect button while glasses
+                // firmware installs) instead of leaving a silently dead card.
+                if mwdat.returnedUnregistered {
+                    VStack(alignment: .leading, spacing: 4) {
+                        HStack(spacing: 6) {
+                            Image(systemName: "info.circle.fill")
+                                .font(.system(size: 12))
+                                .foregroundColor(.aurionGold)
+                                .accessibilityHidden(true)
+                            Text(L("devices.meta.returnHint.title"))
+                                .aurionFont(13, weight: .semibold, relativeTo: .footnote)
+                                .foregroundColor(.aurionTextPrimary)
+                        }
+                        Text(L("devices.meta.returnHint.body"))
+                            .aurionFont(12, relativeTo: .caption)
+                            .foregroundColor(.aurionTextSecondary)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(12)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Color.aurionGoldBg)
+                    .cornerRadius(12)
+                }
+
+                // Always-available path into the step-by-step guide.
+                Button {
+                    AurionHaptics.selection()
+                    showGlassesGuide = true
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: "questionmark.circle")
+                            .font(.system(size: 12))
+                        Text(L("devices.meta.guideLink"))
+                            .aurionFont(13, weight: .medium, relativeTo: .footnote)
+                    }
+                    .foregroundColor(.aurionGoldDark)
+                    .padding(.horizontal, 4)
+                    .frame(minHeight: 32)
+                }
+                .buttonStyle(.plain)
             }
         }
     }

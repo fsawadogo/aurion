@@ -1224,3 +1224,30 @@
 /* Accessibility — session-count chip */
 "a11y.sessionCount.one" = "%lld session";
 "a11y.sessionCount.many" = "%lld sessions";
+
+// Glasses connect guidance + step-by-step guide (Devices tab)
+"devices.meta.guideLink" = "How to connect the glasses · step by step";
+"devices.meta.returnHint.title" = "Glasses still not connected";
+"devices.meta.returnHint.body" = "If the Connect button in Meta AI was grayed out, your glasses are probably installing an update. Keep them in their charging case next to your phone with Meta AI open. When the update finishes, tap Connect Ray-Ban Meta again.";
+"glassesGuide.title" = "Glasses guide";
+"glassesGuide.heading" = "Ray-Ban Meta with PeriTwin";
+"glassesGuide.intro" = "Five steps, once per phone. After that, the glasses connect on their own.";
+"glassesGuide.step1.title" = "Pair in the Meta AI app";
+"glassesGuide.step1.body" = "Set up the glasses in Meta AI first: they should show as connected on the Meta AI home screen when worn or in the open case.";
+"glassesGuide.step2.title" = "Let updates finish";
+"glassesGuide.step2.body" = "If Meta AI shows “Updating…”, keep the glasses in their charging case (lid open) next to your phone with Meta AI open until it completes. Meta blocks app connections during an update.";
+"glassesGuide.step3.title" = "Authorize PeriTwin";
+"glassesGuide.step3.body" = "In PeriTwin, tap Connect Ray-Ban Meta on this screen. Meta AI opens a connect sheet for Aurion Clinical AI: tap Connect and accept. The release channel should read “Aurion pilot testers”.";
+"glassesGuide.step4.title" = "Pick the glasses as video source";
+"glassesGuide.step4.body" = "Back in PeriTwin, select Ray-Ban Meta under Video source. Your voice still comes through the selected audio source.";
+"glassesGuide.step5.title" = "In the room";
+"glassesGuide.step5.body" = "Start the session as usual: the glasses LED shows recording, and faces are masked on the device before anything uploads. If the glasses drop, the session continues with audio only and the note still generates.";
+"glassesGuide.troubleshooting.title" = "If something's off";
+"glassesGuide.trouble1.symptom" = "Connect button is grayed out in Meta AI";
+"glassesGuide.trouble1.fix" = "An update is installing (see step 2), or the glasses are off or out of range. Wait for the update to finish, then retry.";
+"glassesGuide.trouble2.symptom" = "Meta AI says “Device not connected”";
+"glassesGuide.trouble2.fix" = "Close the charging case for 10 seconds, reopen it, and make sure Bluetooth is on and the glasses have battery.";
+"glassesGuide.trouble3.symptom" = "Session says “Glasses video unavailable”";
+"glassesGuide.trouble3.fix" = "The authorization didn't complete. Recording continues with audio only; finish the visit, then redo step 3 before the next one.";
+"glassesGuide.trouble4.symptom" = "Still stuck";
+"glassesGuide.trouble4.fix" = "Quit both apps. Open Meta AI first and wait for the glasses to connect, then open PeriTwin and try again.";

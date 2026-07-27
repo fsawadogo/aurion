@@ -1212,3 +1212,30 @@
 /* Accessibility — session-count chip */
 "a11y.sessionCount.one" = "%lld s\U00E9ance";
 "a11y.sessionCount.many" = "%lld s\U00E9ances";
+
+// Glasses connect guidance + step-by-step guide (Devices tab)
+"devices.meta.guideLink" = "Comment connecter les lunettes \U00B7 \U00E9tape par \U00E9tape";
+"devices.meta.returnHint.title" = "Lunettes toujours non connect\U00E9es";
+"devices.meta.returnHint.body" = "Si le bouton Connecter \U00E9tait gris\U00E9 dans Meta AI, vos lunettes installent probablement une mise \U00E0 jour. Laissez-les dans leur \U00E9tui de recharge pr\U00E8s du t\U00E9l\U00E9phone, avec Meta AI ouvert. Une fois la mise \U00E0 jour termin\U00E9e, touchez de nouveau Connecter Ray-Ban Meta.";
+"glassesGuide.title" = "Guide des lunettes";
+"glassesGuide.heading" = "Ray-Ban Meta avec PeriTwin";
+"glassesGuide.intro" = "Cinq \U00E9tapes, une seule fois par t\U00E9l\U00E9phone. Ensuite, les lunettes se connectent d'elles-m\U00EAmes.";
+"glassesGuide.step1.title" = "Jumeler dans l'app Meta AI";
+"glassesGuide.step1.body" = "Configurez d'abord les lunettes dans Meta AI : elles doivent appara\U00EEtre comme connect\U00E9es \U00E0 l'accueil de Meta AI quand vous les portez ou que l'\U00E9tui est ouvert.";
+"glassesGuide.step2.title" = "Laisser finir les mises \U00E0 jour";
+"glassesGuide.step2.body" = "Si Meta AI affiche \U00AB Mise \U00E0 jour\U2026 \U00BB, laissez les lunettes dans leur \U00E9tui de recharge (couvercle ouvert) pr\U00E8s du t\U00E9l\U00E9phone, avec Meta AI ouvert, jusqu'\U00E0 la fin. Meta bloque les connexions d'applications pendant une mise \U00E0 jour.";
+"glassesGuide.step3.title" = "Autoriser PeriTwin";
+"glassesGuide.step3.body" = "Dans PeriTwin, touchez Connecter Ray-Ban Meta sur cet \U00E9cran. Meta AI ouvre une feuille de connexion pour Aurion Clinical AI : touchez Connecter et acceptez. Le canal de diffusion doit indiquer \U00AB Aurion pilot testers \U00BB.";
+"glassesGuide.step4.title" = "Choisir les lunettes comme source vid\U00E9o";
+"glassesGuide.step4.body" = "De retour dans PeriTwin, s\U00E9lectionnez Ray-Ban Meta sous Source vid\U00E9o. Votre voix passe toujours par la source audio s\U00E9lectionn\U00E9e.";
+"glassesGuide.step5.title" = "En salle";
+"glassesGuide.step5.body" = "D\U00E9marrez la s\U00E9ance comme d'habitude : le voyant des lunettes indique l'enregistrement et les visages sont masqu\U00E9s sur l'appareil avant tout t\U00E9l\U00E9versement. Si les lunettes d\U00E9crochent, la s\U00E9ance continue en audio seulement et la note se g\U00E9n\U00E8re quand m\U00EAme.";
+"glassesGuide.troubleshooting.title" = "En cas de p\U00E9pin";
+"glassesGuide.trouble1.symptom" = "Le bouton Connecter est gris\U00E9 dans Meta AI";
+"glassesGuide.trouble1.fix" = "Une mise \U00E0 jour s'installe (voir l'\U00E9tape 2), ou les lunettes sont \U00E9teintes ou hors de port\U00E9e. Attendez la fin de la mise \U00E0 jour, puis r\U00E9essayez.";
+"glassesGuide.trouble2.symptom" = "Meta AI affiche \U00AB Appareil non connect\U00E9 \U00BB";
+"glassesGuide.trouble2.fix" = "Fermez l'\U00E9tui de recharge 10 secondes, rouvrez-le, et v\U00E9rifiez que le Bluetooth est activ\U00E9 et que les lunettes ont de la batterie.";
+"glassesGuide.trouble3.symptom" = "La s\U00E9ance affiche \U00AB Vid\U00E9o des lunettes indisponible \U00BB";
+"glassesGuide.trouble3.fix" = "L'autorisation n'a pas abouti. L'enregistrement continue en audio seulement; terminez la visite, puis refaites l'\U00E9tape 3 avant la prochaine.";
+"glassesGuide.trouble4.symptom" = "Toujours bloqu\U00E9";
+"glassesGuide.trouble4.fix" = "Quittez les deux applications. Ouvrez d'abord Meta AI, attendez que les lunettes se connectent, puis rouvrez PeriTwin et r\U00E9essayez.";
