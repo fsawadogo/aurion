@@ -3,6 +3,7 @@ import CoreMedia
 import Foundation
 import MWDATCamera
 import MWDATCore
+import UIKit
 
 /// Owns the Meta Wearables Device Access Toolkit (MWDAT) runtime lifecycle:
 /// device registration (the real "connect to the glasses" flow that opens the
@@ -34,6 +35,12 @@ final class MWDATManager: ObservableObject {
     @Published private(set) var connection: Connection = .unavailable
     @Published private(set) var isStreaming = false
     @Published private(set) var lastError: String?
+    /// True when the clinician came back from a Meta AI handoff still
+    /// unregistered. The Meta side gives us no reason (the sheet's Connect
+    /// button is simply disabled while glasses firmware updates install, the
+    /// most common cause in the pilot), so this flag drives an explanatory
+    /// hint on the Devices card instead of a silent dead button.
+    @Published private(set) var returnedUnregistered = false
 
     private var session: DeviceSession?
     private var stream: MWDATCamera.Stream?
@@ -41,9 +48,14 @@ final class MWDATManager: ObservableObject {
     private var stateToken: (any AnyListenerToken)?
     private var registrationTask: Task<Void, Never>?
     private var registrationObserveTask: Task<Void, Never>?
+    /// Set when `connect()` hands off to Meta AI; consumed on the next
+    /// foreground return to decide whether to show the not-connected hint.
+    private var handoffStartedAt: Date?
+    private var foregroundObserver: NSObjectProtocol?
 
     private init() {
         observeRegistration()
+        observeForegroundReturns()
     }
 
     /// Whether a device is registered + reachable for a streaming session.
@@ -55,12 +67,35 @@ final class MWDATManager: ObservableObject {
     /// to authorize the glasses; the return trip arrives as a Universal Link
     /// that `MWDATLinkRouter.handle` forwards to `Wearables.shared.handleUrl`.
     func connect() {
+        handoffStartedAt = Date()
+        returnedUnregistered = false
         registrationTask?.cancel()
         registrationTask = Task { [weak self] in
             do {
                 try await Wearables.shared.startRegistration()
             } catch {
                 await MainActor.run { self?.lastError = "Couldn't start glasses setup: \(error.localizedDescription)" }
+            }
+        }
+    }
+
+    /// Watch foreground returns after a Meta AI handoff. If the clinician is
+    /// back within 15 minutes and the glasses still aren't registered, the
+    /// Meta-side flow didn't complete — surface the hint. Registration
+    /// succeeding (in `apply`) clears it.
+    private func observeForegroundReturns() {
+        foregroundObserver = NotificationCenter.default.addObserver(
+            forName: UIApplication.didBecomeActiveNotification,
+            object: nil,
+            queue: .main
+        ) { [weak self] _ in
+            MainActor.assumeIsolated {
+                guard let self, let started = self.handoffStartedAt else { return }
+                self.handoffStartedAt = nil
+                let withinWindow = Date().timeIntervalSince(started) < 15 * 60
+                if withinWindow, self.connection != .registered {
+                    self.returnedUnregistered = true
+                }
             }
         }
     }
@@ -84,6 +119,11 @@ final class MWDATManager: ObservableObject {
         case .registering: connection = .registering
         case .registered:  connection = .registered
         @unknown default:  connection = .unavailable
+        }
+        if connection == .registered {
+            // Success clears the "came back unconnected" guidance.
+            returnedUnregistered = false
+            handoffStartedAt = nil
         }
     }
 
