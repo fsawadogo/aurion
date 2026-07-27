@@ -1,12 +1,13 @@
 "use client";
 
-import { AlertTriangle, ClipboardCheck, Copy, Download, Printer } from "lucide-react";
+import { AlertTriangle, ChevronRight, ClipboardCheck, Copy, Download, Printer } from "lucide-react";
 import {
   humanizeError,
   RegenerateDiscardError,
   regenerateNote,
   type RegenerateWouldDiscard,
 } from "@/lib/api";
+import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { useRouteSegment } from "@/lib/use-route-segment";
@@ -22,7 +23,6 @@ import NoteAssistChat from "@/components/portal/NoteAssistChat";
 import NoteContextBadge from "@/components/portal/NoteContextBadge";
 import NoteSectionCard from "@/components/portal/NoteSectionCard";
 import OrdersCard from "@/components/portal/OrdersCard";
-import PageHeader from "@/components/portal/PageHeader";
 import PatientIdentifierEditor from "@/components/portal/PatientIdentifierEditor";
 import PatientSummaryCard from "@/components/portal/PatientSummaryCard";
 import PreviewVsFinalCard from "@/components/portal/PreviewVsFinalCard";
@@ -261,26 +261,60 @@ export default function NoteReviewPage() {
     ? filterForSpecialty(macros, detail.note.specialty)
     : [];
 
+  // Same label in the breadcrumb + the H1 — derive once (cf. `noteBusy`).
+  const specialtyLabel = detail
+    ? humanSpecialty(detail.note.specialty)
+    : t("breadcrumbFallback");
+
   return (
-    <div className="aurion-page-padded aurion-container">
-      <PageHeader
-        breadcrumb={[
-          { label: t("breadcrumbNotes"), href: "/portal/notes" },
-          { label: detail ? humanSpecialty(detail.note.specialty) : t("breadcrumbFallback") },
-        ]}
-        eyebrow={t("eyebrow")}
-        title={detail ? humanSpecialty(detail.note.specialty) : t("breadcrumbFallback")}
-        description={
-          detail ? (
-            <>
-              {t("stageMetaPrefix")} <span className="font-semibold text-navy-700">{detail.note.stage}</span>
-              {" · "}{t("stageVersion")}<span className="font-semibold text-navy-700">{detail.note.version}</span>
-              {" · "}{t("stageProvider")} <span className="font-semibold text-navy-700">{detail.note.provider_used}</span>
-            </>
-          ) : undefined
-        }
-        actions={
-          detail ? (
+    <div className="flex flex-col bg-canvas lg:h-[100dvh] lg:overflow-hidden">
+      {/* Landscape app-shell. On lg+ this box owns the viewport height and
+          scrolls its panes internally; it relies on the portal <main>
+          placing these children at the top of the viewport (Sidebar, bell,
+          and command palette are all position:fixed, out of flow). Below lg
+          it falls back to normal document flow. If an in-flow element is ever
+          added above the portal's children, lift this shell into PortalLayout
+          so the contract is shared rather than assumed here. */}
+      {/* Identity header — deliberately slim so the vertical space goes to
+          the note. Breadcrumb + specialty + Stage·v·Provider on the left;
+          context badge + patient-identifier editor on the right. The note
+          ACTIONS live in the note pane's toolbar, next to the note. */}
+      <header className="shrink-0 border-b border-hairline bg-white px-6 py-3 lg:px-8">
+        <div className="flex flex-wrap items-start justify-between gap-x-6 gap-y-2">
+          <div className="min-w-0">
+            <nav
+              aria-label="Breadcrumb"
+              className="mb-0.5 flex items-center gap-1 text-aurion-caption text-navy-400"
+            >
+              <Link
+                href="/portal/notes"
+                className="hover:text-navy-700 transition-colors duration-short"
+              >
+                {t("breadcrumbNotes")}
+              </Link>
+              <ChevronRight className="h-3 w-3 text-navy-200" />
+              <span className="truncate font-medium text-navy-700">{specialtyLabel}</span>
+            </nav>
+            <div className="flex flex-wrap items-baseline gap-x-3 gap-y-0.5">
+              <h1 className="text-aurion-headline font-semibold text-navy-900">
+                {specialtyLabel}
+              </h1>
+              {detail && (
+                <p className="text-[11px] text-navy-500">
+                  {t("stageMetaPrefix")}{" "}
+                  <span className="font-semibold text-navy-700">{detail.note.stage}</span>
+                  {" · "}
+                  {t("stageVersion")}
+                  <span className="font-semibold text-navy-700">{detail.note.version}</span>
+                  {" · "}
+                  {t("stageProvider")}{" "}
+                  <span className="font-semibold text-navy-700">{detail.note.provider_used}</span>
+                </p>
+              )}
+            </div>
+          </div>
+
+          {detail && (
             <div className="flex items-center gap-2">
               <NoteContextBadge
                 encountersReferenced={detail.note.prior_context_used?.encounters_referenced ?? 0}
@@ -292,73 +326,76 @@ export default function NoteReviewPage() {
                 onChange={() => void load()}
               />
             </div>
-          ) : undefined
-        }
-      />
-
-      {loading && !detail ? (
-        <Card>
-          <LoadingSkeleton lines={12} />
-        </Card>
-      ) : noNoteYet ? (
-        <div className="space-y-4">
-          {session && <LivePreviewCard sessionId={sessionId} sessionState={session.state} />}
-          <Card>
-            <div className="text-center py-10">
-              <p className="aurion-headline text-navy-700 mb-1.5">{t("noNoteTitle")}</p>
-              <p className="aurion-callout text-navy-500 max-w-md mx-auto">{t("noNoteHint")}</p>
-              <Button variant="secondary" size="sm" className="mt-5" onClick={() => void load()}>
-                {t("checkAgain")}
-              </Button>
-            </div>
-          </Card>
+          )}
         </div>
-      ) : error && !detail ? (
-        <Card>
-          <p className="aurion-callout text-red-600">{error}</p>
-          <Button variant="secondary" className="mt-3" onClick={() => void load()}>
-            {t("retry")}
-          </Button>
-        </Card>
-      ) : detail ? (
-        <div className="space-y-4">
-          {error && (
-            <div className="rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">
-              {error}
-            </div>
-          )}
+      </header>
 
-          <StageTwoProgressBanner
-            sessionId={sessionId}
-            enabled={
-              detail.export_metadata.session_state === "PROCESSING_STAGE2" ||
-              detail.export_metadata.session_state === "AWAITING_REVIEW"
-            }
-            onCompleted={() => void load()}
-          />
-
-          {detail.conflict_state.has_unresolved && (
-            <ConflictsBanner
-              count={detail.conflict_state.unresolved_count}
-              firstSectionId={detail.conflict_state.unresolved_section_ids[0]}
-            />
-          )}
-
-          {discardPrompt && (
-            <DiscardPrompt
-              counts={discardPrompt.counts}
-              onConfirm={discardPrompt.onConfirm}
-              onCancel={() => setDiscardPrompt(null)}
-            />
-          )}
-
-          {/* Landscape note — full width, one top toolbar, no side rail
-              (TE-4c). The 300px rail and the 720px note cap were what forced
-              the long vertical scroll; sign-off moved into the toolbar. */}
-          <div className="space-y-4">
-            <div className="min-w-0 w-full space-y-4">
+      {/* Body — landscape two-pane workspace. The note pane fills the width
+          and scrolls on its own; the right rail carries the "ask anything"
+          assist chat and the post-approval add-on cards (Heidi's right-hand
+          panel) instead of stacking them below the note. Below lg it stacks
+          into one column and the fixed height / internal scroll fall away
+          (natural document flow). */}
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden">
+        <div className="min-w-0 flex-1 px-6 py-5 lg:overflow-y-auto lg:px-8">
+          {loading && !detail ? (
+            <Card>
+              <LoadingSkeleton lines={12} />
+            </Card>
+          ) : noNoteYet ? (
+            <div className="space-y-4">
+              {session && <LivePreviewCard sessionId={sessionId} sessionState={session.state} />}
               <Card>
-                {/* Toolbar — template · language · print · export · copy. */}
+                <div className="text-center py-10">
+                  <p className="aurion-headline text-navy-700 mb-1.5">{t("noNoteTitle")}</p>
+                  <p className="aurion-callout text-navy-500 max-w-md mx-auto">{t("noNoteHint")}</p>
+                  <Button variant="secondary" size="sm" className="mt-5" onClick={() => void load()}>
+                    {t("checkAgain")}
+                  </Button>
+                </div>
+              </Card>
+            </div>
+          ) : error && !detail ? (
+            <Card>
+              <p className="aurion-callout text-red-600">{error}</p>
+              <Button variant="secondary" className="mt-3" onClick={() => void load()}>
+                {t("retry")}
+              </Button>
+            </Card>
+          ) : detail ? (
+            <div className="space-y-4">
+              {error && (
+                <div className="rounded-md bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700">
+                  {error}
+                </div>
+              )}
+
+              <StageTwoProgressBanner
+                sessionId={sessionId}
+                enabled={
+                  detail.export_metadata.session_state === "PROCESSING_STAGE2" ||
+                  detail.export_metadata.session_state === "AWAITING_REVIEW"
+                }
+                onCompleted={() => void load()}
+              />
+
+              {detail.conflict_state.has_unresolved && (
+                <ConflictsBanner
+                  count={detail.conflict_state.unresolved_count}
+                  firstSectionId={detail.conflict_state.unresolved_section_ids[0]}
+                />
+              )}
+
+              {discardPrompt && (
+                <DiscardPrompt
+                  counts={discardPrompt.counts}
+                  onConfirm={discardPrompt.onConfirm}
+                  onCancel={() => setDiscardPrompt(null)}
+                />
+              )}
+
+              <Card>
+                {/* Toolbar — template · language · print · export · copy · sign-off. */}
                 <div className="mb-5 flex flex-wrap items-center gap-2 border-b border-hairline pb-4">
                   <select
                     aria-label={t("toolbar.templateLabel")}
@@ -433,10 +470,9 @@ export default function NoteReviewPage() {
                     {copied ? t("toolbar.copied") : t("toolbar.copy")}
                   </Button>
 
-                  {/* Sign-off — the rail's job, now the toolbar's right end
-                      (TE-4c). Approved → the green Signed badge; otherwise the
-                      Approve & sign button, gated by `noteBusy` and the same
-                      conflict/stage guards the rail used. */}
+                  {/* Sign-off — the toolbar's right end. Approved → the green
+                      Signed badge; otherwise the Approve & sign button, gated
+                      by `noteBusy` and the same conflict/stage guards. */}
                   <div className="mx-1 hidden h-6 w-px bg-hairline sm:block" />
                   <SignOffControl
                     detail={detail}
@@ -498,23 +534,34 @@ export default function NoteReviewPage() {
                   </div>
                 </div>
               </Card>
-
-              {chatEnabled && <NoteAssistChat onAssist={onAssist} />}
             </div>
-          </div>
-
-          {/* Approval-gated add-on surfaces — only render post-approval. */}
-          <OrdersCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
-          <PatientSummaryCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
-          <CodingSuggestionsCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
-          <EmrWriteBackCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
-          <PreviewVsFinalCard
-            sessionId={sessionId}
-            finalSections={detail.note.sections}
-            noteApproved={detail.export_metadata.is_approved}
-          />
+          ) : null}
         </div>
-      ) : null}
+
+        {/* Right rail — Heidi's right-hand panel. The "ask anything" assist
+            chat (flag-gated) lives here during review; the approval-gated
+            add-on cards join it after sign-off. Each add-on card already
+            returns null until approved, so the rail is mounted only when it
+            has something to show — during review the note keeps the width. */}
+        {detail && (chatEnabled || detail.export_metadata.is_approved) && (
+          <aside className="shrink-0 space-y-4 border-t border-hairline bg-canvas px-6 py-5 lg:w-[360px] lg:overflow-y-auto lg:border-l lg:border-t-0 lg:py-6 xl:w-[400px]">
+            {chatEnabled && <NoteAssistChat onAssist={onAssist} />}
+            {detail.export_metadata.is_approved && (
+              <>
+                <OrdersCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
+                <PatientSummaryCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
+                <CodingSuggestionsCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
+                <EmrWriteBackCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
+                <PreviewVsFinalCard
+                  sessionId={sessionId}
+                  finalSections={detail.note.sections}
+                  noteApproved={detail.export_metadata.is_approved}
+                />
+              </>
+            )}
+          </aside>
+        )}
+      </div>
     </div>
   );
 }
