@@ -337,7 +337,10 @@ export default function NoteReviewPage() {
           into one column and the fixed height / internal scroll fall away
           (natural document flow). */}
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row lg:overflow-hidden">
-        <div className="min-w-0 flex-1 px-6 py-5 lg:overflow-y-auto lg:px-8">
+        {/* Note pane — the scrollable note, with the "Fix this note" bar
+            frozen at its foot (see below). */}
+        <div className="flex min-w-0 flex-1 flex-col lg:overflow-hidden">
+          <div className="min-h-0 flex-1 px-6 py-5 lg:overflow-y-auto lg:px-8">
           {loading && !detail ? (
             <Card>
               <LoadingSkeleton lines={12} />
@@ -536,29 +539,32 @@ export default function NoteReviewPage() {
               </Card>
             </div>
           ) : null}
+          </div>
+
+          {/* "Fix this note" — frozen full-width bar docked under the note,
+              not a side panel (Heidi's bottom command bar). As a shrink-0
+              flex child it stays put while the note scrolls above it. */}
+          {detail && chatEnabled && (
+            <div className="shrink-0 border-t border-hairline bg-canvas px-6 py-3 lg:px-8">
+              <NoteAssistChat onAssist={onAssist} />
+            </div>
+          )}
         </div>
 
-        {/* Right rail — Heidi's right-hand panel. The "ask anything" assist
-            chat (flag-gated) lives here during review; the approval-gated
-            add-on cards join it after sign-off. Each add-on card already
-            returns null until approved, so the rail is mounted only when it
-            has something to show — during review the note keeps the width. */}
-        {detail && (chatEnabled || detail.export_metadata.is_approved) && (
+        {/* Right rail — the approval-gated add-on cards. Each returns null
+            until the note is approved, so the rail mounts only post-sign-off;
+            during review the note pane keeps the full width. */}
+        {detail?.export_metadata.is_approved && (
           <aside className="shrink-0 space-y-4 border-t border-hairline bg-canvas px-6 py-5 lg:w-[360px] lg:overflow-y-auto lg:border-l lg:border-t-0 lg:py-6 xl:w-[400px]">
-            {chatEnabled && <NoteAssistChat onAssist={onAssist} />}
-            {detail.export_metadata.is_approved && (
-              <>
-                <OrdersCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
-                <PatientSummaryCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
-                <CodingSuggestionsCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
-                <EmrWriteBackCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
-                <PreviewVsFinalCard
-                  sessionId={sessionId}
-                  finalSections={detail.note.sections}
-                  noteApproved={detail.export_metadata.is_approved}
-                />
-              </>
-            )}
+            <OrdersCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
+            <PatientSummaryCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
+            <CodingSuggestionsCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
+            <EmrWriteBackCard sessionId={sessionId} noteApproved={detail.export_metadata.is_approved} />
+            <PreviewVsFinalCard
+              sessionId={sessionId}
+              finalSections={detail.note.sections}
+              noteApproved={detail.export_metadata.is_approved}
+            />
           </aside>
         )}
       </div>
