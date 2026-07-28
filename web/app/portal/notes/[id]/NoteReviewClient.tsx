@@ -428,7 +428,15 @@ export default function NoteReviewPage() {
                         custom templates (no flat 8-specialty list). */}
                     {mySpecialty && (
                       <option value={mySpecialty}>
-                        {t("toolbar.specialtyDefault", { specialty: tSpec(mySpecialty) })}
+                        {t("toolbar.specialtyDefault", {
+                          // `primary_specialty` is unconstrained backend-side and
+                          // can be a post-MVP key the `Specialties` catalog lacks
+                          // (family/internal medicine, pediatrics) — guard the
+                          // lookup the way dashboard/page.tsx does.
+                          specialty: tSpec.has(mySpecialty)
+                            ? tSpec(mySpecialty)
+                            : humanSpecialty(mySpecialty),
+                        })}
                       </option>
                     )}
                     {customTemplates.length > 0 && (

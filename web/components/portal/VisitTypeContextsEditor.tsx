@@ -107,7 +107,8 @@ interface VisitTypeContextsEditorProps {
   onChange: (next: Record<string, VisitTypeContext[]>) => void;
   /** Caller's OWNED custom templates → the "Custom templates" optgroup
    * (#320/W2). Defaults to `[]` so the empty-library case (and the W1
-   * call sites / tests that don't pass it) render built-ins only. */
+   * call sites / tests that don't pass it) render just the "Use my
+   * specialty default" option (TE-4e removed the built-in list). */
   customTemplates?: ContextCustomTemplate[];
 }
 
@@ -130,7 +131,7 @@ export default function VisitTypeContextsEditor({
   const [draft, setDraft] = useState("");
 
   // Custom-template options for the "Custom templates" optgroup (#320/W2).
-  // Sorted by display name to match the built-in list. The display name
+  // Sorted by display name for a stable, readable order. The display name
   // can be PHI, so it never leaves this render path — no logging.
   const customOptions = customTemplates
     .map((c) => ({ id: c.id, label: c.display_name }))
