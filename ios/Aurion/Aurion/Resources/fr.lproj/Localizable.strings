@@ -1225,7 +1225,7 @@
 "glassesGuide.step2.title" = "Laisser finir les mises \U00E0 jour";
 "glassesGuide.step2.body" = "Si Meta AI affiche \U00AB Mise \U00E0 jour\U2026 \U00BB, laissez les lunettes dans leur \U00E9tui de recharge (couvercle ouvert) pr\U00E8s du t\U00E9l\U00E9phone, avec Meta AI ouvert, jusqu'\U00E0 la fin. Meta bloque les connexions d'applications pendant une mise \U00E0 jour.";
 "glassesGuide.step3.title" = "Autoriser PeriTwin";
-"glassesGuide.step3.body" = "Dans PeriTwin, touchez Connecter Ray-Ban Meta sur cet \U00E9cran. Meta AI ouvre une feuille de connexion pour Aurion Clinical AI : touchez Connecter et acceptez. Le canal de diffusion doit indiquer \U00AB Aurion pilot testers \U00BB.";
+"glassesGuide.step3.body" = "Dans PeriTwin, touchez Connecter Ray-Ban Meta sur cet \U00E9cran. Meta AI ouvre une feuille de connexion pour PeriTwin : touchez Connecter et acceptez.";
 "glassesGuide.step4.title" = "Choisir les lunettes comme source vid\U00E9o";
 "glassesGuide.step4.body" = "De retour dans PeriTwin, s\U00E9lectionnez Ray-Ban Meta sous Source vid\U00E9o. Votre voix passe toujours par la source audio s\U00E9lectionn\U00E9e.";
 "glassesGuide.step5.title" = "En salle";
