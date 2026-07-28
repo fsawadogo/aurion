@@ -662,6 +662,12 @@ class RegenerateNoteRequest(BaseModel):
     # focus the regenerated note. Empty string clears it. Omitted → the
     # session's stored context is reused unchanged.
     encounter_context: Optional[str] = None
+    # TE-1b — per-session verbosity override for the Stage-1 capture
+    # directive. Persisted to the session so it sticks for future re-runs
+    # (same write-back contract as the template pin). Omitted → the stored
+    # override (if any) keeps applying. Changes HOW MUCH is captured, never
+    # whether the model may interpret — descriptive mode is untouched.
+    detail_level: Optional[Literal["brief", "standard", "detailed"]] = None
     # Acknowledge that regenerating destroys work Stage 1 cannot rebuild
     # (Stage 2 visual/screen claims, physician edits, confirmed measurements).
     # False + a lossy note → 409 carrying the counts, so the client can warn
@@ -800,6 +806,11 @@ async def regenerate_note(
     if body.encounter_context is not None:
         stripped = body.encounter_context.strip()
         session.encounter_context = stripped or None
+
+    # TE-1b — persist a changed verbosity override so it (a) grades this
+    # regenerate and (b) sticks for future re-runs. Omitted → unchanged.
+    if body.detail_level is not None:
+        session.detail_level = body.detail_level
 
     # Naming NO template means "same template, re-run" — so fall back to the
     # session's own snapshot, not the specialty default (which would silently

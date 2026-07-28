@@ -339,6 +339,12 @@ struct SessionNoteView: View {
     // `note_options_enabled`. Phase 1: change template / output language and
     // regenerate from the stored transcript (no re-record).
     @State private var showTemplatePicker = false
+    /// TE-1b — verbosity picker (Brief / Standard / Detailed).
+    @State private var showDetailPicker = false
+    /// The caller's custom templates (own + shared) for the change-template
+    /// picker. Loaded once alongside the note; empty when none exist or the
+    /// fetch fails (the picker then shows built-ins only, as before).
+    @State private var customTemplates: [CustomTemplateSummary] = []
     @State private var showLanguagePicker = false
     /// Phase 2: edit/add the encounter context (e.g. a breast-aug visit that
     /// also covered liposuction), then regenerate focused on it.
@@ -516,6 +522,11 @@ struct SessionNoteView: View {
                             Label(L("noteOptions.changeLanguage"), systemImage: "globe")
                         }
                         Button {
+                            showDetailPicker = true
+                        } label: {
+                            Label(L("noteOptions.detailLevel"), systemImage: "text.alignleft")
+                        }
+                        Button {
                             contextDraft = ""
                             showContextEditor = true
                         } label: {
@@ -550,7 +561,14 @@ struct SessionNoteView: View {
                 }
             }
         }
-        .task { await loadNote() }
+        .task {
+            await loadNote()
+            // Options-menu template picker data. Display names are
+            // clinician-authored -> never logged (APIClient contract).
+            if remoteConfig.featureFlags.noteOptionsEnabled {
+                customTemplates = (try? await APIClient.shared.getCustomTemplates()) ?? []
+            }
+        }
         // Confirmation dialog presents the two formats; the system
         // adds a localized Cancel via `.cancel` role automatically.
         .confirmationDialog(
@@ -591,10 +609,37 @@ struct SessionNoteView: View {
             isPresented: $showTemplatePicker,
             titleVisibility: .visible
         ) {
+            // The clinician's own + shared templates lead (they're the
+            // reason to open this picker since the template engine); the 8
+            // built-ins follow. confirmationDialog has no section headers,
+            // so custom names appear as authored.
+            ForEach(customTemplates) { tmpl in
+                Button(tmpl.displayName) {
+                    Task { await regenerate(customTemplateId: tmpl.id) }
+                }
+            }
             ForEach(BuiltInTemplate.keys, id: \.self) { key in
                 Button(localizedTemplate(key)) {
                     Task { await regenerate(templateKey: key) }
                 }
+            }
+        }
+        // TE-1b — verbosity for THIS session's note. Server persists the
+        // choice, so later re-runs keep the level until changed. Grades how
+        // much incidental material is captured; findings are never dropped.
+        .confirmationDialog(
+            L("noteOptions.detailTitle"),
+            isPresented: $showDetailPicker,
+            titleVisibility: .visible
+        ) {
+            Button(L("noteOptions.detailBrief")) {
+                Task { await regenerate(detailLevel: "brief") }
+            }
+            Button(L("noteOptions.detailStandard")) {
+                Task { await regenerate(detailLevel: "standard") }
+            }
+            Button(L("noteOptions.detailDetailed")) {
+                Task { await regenerate(detailLevel: "detailed") }
             }
         }
         // Change-output-language picker — regenerates the note in the chosen
@@ -897,8 +942,10 @@ struct SessionNoteView: View {
     /// note-gen re-run over stored data, so it takes a few seconds.
     private func regenerate(
         templateKey: String? = nil,
+        customTemplateId: String? = nil,
         outputLanguage: String? = nil,
-        encounterContext: String? = nil
+        encounterContext: String? = nil,
+        detailLevel: String? = nil
     ) async {
         guard let note else { return }
         isRegenerating = true
@@ -907,8 +954,10 @@ struct SessionNoteView: View {
             _ = try await APIClient.shared.regenerateNote(
                 sessionId: note.sessionId,
                 templateKey: templateKey,
+                customTemplateId: customTemplateId,
                 outputLanguage: outputLanguage,
-                encounterContext: encounterContext
+                encounterContext: encounterContext,
+                detailLevel: detailLevel
             )
             // Pull the new version so the screen reflects the regenerated note.
             await loadNote()

@@ -1251,3 +1251,10 @@
 "glassesGuide.trouble3.fix" = "The authorization didn't complete. Recording continues with audio only; finish the visit, then redo step 3 before the next one.";
 "glassesGuide.trouble4.symptom" = "Still stuck";
 "glassesGuide.trouble4.fix" = "Quit both apps. Open Meta AI first and wait for the glasses to connect, then open PeriTwin and try again.";
+
+// TE-1b — note detail level (Options menu)
+"noteOptions.detailLevel" = "Detail level";
+"noteOptions.detailTitle" = "How detailed should the note be?";
+"noteOptions.detailBrief" = "Brief";
+"noteOptions.detailStandard" = "Standard";
+"noteOptions.detailDetailed" = "Detailed";

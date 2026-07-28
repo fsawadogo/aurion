@@ -57,6 +57,8 @@ export function normalizeTemplate(t: TemplateDefinition): TemplateDefinition {
     // Empty / whitespace → null so the backend treats it as "no instructions"
     // (structure only), matching the descriptive-mode write gate.
     system_prompt: t.system_prompt?.trim() || null,
+    // TE-1b — unset ("") normalizes to null: template default.
+    detail_level: t.detail_level || null,
     sections: t.sections.map((s) => ({
       ...s,
       id: s.id.trim(),
@@ -199,6 +201,33 @@ export default function TemplateSectionEditor({
             {t("keyHint")}
           </span>
         </div>
+      </div>
+
+      {/* ── Detail level (optional, TE-1b) ────────────────────────────── */}
+      <div>
+        <label className="block sm:max-w-xs">
+          <span className={fieldLabel}>{t("detailLevel")}</span>
+          <select
+            className="form-input w-full"
+            value={value.detail_level ?? ""}
+            onChange={(e) =>
+              setMeta({
+                detail_level: (e.target.value ||
+                  null) as TemplateDefinition["detail_level"],
+              })
+            }
+            disabled={disabled}
+            data-testid="template-detail-level"
+          >
+            <option value="">{t("detailDefault")}</option>
+            <option value="brief">{t("detailBrief")}</option>
+            <option value="standard">{t("detailStandard")}</option>
+            <option value="detailed">{t("detailDetailed")}</option>
+          </select>
+        </label>
+        <span className="mt-1 block text-aurion-caption text-navy-400">
+          {t("detailHint")}
+        </span>
       </div>
 
       {/* ── AI instructions (optional, tpl-01) ────────────────────────── */}

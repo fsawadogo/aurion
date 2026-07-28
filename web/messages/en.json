@@ -1244,7 +1244,13 @@
     "errSectionDesc": "A section's guidance is too long (500 characters max).",
     "errDuplicateId": "Two sections share the same id — make each unique.",
     "errTooManyKeywords": "Too many keywords in a section (50 max).",
-    "errKeywordLong": "A keyword is too long (50 characters max)."
+    "errKeywordLong": "A keyword is too long (50 characters max).",
+    "detailLevel": "Detail level",
+    "detailDefault": "Default (detailed)",
+    "detailBrief": "Brief",
+    "detailStandard": "Standard",
+    "detailDetailed": "Detailed",
+    "detailHint": "How much incidental material notes built with this template capture. Findings, medications and plan items are never dropped at any level."
   },
   "TemplateChat": {
     "thinking": "Thinking…",

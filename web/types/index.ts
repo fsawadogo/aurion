@@ -1131,6 +1131,10 @@ export interface TemplateDefinition {
   // replaces the default note-generation prompt for notes built with this
   // template. Validated against the descriptive-mode gate server-side.
   system_prompt?: string | null;
+  // TE-1b — how exhaustively the note captures incidental material
+  // (brief | standard | detailed). Unset = detailed-equivalent default.
+  // A per-session override (set from the note's Options) wins over this.
+  detail_level?: "brief" | "standard" | "detailed" | null;
 }
 
 /** Mirrors backend `/me/custom-templates` response. */

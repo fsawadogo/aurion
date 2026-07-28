@@ -176,6 +176,11 @@ class SessionModel(Base):
         UUID(as_uuid=True), nullable=True
     )
     output_language: Mapped[str] = mapped_column(String(10), nullable=False, default="en")
+    # TE-1b — per-session verbosity override. When set, wins over the
+    # template's own detail_level in the Stage-1 capture directive (see
+    # providers/note_gen/shared._completeness_directive). Nullable: unset
+    # means "whatever the template says". Never relaxes descriptive mode.
+    detail_level: Mapped[str | None] = mapped_column(String(10), nullable=True)
     encounter_type: Mapped[str] = mapped_column(String(50), nullable=False, default="doctor_patient")
     participants_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     # `multimodal` (default), `audio_only`, or `smart_dictation`. Chosen at
