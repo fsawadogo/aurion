@@ -119,7 +119,7 @@ describe("VisitTypeContextsEditor — accordions", () => {
 /* ── Template select ──────────────────────────────────────────────────── */
 
 describe("VisitTypeContextsEditor — template select", () => {
-  it("offers the default option + all 8 built-in templates", async () => {
+  it("offers only the my-specialty-default option (no flat built-in list) — TE-4e", async () => {
     const user = userEvent.setup();
     render(
       withIntl(
@@ -131,38 +131,36 @@ describe("VisitTypeContextsEditor — template select", () => {
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
     const select = screen.getByRole("combobox");
-    // 1 "Use my specialty default" + 8 built-ins.
-    expect(within(select).getAllByRole("option")).toHaveLength(
-      1 + BUILT_IN_TEMPLATE_KEYS.length,
-    );
+    // Only "Use my specialty default" — specialty is a profile property, not a
+    // per-context pick, so the 8-specialty list is gone.
+    expect(within(select).getAllByRole("option")).toHaveLength(1);
     expect(
       within(select).getByRole("option", { name: /use my specialty default/i }),
     ).toBeInTheDocument();
     expect(
-      within(select).getByRole("option", { name: /orthopedic surgery/i }),
-    ).toBeInTheDocument();
+      within(select).queryByRole("option", { name: /orthopedic surgery/i }),
+    ).not.toBeInTheDocument();
   });
 
-  it("patches template_key on selection; default option maps back to null", async () => {
+  it("surfaces a legacy built-in template_key as a re-pickable option, not a blank select (TE-4e)", async () => {
     const user = userEvent.setup();
     render(
       withIntl(
         <Harness
           visitTypes={["new_patient"]}
-          initial={{ new_patient: [ctx("Left knee")] }}
+          initial={{ new_patient: [ctx("Left knee", "orthopedic_surgery")] }}
+          customTemplates={CUSTOM_TEMPLATES}
         />,
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox");
-    await user.selectOptions(select, "orthopedic_surgery");
-    await waitFor(() => {
-      expect(getState().new_patient[0].template_key).toBe("orthopedic_surgery");
-    });
-    await user.selectOptions(select, "");
-    await waitFor(() => {
-      expect(getState().new_patient[0].template_key).toBeNull();
-    });
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    // The built-in key has no normal option anymore; a placeholder keeps the
+    // <select> ON it (value round-trips) instead of snapping silently to blank.
+    expect(select.value).toBe("orthopedic_surgery");
+    expect(
+      within(select).getByRole("option", { name: /specialty template/i }),
+    ).toBeInTheDocument();
   });
 });
 
@@ -182,9 +180,9 @@ describe("VisitTypeContextsEditor — custom templates", () => {
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
     const select = screen.getByRole("combobox");
-    // 1 default + 8 built-ins + 2 custom.
+    // 1 default + 2 custom (TE-4e: no flat built-in list).
     expect(within(select).getAllByRole("option")).toHaveLength(
-      1 + BUILT_IN_TEMPLATE_KEYS.length + CUSTOM_TEMPLATES.length,
+      1 + CUSTOM_TEMPLATES.length,
     );
     expect(
       within(select).getByRole("group", { name: /custom templates/i }),
@@ -215,29 +213,6 @@ describe("VisitTypeContextsEditor — custom templates", () => {
     });
   });
 
-  it("clears template_ref when a built-in is picked after a custom (mutual exclusion)", async () => {
-    const user = userEvent.setup();
-    render(
-      withIntl(
-        <Harness
-          visitTypes={["new_patient"]}
-          initial={{
-            new_patient: [ctxRef("Left knee", CUSTOM_TEMPLATES[0].id)],
-          }}
-          customTemplates={CUSTOM_TEMPLATES}
-        />,
-      ),
-    );
-    await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox");
-    await user.selectOptions(select, "orthopedic_surgery");
-    await waitFor(() => {
-      const row = getState().new_patient[0];
-      expect(row.template_key).toBe("orthopedic_surgery");
-      expect(row.template_ref).toBeNull();
-    });
-  });
-
   it("selecting the default clears a previously-bound custom ref", async () => {
     const user = userEvent.setup();
     render(
@@ -260,7 +235,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
     });
   });
 
-  it("shows only built-ins when the custom library is empty", async () => {
+  it("shows only the my-specialty-default option when the custom library is empty", async () => {
     const user = userEvent.setup();
     render(
       withIntl(
@@ -273,9 +248,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
     const select = screen.getByRole("combobox");
-    expect(within(select).getAllByRole("option")).toHaveLength(
-      1 + BUILT_IN_TEMPLATE_KEYS.length,
-    );
+    expect(within(select).getAllByRole("option")).toHaveLength(1);
     expect(
       within(select).queryByRole("group", { name: /custom templates/i }),
     ).not.toBeInTheDocument();

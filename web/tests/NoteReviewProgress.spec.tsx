@@ -56,6 +56,7 @@ vi.mock("@/lib/portal-api", () => ({
   listMyMacros: vi.fn(),
   listMyCustomTemplates: vi.fn(),
   getPortalFeatureFlags: vi.fn(),
+  getMyProfile: vi.fn(),
   assistNote: vi.fn(),
   approveAll: vi.fn(),
   editNote: vi.fn(),
@@ -69,6 +70,7 @@ import {
   listMyMacros,
   listMyCustomTemplates,
   getPortalFeatureFlags,
+  getMyProfile,
 } from "@/lib/portal-api";
 import { regenerateNote } from "@/lib/api";
 import NoteReviewPage from "@/app/portal/notes/[id]/NoteReviewClient";
@@ -139,6 +141,7 @@ beforeEach(() => {
   vi.mocked(listMyMacros).mockResolvedValue([] as never);
   vi.mocked(listMyCustomTemplates).mockResolvedValue([] as never);
   vi.mocked(getPortalFeatureFlags).mockResolvedValue(FLAGS as never);
+  vi.mocked(getMyProfile).mockResolvedValue({ primary_specialty: "general" } as never);
 });
 
 describe("NoteReview — actions while the note is being replaced", () => {

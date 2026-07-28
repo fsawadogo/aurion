@@ -27,12 +27,12 @@ import PatientIdentifierEditor from "@/components/portal/PatientIdentifierEditor
 import PatientSummaryCard from "@/components/portal/PatientSummaryCard";
 import PreviewVsFinalCard from "@/components/portal/PreviewVsFinalCard";
 import StageTwoProgressBanner from "@/components/portal/StageTwoProgressBanner";
-import { BUILT_IN_TEMPLATE_KEYS } from "@/components/portal/VisitTypeContextsEditor";
 import {
   approveAll,
   assistNote,
   editNote,
   exportNote,
+  getMyProfile,
   getNoteDetail,
   getPortalFeatureFlags,
   getSession,
@@ -68,7 +68,7 @@ import type {
  */
 export default function NoteReviewPage() {
   const t = useTranslations("NoteReview");
-  const tTemplates = useTranslations("Profile.contexts.templates");
+  const tSpec = useTranslations("Specialties");
   const sessionId = useRouteSegment("id");
 
   const [detail, setDetail] = useState<NoteDetail | null>(null);
@@ -83,6 +83,9 @@ export default function NoteReviewPage() {
   const [macros, setMacros] = useState<PhysicianMacro[]>([]);
   const [customTemplates, setCustomTemplates] = useState<CustomTemplate[]>([]);
   const [chatEnabled, setChatEnabled] = useState(false);
+  // The clinician's own specialty → the single "my specialty default" template
+  // option (TE-4e). Null until the profile loads, or if the fetch fails.
+  const [mySpecialty, setMySpecialty] = useState<string | null>(null);
   // Pending regenerate that hit the loss gate — holds the counts + the retry.
   const [discardPrompt, setDiscardPrompt] = useState<{
     counts: RegenerateWouldDiscard;
@@ -115,6 +118,9 @@ export default function NoteReviewPage() {
       .catch(() => {});
     void getPortalFeatureFlags()
       .then((f) => !cancelled && setChatEnabled(f.note_review_chat_enabled))
+      .catch(() => {});
+    void getMyProfile()
+      .then((p) => !cancelled && setMySpecialty(p.primary_specialty))
       .catch(() => {});
     return () => {
       cancelled = true;
@@ -417,13 +423,25 @@ export default function NoteReviewPage() {
                     className="form-input h-9 py-0 text-aurion-caption font-semibold"
                   >
                     <option value="">{t("toolbar.changeTemplate")}</option>
-                    <optgroup label={t("toolbar.builtInGroup")}>
-                      {BUILT_IN_TEMPLATE_KEYS.map((key) => (
-                        <option key={key} value={key}>
-                          {tTemplates(key)}
-                        </option>
-                      ))}
-                    </optgroup>
+                    {/* TE-4e: specialty is a profile property, not a picker —
+                        offer only the clinician's own specialty default + their
+                        custom templates (no flat 8-specialty list). Latent: a
+                        primary_specialty with no on-disk template would 422 on
+                        regenerate (surfaced as an error toast, not silent) —
+                        not reachable today, every settable specialty has one. */}
+                    {mySpecialty && (
+                      <option value={mySpecialty}>
+                        {t("toolbar.specialtyDefault", {
+                          // `primary_specialty` is unconstrained backend-side and
+                          // can be a post-MVP key the `Specialties` catalog lacks
+                          // (family/internal medicine, pediatrics) — guard the
+                          // lookup the way dashboard/page.tsx does.
+                          specialty: tSpec.has(mySpecialty)
+                            ? tSpec(mySpecialty)
+                            : humanSpecialty(mySpecialty),
+                        })}
+                      </option>
+                    )}
                     {customTemplates.length > 0 && (
                       <optgroup label={t("toolbar.customGroup")}>
                         {customTemplates.map((c) => (

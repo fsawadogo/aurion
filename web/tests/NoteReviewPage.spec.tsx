@@ -49,6 +49,7 @@ vi.mock("@/lib/portal-api", () => ({
   listMyMacros: vi.fn(),
   listMyCustomTemplates: vi.fn(),
   getPortalFeatureFlags: vi.fn(),
+  getMyProfile: vi.fn(),
   assistNote: vi.fn(),
   approveAll: vi.fn(),
   editNote: vi.fn(),
@@ -62,6 +63,7 @@ import {
   listMyMacros,
   listMyCustomTemplates,
   getPortalFeatureFlags,
+  getMyProfile,
   assistNote,
 } from "@/lib/portal-api";
 import { regenerateNote } from "@/lib/api";
@@ -112,6 +114,7 @@ describe("NoteReviewPage — fix-this-note chat wiring", () => {
     vi.mocked(getSession).mockResolvedValue({ state: "AWAITING_REVIEW" } as never);
     vi.mocked(listMyMacros).mockResolvedValue([] as never);
     vi.mocked(listMyCustomTemplates).mockResolvedValue([] as never);
+    vi.mocked(getMyProfile).mockResolvedValue({ primary_specialty: "general" } as never);
   });
 
   it("hides the chat when note_review_chat_enabled is off (fails closed)", async () => {
@@ -174,6 +177,7 @@ describe("NoteReviewPage — loop-4 copy + regenerate wiring", () => {
     vi.mocked(listMyMacros).mockResolvedValue([] as never);
     vi.mocked(listMyCustomTemplates).mockResolvedValue([] as never);
     vi.mocked(getPortalFeatureFlags).mockResolvedValue(flags(false) as never);
+    vi.mocked(getMyProfile).mockResolvedValue({ primary_specialty: "orthopedic_surgery" } as never);
     Object.assign(navigator, {
       clipboard: { writeText: vi.fn().mockResolvedValue(undefined) },
     });
@@ -206,6 +210,30 @@ describe("NoteReviewPage — loop-4 copy + regenerate wiring", () => {
         template_key: "orthopedic_surgery",
       }),
     );
+  });
+
+  it("the template dropdown offers only my specialty default + custom, not the 8 built-ins (TE-4e)", async () => {
+    render(withIntl(<NoteReviewPage />));
+    // getMyProfile → orthopedic_surgery, so the only specialty option is the
+    // clinician's own default; the flat 8-specialty list is gone.
+    expect(
+      await screen.findByRole("option", { name: /my specialty default/i }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("option", { name: /plastic surgery/i })).toBeNull();
+    expect(screen.queryByRole("option", { name: /family medicine/i })).toBeNull();
+  });
+
+  it("labels a specialty missing from the Specialties catalog via humanSpecialty (TE-4e guard)", async () => {
+    vi.mocked(getMyProfile).mockResolvedValue({ primary_specialty: "family_medicine" } as never);
+    render(withIntl(<NoteReviewPage />));
+    // family_medicine isn't in the Specialties i18n catalog → the tSpec.has()
+    // guard falls back to humanSpecialty, so the option still reads sensibly
+    // ("Family Medicine"), not a raw `Specialties.family_medicine` key path.
+    expect(
+      await screen.findByRole("option", {
+        name: /my specialty default \(family medicine\)/i,
+      }),
+    ).toBeTruthy();
   });
 
   it("a language switch that hits the loss gate confirms, then retries with confirm_discard", async () => {

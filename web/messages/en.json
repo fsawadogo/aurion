@@ -971,7 +971,7 @@
     },
     "contexts": {
       "label": "Visit-type contexts",
-      "description": "Add contexts under a visit type (e.g. \"left knee\", \"revision\") and optionally pin each to a built-in template. Leave the template on your specialty default to inherit it.",
+      "description": "Add contexts under a visit type (e.g. \"left knee\", \"revision\") and optionally pin each to one of your custom templates. Leave the template on your specialty default to inherit it.",
       "noVisitTypes": "Add a visit type above to attach contexts to it.",
       "empty": "No contexts yet.",
       "addContext": "Add context",
@@ -986,6 +986,7 @@
       "defaultTemplate": "Use my specialty default",
       "customGroup": "Custom templates",
       "customUnavailable": "Custom template (unavailable)",
+      "legacySpecialtyTemplate": "Specialty template (re-pick)",
       "delete": "Remove context \"{label}\"",
       "limit": "30 contexts maximum per visit type.",
       "templates": {
@@ -1289,7 +1290,7 @@
     "toolbar": {
       "templateLabel": "Note template",
       "changeTemplate": "Change template…",
-      "builtInGroup": "Specialty templates",
+      "specialtyDefault": "My specialty default ({specialty})",
       "customGroup": "My templates",
       "lang_en": "English",
       "lang_fr": "Français",
