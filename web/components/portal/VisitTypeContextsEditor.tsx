@@ -10,12 +10,12 @@
  *   - one collapsible section per `consultation_types` entry (default
  *     key or custom label);
  *   - each context row = a label input + a template `<select>`
- *     ("Use my specialty default" + the 8 built-ins + a "Custom
- *     templates" optgroup of the caller's OWNED custom templates, all
- *     localized) + a delete button. A built-in `template_key` and a
- *     custom `template_ref` are mutually exclusive — picking one clears
- *     the other, mirroring the backend `VisitTypeContext` validator
- *     (#318/B3, #320/W2);
+ *     ("Use my specialty default" + a "Custom templates" optgroup of the
+ *     caller's OWNED custom templates, all localized) + a delete button.
+ *     Specialty is a profile property, not a per-context pick (TE-4e), so
+ *     the flat built-in list is gone; a context pins only the default or a
+ *     custom `template_ref` (they clear each other, mirroring the backend
+ *     `VisitTypeContext` validator #318/B3, #320/W2);
  *   - an inline "Add context" affordance reusing the exact
  *     `validateConsultationType` rules (60 chars, no SSN / email /
  *     proper-noun-pair) the visit-type editor already pins;
@@ -47,9 +47,11 @@ const DEFAULT_VISIT_TYPE_KEYS = [
   "post_op",
 ] as const;
 
-/** The 8 built-in specialty templates a context can pin to (B1
- * contract). `null` template_key = inherit the physician's specialty
- * default — surfaced as the leading "Use my specialty default" option. */
+/** The 8 built-in specialty template keys (B1 contract). Still consumed by
+ * the upload flow + the Templates → Visit-Types tab; TE-4e removed them from
+ * THIS editor's picker (specialty is a profile property, not a per-context
+ * pick), leaving only the "Use my specialty default" option + the caller's
+ * custom templates. */
 export const BUILT_IN_TEMPLATE_KEYS = [
   "general",
   "emergency_medicine",
@@ -116,7 +118,6 @@ export default function VisitTypeContextsEditor({
   customTemplates = [],
 }: VisitTypeContextsEditorProps) {
   const t = useTranslations("Profile.contexts");
-  const tTemplates = useTranslations("Profile.contexts.templates");
   const tTypes = useTranslations("Profile.consultationTypes");
   const tVal = useTranslations(
     "Profile.consultationTypes.custom.validation",
@@ -128,13 +129,6 @@ export default function VisitTypeContextsEditor({
   const [addingFor, setAddingFor] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
 
-  // Built-in template options, localized + sorted by display name so the
-  // list reads naturally in either locale.
-  const templateOptions = BUILT_IN_TEMPLATE_KEYS.map((key) => ({
-    key,
-    label: tTemplates(key),
-  })).sort((a, b) => a.label.localeCompare(b.label));
-
   // Custom-template options for the "Custom templates" optgroup (#320/W2).
   // Sorted by display name to match the built-in list. The display name
   // can be PHI, so it never leaves this render path — no logging.
@@ -142,28 +136,22 @@ export default function VisitTypeContextsEditor({
     .map((c) => ({ id: c.id, label: c.display_name }))
     .sort((a, b) => a.label.localeCompare(b.label));
 
-  // Membership sets the change handler uses to route a selected option
-  // value to the right field (built-in key → `template_key`, custom id →
-  // `template_ref`), enforcing the same mutual exclusion as the backend.
-  const builtInKeySet = new Set<string>(BUILT_IN_TEMPLATE_KEYS);
+  // Membership set the change handler uses to route a selected option to
+  // the right field. TE-4e: only custom templates are selectable now, so a
+  // built-in key can no longer be picked — no built-in set needed.
   const customIdSet = new Set(customTemplates.map((c) => c.id));
 
-  /** Apply a template `<select>` choice to one context, honouring the
-   * built-in/custom mutual exclusion:
-   *   - "" (default)  → clear BOTH pointers (inherit specialty default);
-   *   - built-in key  → set `template_key`, clear `template_ref`;
-   *   - custom id     → set `template_ref`, clear `template_key`.
-   * A value matching neither set can only be a stale ref re-selected,
-   * which `onChange` never fires for (it's already the value), so we
-   * leave the binding untouched. */
+  /** Apply a template `<select>` choice to one context. TE-4e: specialty is
+   * a profile property, so a context pins ONLY the default or a custom
+   * template:
+   *   - "" (default) → clear BOTH pointers (inherit specialty default);
+   *   - custom id    → set `template_ref`, clear `template_key`.
+   * A value matching neither (a stale ref re-selected, or a legacy built-in
+   * `template_key` with no matching option) leaves the binding untouched —
+   * `onChange` only fires on a real change. */
   function selectTemplate(vt: string, id: string, optionValue: string) {
     if (optionValue === "") {
       updateContext(vt, id, { template_key: null, template_ref: null });
-    } else if (builtInKeySet.has(optionValue)) {
-      updateContext(vt, id, {
-        template_key: optionValue,
-        template_ref: null,
-      });
     } else if (customIdSet.has(optionValue)) {
       updateContext(vt, id, {
         template_ref: optionValue,
@@ -362,11 +350,6 @@ export default function VisitTypeContextsEditor({
                           className="form-select sm:w-56"
                         >
                           <option value="">{t("defaultTemplate")}</option>
-                          {templateOptions.map((o) => (
-                            <option key={o.key} value={o.key}>
-                              {o.label}
-                            </option>
-                          ))}
                           {customOptions.length > 0 && (
                             <optgroup label={t("customGroup")}>
                               {customOptions.map((o) => (

@@ -971,7 +971,7 @@
     },
     "contexts": {
       "label": "Contextes par type de consultation",
-      "description": "Ajoutez des contextes sous un type de consultation (ex. « genou gauche », « révision ») et associez-en chacun à un gabarit intégré au besoin. Laissez le gabarit sur votre spécialité par défaut pour en hériter.",
+      "description": "Ajoutez des contextes sous un type de consultation (ex. « genou gauche », « révision ») et associez-en chacun à l'un de vos gabarits personnalisés au besoin. Laissez le gabarit sur votre spécialité par défaut pour en hériter.",
       "noVisitTypes": "Ajoutez un type de consultation ci-dessus pour y rattacher des contextes.",
       "empty": "Aucun contexte pour l’instant.",
       "addContext": "Ajouter un contexte",
@@ -1289,7 +1289,7 @@
     "toolbar": {
       "templateLabel": "Modèle de note",
       "changeTemplate": "Changer de modèle…",
-      "builtInGroup": "Modèles de spécialité",
+      "specialtyDefault": "Ma spécialité par défaut ({specialty})",
       "customGroup": "Mes modèles",
       "lang_en": "English",
       "lang_fr": "Français",
