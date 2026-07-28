@@ -1,0 +1,13 @@
+{
+  "task_id": "te-4e-specialty-default",
+  "branch": "lane-web/te-4e-specialty-default",
+  "verified_at": "2026-07-27T21:15:00Z",
+  "checks": {
+    "web_tests": "vitest run: 51 files / 416 passed. NoteReviewPage.spec.tsx: new 'dropdown offers only my-specialty-default + custom, not the 8 built-ins (TE-4e)'; 'changing the template regenerates' still sends template_key=primary_specialty; chat-gate/copy/loss-gate intact (getMyProfile mocked). VisitTypeContexts.spec.tsx: per-context select now 1 option (empty lib) / 1+custom; custom optgroup + stale-ref + default<->custom exclusion preserved; 2 obsolete built-in-selection tests removed; AC-8 'localized name for every built-in key' kept. i18n-bootstrap EN/FR parity green.",
+    "web_build": "npm run build -> compiled + static export OK (exit 0); /portal/notes/[id] built; postbuild copied .well-known.",
+    "lint": "next lint -> clean (no unused BUILT_IN_TEMPLATE_KEYS / tTemplates / templateOptions / builtInKeySet after removals).",
+    "ios_builds": "n/a — web-only change, no ios/** in diff.",
+    "acceptance_criteria": "AC1 selecting 'my specialty default' regenerates with template_key=primary_specialty; AC2 built-in specialties (plastic surgery / family medicine) absent from the note-review dropdown, my-specialty-default present; AC4 visit-type select shows only default (+ custom) — 1 option on empty library; AC5/6 custom-count assertions updated; AC7 mutual-exclusion + stale-ref preserved; AC8 BUILT_IN_TEMPLATE_KEYS + Profile.contexts.templates catalog kept for out-of-scope consumers (VideoImportClient, VisitTypesTab); AC9 EN/FR parity (specialtyDefault added, builtInGroup removed); AC10 VisitTypesTab.spec untouched; AC11 lint + build clean.",
+    "simplify": "4 agents (reuse/simplify/efficiency/altitude); 3 fix-now applied: (1) label the specialty-default option via the established tSpec.has(k) ? tSpec(k) : humanSpecialty(k) guard so a post-MVP primary_specialty the Specialties catalog lacks (family/internal medicine, pediatrics) renders a real label; (2)+(3) two stale VisitTypeContextsEditor comments. Skips->PR Deferred: duplicate getMyProfile-vs-Sidebar fetch (pre-existing codebase pattern; real fix = shared profile context); extract shared option-list (premature — the two surfaces differ underneath); move BUILT_IN_TEMPLATE_KEYS to web/lib (optional 4-file relocation)."
+  }
+}
