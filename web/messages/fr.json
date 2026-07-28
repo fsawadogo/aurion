@@ -1244,7 +1244,13 @@
     "errSectionDesc": "Les indications d’une section sont trop longues (500 caractères max).",
     "errDuplicateId": "Deux sections partagent le même id — rendez chacun unique.",
     "errTooManyKeywords": "Trop de mots-clés dans une section (50 max).",
-    "errKeywordLong": "Un mot-clé est trop long (50 caractères max)."
+    "errKeywordLong": "Un mot-clé est trop long (50 caractères max).",
+    "detailLevel": "Niveau de détail",
+    "detailDefault": "Par défaut (détaillé)",
+    "detailBrief": "Concis",
+    "detailStandard": "Standard",
+    "detailDetailed": "Détaillé",
+    "detailHint": "Quantité de détails accessoires que capturent les notes créées avec ce gabarit. Les constats, médicaments et éléments du plan ne sont jamais omis, quel que soit le niveau."
   },
   "TemplateChat": {
     "thinking": "Réflexion…",

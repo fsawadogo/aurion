@@ -106,12 +106,16 @@ final class APIClient: Sendable {
         templateKey: String? = nil,
         customTemplateId: String? = nil,
         outputLanguage: String? = nil,
-        encounterContext: String? = nil
+        encounterContext: String? = nil,
+        detailLevel: String? = nil
     ) async throws -> RegenerateNoteResult {
         var body: [String: Any] = [:]
         if let templateKey { body["template_key"] = templateKey }
         if let customTemplateId { body["custom_template_id"] = customTemplateId }
         if let outputLanguage { body["output_language"] = outputLanguage }
+        // TE-1b — per-session verbosity override (brief|standard|detailed).
+        // Persisted server-side so the level sticks across future re-runs.
+        if let detailLevel { body["detail_level"] = detailLevel }
         // Sent even when empty so the server can CLEAR the context; nil (unset)
         // leaves the stored context untouched.
         if let encounterContext { body["encounter_context"] = encounterContext }

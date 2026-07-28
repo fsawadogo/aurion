@@ -931,6 +931,23 @@ async def generate_stage1_note(
         custom_template_id=custom_template_id,
         db=db,
     )
+
+    # TE-1b — the session's verbosity override wins over the template's own
+    # detail_level (resolution: session override → template → default, as
+    # _completeness_directive documents). Applied on a copy so the cached
+    # built-in Template object is never mutated across sessions. Flag-gated
+    # downstream: with template_engine_enabled OFF the directive ignores
+    # detail_level entirely, so this stays inert.
+    session_row = await db.get(SessionModel, uuid.UUID(session_id))
+    if session_row is not None and session_row.detail_level in (
+        "brief",
+        "standard",
+        "detailed",
+    ):
+        template = template.model_copy(
+            update={"detail_level": session_row.detail_level}
+        )
+
     registry = get_registry()
 
     if provider_override:

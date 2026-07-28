@@ -1239,3 +1239,10 @@
 "glassesGuide.trouble3.fix" = "L'autorisation n'a pas abouti. L'enregistrement continue en audio seulement; terminez la visite, puis refaites l'\U00E9tape 3 avant la prochaine.";
 "glassesGuide.trouble4.symptom" = "Toujours bloqu\U00E9";
 "glassesGuide.trouble4.fix" = "Quittez les deux applications. Ouvrez d'abord Meta AI, attendez que les lunettes se connectent, puis rouvrez PeriTwin et r\U00E9essayez.";
+
+// TE-1b — note detail level (Options menu)
+"noteOptions.detailLevel" = "Niveau de d\U00E9tail";
+"noteOptions.detailTitle" = "Quel niveau de d\U00E9tail pour la note ?";
+"noteOptions.detailBrief" = "Concis";
+"noteOptions.detailStandard" = "Standard";
+"noteOptions.detailDetailed" = "D\U00E9taill\U00E9";
