@@ -1237,7 +1237,7 @@
 "glassesGuide.step2.title" = "Let updates finish";
 "glassesGuide.step2.body" = "If Meta AI shows “Updating…”, keep the glasses in their charging case (lid open) next to your phone with Meta AI open until it completes. Meta blocks app connections during an update.";
 "glassesGuide.step3.title" = "Authorize PeriTwin";
-"glassesGuide.step3.body" = "In PeriTwin, tap Connect Ray-Ban Meta on this screen. Meta AI opens a connect sheet for Aurion Clinical AI: tap Connect and accept. The release channel should read “Aurion pilot testers”.";
+"glassesGuide.step3.body" = "In PeriTwin, tap Connect Ray-Ban Meta on this screen. Meta AI opens a connect sheet for PeriTwin: tap Connect and accept.";
 "glassesGuide.step4.title" = "Pick the glasses as video source";
 "glassesGuide.step4.body" = "Back in PeriTwin, select Ray-Ban Meta under Video source. Your voice still comes through the selected audio source.";
 "glassesGuide.step5.title" = "In the room";
