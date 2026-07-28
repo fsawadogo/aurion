@@ -425,7 +425,10 @@ export default function NoteReviewPage() {
                     <option value="">{t("toolbar.changeTemplate")}</option>
                     {/* TE-4e: specialty is a profile property, not a picker —
                         offer only the clinician's own specialty default + their
-                        custom templates (no flat 8-specialty list). */}
+                        custom templates (no flat 8-specialty list). Latent: a
+                        primary_specialty with no on-disk template would 422 on
+                        regenerate (surfaced as an error toast, not silent) —
+                        not reachable today, every settable specialty has one. */}
                     {mySpecialty && (
                       <option value={mySpecialty}>
                         {t("toolbar.specialtyDefault", {

@@ -351,6 +351,21 @@ export default function VisitTypeContextsEditor({
                           className="form-select sm:w-56"
                         >
                           <option value="">{t("defaultTemplate")}</option>
+                          {ctx.template_ref === null &&
+                            ctx.template_key !== null && (
+                              /* TE-4e transitional: this context still carries a
+                               * built-in specialty `template_key`, which the
+                               * picker no longer lists. Surface it as a
+                               * selectable option — rather than a silently
+                               * unselected <select> — so the physician sees the
+                               * legacy pin and can switch to "my specialty
+                               * default" or a custom template. Full retirement
+                               * of per-context specialty pins is TE-4f + a
+                               * backend change. */
+                              <option value={ctx.template_key}>
+                                {t("legacySpecialtyTemplate")}
+                              </option>
+                            )}
                           {customOptions.length > 0 && (
                             <optgroup label={t("customGroup")}>
                               {customOptions.map((o) => (

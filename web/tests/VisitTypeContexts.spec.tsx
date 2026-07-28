@@ -141,6 +141,27 @@ describe("VisitTypeContextsEditor — template select", () => {
       within(select).queryByRole("option", { name: /orthopedic surgery/i }),
     ).not.toBeInTheDocument();
   });
+
+  it("surfaces a legacy built-in template_key as a re-pickable option, not a blank select (TE-4e)", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [ctx("Left knee", "orthopedic_surgery")] }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await user.click(screen.getByRole("button", { name: /new patient/i }));
+    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    // The built-in key has no normal option anymore; a placeholder keeps the
+    // <select> ON it (value round-trips) instead of snapping silently to blank.
+    expect(select.value).toBe("orthopedic_surgery");
+    expect(
+      within(select).getByRole("option", { name: /specialty template/i }),
+    ).toBeInTheDocument();
+  });
 });
 
 /* ── Custom templates (#320/W2) ───────────────────────────────────────── */

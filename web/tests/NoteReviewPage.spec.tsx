@@ -223,6 +223,19 @@ describe("NoteReviewPage — loop-4 copy + regenerate wiring", () => {
     expect(screen.queryByRole("option", { name: /family medicine/i })).toBeNull();
   });
 
+  it("labels a specialty missing from the Specialties catalog via humanSpecialty (TE-4e guard)", async () => {
+    vi.mocked(getMyProfile).mockResolvedValue({ primary_specialty: "family_medicine" } as never);
+    render(withIntl(<NoteReviewPage />));
+    // family_medicine isn't in the Specialties i18n catalog → the tSpec.has()
+    // guard falls back to humanSpecialty, so the option still reads sensibly
+    // ("Family Medicine"), not a raw `Specialties.family_medicine` key path.
+    expect(
+      await screen.findByRole("option", {
+        name: /my specialty default \(family medicine\)/i,
+      }),
+    ).toBeTruthy();
+  });
+
   it("a language switch that hits the loss gate confirms, then retries with confirm_discard", async () => {
     const { RegenerateDiscardError } = await import("@/lib/api");
     vi.mocked(regenerateNote)

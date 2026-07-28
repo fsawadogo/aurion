@@ -986,6 +986,7 @@
       "defaultTemplate": "Utiliser ma spécialité par défaut",
       "customGroup": "Gabarits personnalisés",
       "customUnavailable": "Gabarit personnalisé (indisponible)",
+      "legacySpecialtyTemplate": "Modèle de spécialité (à resélectionner)",
       "delete": "Supprimer le contexte « {label} »",
       "limit": "Maximum 30 contextes par type de consultation.",
       "templates": {

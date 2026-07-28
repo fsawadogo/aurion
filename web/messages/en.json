@@ -986,6 +986,7 @@
       "defaultTemplate": "Use my specialty default",
       "customGroup": "Custom templates",
       "customUnavailable": "Custom template (unavailable)",
+      "legacySpecialtyTemplate": "Specialty template (re-pick)",
       "delete": "Remove context \"{label}\"",
       "limit": "30 contexts maximum per visit type.",
       "templates": {
