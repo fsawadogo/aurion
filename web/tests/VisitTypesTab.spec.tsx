@@ -129,6 +129,57 @@ describe("VisitTypesTab", () => {
     expect(listOrgVisitTypeTemplates).not.toHaveBeenCalled();
   });
 
+  it("clinician: dropdown offers specialty-default + custom only, no built-in specialty templates (TE-4g)", async () => {
+    vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
+    render(withIntl(<VisitTypesTab />));
+
+    const sel = (await screen.findByTestId(
+      "visit-type-template-follow_up",
+    )) as HTMLSelectElement;
+    const values = Array.from(sel.querySelectorAll("option")).map(
+      (o) => o.value,
+    );
+    // The clinician's specialty template comes from their profile, not this
+    // menu — so no built-in specialty options are offered (TE-4g).
+    expect(values.some((v) => v.startsWith("builtin:"))).toBe(false);
+    // Specialty default ("") + both of the clinician's own customs remain.
+    expect(values).toContain("");
+    expect(values).toContain("custom:c1");
+    expect(values).toContain("custom:c2");
+  });
+
+  it("clinician: a default still pinned to a built-in shows a re-pick placeholder, not a blank select (TE-4g)", async () => {
+    vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
+    // A default context created before TE-4g (or by iOS) still pinned to a
+    // built-in template_key.
+    vi.mocked(getMyProfile).mockResolvedValue({
+      consultation_types: ["follow_up", "pre_op"],
+      contexts_per_visit_type: {
+        follow_up: [
+          {
+            id: "ctx_legacy",
+            label: "Follow-up",
+            template_key: "orthopedic_surgery",
+            template_ref: null,
+            is_default: true,
+            description: null,
+          },
+        ],
+      },
+    } as never);
+    render(withIntl(<VisitTypesTab />));
+
+    const sel = (await screen.findByTestId(
+      "visit-type-template-follow_up",
+    )) as HTMLSelectElement;
+    // The pin is preserved and visible — NOT silently blanked to "".
+    expect(sel.value).toBe("builtin:orthopedic_surgery");
+    expect(screen.getByText("Specialty template (re-pick)")).toBeTruthy();
+    // Re-picking a custom moves off the legacy pin (no built-in re-selection).
+    fireEvent.change(sel, { target: { value: "custom:c1" } });
+    expect(sel.value).toBe("custom:c1");
+  });
+
   it("admin: selecting the specialty default clears the org default", async () => {
     vi.mocked(getMe).mockResolvedValue({ role: "ADMIN" } as never);
     render(withIntl(<VisitTypesTab />));

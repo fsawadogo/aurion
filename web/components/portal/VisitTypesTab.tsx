@@ -102,6 +102,7 @@ function withClinicianDefault(
 export default function VisitTypesTab() {
   const t = useTranslations("TemplatesList");
   const tTpl = useTranslations("Profile.contexts.templates");
+  const tCtx = useTranslations("Profile.contexts");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -227,7 +228,14 @@ export default function VisitTypesTab() {
     options: CustomTemplate[],
     customGroupLabel: string,
     onChange: (vt: string, value: string) => void,
+    includeBuiltins: boolean,
   ) {
+    // A clinician default still pinned to a built-in specialty template_key
+    // (pre-TE-4g, or from iOS) has no matching option once the built-ins are
+    // gone. Surface it as a visible, re-pickable placeholder rather than a
+    // silent blank <select> — the same guard TE-4e added to the per-context
+    // editor. Reselecting it is a no-op; pick "" or a custom to move off it.
+    const legacyBuiltin = !includeBuiltins && value.startsWith("builtin:");
     return (
       <select
         className="rounded-aurion-md border border-hairline bg-white px-3 py-2 text-aurion-callout text-navy-800 focus:outline-none focus:ring-2 focus:ring-gold-300/40 disabled:opacity-50"
@@ -241,13 +249,18 @@ export default function VisitTypesTab() {
         aria-label={t("visitsSelectAria", { visit: visitTypeLabel(vt) })}
       >
         <option value="">{t("visitsSpecialtyDefault")}</option>
-        <optgroup label={t("visitsBuiltinGroup")}>
-          {BUILT_IN_TEMPLATE_KEYS.map((k) => (
-            <option key={k} value={`builtin:${k}`}>
-              {tTpl(k)}
-            </option>
-          ))}
-        </optgroup>
+        {includeBuiltins && (
+          <optgroup label={t("visitsBuiltinGroup")}>
+            {BUILT_IN_TEMPLATE_KEYS.map((k) => (
+              <option key={k} value={`builtin:${k}`}>
+                {tTpl(k)}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {legacyBuiltin && (
+          <option value={value}>{tCtx("legacySpecialtyTemplate")}</option>
+        )}
         {options.length > 0 && (
           <optgroup label={customGroupLabel}>
             {options.map((c) => (
@@ -310,6 +323,7 @@ export default function VisitTypesTab() {
                     shared,
                     t("visitsSharedGroup"),
                     onOrgChange,
+                    true,
                   )
                 : renderSelect(
                     vt,
@@ -317,6 +331,7 @@ export default function VisitTypesTab() {
                     customs,
                     t("visitsMineGroup"),
                     onClinicianChange,
+                    false,
                   )}
             </li>
           ))}
