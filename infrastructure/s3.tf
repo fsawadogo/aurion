@@ -384,15 +384,22 @@ resource "aws_s3_bucket_lifecycle_configuration" "video_imports" {
   }
 }
 
-# CORS for the browser presigned PUT from the portal origin. Exposes ETag so
+# CORS for the browser presigned PUT from the portal origins. Exposes ETag so
 # the multipart-complete path (VID-10) can read it. Scoped to the portal
-# subdomain — not a public bucket.
+# domains — not a public bucket. Includes var.web_portal_extra_domains
+# (rebrand dual-domain, e.g. portal.peritwin.com) mirroring the API's
+# CORS_ALLOWED_ORIGINS in ecs.tf — the rebrand extended the API list but
+# missed this bucket, so browser part-PUTs from the new domain failed
+# preflight (part_network_error, found live 2026-07-29).
 resource "aws_s3_bucket_cors_configuration" "video_imports" {
   bucket = aws_s3_bucket.video_imports.id
 
   cors_rule {
     allowed_methods = ["PUT", "GET"]
-    allowed_origins = ["https://${var.web_portal_subdomain}"]
+    allowed_origins = concat(
+      ["https://${var.web_portal_subdomain}"],
+      [for d in var.web_portal_extra_domains : "https://${d}"],
+    )
     allowed_headers = ["*"]
     expose_headers  = ["ETag"]
     max_age_seconds = 3000
