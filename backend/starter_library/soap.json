@@ -9,8 +9,7 @@
       "title": "S — Subjective / Subjectif",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Chief complaint in the patient's own words, then the history of present illness: onset, duration, severity, triggers, prior treatments and their results, and the patient's stated goals. Include history the patient reports during the visit when discussed (medical, surgical, medications, allergies, social, family). Patient-reported information only — record what was said, never conclusions.",
-      "measurement_output_expected": false
+      "description": "Chief complaint in the patient's own words, then the history of present illness: onset, duration, severity, triggers, prior treatments and their results, and the patient's stated goals. Include history the patient reports during the visit when discussed (medical, surgical, medications, allergies, social, family). Patient-reported information only — record what was said, never conclusions."
     },
     {
       "id": "objective",
@@ -34,16 +33,14 @@
       "title": "A — Assessment / Évaluation",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "The provider's stated assessment, numbered per problem and attributed to the provider (e.g. \"Provider assessed…\"). Include the stated status or progress of each problem and any differentials the provider voiced. Record only conclusions the provider actually said — never infer new ones.",
-      "measurement_output_expected": false
+      "description": "The provider's stated assessment, numbered per problem and attributed to the provider (e.g. \"Provider assessed…\"). Include the stated status or progress of each problem and any differentials the provider voiced. Record only conclusions the provider actually said — never infer new ones."
     },
     {
       "id": "plan",
       "title": "P — Plan",
       "required": true,
       "visual_trigger_keywords": [],
-      "description": "Management as stated: treatments and prescriptions, activity level and restrictions, counselling given (risks, prognosis, expectations), orders and referrals, follow-up interval, return precautions, and discharge status when stated.",
-      "measurement_output_expected": false
+      "description": "Management as stated: treatments and prescriptions, activity level and restrictions, counselling given (risks, prognosis, expectations), orders and referrals, follow-up interval, return precautions, and discharge status when stated."
     }
   ]
 }
