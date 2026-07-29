@@ -1,5 +1,11 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import {
+  render,
+  screen,
+  waitFor,
+  fireEvent,
+  within,
+} from "@testing-library/react";
 
 import { withIntl } from "./helpers/intl";
 
@@ -136,9 +142,9 @@ describe("VisitTypesTab", () => {
     const sel = (await screen.findByTestId(
       "visit-type-template-follow_up",
     )) as HTMLSelectElement;
-    const values = Array.from(sel.querySelectorAll("option")).map(
-      (o) => o.value,
-    );
+    const values = within(sel)
+      .getAllByRole("option")
+      .map((o) => (o as HTMLOptionElement).value);
     // The clinician's specialty template comes from their profile, not this
     // menu — so no built-in specialty options are offered (TE-4g).
     expect(values.some((v) => v.startsWith("builtin:"))).toBe(false);
