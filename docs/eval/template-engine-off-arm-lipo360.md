@@ -29,13 +29,32 @@ tier ① (context pin) fired, exactly the iOS-mirrored flow (TE-4d).
 - Sign-off gates worked: approval was held for the Stage-2 pass ("Resolve conflicts to approve"), then Signed;
   post-approval rail (Orders / AVS / Coding / EMR stub) rendered.
 
-## Result — visual enrichment (the engine's target): baseline confirmed EMPTY
+## Result — visual enrichment (the engine's target): 2 claims merged, BOTH mis-routed
 
-Stage 2 processed **133 frames → 0 merged visual claims, 0 conflicts**; note stayed v1; *Physical exam* kept its
-transcript-derived content and its `pending visual` badge after signing. Expected with the engine dark: captioning
-is template-blind, so consult-room footage yields low-confidence/repeat captions that the merge drops. **This is
-the OFF-arm datum:** the machinery TE-2/3/4 built (template-aimed captioning + template-routed merge) exists to
-make exactly this section gain grounded visual claims.
+> Correction (same day): this section first claimed "0 merged claims, note stayed v1" based on the clinician
+> surface. The admin Eval view (`/eval/60eabcc3…`) shows the truth: **v2 (stage 2) exists** with **2 merged
+> frame claims**. The clinician's My Notes page still renders **v1 · Signed** — see divergence below.
+
+Stage 2 captioned 133 frames; **2 survived as ENRICHES and merged** (131 died at the confidence/repeats
+gates). With the engine dark, routing is anchor-based, and both landed in the WRONG sections:
+
+- `frame_132680` → **Chief complaint**: "seated in an examination chair… hands gesturing towards the bilateral
+  flank and abdominal area" — exam-adjacent content filed under the visit reason;
+- `frame_253670` → **Plan / procedure**: "standing in sports bra and pants. Abdomen is blurred. No procedural
+  elements or markings visible" — a near-no-finding caption filed under the surgical plan;
+- **Physical exam — the one `pending_video` section — received neither**, and the merge's cleanup pass then
+  flipped it `pending_video → not_captured` **despite its 6 transcript claims**. v2 now labels a fully narrated
+  exam "Not captured". This is the tier-divergence class TE-4 documented; the fix is live but dark behind the flag.
+
+**Three additional findings from the admin view:**
+1. **Version divergence:** clinician surface shows **v1 · Signed** ("Pending visual"); Eval shows **v2 (stage 2)**
+   with the merged claims. Which version the signed/exported record carries needs to be pinned down — if
+   sign/export freeze v1, Stage-2 output is silently orphaned on this path.
+2. **Completeness discrepancy:** clinician note ring 93% (v1) vs Eval header **67%** (v2) — different formulas
+   or a post-merge recompute; unresolved.
+3. **FRAMES: Unmasked** (red) on this session — the upload path's masking-proof posture needs review
+   (CLAUDE.md: vision calls only on frames with confirmed masking status; the stepper showed a masking step,
+   yet the eval flag reads unmasked). Benign for this synthetic case; not benign as a pattern.
 
 ## Quality observations (for the ON-arm diff)
 
@@ -43,18 +62,17 @@ make exactly this section gain grounded visual claims.
   strong sections. Section-level shaping is solved; claim-level economy is what detail-level + the engine target.
 - Grounded/descriptive voice held throughout; patient quotes preserved; no uncited interpretation observed.
 
-## Defect found post-run — "Pending visual" on a signed, content-rich section
+## Defect found post-run — a narrated exam section labeled "pending", then "not captured"
 
-*Physical exam* shows 6 transcript claims **and** status `pending_video` — a combination the Stage-1 prompt
-explicitly forbids (`note_gen/service.py:420`: populated whenever the transcript narrates findings;
-pending_video only with an EMPTY claims array). Nothing validates the pair post-parse, so the model's soft
-violation shipped, and it is why the score reads 93% instead of 100% despite a full section. It then never
-resolved because the only flip to `populated` lives inside the Stage-2 merge (`vision/service.py:950`) and the
-merge never ran — zero captions survived the confidence/repeat gates, so the note was never rewritten (still
-v1) and the Stage-1 status survived into the **signed** note, where a permanent "Pending visual" badge is
-misleading. Fixes chipped: (a) backend — coerce claims-present + pending_video → populated at parse time;
-(b) web — never render "pending" on a signed note; (c) stale comment at `vision/service.py:956` says
-processing_failed, code sets not_captured.
+*Physical exam* shipped from Stage 1 with 6 transcript claims **and** status `pending_video` — a combination
+the Stage-1 prompt explicitly forbids (`note_gen/service.py:420`: populated whenever the transcript narrates
+findings; pending_video only with an EMPTY claims array). Nothing validates the pair post-parse, so the
+violation shipped and cost the v1 score (93% instead of 100%). Stage 2 then made it WORSE, not better: no
+visual claim routed there (see mis-routing above), so the merge cleanup (`vision/service.py:957`) flipped it
+to `not_captured` in v2 — a fully narrated exam now labeled "Not captured" — while the clinician surface kept
+rendering v1's "Pending visual" on the signed note. Fixes chipped: (a) backend — coerce claims-present +
+pending_video/not_captured → populated at parse AND at merge cleanup; (b) web — never render "pending" on a
+signed note; (c) stale comment at `vision/service.py:956` says processing_failed, code sets not_captured.
 
 ## Incidental find (fixed in-flight)
 
