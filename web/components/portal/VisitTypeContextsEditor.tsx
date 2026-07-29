@@ -89,15 +89,14 @@ export function newContextId(): string {
   );
 }
 
-/** Slim custom-template option for the per-context picker (#320/W2).
+/** Slim custom-template option for the context/default pickers (#320/W2).
  *
- * The parent fetches `GET /me/custom-templates` and passes ONLY the
- * caller's OWNED rows mapped to `{id, display_name}`. A community-shared
- * row the caller doesn't own would 422 on the PUT (the backend binds a
- * `template_ref` via the owner-scoped `get_owned`), so the parent
- * filters to owned before handing them down. `id` is the value written
- * into a context's `template_ref`. Display names can be PHI — they ride
- * this prop only, never a client log. */
+ * The parent fetches `GET /me/custom-templates` and passes the caller's
+ * usable rows (owned + community-shared — the backend binds a
+ * `template_ref` via `get_owned_or_shared`, #619) mapped to
+ * `{id, display_name}`. `id` is the value written into a context's
+ * `template_ref`. Display names can be PHI — they ride this prop only,
+ * never a client log. */
 export interface ContextCustomTemplate {
   id: string;
   display_name: string;
@@ -243,6 +242,11 @@ export default function VisitTypeContextsEditor({
       setContexts(vt, rest);
     } else if (customIdSet.has(optionValue)) {
       const prev = list.find((c) => c.is_default);
+      // INSERTING (not replacing) the default row consumes a slot in the
+      // backend's 30-per-visit-type cap — refuse past it, else the whole
+      // PUT 422s. The select is also disabled in this state; this guard is
+      // the belt.
+      if (!prev && list.length >= MAX_CONTEXTS_PER_VISIT_TYPE) return;
       setContexts(vt, [
         ...rest,
         {
@@ -356,6 +360,11 @@ export default function VisitTypeContextsEditor({
           const isOpen = open.has(vt);
           const adding = addingFor === vt;
           const atLimit = list.length >= MAX_CONTEXTS_PER_VISIT_TYPE;
+          // No default row yet + a full list: setting one would INSERT a
+          // 31st row and 422 the whole save — disable instead (review #700).
+          // Replacing an existing default never grows the list, so a set
+          // default stays editable at the cap.
+          const defaultAtCap = !defaultCtx && atLimit;
           const validation: ValidationReason = adding
             ? validateConsultationType(
                 draft,
@@ -430,10 +439,11 @@ export default function VisitTypeContextsEditor({
                     <select
                       value={bindingValue(defaultCtx)}
                       onChange={(e) => setDefaultTemplate(vt, e.target.value)}
+                      disabled={defaultAtCap}
                       aria-label={t("default.aria", {
                         visit: visitTypeLabel(vt),
                       })}
-                      className="form-select flex-1"
+                      className="form-select flex-1 disabled:opacity-50"
                     >
                       {templateOptions(defaultCtx)}
                     </select>

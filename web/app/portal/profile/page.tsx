@@ -72,10 +72,12 @@ export default function PortalProfilePage() {
   const tSpecialties = useTranslations("Specialties");
   const [profile, setProfile] = useState<PhysicianProfile | null>(null);
   const [draft, setDraft] = useState<PhysicianProfile | null>(null);
-  // OWNED custom templates → the per-context picker's "Custom templates"
-  // optgroup (#320/W2). Filtered to owner == this clinician because the
-  // backend binds a `template_ref` via the owner-scoped `get_owned`; a
-  // community-shared row would 422 on save.
+  // The clinician's custom templates (owned + community-shared, as
+  // GET /me/custom-templates returns them) → the context/default pickers'
+  // "Custom templates" optgroup (#320/W2). Shared refs save fine — the
+  // backend binds template_ref via get_owned_or_shared (#619) — and the
+  // Templates → Visit Types tab passes the same unfiltered list, so a
+  // shared-template default set there must not read "unavailable" here.
   const [customTemplates, setCustomTemplates] = useState<
     ContextCustomTemplate[]
   >([]);
@@ -99,9 +101,10 @@ export default function PortalProfilePage() {
       setProfile(p);
       setDraft(p);
       setCustomTemplates(
-        templates
-          .filter((tpl) => tpl.owner_id === p.clinician_id)
-          .map((tpl) => ({ id: tpl.id, display_name: tpl.display_name })),
+        templates.map((tpl) => ({
+          id: tpl.id,
+          display_name: tpl.display_name,
+        })),
       );
     } catch (e) {
       setError(humanizeError(e, t("loadError")));

@@ -693,6 +693,50 @@ describe("VisitTypeContextsEditor — default template (TE-4h)", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0].is_default).toBe(true);
   });
+
+  it("default select is disabled at the 30-context cap when no default exists (inserting would 422 the save)", async () => {
+    const user = userEvent.setup();
+    const full = Array.from({ length: MAX_CONTEXTS_PER_VISIT_TYPE }, (_, i) =>
+      ctx(`Context ${i + 1}`),
+    );
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: full }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await openPanel(user);
+    expect(defaultSelect()).toBeDisabled();
+    // The panel's single limit line (the Add area's) explains why.
+    expect(screen.getByText(/30 contexts maximum/i)).toBeInTheDocument();
+  });
+
+  it("an existing default stays re-pickable at the cap (replacing never grows the list)", async () => {
+    const user = userEvent.setup();
+    const named = Array.from(
+      { length: MAX_CONTEXTS_PER_VISIT_TYPE - 1 },
+      (_, i) => ctx(`Context ${i + 1}`),
+    );
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [defaultCtx(), ...named] }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await openPanel(user);
+    const sel = defaultSelect();
+    expect(sel).toBeEnabled();
+    await user.selectOptions(sel, SHOULDER.id);
+    const rows = getState().new_patient;
+    expect(rows).toHaveLength(MAX_CONTEXTS_PER_VISIT_TYPE);
+    expect(rows.find((c) => c.is_default)?.template_ref).toBe(SHOULDER.id);
+  });
 });
 
 function walk(obj: unknown, prefix = ""): string[] {

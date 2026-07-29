@@ -988,11 +988,11 @@
       "customUnavailable": "Gabarit personnalisé (indisponible)",
       "legacySpecialtyTemplate": "Modèle de spécialité (à resélectionner)",
       "default": {
-        "label": "Modèle par défaut",
-        "hint": "Utilisé lorsqu'aucun contexte n'est choisi sur l'appareil.",
-        "aria": "Modèle par défaut pour « {visit} »",
+        "label": "Gabarit par défaut",
+        "hint": "Utilisé lorsqu’aucun contexte n’est choisi sur l’appareil.",
+        "aria": "Gabarit par défaut pour « {visit} »",
         "summary": "Par défaut : {name}",
-        "summarySpecialty": "Modèle par défaut de la spécialité"
+        "summarySpecialty": "Gabarit de la spécialité"
       },
       "delete": "Supprimer le contexte « {label} »",
       "limit": "Maximum 30 contextes par type de consultation.",
