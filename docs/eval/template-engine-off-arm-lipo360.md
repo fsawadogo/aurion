@@ -43,6 +43,19 @@ make exactly this section gain grounded visual claims.
   strong sections. Section-level shaping is solved; claim-level economy is what detail-level + the engine target.
 - Grounded/descriptive voice held throughout; patient quotes preserved; no uncited interpretation observed.
 
+## Defect found post-run — "Pending visual" on a signed, content-rich section
+
+*Physical exam* shows 6 transcript claims **and** status `pending_video` — a combination the Stage-1 prompt
+explicitly forbids (`note_gen/service.py:420`: populated whenever the transcript narrates findings;
+pending_video only with an EMPTY claims array). Nothing validates the pair post-parse, so the model's soft
+violation shipped, and it is why the score reads 93% instead of 100% despite a full section. It then never
+resolved because the only flip to `populated` lives inside the Stage-2 merge (`vision/service.py:950`) and the
+merge never ran — zero captions survived the confidence/repeat gates, so the note was never rewritten (still
+v1) and the Stage-1 status survived into the **signed** note, where a permanent "Pending visual" badge is
+misleading. Fixes chipped: (a) backend — coerce claims-present + pending_video → populated at parse time;
+(b) web — never render "pending" on a signed note; (c) stale comment at `vision/service.py:956` says
+processing_failed, code sets not_captured.
+
 ## Incidental find (fixed in-flight)
 
 Uploads from **portal.peritwin.com** fail instantly (`part_network_error`): the rebrand extended the API CORS but
