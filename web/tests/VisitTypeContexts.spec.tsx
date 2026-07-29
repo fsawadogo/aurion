@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
@@ -72,6 +72,14 @@ function getState(): CtxMap {
   return JSON.parse(screen.getByTestId("state").textContent ?? "{}");
 }
 
+/** The per-context template select — disambiguated from the TE-4h
+ * default-template select rendered in the same panel. */
+function rowSelect(): HTMLSelectElement {
+  return screen.getByRole("combobox", {
+    name: /template for context/i,
+  }) as HTMLSelectElement;
+}
+
 function ctx(label: string, template_key: string | null = null): VisitTypeContext {
   return { id: newContextId(), label, template_key, template_ref: null };
 }
@@ -130,7 +138,7 @@ describe("VisitTypeContextsEditor — template select", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox", { name: /template for context/i });
+    const select = rowSelect();
     // Only "Use my specialty default" — specialty is a profile property, not a
     // per-context pick, so the 8-specialty list is gone.
     expect(within(select).getAllByRole("option")).toHaveLength(1);
@@ -154,7 +162,7 @@ describe("VisitTypeContextsEditor — template select", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox", { name: /template for context/i }) as HTMLSelectElement;
+    const select = rowSelect();
     // The built-in key has no normal option anymore; a placeholder keeps the
     // <select> ON it (value round-trips) instead of snapping silently to blank.
     expect(select.value).toBe("orthopedic_surgery");
@@ -179,7 +187,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox", { name: /template for context/i });
+    const select = rowSelect();
     // 1 default + 2 custom (TE-4e: no flat built-in list).
     expect(within(select).getAllByRole("option")).toHaveLength(
       1 + CUSTOM_TEMPLATES.length,
@@ -204,7 +212,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox", { name: /template for context/i });
+    const select = rowSelect();
     await user.selectOptions(select, CUSTOM_TEMPLATES[0].id);
     await waitFor(() => {
       const row = getState().new_patient[0];
@@ -227,7 +235,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    await user.selectOptions(screen.getByRole("combobox", { name: /template for context/i }), "");
+    await user.selectOptions(rowSelect(), "");
     await waitFor(() => {
       const row = getState().new_patient[0];
       expect(row.template_ref).toBeNull();
@@ -247,7 +255,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox", { name: /template for context/i });
+    const select = rowSelect();
     expect(within(select).getAllByRole("option")).toHaveLength(1);
     expect(
       within(select).queryByRole("group", { name: /custom templates/i }),
@@ -267,7 +275,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox", { name: /template for context/i }) as HTMLSelectElement;
+    const select = rowSelect();
     // The placeholder option is selected (the select reflects the ref).
     expect(
       within(select).getByRole("option", { name: /unavailable/i }),
@@ -495,10 +503,8 @@ describe("VisitTypeContextsEditor — default template (TE-4h)", () => {
   /** The visit type's `is_default` context (#577). */
   function defaultCtx(patch: Partial<VisitTypeContext> = {}): VisitTypeContext {
     return {
+      ...ctxRef("New patient", KNEE.id),
       id: "ctx_default1",
-      label: "New patient",
-      template_key: null,
-      template_ref: KNEE.id,
       is_default: true,
       ...patch,
     };
@@ -696,4 +702,3 @@ function walk(obj: unknown, prefix = ""): string[] {
   );
 }
 
-vi.fn();

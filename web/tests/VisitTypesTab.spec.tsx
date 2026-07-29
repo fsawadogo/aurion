@@ -4,10 +4,11 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import { withIntl } from "./helpers/intl";
 
 /**
- * Templates → "Visit Types" tab (the admin org-default layer of the visit-type
- * → template map). Admins get a per-visit-type template selector that writes the
- * org default; non-admins get a read-only note (the org GET is admin-gated) and
- * the org list is never fetched.
+ * Templates → "Visit Types" tab. Admins get the flat per-visit-type selector
+ * that writes the ORG default; clinicians get ONE surface (TE-4h) — the
+ * accordion editor (stubbed here, exercised in VisitTypeContexts.spec) plus
+ * the draft/dirty/Save wiring these tests drive. The admin-gated org list is
+ * never fetched for clinicians.
  */
 
 vi.mock("@/lib/api", () => ({
@@ -21,9 +22,6 @@ vi.mock("@/lib/portal-api", () => ({
   getMyProfile: vi.fn(),
   listMyCustomTemplates: vi.fn(),
   updateMyProfile: vi.fn(),
-}));
-vi.mock("next/link", () => ({
-  default: ({ children }: { children: React.ReactNode }) => children,
 }));
 // Keep the real i18n keys but avoid pulling the full editor component tree.
 vi.mock("@/components/portal/VisitTypeContextsEditor", () => ({
@@ -133,9 +131,6 @@ describe("VisitTypesTab", () => {
     // The editor (stub) renders; the flat clinician dropdowns are gone.
     await screen.findByTestId("editor-stub-mutate");
     expect(screen.queryByTestId("visit-type-template-follow_up")).toBeNull();
-    // The doubled heading and the stale Profile pointer are gone too.
-    expect(screen.queryByText("Sub-contexts")).toBeNull();
-    expect(screen.queryByText(/set your own in my profile/i)).toBeNull();
   });
 
   it("clinician: editor edits the DRAFT; Save persists it; never fetches org defaults", async () => {
@@ -172,7 +167,7 @@ describe("VisitTypesTab", () => {
     );
   });
 
-  it("shows a retryable error (not the clinician note) when the load fails", async () => {
+  it("shows a retryable error and renders neither surface when the load fails", async () => {
     vi.mocked(getMe).mockResolvedValue({ role: "ADMIN" } as never);
     vi.mocked(getMyProfile).mockRejectedValueOnce(new Error("boom"));
     render(withIntl(<VisitTypesTab />));

@@ -103,6 +103,13 @@ export interface ContextCustomTemplate {
   display_name: string;
 }
 
+/** The two nullable pin pointers of a context row (or a panel's default).
+ * `null` = the row doesn't exist — an unset default. */
+type TemplateBinding = Pick<
+  VisitTypeContext,
+  "template_key" | "template_ref"
+> | null;
+
 interface VisitTypeContextsEditorProps {
   /** The current `consultation_types` — one accordion per entry. */
   visitTypes: string[];
@@ -145,6 +152,59 @@ export default function VisitTypeContextsEditor({
   // the right field. TE-4e: only custom templates are selectable now, so a
   // built-in key can no longer be picked — no built-in set needed.
   const customIdSet = new Set(customTemplates.map((c) => c.id));
+
+  /** The select value for a binding: a custom `template_ref` wins over a
+   * built-in `template_key` — the two are mutually exclusive, but reading
+   * both defends against a half-applied row. "" = specialty default. */
+  function bindingValue(b: TemplateBinding): string {
+    return b?.template_ref ?? b?.template_key ?? "";
+  }
+
+  /** The ONE option list both template selects render (context rows + the
+   * panel's default): specialty default + the customs optgroup, plus two
+   * guards against a silent blank <select> — a legacy built-in pin
+   * (pre-TE-4e, or iOS) and a stale custom ref each stay visible as a
+   * placeholder whose value equals the pin, so the binding round-trips and
+   * the physician can re-pick. (Retiring stored built-in pins server-side is
+   * a separate backend task.) */
+  function templateOptions(b: TemplateBinding) {
+    return (
+      <>
+        <option value="">{t("defaultTemplate")}</option>
+        {b && b.template_ref === null && b.template_key !== null && (
+          <option value={b.template_key}>
+            {t("legacySpecialtyTemplate")}
+          </option>
+        )}
+        {customOptions.length > 0 && (
+          <optgroup label={t("customGroup")}>
+            {customOptions.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.label}
+              </option>
+            ))}
+          </optgroup>
+        )}
+        {b?.template_ref != null && !customIdSet.has(b.template_ref) && (
+          <option value={b.template_ref}>{t("customUnavailable")}</option>
+        )}
+      </>
+    );
+  }
+
+  /** Collapsed-summary name for a default binding — derived from the same
+   * guards as `templateOptions`, so the header can never disagree with what
+   * the expanded select shows. */
+  function defaultTemplateName(b: TemplateBinding): string {
+    if (b?.template_ref != null) {
+      return (
+        customOptions.find((o) => o.id === b.template_ref)?.label ??
+        t("customUnavailable")
+      );
+    }
+    if (b?.template_key != null) return t("legacySpecialtyTemplate");
+    return t("default.summarySpecialty");
+  }
 
   /** Apply a template `<select>` choice to one context. TE-4e: specialty is
    * a profile property, so a context pins ONLY the default or a custom
@@ -302,14 +362,7 @@ export default function VisitTypeContextsEditor({
                 list.map((c) => c.label),
               )
             : null;
-          const defaultName = defaultCtx
-            ? defaultCtx.template_ref !== null
-              ? (customOptions.find((o) => o.id === defaultCtx.template_ref)
-                  ?.label ?? t("customUnavailable"))
-              : defaultCtx.template_key !== null
-                ? t("legacySpecialtyTemplate")
-                : t("default.summarySpecialty")
-            : t("default.summarySpecialty");
+          const defaultName = defaultTemplateName(defaultCtx);
           const showValidationError =
             adding && validation !== null && validation !== "empty";
           const panelId = `ctx-panel-${vt}`;
@@ -375,45 +428,14 @@ export default function VisitTypeContextsEditor({
                       {t("default.label")}
                     </span>
                     <select
-                      value={
-                        defaultCtx
-                          ? (defaultCtx.template_ref ??
-                            defaultCtx.template_key ??
-                            "")
-                          : ""
-                      }
+                      value={bindingValue(defaultCtx)}
                       onChange={(e) => setDefaultTemplate(vt, e.target.value)}
                       aria-label={t("default.aria", {
                         visit: visitTypeLabel(vt),
                       })}
                       className="form-select flex-1"
                     >
-                      <option value="">{t("defaultTemplate")}</option>
-                      {defaultCtx &&
-                        defaultCtx.template_ref === null &&
-                        defaultCtx.template_key !== null && (
-                          /* Legacy built-in pin (pre-TE-4e, or iOS): keep it
-                           * visible and re-pickable, same guard as rows. */
-                          <option value={defaultCtx.template_key}>
-                            {t("legacySpecialtyTemplate")}
-                          </option>
-                        )}
-                      {customOptions.length > 0 && (
-                        <optgroup label={t("customGroup")}>
-                          {customOptions.map((o) => (
-                            <option key={o.id} value={o.id}>
-                              {o.label}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {defaultCtx?.template_ref != null &&
-                        !customIdSet.has(defaultCtx.template_ref) && (
-                          /* Stale ref: same graceful display as rows. */
-                          <option value={defaultCtx.template_ref}>
-                            {t("customUnavailable")}
-                          </option>
-                        )}
+                      {templateOptions(defaultCtx)}
                     </select>
                   </div>
                   <p className="pb-1 text-xs text-gray-500">
@@ -442,11 +464,7 @@ export default function VisitTypeContextsEditor({
                           className="form-input flex-1"
                         />
                         <select
-                          // A custom `template_ref` wins over a built-in
-                          // `template_key` for the displayed value — the two
-                          // are mutually exclusive, but reading both defends
-                          // against a half-applied row. "" = specialty default.
-                          value={ctx.template_ref ?? ctx.template_key ?? ""}
+                          value={bindingValue(ctx)}
                           onChange={(e) =>
                             selectTemplate(vt, ctx.id, e.target.value)
                           }
@@ -455,44 +473,7 @@ export default function VisitTypeContextsEditor({
                           })}
                           className="form-select sm:w-56"
                         >
-                          <option value="">{t("defaultTemplate")}</option>
-                          {ctx.template_ref === null &&
-                            ctx.template_key !== null && (
-                              /* TE-4e transitional: this context still carries a
-                               * built-in specialty `template_key`, which the
-                               * picker no longer lists. Surface it as a
-                               * selectable option — rather than a silently
-                               * unselected <select> — so the physician sees the
-                               * legacy pin and can switch to "my specialty
-                               * default" or a custom template. Full retirement
-                               * of per-context specialty pins is TE-4f + a
-                               * backend change. */
-                              <option value={ctx.template_key}>
-                                {t("legacySpecialtyTemplate")}
-                              </option>
-                            )}
-                          {customOptions.length > 0 && (
-                            <optgroup label={t("customGroup")}>
-                              {customOptions.map((o) => (
-                                <option key={o.id} value={o.id}>
-                                  {o.label}
-                                </option>
-                              ))}
-                            </optgroup>
-                          )}
-                          {ctx.template_ref !== null &&
-                            !customIdSet.has(ctx.template_ref) && (
-                              /* Stale ref: the bound custom template was
-                               * deleted (or the list failed to load). Render
-                               * a placeholder option whose value equals the
-                               * ref so the <select> stays on it instead of
-                               * silently snapping to the default — the
-                               * binding round-trips and the physician can
-                               * re-pick. Mirrors iOS I3 graceful display. */
-                              <option value={ctx.template_ref}>
-                                {t("customUnavailable")}
-                              </option>
-                            )}
+                          {templateOptions(ctx)}
                         </select>
                         <button
                           type="button"

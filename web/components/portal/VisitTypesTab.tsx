@@ -81,10 +81,10 @@ export default function VisitTypesTab() {
   const [contextsByVt, setContextsByVt] = useState<
     Record<string, VisitTypeContext[]>
   >({});
-  // TE-4f: the clinician's whole visit-type mapping (defaults + named
-  // contexts) is edited as ONE draft and saved together, so the flat default
-  // dropdown and the rich accordion — both editing contexts_per_visit_type —
-  // can't race each other's PUT. `contextsByVt` is the last saved snapshot.
+  // One draft carries each visit type's default template AND its named
+  // contexts (both live in contexts_per_visit_type), saved together so two
+  // concurrent PUTs can't race (TE-4f; surface unified in TE-4h).
+  // `contextsByVt` is the last saved snapshot.
   const [draftContexts, setDraftContexts] = useState<
     Record<string, VisitTypeContext[]>
   >({});
@@ -157,6 +157,9 @@ export default function VisitTypesTab() {
   const contextsDirty =
     JSON.stringify(draftContexts) !== JSON.stringify(contextsByVt);
 
+  // Org-default options: only SHARED customs are org-usable. Admin-only.
+  const shared = isAdmin ? customs.filter((c) => c.is_shared) : [];
+
   async function onSaveContexts() {
     setSavingContexts(true);
     setSaveError(null);
@@ -173,21 +176,15 @@ export default function VisitTypesTab() {
     }
   }
 
-  function renderSelect(
-    vt: string,
-    value: string,
-    options: CustomTemplate[],
-    customGroupLabel: string,
-    onChange: (vt: string, value: string) => void,
-  ) {
-    // Admin-only since TE-4h — the clinician surface is the accordion below.
+  // The admin org-default select — the clinician surface is the accordion.
+  function renderOrgSelect(vt: string) {
     return (
       <select
         className="rounded-aurion-md border border-hairline bg-white px-3 py-2 text-aurion-callout text-navy-800 focus:outline-none focus:ring-2 focus:ring-gold-300/40 disabled:opacity-50"
-        value={value}
+        value={orgValue(orgByVt[vt])}
         // Serialize org-default writes: disable while a save is in flight.
         disabled={savingVt !== null}
-        onChange={(e) => onChange(vt, e.target.value)}
+        onChange={(e) => void onOrgChange(vt, e.target.value)}
         data-testid={`visit-type-template-${vt}`}
         aria-label={t("visitsSelectAria", { visit: visitTypeLabel(vt) })}
       >
@@ -199,9 +196,9 @@ export default function VisitTypesTab() {
             </option>
           ))}
         </optgroup>
-        {options.length > 0 && (
-          <optgroup label={customGroupLabel}>
-            {options.map((c) => (
+        {shared.length > 0 && (
+          <optgroup label={t("visitsSharedGroup")}>
+            {shared.map((c) => (
               <option key={c.id} value={`custom:${c.id}`}>
                 {c.display_name}
               </option>
@@ -231,8 +228,6 @@ export default function VisitTypesTab() {
     );
   }
 
-  const shared = customs.filter((c) => c.is_shared);
-
   return (
     <div>
       {saveError && (
@@ -256,13 +251,7 @@ export default function VisitTypesTab() {
               <span className="flex-1 min-w-0 truncate text-aurion-callout font-medium text-navy-800">
                 {visitTypeLabel(vt)}
               </span>
-              {renderSelect(
-                vt,
-                orgValue(orgByVt[vt]),
-                shared,
-                t("visitsSharedGroup"),
-                onOrgChange,
-              )}
+              {renderOrgSelect(vt)}
             </li>
           ))}
         </ul>
@@ -270,7 +259,7 @@ export default function VisitTypesTab() {
         /* TE-4h — the clinician's ONE surface: the same accordion as My
            Profile, now carrying each visit type's default template AND its
            contexts. One draft, one Save. */
-        <div>
+        <>
           <VisitTypeContextsEditor
             visitTypes={visitTypes}
             value={draftContexts}
@@ -294,7 +283,7 @@ export default function VisitTypesTab() {
               </span>
             )}
           </div>
-        </div>
+        </>
       )}
     </div>
   );

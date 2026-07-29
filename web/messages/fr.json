@@ -1137,7 +1137,7 @@
     "saveToMine": "Enregistrer dans Mes modèles",
     "duplicateError": "Impossible de copier le modèle.",
     "visitsHeading": "Types de visite",
-    "visitsAdminHint": "Définissez le modèle par défaut de l’organisation pour chaque type de visite. Les cliniciens en héritent sauf s’ils définissent le leur dans Mon profil.",
+    "visitsAdminHint": "Définissez le modèle par défaut de l’organisation pour chaque type de visite. Les cliniciens en héritent sauf s’ils définissent le leur.",
     "visitsSpecialtyDefault": "Modèle par défaut de la spécialité",
     "visitsBuiltinGroup": "Modèles intégrés",
     "visitsSharedGroup": "Modèles partagés",

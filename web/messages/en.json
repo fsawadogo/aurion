@@ -1137,7 +1137,7 @@
     "saveToMine": "Save to My Templates",
     "duplicateError": "Couldn't copy the template.",
     "visitsHeading": "Visit Types",
-    "visitsAdminHint": "Set the org-wide default template for each visit type. Clinicians inherit it unless they set their own in My Profile.",
+    "visitsAdminHint": "Set the org-wide default template for each visit type. Clinicians inherit it unless they set their own.",
     "visitsSpecialtyDefault": "Specialty default",
     "visitsBuiltinGroup": "Built-in templates",
     "visitsSharedGroup": "Shared templates",
