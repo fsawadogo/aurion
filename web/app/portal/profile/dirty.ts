@@ -25,6 +25,10 @@ export function sameContexts(
         av[j].label !== bv[j].label ||
         av[j].template_key !== bv[j].template_key ||
         av[j].template_ref !== bv[j].template_ref ||
+        // TE-4h: the editor manages the visit type's default via is_default —
+        // a flip alone must read as dirty (same undefined↔null normalization
+        // as description; omitted = false).
+        (av[j].is_default ?? false) !== (bv[j].is_default ?? false) ||
         // #576: a description-only edit must mark the form dirty. Normalize
         // undefined↔null so a freshly-loaded context (key omitted) and an
         // edited one (explicit null) don't read as a spurious change.

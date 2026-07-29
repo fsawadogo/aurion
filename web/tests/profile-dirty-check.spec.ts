@@ -49,4 +49,16 @@ describe("profile sameContexts — description (#576)", () => {
     };
     expect(sameContexts(a, b)).toBe(false);
   });
+
+  it("is NOT equal when only is_default flips — the editor's default control must dirty Profile's Save (TE-4h)", () => {
+    const a: CtxMap = { new_patient: [ctx()] };
+    const b: CtxMap = { new_patient: [ctx({ is_default: true })] };
+    expect(sameContexts(a, b)).toBe(false);
+  });
+
+  it("treats a missing is_default and explicit false as equal (no spurious dirty on load)", () => {
+    const a: CtxMap = { new_patient: [ctx()] };
+    const b: CtxMap = { new_patient: [ctx({ is_default: false })] };
+    expect(sameContexts(a, b)).toBe(true);
+  });
 });
