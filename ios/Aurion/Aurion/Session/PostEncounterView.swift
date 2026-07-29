@@ -1,24 +1,46 @@
 import SwiftUI
 
-/// Post-encounter settings — matches design PostEncounterScreen.
-/// Template selection + language picker before note generation.
+/// Post-encounter settings — resolved template + language before generation.
+///
+/// TE-4e parity (Uzziel handoff, docs/handoffs/template-engine-ios-faical.md):
+/// the screen used to list the 8 built-in specialties with the profile
+/// specialty pre-checked, while the note underneath already generated on the
+/// visit-context-mapped template — and tapping any row silently overrode that
+/// mapping with a built-in. It now mirrors the web upload form: a "Template"
+/// card shows what the mapping actually RESOLVED (context pin → custom or
+/// built-in → specialty default), and changing it is an explicit "Change"
+/// action offering the clinician's custom templates + the built-ins. An
+/// untouched card sends nothing, so the mapping always wins by default.
 struct PostEncounterView: View {
     @EnvironmentObject var sessionManager: SessionManager
     @EnvironmentObject var appState: AppState
-    @State private var selectedTemplate: String
     @State private var selectedLanguage: String
-    @State private var preferredTemplates: [TemplateResponse] = []
-    @State private var isLoadingTemplates = false
-    /// `true` when the template fetch threw. We still fall back to the
-    /// current specialty so the physician can proceed, but we surface an
-    /// inline error + Retry rather than silently masking the failure as a
-    /// one-item list.
-    @State private var templatesLoadFailed = false
+    /// The session row's resolved template pin, fetched on load. nil until
+    /// the fetch lands (the card shows a placeholder), then drives the
+    /// resolved-name line.
+    @State private var sessionRow: SessionResponse?
+    /// The clinician's custom templates (own + shared) — resolves a custom
+    /// pin's display name and populates the Change picker.
+    @State private var customTemplates: [CustomTemplateSummary] = []
+    /// Explicit override picked via Change. nil = untouched = mapping wins,
+    /// nothing is sent. Applied to the session (pin replacement) on Generate.
+    @State private var overridePick: TemplateOverride?
+    @State private var showChangePicker = false
     @State private var isConfirming = false
+    /// `true` when the session-row fetch threw; the card falls back to the
+    /// specialty default with a Retry, and Generate stays available.
+    @State private var resolveFailed = false
     /// Patient identifier (#61). Seeded from the session row on
     /// load; the editor binding writes back here. Stays nil when
     /// the physician doesn't set one — the backend accepts that.
     @State private var patientIdentifier: String?
+
+    private let currentSpecialty: String
+
+    enum TemplateOverride: Equatable {
+        case builtIn(key: String)
+        case custom(id: String, name: String)
+    }
 
     private let languages = [
         ("en", "English", "\u{1F1FA}\u{1F1F8}"),
@@ -26,7 +48,7 @@ struct PostEncounterView: View {
     ]
 
     init(currentSpecialty: String, profileLanguage: String = "en") {
-        _selectedTemplate = State(initialValue: currentSpecialty)
+        self.currentSpecialty = currentSpecialty
         _selectedLanguage = State(initialValue: profileLanguage)
     }
 
@@ -40,67 +62,20 @@ struct PostEncounterView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 20) {
-                    // Template section
+                    // Template section — the RESOLVED template, not a picker.
                     SectionHeader(title: L("postEncounter.template"))
+                    templateCard
 
-                    // Templates in a single card with dividers
-                    AurionCard(padding: 0) {
-                        VStack(spacing: 0) {
-                            if isLoadingTemplates {
-                                HStack { Spacer(); ProgressView(); Spacer() }
-                                    .padding(16)
-                            } else {
-                                ForEach(Array(preferredTemplates.enumerated()), id: \.element.key) { index, template in
-                                    let isSelected = selectedTemplate == template.key
-                                    Button {
-                                        AurionHaptics.selection()
-                                        selectedTemplate = template.key
-                                    } label: {
-                                        HStack {
-                                            Text(localizedSpecialty(template.key))
-                                                .aurionFont(15, relativeTo: .subheadline)
-                                                .foregroundColor(.aurionTextPrimary)
-                                            Spacer()
-                                            if isSelected {
-                                                Image(systemName: "checkmark")
-                                                    .font(.system(size: 16, weight: .medium))
-                                                    .foregroundColor(.aurionGold)
-                                            }
-                                        }
-                                        .padding(.horizontal, 16)
-                                        .padding(.vertical, 14)
-                                        // Subtle gold wash reinforces selection
-                                        // visually alongside the .isSelected trait.
-                                        .background(isSelected ? Color.aurionGold.opacity(0.08) : Color.clear)
-                                    }
-                                    .buttonStyle(.plain)
-                                    .accessibilityAddTraits(isSelected ? .isSelected : [])
-
-                                    if index < preferredTemplates.count - 1 {
-                                        Divider().padding(.leading, 16)
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    // Inline failure surface for the template fetch. The
-                    // list above still shows the current-specialty fallback
-                    // so the physician isn't blocked; this just makes the
-                    // failure honest and offers a Retry.
-                    if templatesLoadFailed {
+                    if resolveFailed {
                         ErrorBanner(
                             L("postEncounter.templatesLoadFailed"),
-                            onRetry: { Task { await loadTemplates() } }
+                            onRetry: { Task { await loadResolvedTemplate() } }
                         )
                     }
 
                     // Patient identifier section (#61). Optional —
                     // physician can skip it and the note still
-                    // generates normally. When set, the backend
-                    // attaches it to the FHIR DocumentReference
-                    // (#57) and surfaces prior encounters for the
-                    // same identifier in the inbox.
+                    // generates normally.
                     if let session = sessionManager.session {
                         SectionHeader(title: L("patientId.section"))
                         PatientIdentifierEditor(
@@ -111,41 +86,7 @@ struct PostEncounterView: View {
 
                     // Language section
                     SectionHeader(title: L("postEncounter.outputLanguage"))
-
-                    AurionCard(padding: 0) {
-                        VStack(spacing: 0) {
-                            ForEach(Array(languages.enumerated()), id: \.element.0) { index, lang in
-                                let (key, name, flag) = lang
-                                let isSelected = selectedLanguage == key
-                                Button {
-                                    AurionHaptics.selection()
-                                    selectedLanguage = key
-                                } label: {
-                                    HStack(spacing: 12) {
-                                        Text(flag).aurionFont(22, relativeTo: .title2)
-                                        Text(name)
-                                            .aurionFont(15, relativeTo: .subheadline)
-                                            .foregroundColor(.aurionTextPrimary)
-                                        Spacer()
-                                        if isSelected {
-                                            Image(systemName: "checkmark")
-                                                .font(.system(size: 16, weight: .medium))
-                                                .foregroundColor(.aurionGold)
-                                        }
-                                    }
-                                    .padding(.horizontal, 16)
-                                    .padding(.vertical, 14)
-                                    .background(isSelected ? Color.aurionGold.opacity(0.08) : Color.clear)
-                                }
-                                .buttonStyle(.plain)
-                                .accessibilityAddTraits(isSelected ? .isSelected : [])
-
-                                if index < languages.count - 1 {
-                                    Divider().padding(.leading, 16)
-                                }
-                            }
-                        }
-                    }
+                    languageCard
                 }
                 .padding(.horizontal, 20)
                 .padding(.bottom, 20)
@@ -164,48 +105,186 @@ struct PostEncounterView: View {
         }
         .background(Color.aurionBackground)
         .task {
-            await loadTemplates()
-            // Seed the identifier from the session row. The
-            // SessionResponse decoder reads `external_reference_id`
-            // when the server returns it (owning clinician + admin
-            // only); otherwise nil and the editor renders the
-            // "Add" CTA.
+            await loadResolvedTemplate()
             patientIdentifier = sessionManager.session?.externalReferenceId
         }
-        // Propagate identifier changes from the editor back to the
-        // CaptureSession so other views (capture screen, inbox,
-        // export sheet) see the new value without an API round-trip.
-        // The editor itself has already persisted to the backend
-        // before this fires. Uses the iOS 16-compatible single-arg
-        // onChange signature (we ship iOS 16+ per CLAUDE.md).
+        // Change-template picker: the clinician's custom templates lead, the
+        // 8 built-ins follow — explicit action only, mirroring the note
+        // screen's Options picker.
+        .confirmationDialog(
+            L("postEncounter.changeTemplateTitle"),
+            isPresented: $showChangePicker,
+            titleVisibility: .visible
+        ) {
+            ForEach(customTemplates) { tmpl in
+                Button(tmpl.displayName) {
+                    overridePick = .custom(id: tmpl.id, name: tmpl.displayName)
+                }
+            }
+            ForEach(BuiltInTemplate.keys, id: \.self) { key in
+                Button(localizedSpecialty(key)) {
+                    overridePick = .builtIn(key: key)
+                }
+            }
+            if overridePick != nil {
+                Button(L("postEncounter.useMappedTemplate"), role: .destructive) {
+                    overridePick = nil
+                }
+            }
+        }
         .onChange(of: patientIdentifier) { newValue in
             sessionManager.session?.externalReferenceId = newValue
         }
     }
 
-    private func loadTemplates() async {
-        isLoadingTemplates = true
-        do {
-            preferredTemplates = try await APIClient.shared.getPreferredTemplates()
-            templatesLoadFailed = false
-        } catch {
-            templatesLoadFailed = true
-            // Keep a usable fallback (the current specialty) so Generate
-            // still works, but only seed it if we have nothing yet — a
-            // Retry that fails again shouldn't clobber a prior good list.
-            if preferredTemplates.isEmpty {
-                preferredTemplates = [
-                    TemplateResponse(key: selectedTemplate, displayName: selectedTemplate.displayFormatted, sections: [])
-                ]
+    // MARK: - Template card
+
+    /// "Template: {resolved name}" + provenance line, with a Change action.
+    private var templateCard: some View {
+        AurionCard(padding: 16) {
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "doc.text")
+                    .font(.system(size: 20))
+                    .foregroundColor(.aurionGold)
+                    .accessibilityHidden(true)
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(resolvedTemplateName)
+                        .aurionFont(15, weight: .semibold, relativeTo: .subheadline)
+                        .foregroundColor(.aurionTextPrimary)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Text(templateProvenance)
+                        .aurionFont(12, relativeTo: .caption)
+                        .foregroundColor(.aurionTextSecondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer()
+                Button {
+                    AurionHaptics.selection()
+                    showChangePicker = true
+                } label: {
+                    Text(L("postEncounter.changeTemplate"))
+                        .aurionFont(14, weight: .medium, relativeTo: .footnote)
+                        .foregroundColor(.aurionGoldDark)
+                        .frame(minHeight: 44)
+                }
+                .buttonStyle(.plain)
             }
         }
-        isLoadingTemplates = false
+    }
+
+    /// Display name for what Stage 1 will generate with, in precedence order:
+    /// explicit override → session custom pin → session built-in pin →
+    /// specialty default.
+    private var resolvedTemplateName: String {
+        switch overridePick {
+        case .builtIn(let key): return localizedSpecialty(key)
+        case .custom(_, let name): return name
+        case nil: break
+        }
+        guard let row = sessionRow else {
+            // Fetch pending/failed — the specialty default is the honest floor.
+            return localizedSpecialty(currentSpecialty)
+        }
+        if let customID = row.customTemplateId {
+            if let match = customTemplates.first(where: { $0.id == customID }) {
+                return match.displayName
+            }
+            // Pin exists but the name lookup hasn't resolved (shared template
+            // list still loading, or fetch failed): say so honestly rather
+            // than showing the wrong built-in name.
+            return L("postEncounter.customTemplate")
+        }
+        if let key = row.templateKey {
+            return localizedSpecialty(key)
+        }
+        return localizedSpecialty(row.specialty)
+    }
+
+    /// One-line provenance under the name, so "my template applied" and "the
+    /// default applied" are visually distinct (Uzziel: silent-fallback gap).
+    private var templateProvenance: String {
+        if overridePick != nil { return L("postEncounter.templateOverridden") }
+        guard let row = sessionRow else { return L("postEncounter.templateResolving") }
+        if row.customTemplateId != nil || row.templateKey != nil {
+            return L("postEncounter.templateFromMapping")
+        }
+        return L("postEncounter.templateSpecialtyDefault")
+    }
+
+    private var languageCard: some View {
+        AurionCard(padding: 0) {
+            VStack(spacing: 0) {
+                ForEach(Array(languages.enumerated()), id: \.element.0) { index, lang in
+                    let (key, name, flag) = lang
+                    let isSelected = selectedLanguage == key
+                    Button {
+                        AurionHaptics.selection()
+                        selectedLanguage = key
+                    } label: {
+                        HStack(spacing: 12) {
+                            Text(flag).aurionFont(22, relativeTo: .title2)
+                            Text(name)
+                                .aurionFont(15, relativeTo: .subheadline)
+                                .foregroundColor(.aurionTextPrimary)
+                            Spacer()
+                            if isSelected {
+                                Image(systemName: "checkmark")
+                                    .font(.system(size: 16, weight: .medium))
+                                    .foregroundColor(.aurionGold)
+                            }
+                        }
+                        .padding(.horizontal, 16)
+                        .padding(.vertical, 14)
+                        .background(isSelected ? Color.aurionGold.opacity(0.08) : Color.clear)
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityAddTraits(isSelected ? .isSelected : [])
+
+                    if index < languages.count - 1 {
+                        Divider().padding(.leading, 16)
+                    }
+                }
+            }
+        }
+    }
+
+    // MARK: - Data
+
+    /// Fetch the session row (for its resolved pin) + the custom-template
+    /// list (for a custom pin's display name and the Change picker).
+    private func loadResolvedTemplate() async {
+        resolveFailed = false
+        guard let session = sessionManager.session else { return }
+        async let rowTask = APIClient.shared.getSession(sessionId: session.id)
+        async let templatesTask = APIClient.shared.getCustomTemplates()
+        do {
+            sessionRow = try await rowTask
+        } catch {
+            resolveFailed = true
+        }
+        // Custom-template fetch failing alone shouldn't banner the screen —
+        // it only affects a custom pin's display name and the picker's
+        // custom section, both of which degrade gracefully.
+        customTemplates = (try? await templatesTask) ?? []
     }
 
     private func confirmAndProcess() async {
         isConfirming = true
-        if let session = sessionManager.session, selectedTemplate != session.specialty {
-            _ = try? await APIClient.shared.updateSessionTemplate(sessionId: session.id, specialty: selectedTemplate)
+        // Only an EXPLICIT pick sends anything — an untouched card means the
+        // server-side mapping stays authoritative (the old screen PATCHed the
+        // specialty whenever the checked row differed, silently clobbering
+        // the visit-context pin).
+        if let session = sessionManager.session, let pick = overridePick {
+            switch pick {
+            case .builtIn(let key):
+                _ = try? await APIClient.shared.overrideSessionTemplate(
+                    sessionId: session.id, templateKey: key
+                )
+            case .custom(let id, _):
+                _ = try? await APIClient.shared.overrideSessionTemplate(
+                    sessionId: session.id, customTemplateId: id
+                )
+            }
         }
         await sessionManager.submitProcessing()
         isConfirming = false

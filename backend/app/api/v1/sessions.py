@@ -209,6 +209,12 @@ class SessionResponse(BaseModel):
     # (the case that left two web-imported sessions looking stuck). Defaults
     # False, so older clients and non-Stage-2 sessions are unaffected.
     stage2_review_ready: bool = False
+    # The session's resolved template pin (snapshotted at create from the
+    # visit-type context mapping, #314/#318; replaced by explicit overrides).
+    # Both None => the specialty default template. Not PHI — lets clients
+    # show "Template: {name}" instead of guessing (TE-4e parity on iOS).
+    template_key: Optional[str] = None
+    custom_template_id: Optional[uuid.UUID] = None
     created_at: str
     updated_at: str
 
@@ -470,7 +476,31 @@ async def stop_recording_route(
 
 
 class UpdateTemplateRequest(BaseModel):
-    specialty: str
+    """Pre-generation template change. Exactly one of the three fields:
+
+    * ``specialty`` — legacy shape (pre-TE clients): swaps the session
+      specialty; the context pin, when present, still wins at resolution.
+    * ``template_key`` — explicit built-in override: REPLACES the session's
+      template pin so generation provably uses this template.
+    * ``custom_template_id`` — explicit custom-template override (own or
+      shared), same replace-the-pin semantics as the regenerate path (#590).
+    """
+
+    specialty: Optional[str] = None
+    template_key: Optional[str] = None
+    custom_template_id: Optional[uuid.UUID] = None
+
+    @model_validator(mode="after")
+    def _exactly_one(self):
+        set_fields = [
+            f for f in (self.specialty, self.template_key, self.custom_template_id)
+            if f is not None
+        ]
+        if len(set_fields) != 1:
+            raise ValueError(
+                "Provide exactly one of specialty / template_key / custom_template_id."
+            )
+        return self
 
 
 @router.patch("/{session_id}/template", response_model=SessionResponse)
@@ -480,17 +510,49 @@ async def update_session_template(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Change the session specialty/template after recording, before note generation.
+    """Change the session template after recording, before note generation.
 
     Only valid when the session is in PROCESSING_STAGE1 state (audio submitted
-    but note not yet generated).
+    but note not yet generated). ``template_key`` / ``custom_template_id``
+    replace the session's context-mapped pin wholesale — the two snapshot
+    columns are mutually exclusive, mirroring the regenerate contract — so an
+    explicit pick is what Stage 1 provably generates with. The legacy
+    ``specialty`` shape is unchanged: it never touches the pin (a mapped
+    context still wins), preserving pre-TE client behavior.
     """
     session = await get_owned_session_or_404(db, session_id, user)
     require_state(session, SessionState.PROCESSING_STAGE1)
-    session.specialty = body.specialty
+
+    if body.template_key is not None:
+        raise_if_unknown_template_key(body.template_key)
+        session.template_key = body.template_key
+        session.custom_template_id = None
+        audit_specialty = body.template_key
+    elif body.custom_template_id is not None:
+        # Own-scope (SECURITY) — mirrors regenerate: own or shared only,
+        # 404 so existence of others' templates is never confirmed.
+        from app.modules.custom_templates.service import get_owned_or_shared
+
+        if (
+            await get_owned_or_shared(body.custom_template_id, user.user_id, db)
+            is None
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Custom template not found.",
+            )
+        session.custom_template_id = body.custom_template_id
+        session.template_key = None
+        # ALLOWED_AUDIT_KWARGS for TEMPLATE_CHANGED carries new_specialty
+        # only; a bounded marker (never the clinician-authored name) keeps
+        # the trail PHI-free while recording that a custom pick happened.
+        audit_specialty = "custom_template"
+    else:
+        session.specialty = body.specialty
+        audit_specialty = body.specialty
     await db.flush()
 
-    await write_audit(session.id, AuditEventType.TEMPLATE_CHANGED, new_specialty=body.specialty)
+    await write_audit(session.id, AuditEventType.TEMPLATE_CHANGED, new_specialty=audit_specialty)
     return _to_response(session)
 
 
@@ -986,6 +1048,8 @@ def _to_response(session, review_ready: bool = False) -> SessionResponse:
         provider_overrides=overrides,
         participants=participants,
         stage2_review_ready=review_ready,
+        template_key=getattr(session, "template_key", None),
+        custom_template_id=getattr(session, "custom_template_id", None),
         created_at=session.created_at.isoformat() if session.created_at else "",
         updated_at=session.updated_at.isoformat() if session.updated_at else "",
     )

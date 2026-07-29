@@ -1246,3 +1246,13 @@
 "noteOptions.detailBrief" = "Concis";
 "noteOptions.detailStandard" = "Standard";
 "noteOptions.detailDetailed" = "D\U00E9taill\U00E9";
+
+// TE-4e parity — resolved template on Generate Note screen
+"postEncounter.changeTemplate" = "Modifier";
+"postEncounter.changeTemplateTitle" = "G\U00E9n\U00E9rer avec un autre gabarit ?";
+"postEncounter.useMappedTemplate" = "Utiliser mon gabarit configur\U00E9";
+"postEncounter.customTemplate" = "Gabarit personnalis\U00E9";
+"postEncounter.templateOverridden" = "Modifi\U00E9 pour cette note seulement";
+"postEncounter.templateResolving" = "R\U00E9solution de votre gabarit\U2026";
+"postEncounter.templateFromMapping" = "Selon vos r\U00E9glages de type de visite";
+"postEncounter.templateSpecialtyDefault" = "Gabarit par d\U00E9faut de la sp\U00E9cialit\U00E9";

@@ -96,6 +96,21 @@ final class APIClient: Sendable {
         return try await patch(path: "/sessions/\(sessionId)/template", body: ["specialty": specialty])
     }
 
+    /// Explicit pre-generation template override (TE-4e parity). Exactly one
+    /// of `templateKey` (built-in) / `customTemplateId` (own or shared custom)
+    /// — the backend REPLACES the session's context-mapped pin with the pick,
+    /// so what the clinician chose is provably what Stage 1 generates with.
+    func overrideSessionTemplate(
+        sessionId: String,
+        templateKey: String? = nil,
+        customTemplateId: String? = nil
+    ) async throws -> SessionResponse {
+        var body: [String: Any] = [:]
+        if let templateKey { body["template_key"] = templateKey }
+        if let customTemplateId { body["custom_template_id"] = customTemplateId }
+        return try await patch(path: "/sessions/\(sessionId)/template", body: body)
+    }
+
     /// Re-run Stage 1 note generation on the STORED transcript with a
     /// different template and/or output language — no re-record, no
     /// re-transcribe. Server auto-creates a new note version. Backs the
@@ -1295,6 +1310,12 @@ struct SessionResponse: Codable, Sendable {
     /// one yet. Server decrypts before serialization for the owning
     /// clinician + admins; absent in the response for other roles.
     let externalReferenceId: String?
+    /// The session's resolved template pin, snapshotted at create from the
+    /// visit-type context mapping (#314/#318) and replaced by explicit
+    /// overrides. Both nil => the specialty default template. Drives the
+    /// "Template: {name}" line on the Generate Note screen (TE-4e parity).
+    let templateKey: String?
+    let customTemplateId: String?
     /// Per-session provider routing overrides (P1-7). NULL when no
     /// overrides were set at creation. Read by `SessionManager.extractEvidence`
     /// to drive Stage 2 dual-mode routing without a second backend call.
@@ -1335,6 +1356,8 @@ struct SessionResponse: Codable, Sendable {
         case createdAt = "created_at"
         case updatedAt = "updated_at"
         case stage2ReviewReady = "stage2_review_ready"
+        case templateKey = "template_key"
+        case customTemplateId = "custom_template_id"
     }
 
     init(from decoder: Decoder) throws {
@@ -1351,6 +1374,8 @@ struct SessionResponse: Codable, Sendable {
         createdAt = try c.decode(String.self, forKey: .createdAt)
         updatedAt = try c.decode(String.self, forKey: .updatedAt)
         stage2ReviewReady = try c.decodeIfPresent(Bool.self, forKey: .stage2ReviewReady) ?? false
+        templateKey = try c.decodeIfPresent(String.self, forKey: .templateKey)
+        customTemplateId = try c.decodeIfPresent(String.self, forKey: .customTemplateId)
     }
 
     init(
@@ -1365,7 +1390,9 @@ struct SessionResponse: Codable, Sendable {
         participants: [SessionParticipantPayload]? = nil,
         createdAt: String,
         updatedAt: String,
-        stage2ReviewReady: Bool = false
+        stage2ReviewReady: Bool = false,
+        templateKey: String? = nil,
+        customTemplateId: String? = nil
     ) {
         self.id = id
         self.clinicianId = clinicianId
@@ -1379,6 +1406,8 @@ struct SessionResponse: Codable, Sendable {
         self.createdAt = createdAt
         self.updatedAt = updatedAt
         self.stage2ReviewReady = stage2ReviewReady
+        self.templateKey = templateKey
+        self.customTemplateId = customTemplateId
     }
 }
 
