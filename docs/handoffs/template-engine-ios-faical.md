@@ -17,7 +17,33 @@ Full run through the upload path (same server pipeline as iOS): visit type + con
 `plastic_lipo_consult_v2` with no manual template pick → note rendered all 15 sections in order, following
 each section's guidance → signed. Full receipt: `docs/eval/template-engine-eval-lipo360.md`.
 
-## Your queue (none urgent, in priority order)
+## Your queue (in priority order)
+
+0. **CONFIRMED BUG — context pin not applied on the recording path** (repro: session `1b0e9ac2`,
+   2026-07-29 10:40, Uzziel's device). Flow: Quick Start "New Patient" → saved context "Plastic surgery
+   Consult" (pinned to a custom template) → record → generate. The note came out on the **built-in**
+   plastic-surgery template (`wound_assessment`/`imaging_review` sections), not the pinned custom.
+   Traced server-side: `POST /sessions` → `resolve_context_template_key` is correctly wired and validates
+   shared refs (`get_owned_or_shared`), the visit-type key matches (`new_patient`), and yesterday's web
+   upload run resolved the same class of pin fine — so the request almost certainly arrived with
+   `context_id` nil or non-matching. Prime suspect on device: `ctx.serverID == ""`
+   (`DashboardView.swift:1017` sends nil then) — a context added on-device keeps an empty `serverID` until
+   the profile is re-fetched, and a stale cached profile has the same effect. Please verify when the phone
+   refreshes the profile relative to context creation/edit, and consider re-fetching before Start Session.
+   Two product fixes ride along regardless of root cause:
+   a. **`PostEncounterView` is pre-TE-4e**: it lists built-in specialties only (no customs), defaults the
+      checkmark to the profile specialty, and never shows what the mapping actually resolved — the exact
+      misleading UI the web killed in TE-4e/#699. Wanted: show "Template: {resolved name}" (the web upload
+      form's `resolvedTemplateName` pattern), list customs, drop the flat built-ins. Note its Generate
+      handler only PATCHes a template when the selection *changes* (`PostEncounterView.swift:205`) — so an
+      untouched screen does not override the mapping; a single tap on any other row silently does, with a
+      built-in.
+   b. **Silent failure**: when a context pin fails to resolve, the session degrades to the specialty
+      default with only a count-only server log — nothing on the device, nothing visible in the audit UI
+      (the `session_created` event records only specialty + actor). A clinician cannot tell the difference
+      between "my template applied" and "my pick was dropped". At minimum surface the resolved template on
+      the pre-generation screen; ideally also record consultation_type/context_id/coercion on the audit
+      event (backend half — flag it and we'll take it).
 
 1. **TE-5b — export S/O/A/P grouping** (`ios/Aurion/Aurion/Export/NoteDocumentBuilder.swift:271-279`).
    The S/O/A/P mapping hardcodes built-in section ids; custom-template ids (`medications_supplements`,
