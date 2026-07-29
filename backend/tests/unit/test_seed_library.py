@@ -53,12 +53,22 @@ def _shared_row_for(payload: dict) -> SimpleNamespace:
     )
 
 
-# ── The starter file itself (AC-1, AC-2) ─────────────────────────────────
+# ── The starter files (AC-1, AC-2) ───────────────────────────────────────
 
 
-def test_soap_json_passes_the_service_create_gate():
-    # The same gate create_for_owner applies — incl. create-time section caps.
-    svc._validate_custom_template_fields(SOAP_TEMPLATE)
+@pytest.mark.parametrize(
+    "payload",
+    seed_library.load_starter_templates(),
+    ids=lambda p: str(p.get("key")),
+)
+def test_every_starter_file_passes_the_service_create_gate(payload):
+    # The same gate create_for_owner applies — incl. create-time section
+    # caps, which update_owned deliberately relaxes: without this test an
+    # over-cap EDIT would seed on dev (update path) but fail a fresh DB.
+    svc._validate_custom_template_fields(Template.model_validate(payload))
+
+
+def test_soap_identity():
     assert SOAP_TEMPLATE.key == "soap_universal"
     assert SOAP_TEMPLATE.detail_level == "standard"
 
@@ -199,6 +209,82 @@ async def test_upsert_rejects_schema_invalid_payload():
         await seed_library.upsert_shared_template(
             AsyncMock(), uuid.uuid4(), {"key": "x"}, {}
         )
+
+
+# ── seed() orchestration — the one-transaction promise ───────────────────
+
+
+class _FakeSessionCtx:
+    def __init__(self, db):
+        self.db = db
+
+    async def __aenter__(self):
+        return self.db
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+def _wire_seed(monkeypatch, db, payloads, shared_rows=()):
+    import app.core.database as database
+
+    monkeypatch.setattr(database, "async_session_factory", lambda: _FakeSessionCtx(db))
+    monkeypatch.setattr(
+        seed_library, "load_starter_templates", lambda: list(payloads)
+    )
+    monkeypatch.setattr(
+        seed_library, "resolve_owner", AsyncMock(return_value=uuid.uuid4())
+    )
+    monkeypatch.setattr(svc, "list_shared", AsyncMock(return_value=list(shared_rows)))
+
+
+async def test_seed_commits_once_and_reports_unmanaged(monkeypatch):
+    db = AsyncMock()
+    handmade = SimpleNamespace(key="handmade_row")
+    _wire_seed(monkeypatch, db, [_soap_payload()], shared_rows=[handmade])
+    monkeypatch.setattr(
+        seed_library, "upsert_shared_template", AsyncMock(return_value="created")
+    )
+
+    outcomes, unmanaged = await seed_library.seed("admin@example.com")
+
+    assert outcomes == {"soap_universal": "created"}
+    assert unmanaged == ["handmade_row"]
+    db.commit.assert_awaited_once()
+
+
+async def test_seed_never_commits_when_an_upsert_fails(monkeypatch):
+    """The headline guarantee: a bad file can never half-seed the Library.
+    If commit ever moves inside the loop, this fails."""
+    db = AsyncMock()
+    good, bad = _soap_payload(), _soap_payload()
+    bad["key"] = "second_file"
+    _wire_seed(monkeypatch, db, [good, bad])
+    monkeypatch.setattr(
+        seed_library,
+        "upsert_shared_template",
+        AsyncMock(side_effect=["created", seed_library.SeedError("boom")]),
+    )
+
+    with pytest.raises(seed_library.SeedError):
+        await seed_library.seed("admin@example.com")
+
+    db.commit.assert_not_awaited()
+
+
+async def test_seed_aborts_when_two_starter_files_share_a_key(monkeypatch):
+    """On an EXISTING DB both files would take the update path and silently
+    last-write-win — the script must refuse before the second upsert."""
+    db = AsyncMock()
+    _wire_seed(monkeypatch, db, [_soap_payload(), _soap_payload()])
+    upsert = AsyncMock(return_value="created")
+    monkeypatch.setattr(seed_library, "upsert_shared_template", upsert)
+
+    with pytest.raises(seed_library.SeedError):
+        await seed_library.seed("admin@example.com")
+
+    upsert.assert_awaited_once()
+    db.commit.assert_not_awaited()
 
 
 # ── owner resolution (AC-4) ──────────────────────────────────────────────

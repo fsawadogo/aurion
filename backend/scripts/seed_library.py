@@ -32,12 +32,19 @@ import json
 import os
 import sys
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 # Make the backend package importable when running from backend/ or
 # backend/scripts/ — same shim as seed_dev.py. App imports stay
-# function-local below it (ruff E402 would reject them at top level).
+# function-local below it (ruff E402 would reject them at top level);
+# type-only imports are exempt and carry the annotations.
 _backend_root = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(_backend_root))
+
+if TYPE_CHECKING:
+    import uuid
+
+    from sqlalchemy.ext.asyncio import AsyncSession
 
 STARTER_DIR = _backend_root / "starter_library"
 
@@ -69,7 +76,10 @@ def load_starter_templates(directory: Path = STARTER_DIR) -> list[dict]:
 
 
 async def upsert_shared_template(
-    db, owner_id, payload: dict, shared_by_key: dict
+    db: AsyncSession,
+    owner_id: uuid.UUID,
+    payload: dict,
+    shared_by_key: dict[str, list],
 ) -> str:
     """Create/refresh ONE shared template. Returns created|updated|unchanged.
 
@@ -114,8 +124,11 @@ async def upsert_shared_template(
         raise SeedError(f"{key}: {exc}")
 
 
-async def resolve_owner(db, owner_email: str):
-    """The seeding owner: an existing ADMIN / CLINICAL_ADMIN user id."""
+async def resolve_owner(db: AsyncSession, owner_email: str) -> uuid.UUID:
+    """The seeding owner: an existing ADMIN / CLINICAL_ADMIN user id.
+
+    The email is matched exactly (case-sensitive) — registration lowercases
+    stored emails, so pass the address in lowercase."""
     from app.core.types import UserRole
     from app.modules.auth import users_repository as users_repo
 
@@ -131,9 +144,16 @@ async def resolve_owner(db, owner_email: str):
     return user.id
 
 
-async def seed(owner_email: str) -> dict[str, str]:
-    """Upsert every starter template inside one transaction; return
-    ``{key: outcome}``."""
+async def seed(owner_email: str) -> tuple[dict[str, str], list[str]]:
+    """Upsert every starter template inside ONE transaction.
+
+    Returns ``({key: outcome}, unmanaged_shared_keys)``. The single commit
+    sits after the loop on purpose: any failure rolls the whole run back, so
+    a bad starter file can never half-seed the Library. Renaming a starter
+    file's ``key`` creates a NEW row and orphans the old one (it will show
+    up as unmanaged) — delete the orphan via the admin Shared Templates
+    surface.
+    """
     from app.core.database import async_session_factory
     from app.modules.custom_templates import service as svc
 
@@ -141,10 +161,19 @@ async def seed(owner_email: str) -> dict[str, str]:
     outcomes: dict[str, str] = {}
     async with async_session_factory() as db:
         owner_id = await resolve_owner(db, owner_email)
-        shared_by_key: dict = {}
+        shared_by_key: dict[str, list] = {}
         for row in await svc.list_shared(db):
             shared_by_key.setdefault(row.key, []).append(row)
         for payload in payloads:
+            key = payload.get("key")
+            # Two starter FILES declaring one key would silently last-write-
+            # win on an existing DB (both hit the update path) — the DB's
+            # per-owner uniqueness can't catch it, so the script must.
+            if key in outcomes:
+                raise SeedError(
+                    f"{key}: two starter files declare this key — "
+                    "resolve the duplicate before seeding"
+                )
             outcome = await upsert_shared_template(
                 db, owner_id, payload, shared_by_key
             )
@@ -154,9 +183,7 @@ async def seed(owner_email: str) -> dict[str, str]:
     # shared rows this run does NOT manage so an operator can't mistake a
     # partly seeded Library for a fully code-managed one on a DB rebuild.
     unmanaged = sorted(set(shared_by_key) - set(outcomes))
-    if unmanaged:
-        print("unmanaged (not in starter_library/): " + ", ".join(unmanaged))
-    return outcomes
+    return outcomes, unmanaged
 
 
 def main() -> int:
@@ -164,23 +191,27 @@ def main() -> int:
     parser.add_argument(
         "--owner-email",
         default=os.environ.get("SEED_LIBRARY_OWNER_EMAIL"),
-        help="ADMIN/CLINICAL_ADMIN user who owns newly created rows "
-        "(or set SEED_LIBRARY_OWNER_EMAIL)",
+        help="ADMIN/CLINICAL_ADMIN user who owns newly created rows, matched "
+        "exactly (case-sensitive; stored emails are lowercase). Or set "
+        "SEED_LIBRARY_OWNER_EMAIL.",
     )
     args = parser.parse_args()
-    if not args.owner_email:
+    owner_email = (args.owner_email or "").strip()
+    if not owner_email:
         print(
             "error: --owner-email (or SEED_LIBRARY_OWNER_EMAIL) is required",
             file=sys.stderr,
         )
         return 2
     try:
-        outcomes = asyncio.run(seed(args.owner_email))
+        outcomes, unmanaged = asyncio.run(seed(owner_email))
     except SeedError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     for key, outcome in outcomes.items():
         print(f"{outcome}: {key}")
+    if unmanaged:
+        print("unmanaged (not in starter_library/): " + ", ".join(unmanaged))
     return 0
 
 
