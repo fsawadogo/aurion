@@ -1,0 +1,14 @@
+{
+  "task_id": "te-4g-clinician-builtin",
+  "branch": "lane-web/te-4g-clinician-builtin",
+  "verified_at": "2026-07-28T20:40:00-04:00",
+  "checks": {
+    "web_tests": "vitest run (web/): 51 files / 420 passed (418 on main + 2 new). VisitTypesTab.spec.tsx 9/9: NEW 'clinician: dropdown offers specialty-default + custom only, no built-in specialty templates (TE-4g)' (no builtin:-prefixed option values; '' + custom:c1 + custom:c2 present); NEW 'clinician: a default still pinned to a built-in shows a re-pick placeholder, not a blank select (TE-4g)' (value stays builtin:orthopedic_surgery, 'Specialty template (re-pick)' visible, re-pick to custom works); existing admin tests untouched and green (builtin:orthopedic_surgery still offered/selected — option-B guard). i18n-bootstrap EN/FR parity green (no new message keys — reuses Profile.contexts.legacySpecialtyTemplate from TE-4e).",
+    "acceptance_criteria": "AC-1 clinician menu = specialty-default + customs only (new test); AC-2 admin org-default keeps built-ins (existing test green); AC-3 legacy built-in pin renders visible re-pick placeholder, not silent blank select (new test); AC-4 full suite 420 green; AC-5 next lint clean + npm run build static export exit 0.",
+    "lint": "npx next lint -> No ESLint warnings or errors.",
+    "web_build": "npm run build -> compiled + static export OK (exit 0); postbuild .well-known copied.",
+    "ios_builds": "n/a - web-only change, no ios/** in diff.",
+    "backend": "n/a - no backend change; resolve_context_template_key untouched (existing built-in pins still resolve and safely degrade).",
+    "simplify": "4 agents (reuse/simplify/efficiency/altitude). 4 fixes applied: (1) dropped includeBuiltins boolean param - renderSelect already closes over component state, call-site true/false was a boolean trap (simplification; also resolves altitude's readability flag); (2) named the codec - isBuiltinValue() beside encodeValue + admin optgroup option value via encodeValue(k, null) (altitude fix-now, in-diff half); (3) comment states the real mechanism - re-selecting the legacy placeholder never fires onChange; (4) test reads options via within(sel).getAllByRole('option') matching the VisitTypeContexts spec idiom (reuse). Conscious keeps: withClinicianDefault's builtin branch (total decoder for the documented value encoding; unreachable from this menu post-TE-4g per select-change semantics, reachability trace recorded); three useTranslations hooks (efficiency agent verified consolidation is a wash in use-intl 4.13). Deferred to PR: fold the two pre-existing indexOf/slice decoders into the named codec; BUILT_IN_TEMPLATE_KEYS -> web/lib relocation (test-mock drift: spec stub re-declares a 3-key list vs the real 8); shared template-picker extraction trigger = a 4th picker surface or encoding convergence."
+  }
+}
