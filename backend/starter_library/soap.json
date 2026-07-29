@@ -1,0 +1,49 @@
+{
+  "key": "soap_universal",
+  "display_name": "SOAP — Universal",
+  "version": "1.0",
+  "detail_level": "standard",
+  "sections": [
+    {
+      "id": "subjective",
+      "title": "S — Subjective / Subjectif",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Chief complaint in the patient's own words, then the history of present illness: onset, duration, severity, triggers, prior treatments and their results, and the patient's stated goals. Include history the patient reports during the visit when discussed (medical, surgical, medications, allergies, social, family). Patient-reported information only — record what was said, never conclusions.",
+      "measurement_output_expected": false
+    },
+    {
+      "id": "objective",
+      "title": "O — Objective / Objectif",
+      "required": true,
+      "visual_trigger_keywords": [
+        "take a look",
+        "let me examine",
+        "range of motion",
+        "palpation",
+        "x-ray",
+        "on the screen",
+        "wound",
+        "incision"
+      ],
+      "description": "Only what was observed, measured, or reviewed during the visit: general appearance; physical exam findings by region as narrated (position, inspection, palpation, range of motion); vitals when stated; imaging reviewed (e.g. PACS) exactly as the provider described it; procedures performed in-visit. No interpretation beyond the provider's own words.",
+      "measurement_output_expected": true
+    },
+    {
+      "id": "assessment",
+      "title": "A — Assessment / Évaluation",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "The provider's stated assessment, numbered per problem and attributed to the provider (e.g. \"Provider assessed…\"). Include the stated status or progress of each problem and any differentials the provider voiced. Record only conclusions the provider actually said — never infer new ones.",
+      "measurement_output_expected": false
+    },
+    {
+      "id": "plan",
+      "title": "P — Plan",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Management as stated: treatments and prescriptions, activity level and restrictions, counselling given (risks, prognosis, expectations), orders and referrals, follow-up interval, return precautions, and discharge status when stated.",
+      "measurement_output_expected": false
+    }
+  ]
+}
