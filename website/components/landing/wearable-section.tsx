@@ -1,71 +1,79 @@
+import Image from "next/image"
 import { getTranslations } from "next-intl/server"
-
-import { RevealGroup } from "@/components/reveal-group"
-
-/**
- * Wearable — the capture story as a privacy receipt.
- *
- * The old version staged a fake "LIVE MULTIMODAL STREAM" console with
- * generated OR footage and invented surgeon names — and misrepresented
- * the product (capture is processed after the encounter, not streamed).
- * Replaced with the truthful artifact: a capture manifest that says
- * what leaves the room and on what terms. It's the trust argument no
- * generic scribe can make, in the same ledger grammar as the rest of
- * the page.
- */
-
-type ManifestRow = { item: string; chip: string }
 
 export async function WearableSection() {
   const t = await getTranslations("home")
-  const rows = t.raw("wearable.rows") as ManifestRow[]
+
+  const streams = [
+    { src: "/wearable-or-surgeon.jpg", alt: t("wearable.imageAltPrimary"), name: t("wearable.streamPrimaryRole") },
+    { src: "/wearable-clinic-surgeon.jpg", alt: t("wearable.imageAltSecondary"), name: t("wearable.streamSecondaryRole") },
+  ]
 
   return (
     <section id="platform" className="scroll-mt-24 bg-surface py-unit-12 md:py-unit-16">
       <div className="mx-auto max-w-(--breakpoint-2xl) px-margin-mobile md:px-margin-desktop">
-        <RevealGroup className="grid items-center gap-unit-12 lg:grid-cols-2 lg:gap-unit-16">
 
-          {/* ── Copy ── */}
-          <div data-reveal>
-            <p className="text-[12.5px] font-semibold tracking-[0.14em] text-secondary uppercase">
-              {t("wearable.eyebrow")}
-            </p>
-            <h2 className="mt-unit-4 font-display text-[1.75rem] leading-tight font-semibold tracking-[-0.01em] text-on-surface sm:text-[2rem] lg:text-headline-lg">
+        {/* Mobile headline — the desktop copy lives inside the card below */}
+        <h2 className="mb-unit-6 font-display text-[1.75rem] leading-tight font-semibold tracking-[-0.01em] text-on-surface sm:text-[2rem] lg:hidden">
+          {t("wearable.mobileTitle")}
+        </h2>
+
+        {/* Dark stream console — full-bleed card on mobile, right column on desktop */}
+        <div className="lg:flex lg:flex-row lg:items-center lg:gap-unit-16 lg:rounded-[2rem] lg:border lg:border-outline-variant/20 lg:bg-surface-container-lowest lg:p-unit-16 lg:shadow-[0_20px_50px_rgba(0,35,149,0.08)]">
+
+          <div className="hidden flex-1 space-y-unit-6 lg:block">
+            <h2 className="font-display text-[2.25rem] leading-tight font-bold tracking-[-0.02em] text-on-surface lg:text-display-lg">
               {t("wearable.title")}
             </h2>
-            <p className="mt-unit-4 max-w-xl text-body-md leading-relaxed text-on-surface-variant lg:text-body-lg">
-              {t("wearable.body")}
+            <p className="text-[1.25rem] leading-relaxed text-on-surface-variant lg:text-headline-md lg:leading-relaxed">
+              {t("wearable.bodyLead")}{" "}
+              <span className="font-bold text-secondary">{t("wearable.bodyAccent")}</span>{" "}
+              {t("wearable.bodyRest")}
             </p>
           </div>
 
-          {/* ── Artifact: the capture manifest ── */}
-          <div data-reveal style={{ "--rd": "150ms" } as React.CSSProperties} className="rounded-xl border border-outline-variant/50 bg-surface-container-lowest p-unit-6 shadow-sm">
-            <p className="font-mono text-[10.5px] tracking-[0.08em] text-outline uppercase">
-              {t("wearable.ledgerLabel")}
-            </p>
-            <ul className="mt-unit-2 divide-y divide-outline-variant/40">
-              {rows.map((row, rowIndex) => (
-                <li
-                  key={row.item}
-                  data-reveal
-                  style={{ "--rd": `${280 + rowIndex * 90}ms` } as React.CSSProperties}
-                  className="flex flex-wrap items-baseline justify-between gap-x-unit-4 gap-y-unit-1 py-unit-3"
+          <div className="w-full flex-1 overflow-hidden rounded-3xl bg-inverse-surface text-inverse-on-surface shadow-2xl lg:rounded-medical lg:border lg:border-outline-variant/20 lg:bg-surface-container-low lg:text-on-surface lg:shadow-none">
+
+            {/* Console header */}
+            <div className="flex items-center justify-between gap-unit-4 border-b border-white/10 bg-black/20 p-unit-4 lg:border-none lg:bg-transparent lg:px-unit-12 lg:pt-unit-12">
+              <div className="flex items-center gap-unit-2">
+                <span className="ai-pulse block h-2.5 w-2.5 rounded-full bg-emerald-500" aria-hidden />
+                <span className="font-mono text-[13px] tracking-wider uppercase lg:font-bold lg:text-outline">
+                  {t("wearable.streamLabel")}
+                </span>
+              </div>
+              <span className="font-mono text-[13px] text-white/60 lg:text-emerald-600">
+                <span className="lg:hidden">{t("wearable.streamTimecode")}</span>
+                <span className="hidden lg:inline">{t("wearable.streamStatus")}</span>
+              </span>
+            </div>
+
+            {/* Feeds — stacked 16:9 on mobile, side-by-side 4:3 on desktop */}
+            <div className="grid grid-cols-1 gap-px lg:grid-cols-2 lg:gap-unit-4 lg:px-unit-12 lg:pt-unit-6">
+              {streams.map((stream) => (
+                <div
+                  key={stream.src}
+                  className="relative aspect-video overflow-hidden lg:aspect-4/3 lg:rounded-xl lg:border lg:border-outline-variant/20"
                 >
-                  <span className="text-[14px] leading-snug font-medium text-on-surface">
-                    {row.item}
-                  </span>
-                  <span className="rounded-full bg-primary-fixed px-2.5 py-0.5 font-mono text-[10.5px] font-medium text-on-primary-fixed-variant">
-                    {row.chip}
-                  </span>
-                </li>
+                  <Image
+                    src={stream.src}
+                    alt={stream.alt}
+                    fill
+                    sizes="(max-width: 1024px) 100vw, 22vw"
+                    className="object-cover"
+                  />
+                  <div className="absolute bottom-unit-4 left-unit-4 flex items-center gap-unit-2 rounded-full bg-black/40 px-unit-3 py-unit-1 font-mono text-[11px] text-white backdrop-blur-md lg:hidden">
+                    {stream.name}
+                  </div>
+                </div>
               ))}
-            </ul>
-            <p data-reveal style={{ "--rd": "660ms" } as React.CSSProperties} className="mt-unit-2 border-t border-outline-variant/40 pt-unit-3 font-mono text-[11px] leading-relaxed text-on-surface-variant">
-              {t("wearable.footer")}
+            </div>
+
+            <p className="hidden text-center text-[15px] leading-relaxed text-on-surface-variant italic lg:block lg:px-unit-12 lg:pt-unit-6 lg:pb-unit-12">
+              {t("wearable.streamCaption")}
             </p>
           </div>
-
-        </RevealGroup>
+        </div>
       </div>
     </section>
   )

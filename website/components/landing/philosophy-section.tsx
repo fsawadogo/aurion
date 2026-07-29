@@ -1,55 +1,31 @@
 import { getTranslations } from "next-intl/server"
 
-import { RevealGroup } from "@/components/reveal-group"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/i18n/navigation"
 
-/**
- * Philosophy — the page's one dark moment.
- *
- * A deep-indigo closing band (the logo's indigo), opened by the same
- * gradient rule the patient-journey spine uses, so the page ends on
- * the motif it traveled on. Left-aligned statement, one solid CTA,
- * and a specific pilot line instead of a vague community claim.
- * Visible on every breakpoint — the footer no longer duplicates it
- * on mobile.
- */
 export async function PhilosophySection() {
   const t = await getTranslations("home")
 
   return (
-    <section className="relative bg-[#0F1334] py-unit-12 md:py-unit-16">
-      {/* The journey spine, closing the loop. */}
-      <div
-        aria-hidden
-        className="absolute inset-x-0 top-0 h-0.5 bg-gradient-to-r from-primary/15 via-primary/45 to-primary"
-      />
-
-      <RevealGroup className="mx-auto max-w-(--breakpoint-2xl) px-margin-mobile md:px-margin-desktop">
-        <p data-reveal className="text-[12.5px] font-semibold tracking-[0.14em] text-[#A695D6] uppercase">
-          {t("philosophy.eyebrow")}
-        </p>
-
-        <h2 data-reveal style={{ "--rd": "110ms" } as React.CSSProperties} className="mt-unit-6 max-w-3xl font-display text-[2rem] leading-[1.1] font-bold tracking-[-0.02em] text-white sm:text-[2.6rem]">
+    // Hidden on mobile: the footer's outlined CTA carries this message there,
+    // matching the mobile design and avoiding a duplicate call to action.
+    <section className="hidden bg-surface px-margin-mobile py-unit-12 md:px-margin-desktop md:py-unit-16 lg:block">
+      <div className="mx-auto max-w-5xl space-y-unit-8 rounded-[2rem] border border-primary/10 bg-linear-to-b from-primary/5 to-transparent p-unit-8 text-center md:p-unit-16">
+        <h2 className="font-display text-[1.75rem] leading-tight sm:text-[2rem] font-semibold tracking-[-0.01em] text-on-surface lg:text-headline-lg">
           {t("philosophy.title")}
         </h2>
 
-        <p data-reveal style={{ "--rd": "220ms" } as React.CSSProperties} className="mt-unit-6 max-w-2xl text-body-md leading-relaxed text-white/70 lg:text-body-lg">
+        <p className="mx-auto max-w-3xl text-body-md text-on-surface-variant lg:text-body-lg">
           {t("philosophy.body")}
         </p>
 
-        <div data-reveal style={{ "--rd": "330ms" } as React.CSSProperties} className="mt-unit-8 flex flex-col items-start gap-unit-6 sm:flex-row sm:items-center">
-          <Button
-            asChild
-            className="h-auto rounded-xl bg-primary px-unit-8 py-unit-4 text-[15.5px] font-semibold text-on-primary shadow-sm transition-all hover:bg-primary-container active:scale-[0.98]"
-          >
-            <Link href="/contact">{t("philosophy.cta")}</Link>
-          </Button>
-          <p className="font-mono text-[11.5px] tracking-wide text-white/50">
-            {t("philosophy.pilotLine")}
-          </p>
-        </div>
-      </RevealGroup>
+        <Button
+          asChild
+          className="h-auto rounded-xl bg-secondary px-unit-12 py-unit-6 font-display text-[1.125rem] font-bold text-on-secondary shadow-xl transition-transform hover:scale-105 hover:bg-secondary active:scale-95"
+        >
+          <Link href="/contact">{t("philosophy.cta")}</Link>
+        </Button>
+      </div>
     </section>
   )
 }

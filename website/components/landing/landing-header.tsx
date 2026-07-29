@@ -6,7 +6,6 @@ import { useTranslations } from "next-intl"
 import { useState } from "react"
 
 import { LanguageSwitcher } from "@/components/language-switcher"
-import { ThemeToggle } from "@/components/theme-toggle"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/i18n/navigation"
 import { SITE } from "@/lib/site"
@@ -31,30 +30,23 @@ export function LandingHeader() {
 
   return (
     <header className="glass-panel fixed top-0 z-100 w-full border-x-0 border-t-0 border-b border-b-outline-variant/30">
-      <div className="mx-auto flex max-w-(--breakpoint-2xl) items-center justify-between gap-unit-6 px-margin-mobile py-unit-3 md:px-margin-desktop">
+      <div className="mx-auto flex max-w-(--breakpoint-2xl) items-center justify-between gap-unit-6 px-margin-mobile py-unit-4 md:px-margin-desktop md:py-unit-6">
 
-        {/* Brand — compact mark + live-type wordmark. The wordmark is set in
-            the display face (not a scaled PNG) so it's razor-sharp at any
-            DPI and sized like a nav element, not a banner. Two-tone split
-            mirrors the logo art. */}
+        {/* Wordmark */}
         <Link
           href="/"
-          className="group/logo flex min-h-11 shrink-0 items-center gap-2.5 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
-          aria-label={`${t("brand")} · ${t("nav.home")}`}
+          className="flex min-h-11 shrink-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          aria-label={`${t("brand")} — ${t("nav.home")}`}
         >
+          {/* Icon + wordmark lockup, tagline omitted so it stays legible at nav height */}
           <Image
-            src="/peritwin-mark.png"
-            alt=""
-            aria-hidden
-            width={600}
-            height={600}
+            src="/peritwin-nav.png"
+            alt={t("brand")}
+            width={901}
+            height={250}
             priority
-            className="h-8 w-auto transition-transform duration-200 ease-out group-hover/logo:-rotate-3 group-hover/logo:scale-105 md:h-10"
+            className="h-11 w-auto md:h-14 lg:h-16"
           />
-          <span className="font-display text-[21px] leading-none font-bold tracking-[-0.02em] md:text-[25px]">
-            <span className="text-[#5D72DB]">Peri</span>
-            <span className="text-secondary">Twin</span>
-          </span>
         </Link>
 
         {/* Section anchors — appear at xl so they don't crowd the page menu */}
@@ -63,7 +55,7 @@ export function LandingHeader() {
             <a
               key={section.key}
               href={section.href}
-              className="text-[14.5px] font-medium tracking-[-0.01em] text-on-surface-variant transition-colors hover:text-primary"
+              className="font-mono text-[14px] font-medium tracking-tight text-on-surface-variant transition-colors hover:text-primary"
             >
               {t(`nav.${section.key}`)}
             </a>
@@ -77,7 +69,7 @@ export function LandingHeader() {
               <Link
                 key={link.key}
                 href={link.href}
-                className="text-[14.5px] font-medium tracking-[-0.01em] text-on-surface-variant transition-colors hover:text-primary"
+                className="font-mono text-[14px] font-medium tracking-tight text-on-surface-variant transition-colors hover:text-primary"
               >
                 {t(`nav.${link.key}`)}
               </Link>
@@ -93,7 +85,6 @@ export function LandingHeader() {
             </a>
           </nav>
 
-          <ThemeToggle />
           <LanguageSwitcher />
 
           <Button

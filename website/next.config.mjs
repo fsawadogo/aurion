@@ -9,9 +9,8 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // Static export for AWS Amplify manual-deploy hosting (platform WEB),
-  // mirroring the portal's architecture. trailingSlash gives dir-style
-  // index.html files, which is how Amplify's CDN serves static routes.
+  // Static export for AWS Amplify manual-deploy hosting (platform WEB).
+  // trailingSlash gives dir-style index.html files for Amplify's CDN.
   output: "export",
   trailingSlash: true,
   turbopack: {

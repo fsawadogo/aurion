@@ -1,5 +1,6 @@
 import { setRequestLocale } from "next-intl/server"
 
+import { AnimateIn } from "@/components/animate-in"
 import { ColleagueSection } from "@/components/landing/colleague-section"
 import { ContinuumSection } from "@/components/landing/continuum-section"
 import { HeroSection } from "@/components/landing/hero-section"
@@ -24,35 +25,39 @@ export default async function Home({ params }: Props) {
         forces the other from `visible` to `auto`, which turned <main> into a
         nested scroll container and made touch scrolling fight the page scroller.
         `clip` contains the same overflow without creating a scrollport.
-
-        Motion restraint (2026-07-24 redesign): sections render immediately —
-        the previous whole-section AnimateIn reveals left entire viewports
-        blank mid-scroll and read as template motion. The page keeps exactly
-        one orchestrated moment (the hero) and hover micro-interactions
-        (SourceChip receipts).
       */}
-      <main className="overflow-x-clip pt-20 md:pt-24">
+      <main className="overflow-x-clip pt-24 md:pt-32">
 
         {/* Personalized Clinical Intelligence. Ask Peri. */}
         <HeroSection />
 
         {/* ER → clinic → pre-op → OR → post-op */}
-        <ContinuumSection />
+        <AnimateIn direction="up" threshold={0.06} duration={900}>
+          <ContinuumSection />
+        </AnimateIn>
 
-        {/* How the twin listens and observes */}
-        <WearableSection />
+        {/* How the twin sees and hears */}
+        <AnimateIn direction="up" threshold={0.06} duration={850}>
+          <WearableSection />
+        </AnimateIn>
 
         {/* What it learns */}
-        <IntelligenceSection />
+        <AnimateIn direction="up" threshold={0.08}>
+          <IntelligenceSection />
+        </AnimateIn>
 
         {/* Where you work with it */}
         <WorkbenchSection />
 
         {/* What it is to you */}
-        <ColleagueSection />
+        <AnimateIn direction="up" threshold={0.08}>
+          <ColleagueSection />
+        </AnimateIn>
 
         {/* Why it exists */}
-        <PhilosophySection />
+        <AnimateIn direction="up" threshold={0.08}>
+          <PhilosophySection />
+        </AnimateIn>
       </main>
 
       <LandingFooter />
