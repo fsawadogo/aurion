@@ -1002,6 +1002,14 @@ struct DashboardView: View {
         // backend resolves the specialty-default template.
         let encounterLabel: String
         let contextId: String?
+        // A context created this app-run carries `serverID == ""` until the
+        // profile round-trips — the save PUT happens in profile setup, but a
+        // cached dashboard profile keeps the stale copy. Sending nil here made
+        // the backend silently resolve the SPECIALTY default instead of the
+        // pinned template (Uzziel repro 1b0e9ac2). When that's detected, we
+        // re-fetch the profile inside the start Task and re-match the context
+        // by label before creating the session.
+        let staleContextLabel: String?
         if hasSavedContextSelection, let ctx = selectedContext {
             // Lead with the short label (keeps the session-list display
             // recognizable) and append the context's free-text note (#313
@@ -1015,21 +1023,35 @@ struct DashboardView: View {
                 encounterLabel = ctx.label
             }
             contextId = ctx.serverID.isEmpty ? nil : ctx.serverID
+            staleContextLabel = ctx.serverID.isEmpty ? ctx.label : nil
         } else {
             encounterLabel = encounterContext.trimmingCharacters(in: .whitespacesAndNewlines)
             contextId = nil
+            staleContextLabel = nil
         }
-        let request = SessionStartRequest(
-            specialty: qs.specialty,
-            consultationType: qs.consultationType,
-            encounterContext: encounterLabel,
-            outputLanguage: appState.physicianProfile?.outputLanguage ?? "en",
-            encounterType: selectedEncounterType,
-            participants: selectedParticipants.isEmpty ? nil : selectedParticipants,
-            captureMode: selectedCaptureMode,
-            contextId: contextId
-        )
-        Task { await sessionManager.startNewSession(request) }
+        Task {
+            var resolvedContextId = contextId
+            if let label = staleContextLabel,
+               let fresh = try? await APIClient.shared.getProfile() {
+                appState.physicianProfile = fresh
+                let freshContexts = fresh.contextsPerVisitType[qs.consultationType] ?? []
+                if let match = freshContexts.first(where: { $0.label == label }),
+                   !match.serverID.isEmpty {
+                    resolvedContextId = match.serverID
+                }
+            }
+            let request = SessionStartRequest(
+                specialty: qs.specialty,
+                consultationType: qs.consultationType,
+                encounterContext: encounterLabel,
+                outputLanguage: appState.physicianProfile?.outputLanguage ?? "en",
+                encounterType: selectedEncounterType,
+                participants: selectedParticipants.isEmpty ? nil : selectedParticipants,
+                captureMode: selectedCaptureMode,
+                contextId: resolvedContextId
+            )
+            await sessionManager.startNewSession(request)
+        }
     }
 
     /// Dashboard appear / pull-to-refresh entry point. Self-heals a missing
@@ -1037,8 +1059,13 @@ struct DashboardView: View {
     /// Quick Start grid recovers its real specialty + visit types instead of
     /// staying on the skeleton/GENERAL fallback (#278), then loads sessions.
     private func loadDashboardData() async {
-        if appState.physicianProfile == nil {
-            appState.physicianProfile = try? await APIClient.shared.getProfile()
+        // Always re-fetch (not only when nil): context serverIDs are minted by
+        // the profile PUT in a different screen, and a stale cached profile
+        // here made startSession send a nil context_id — the pinned template
+        // silently degraded to the specialty default (repro 1b0e9ac2). A
+        // failed fetch keeps the cached copy, preserving the #278 self-heal.
+        if let fresh = try? await APIClient.shared.getProfile() {
+            appState.physicianProfile = fresh
         }
         await loadRecentSessions()
     }

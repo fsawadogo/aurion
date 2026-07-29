@@ -1258,3 +1258,13 @@
 "noteOptions.detailBrief" = "Brief";
 "noteOptions.detailStandard" = "Standard";
 "noteOptions.detailDetailed" = "Detailed";
+
+// TE-4e parity — resolved template on Generate Note screen
+"postEncounter.changeTemplate" = "Change";
+"postEncounter.changeTemplateTitle" = "Generate with a different template?";
+"postEncounter.useMappedTemplate" = "Use my mapped template";
+"postEncounter.customTemplate" = "Custom template";
+"postEncounter.templateOverridden" = "Changed for this note only";
+"postEncounter.templateResolving" = "Resolving your template…";
+"postEncounter.templateFromMapping" = "From your visit-type settings";
+"postEncounter.templateSpecialtyDefault" = "Specialty default";
