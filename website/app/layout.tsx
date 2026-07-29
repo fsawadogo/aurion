@@ -1,7 +1,5 @@
 import { Analytics } from "@vercel/analytics/next"
-import { Inter, JetBrains_Mono, Schibsted_Grotesk } from "next/font/google"
-
-import { ThemeProvider } from "@/components/theme-provider"
+import { Hanken_Grotesk, Inter, JetBrains_Mono } from "next/font/google"
 
 import "./globals.css"
 
@@ -11,10 +9,9 @@ const inter = Inter({
   variable: "--font-inter",
 })
 
-/** Headlines — a grotesk with real character; used only at display sizes. */
-const schibsted = Schibsted_Grotesk({
+/** Headlines — sharp, contemporary, anchors the page visually. */
+const hanken = Hanken_Grotesk({
   subsets: ["latin"],
-  weight: ["500", "600", "700"],
   variable: "--font-hanken",
 })
 
@@ -38,15 +35,11 @@ export default function RootLayout({
 
   return (
     <html
-      className={`${inter.variable} ${schibsted.variable} ${jetbrainsMono.variable}`}
+      className={`${inter.variable} ${hanken.variable} ${jetbrainsMono.variable}`}
       suppressHydrationWarning
     >
       <body className="font-sans antialiased">
-        {/* class-attribute theming: follows the OS until the visitor picks
-            via the header ThemeToggle; tokens live in globals.css (.dark). */}
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          {children}
-        </ThemeProvider>
+        {children}
         {enableVercelAnalytics && <Analytics />}
       </body>
     </html>

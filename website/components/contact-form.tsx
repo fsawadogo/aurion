@@ -46,8 +46,8 @@ export function ContactForm() {
     setServerMsg(null)
 
     try {
-      // Static site — submissions go straight to the PeriTwin backend's
-      // public waitlist endpoint (stored in Postgres, no PII logged).
+      // Static site — submissions go to the PeriTwin backend's public
+      // waitlist endpoint (stored in Postgres, notification emailed).
       const res = await fetch(`${SITE.apiBaseUrl}/api/v1/public/waitlist`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -157,7 +157,7 @@ export function ContactForm() {
       <Button
         type="submit"
         disabled={form.formState.isSubmitting}
-        className="h-auto w-full rounded-xl bg-primary px-unit-8 py-unit-4 text-[15.5px] font-semibold text-on-primary shadow-sm transition-all hover:bg-primary-container active:scale-[0.98] sm:w-auto sm:min-w-[200px]"
+        className="h-11 w-full rounded-lg bg-secondary font-mono text-[15px] font-medium text-on-secondary hover:bg-secondary/90 sm:w-auto sm:min-w-[200px]"
       >
         {form.formState.isSubmitting ? t("submitting") : t("submit")}
       </Button>

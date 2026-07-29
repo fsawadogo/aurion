@@ -19,7 +19,7 @@ export function WatchVideoButton() {
 
   return (
     <Dialog>
-      <DialogTrigger className="inline-flex min-h-11 items-center gap-unit-2 rounded-lg px-unit-4 py-unit-3 text-[15px] font-medium text-secondary underline-offset-4 transition-colors hover:text-primary hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary">
+      <DialogTrigger className="inline-flex items-center gap-unit-2 rounded-lg border-2 border-secondary px-unit-8 py-unit-4 font-mono text-[15px] font-medium text-secondary transition-all hover:bg-secondary/5 active:scale-95">
         <PlayCircle className="h-5 w-5" aria-hidden />
         {t("hero.watchVideo")}
       </DialogTrigger>

@@ -1,4 +1,4 @@
-import { ChevronRight } from "lucide-react"
+import { ChevronRight, ShieldCheck } from "lucide-react"
 import Image from "next/image"
 import { getTranslations } from "next-intl/server"
 
@@ -21,29 +21,21 @@ const COMPANY_LINKS = [
 
 export async function LandingFooter() {
   const t = await getTranslations("common")
+  const tHome = await getTranslations("home")
 
   return (
     <footer className="w-full border-t border-outline-variant/20 bg-surface-container-low py-unit-12 md:py-unit-16">
       <div className="mx-auto grid max-w-(--breakpoint-2xl) grid-cols-1 gap-unit-12 px-margin-mobile md:grid-cols-2 md:px-margin-desktop lg:grid-cols-4 lg:gap-gutter">
 
-        <div className="space-y-unit-3">
-          {/* Live-type brand row (same grammar as the nav) — the lockup PNG's
-              dark-navy wordmark disappeared on the dark theme. */}
-          <div className="flex items-center gap-2.5">
-            <Image
-              src="/peritwin-mark.png"
-              alt=""
-              aria-hidden
-              width={600}
-              height={600}
-              className="h-9 w-auto"
-            />
-            <span className="font-display text-[22px] leading-none font-bold tracking-[-0.02em]">
-              <span className="text-[#5D72DB]">Peri</span>
-              <span className="text-secondary">Twin</span>
-            </span>
-          </div>
-          <p className="text-[13px] text-on-surface-variant">{t("footer.tagline")}</p>
+        <div className="space-y-unit-4">
+          {/* Full lockup — the tagline is part of the artwork, so no separate line */}
+          <Image
+            src="/peritwin-logo.png"
+            alt={`${t("brand")} — ${t("footer.tagline")}`}
+            width={1248}
+            height={667}
+            className="h-auto w-full max-w-[260px]"
+          />
         </div>
 
         <div className="hidden space-y-unit-4 lg:block">
@@ -108,6 +100,15 @@ export async function LandingFooter() {
       </div>
 
       <div className="mx-auto mt-unit-12 max-w-(--breakpoint-2xl) border-t border-outline-variant/20 px-margin-mobile pt-unit-8 text-center md:px-margin-desktop lg:mt-unit-16 lg:pt-unit-12">
+        {/* Reassurance CTA — mobile only; desktop carries this in its own section */}
+        <Link
+          href="/contact"
+          className="mb-unit-8 flex min-h-14 w-full items-center justify-center gap-unit-2 rounded-xl border-[1.5px] border-primary font-mono text-[15px] font-bold text-primary transition-colors active:bg-primary/5 lg:hidden"
+        >
+          <ShieldCheck className="h-5 w-5" aria-hidden />
+          {tHome("philosophy.title")}
+        </Link>
+
         <p className="mb-unit-2 font-mono text-[13px] font-bold tracking-widest text-on-surface uppercase lg:hidden">
           {t("company")}
         </p>

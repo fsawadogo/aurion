@@ -11,9 +11,8 @@ const baseUrl =
 export const SITE = {
   baseUrl,
   /**
-   * FastAPI backend origin for public endpoints (waitlist). The site is a
-   * static export, so this is baked at build time; override per environment
-   * with NEXT_PUBLIC_API_BASE.
+   * FastAPI backend origin for public endpoints (waitlist). Static export:
+   * baked at build time; override per environment with NEXT_PUBLIC_API_BASE.
    */
   apiBaseUrl:
     process.env.NEXT_PUBLIC_API_BASE ?? "https://api-dev.aurionclinical.com",
