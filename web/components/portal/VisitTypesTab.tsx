@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import Link from "next/link";
 import {
   clearOrgVisitTypeTemplate,
   getMe,
@@ -17,7 +16,6 @@ import {
 } from "@/lib/portal-api";
 import VisitTypeContextsEditor, {
   BUILT_IN_TEMPLATE_KEYS,
-  newContextId,
 } from "@/components/portal/VisitTypeContextsEditor";
 import Button from "@/components/ui/Button";
 import LoadingSkeleton from "@/components/ui/LoadingSkeleton";
@@ -30,16 +28,15 @@ import type {
 /**
  * Templates → "Visit Types" tab: the visit-type → template map, both tiers.
  *
- *   • Admin sets the ORG default template per visit type (built-in or a SHARED
- *     custom template) — the fallback every clinician inherits.
- *   • A clinician sets THEIR OWN default per visit type — stored as the visit
- *     type's ``is_default`` context in their profile (#577), which the note
- *     pipeline resolves ahead of the org/specialty default. Options are the
- *     built-ins + the clinician's own/shared custom templates.
+ *   • Admin sees the flat ORG-default list per visit type (built-in or a
+ *     SHARED custom template) — the fallback every clinician inherits.
+ *   • A clinician sees ONE surface (TE-4h): the per-visit-type accordion
+ *     (`VisitTypeContextsEditor`, shared with My Profile) holding each visit
+ *     type's DEFAULT template (its ``is_default`` context, #577) and its
+ *     named contexts — edited as one draft, saved together.
  *
  * Both tiers resolve server-side in ``resolve_context_template_key``; iOS just
- * sends the visit type. Granular sub-contexts ("left knee", "revision") stay in
- * My Profile — this tab is the flat "one default per visit type" surface.
+ * sends the visit type.
  */
 
 // Mirrors the System-Templates elevatable curation set (#578).
@@ -66,47 +63,13 @@ function encodeValue(
   return "";
 }
 
-function isBuiltinValue(value: string): boolean {
-  return value.startsWith("builtin:");
-}
-
 function orgValue(row: OrgVisitTypeTemplate | undefined): string {
   return encodeValue(row?.template_key, row?.custom_template_id);
-}
-
-function clinicianValue(contexts: VisitTypeContext[] | undefined): string {
-  const def = (contexts ?? []).find((c) => c.is_default);
-  return encodeValue(def?.template_key, def?.template_ref);
-}
-
-/** Apply a selection to a visit type's clinician default (its ``is_default``
- * context), preserving every other context. "" drops the default → inherit. */
-function withClinicianDefault(
-  existing: VisitTypeContext[],
-  vtLabel: string,
-  value: string,
-): VisitTypeContext[] {
-  const nonDefault = existing.filter((c) => !c.is_default);
-  if (value === "") return nonDefault;
-  const idx = value.indexOf(":");
-  const kind = value.slice(0, idx);
-  const id = value.slice(idx + 1);
-  const prev = existing.find((c) => c.is_default);
-  const def: VisitTypeContext = {
-    id: prev?.id ?? newContextId(),
-    label: prev?.label || vtLabel,
-    template_key: kind === "builtin" ? id : null,
-    template_ref: kind === "custom" ? id : null,
-    is_default: true,
-    description: prev?.description ?? null,
-  };
-  return [...nonDefault, def];
 }
 
 export default function VisitTypesTab() {
   const t = useTranslations("TemplatesList");
   const tTpl = useTranslations("Profile.contexts.templates");
-  const tCtx = useTranslations("Profile.contexts");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
@@ -191,22 +154,6 @@ export default function VisitTypesTab() {
     }
   }
 
-  // The flat default dropdown now edits the DRAFT (not an immediate PUT), so
-  // it shares one save with the accordion below.
-  function onClinicianChange(vt: string, value: string) {
-    const nextForVt = withClinicianDefault(
-      draftContexts[vt] ?? [],
-      visitTypeLabel(vt),
-      value,
-    );
-    setDraftContexts((prev) => {
-      const next = { ...prev };
-      if (nextForVt.length === 0) delete next[vt];
-      else next[vt] = nextForVt;
-      return next;
-    });
-  }
-
   const contextsDirty =
     JSON.stringify(draftContexts) !== JSON.stringify(contextsByVt);
 
@@ -233,38 +180,25 @@ export default function VisitTypesTab() {
     customGroupLabel: string,
     onChange: (vt: string, value: string) => void,
   ) {
-    // A clinician default still pinned to a built-in specialty template_key
-    // (pre-TE-4g, or from iOS) has no matching option now that the clinician
-    // menu omits the built-ins. Surface it as a visible, re-pickable
-    // placeholder rather than a silent blank <select> — the same guard TE-4e
-    // added to the per-context editor. Selecting it again never fires
-    // onChange; pick "" or a custom to move off it.
-    const legacyBuiltin = !isAdmin && isBuiltinValue(value);
+    // Admin-only since TE-4h — the clinician surface is the accordion below.
     return (
       <select
         className="rounded-aurion-md border border-hairline bg-white px-3 py-2 text-aurion-callout text-navy-800 focus:outline-none focus:ring-2 focus:ring-gold-300/40 disabled:opacity-50"
         value={value}
-        // Disable ALL selects while any save is in flight. The clinician path
-        // PUTs the full contexts map, so a concurrent edit built from stale
-        // state would clobber the in-flight one; serialising avoids that.
+        // Serialize org-default writes: disable while a save is in flight.
         disabled={savingVt !== null}
         onChange={(e) => onChange(vt, e.target.value)}
         data-testid={`visit-type-template-${vt}`}
         aria-label={t("visitsSelectAria", { visit: visitTypeLabel(vt) })}
       >
         <option value="">{t("visitsSpecialtyDefault")}</option>
-        {isAdmin && (
-          <optgroup label={t("visitsBuiltinGroup")}>
-            {BUILT_IN_TEMPLATE_KEYS.map((k) => (
-              <option key={k} value={encodeValue(k, null)}>
-                {tTpl(k)}
-              </option>
-            ))}
-          </optgroup>
-        )}
-        {legacyBuiltin && (
-          <option value={value}>{tCtx("legacySpecialtyTemplate")}</option>
-        )}
+        <optgroup label={t("visitsBuiltinGroup")}>
+          {BUILT_IN_TEMPLATE_KEYS.map((k) => (
+            <option key={k} value={encodeValue(k, null)}>
+              {tTpl(k)}
+            </option>
+          ))}
+        </optgroup>
         {options.length > 0 && (
           <optgroup label={customGroupLabel}>
             {options.map((c) => (
@@ -306,51 +240,37 @@ export default function VisitTypesTab() {
           {saveError}
         </div>
       )}
-      <p className="mb-4 text-aurion-caption text-navy-500">
-        {isAdmin ? t("visitsAdminHint") : t("visitsClinicianHint")}
-      </p>
+      {isAdmin && (
+        <p className="mb-4 text-aurion-caption text-navy-500">
+          {t("visitsAdminHint")}
+        </p>
+      )}
       {visitTypes.length === 0 ? (
         <p className="py-4 text-aurion-caption text-navy-500">
           {t("visitsEmpty")}
         </p>
-      ) : (
+      ) : isAdmin ? (
         <ul className="divide-y divide-hairline">
           {visitTypes.map((vt) => (
             <li key={vt} className="flex items-center gap-3 py-3">
               <span className="flex-1 min-w-0 truncate text-aurion-callout font-medium text-navy-800">
                 {visitTypeLabel(vt)}
               </span>
-              {isAdmin
-                ? renderSelect(
-                    vt,
-                    orgValue(orgByVt[vt]),
-                    shared,
-                    t("visitsSharedGroup"),
-                    onOrgChange,
-                  )
-                : renderSelect(
-                    vt,
-                    clinicianValue(draftContexts[vt]),
-                    customs,
-                    t("visitsMineGroup"),
-                    onClinicianChange,
-                  )}
+              {renderSelect(
+                vt,
+                orgValue(orgByVt[vt]),
+                shared,
+                t("visitsSharedGroup"),
+                onOrgChange,
+              )}
             </li>
           ))}
         </ul>
-      )}
-
-      {/* TE-4f — the rich per-context accordion, same editor as My Profile,
-          for named sub-contexts under each visit type. Edits the same draft
-          as the default dropdowns above; one Save persists both. */}
-      {!isAdmin && visitTypes.length > 0 && (
-        <div className="mt-6 border-t border-hairline pt-5">
-          <h3 className="mb-1 text-aurion-callout font-semibold text-navy-800">
-            {t("visitsContextsTitle")}
-          </h3>
-          <p className="mb-3 text-aurion-caption text-navy-500">
-            {t("visitsContextsHint")}
-          </p>
+      ) : (
+        /* TE-4h — the clinician's ONE surface: the same accordion as My
+           Profile, now carrying each visit type's default template AND its
+           contexts. One draft, one Save. */
+        <div>
           <VisitTypeContextsEditor
             visitTypes={visitTypes}
             value={draftContexts}
@@ -374,15 +294,6 @@ export default function VisitTypesTab() {
               </span>
             )}
           </div>
-          <p className="mt-4 text-aurion-caption text-navy-500">
-            {t("visitsProfileSubcontexts")}{" "}
-            <Link
-              href="/portal/profile"
-              className="font-medium text-navy-500 hover:text-navy-800 transition-colors duration-short"
-            >
-              {t("visitsGoToProfile")}
-            </Link>
-          </p>
         </div>
       )}
     </div>

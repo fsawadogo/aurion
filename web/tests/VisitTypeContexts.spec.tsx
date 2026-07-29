@@ -130,7 +130,7 @@ describe("VisitTypeContextsEditor — template select", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox");
+    const select = screen.getByRole("combobox", { name: /template for context/i });
     // Only "Use my specialty default" — specialty is a profile property, not a
     // per-context pick, so the 8-specialty list is gone.
     expect(within(select).getAllByRole("option")).toHaveLength(1);
@@ -154,7 +154,7 @@ describe("VisitTypeContextsEditor — template select", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    const select = screen.getByRole("combobox", { name: /template for context/i }) as HTMLSelectElement;
     // The built-in key has no normal option anymore; a placeholder keeps the
     // <select> ON it (value round-trips) instead of snapping silently to blank.
     expect(select.value).toBe("orthopedic_surgery");
@@ -179,7 +179,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox");
+    const select = screen.getByRole("combobox", { name: /template for context/i });
     // 1 default + 2 custom (TE-4e: no flat built-in list).
     expect(within(select).getAllByRole("option")).toHaveLength(
       1 + CUSTOM_TEMPLATES.length,
@@ -204,7 +204,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox");
+    const select = screen.getByRole("combobox", { name: /template for context/i });
     await user.selectOptions(select, CUSTOM_TEMPLATES[0].id);
     await waitFor(() => {
       const row = getState().new_patient[0];
@@ -227,7 +227,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    await user.selectOptions(screen.getByRole("combobox"), "");
+    await user.selectOptions(screen.getByRole("combobox", { name: /template for context/i }), "");
     await waitFor(() => {
       const row = getState().new_patient[0];
       expect(row.template_ref).toBeNull();
@@ -247,7 +247,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox");
+    const select = screen.getByRole("combobox", { name: /template for context/i });
     expect(within(select).getAllByRole("option")).toHaveLength(1);
     expect(
       within(select).queryByRole("group", { name: /custom templates/i }),
@@ -267,7 +267,7 @@ describe("VisitTypeContextsEditor — custom templates", () => {
       ),
     );
     await user.click(screen.getByRole("button", { name: /new patient/i }));
-    const select = screen.getByRole("combobox") as HTMLSelectElement;
+    const select = screen.getByRole("combobox", { name: /template for context/i }) as HTMLSelectElement;
     // The placeholder option is selected (the select reflects the ref).
     expect(
       within(select).getByRole("option", { name: /unavailable/i }),
@@ -483,6 +483,209 @@ describe("VisitTypeContextsEditor — i18n parity", () => {
     for (const key of BUILT_IN_TEMPLATE_KEYS) {
       expect(templates[key]).toBeTruthy();
     }
+  });
+});
+
+/* ── Default template per visit type (TE-4h) ──────────────────────────── */
+
+describe("VisitTypeContextsEditor — default template (TE-4h)", () => {
+  const KNEE = CUSTOM_TEMPLATES[0];
+  const SHOULDER = CUSTOM_TEMPLATES[1];
+
+  /** The visit type's `is_default` context (#577). */
+  function defaultCtx(patch: Partial<VisitTypeContext> = {}): VisitTypeContext {
+    return {
+      id: "ctx_default1",
+      label: "New patient",
+      template_key: null,
+      template_ref: KNEE.id,
+      is_default: true,
+      ...patch,
+    };
+  }
+
+  async function openPanel(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByRole("button", { name: /new patient/i }));
+  }
+
+  function defaultSelect(): HTMLSelectElement {
+    return screen.getByRole("combobox", {
+      name: /default template for/i,
+    }) as HTMLSelectElement;
+  }
+
+  it("picking a custom template upserts the is_default row, preserving other contexts", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [ctx("Left knee")] }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await openPanel(user);
+    await user.selectOptions(defaultSelect(), KNEE.id);
+
+    const rows = getState().new_patient;
+    const def = rows.find((c) => c.is_default);
+    expect(def?.template_ref).toBe(KNEE.id);
+    expect(def?.template_key).toBeNull();
+    expect(def?.label).toBe("New Patient");
+    // The named context is untouched.
+    expect(rows.some((c) => c.label === "Left knee" && !c.is_default)).toBe(
+      true,
+    );
+  });
+
+  it("picking the specialty default DROPS the is_default row (empty map key removed)", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [defaultCtx()] }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await openPanel(user);
+    expect(defaultSelect().value).toBe(KNEE.id);
+    await user.selectOptions(defaultSelect(), "");
+    // Sole row gone → the visit type's key is dropped entirely, so the PUT
+    // carries no pinned default — the server falls through to specialty.
+    expect(getState().new_patient).toBeUndefined();
+  });
+
+  it("re-picking preserves the row's id, label, and description", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{
+            new_patient: [
+              defaultCtx({ label: "My NP default", description: "keep me" }),
+            ],
+          }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await openPanel(user);
+    await user.selectOptions(defaultSelect(), SHOULDER.id);
+
+    const def = getState().new_patient.find((c) => c.is_default);
+    expect(def?.id).toBe("ctx_default1");
+    expect(def?.label).toBe("My NP default");
+    expect(def?.description).toBe("keep me");
+    expect(def?.template_ref).toBe(SHOULDER.id);
+  });
+
+  it("a default still pinned to a built-in shows the re-pick option, and '' clears it", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{
+            new_patient: [
+              defaultCtx({
+                template_ref: null,
+                template_key: "orthopedic_surgery",
+              }),
+            ],
+          }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await openPanel(user);
+    // The legacy pin is visible and selected — not a silent blank select.
+    expect(defaultSelect().value).toBe("orthopedic_surgery");
+    expect(
+      within(defaultSelect()).getByText("Specialty template (re-pick)"),
+    ).toBeInTheDocument();
+    await user.selectOptions(defaultSelect(), "");
+    expect(getState().new_patient).toBeUndefined();
+  });
+
+  it("a default whose custom template no longer resolves shows the unavailable placeholder", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [defaultCtx({ template_ref: "gone-id" })] }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await openPanel(user);
+    expect(defaultSelect().value).toBe("gone-id");
+    expect(
+      within(defaultSelect()).getByText("Custom template (unavailable)"),
+    ).toBeInTheDocument();
+  });
+
+  it("the is_default row never renders as a context row; the badge counts named contexts only", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [defaultCtx(), ctx("Left knee")] }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    const header = screen.getByRole("button", { name: /new patient/i });
+    // Badge = named contexts only (1), not the hidden default row.
+    expect(within(header).getByText("1")).toBeInTheDocument();
+    // Collapsed summary names the default's template.
+    expect(within(header).getByText("Default: Knee Protocol")).toBeInTheDocument();
+
+    await openPanel(user);
+    // Exactly one label input — the named context. No phantom "New patient" row.
+    expect(screen.getByDisplayValue("Left knee")).toBeInTheDocument();
+    expect(screen.queryByDisplayValue("New patient")).not.toBeInTheDocument();
+  });
+
+  it("summarizes 'Specialty default' when nothing is pinned", () => {
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{}}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    const header = screen.getByRole("button", { name: /new patient/i });
+    expect(
+      within(header).getByText("Default: Specialty default"),
+    ).toBeInTheDocument();
+  });
+
+  it("deleting a named context leaves the default row intact", async () => {
+    const user = userEvent.setup();
+    render(
+      withIntl(
+        <Harness
+          visitTypes={["new_patient"]}
+          initial={{ new_patient: [defaultCtx(), ctx("Left knee")] }}
+          customTemplates={CUSTOM_TEMPLATES}
+        />,
+      ),
+    );
+    await openPanel(user);
+    await user.click(
+      screen.getByRole("button", { name: /remove context "left knee"/i }),
+    );
+    const rows = getState().new_patient;
+    expect(rows).toHaveLength(1);
+    expect(rows[0].is_default).toBe(true);
   });
 });
 

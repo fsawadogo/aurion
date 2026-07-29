@@ -9,6 +9,10 @@
  * Mirrors the iOS context editor (I1) and the B1 backend contract:
  *   - one collapsible section per `consultation_types` entry (default
  *     key or custom label);
+ *   - a "Default template" select at the top of each panel (TE-4h) — the
+ *     visit type's `is_default` context (#577), i.e. the template used when
+ *     no context is picked on the device. Rendered as a dedicated control,
+ *     never as a context row, and summarized on the collapsed header;
  *   - each context row = a label input + a template `<select>`
  *     ("Use my specialty default" + a "Custom templates" optgroup of the
  *     caller's OWNED custom templates, all localized) + a delete button.
@@ -167,6 +171,32 @@ export default function VisitTypeContextsEditor({
       : vt;
   }
 
+  /** Apply the panel's "Default template" pick (TE-4h). "" drops the
+   * `is_default` row — inherit the specialty default; a custom id upserts it,
+   * preserving the row's id/label/description so a re-pick round-trips. A
+   * value matching neither (re-selecting the legacy or stale placeholder)
+   * never reaches here — a `<select>` only fires onChange on a real change. */
+  function setDefaultTemplate(vt: string, optionValue: string) {
+    const list = value[vt] ?? [];
+    const rest = list.filter((c) => !c.is_default);
+    if (optionValue === "") {
+      setContexts(vt, rest);
+    } else if (customIdSet.has(optionValue)) {
+      const prev = list.find((c) => c.is_default);
+      setContexts(vt, [
+        ...rest,
+        {
+          id: prev?.id ?? newContextId(),
+          label: prev?.label || visitTypeLabel(vt),
+          template_key: null,
+          template_ref: optionValue,
+          is_default: true,
+          description: prev?.description ?? null,
+        },
+      ]);
+    }
+  }
+
   function toggleOpen(vt: string) {
     const next = new Set(open);
     if (next.has(vt)) next.delete(vt);
@@ -256,16 +286,30 @@ export default function VisitTypeContextsEditor({
 
       <div className="space-y-2">
         {visitTypes.map((vt) => {
-          const contexts = value[vt] ?? [];
+          // TE-4h: the `is_default` row is the visit type's DEFAULT — shown
+          // as the panel's dedicated select, never as a context row. The cap
+          // and duplicate-label validation run on the FULL list because the
+          // backend validates the full list.
+          const list = value[vt] ?? [];
+          const defaultCtx = list.find((c) => c.is_default) ?? null;
+          const contexts = list.filter((c) => !c.is_default);
           const isOpen = open.has(vt);
           const adding = addingFor === vt;
-          const atLimit = contexts.length >= MAX_CONTEXTS_PER_VISIT_TYPE;
+          const atLimit = list.length >= MAX_CONTEXTS_PER_VISIT_TYPE;
           const validation: ValidationReason = adding
             ? validateConsultationType(
                 draft,
-                contexts.map((c) => c.label),
+                list.map((c) => c.label),
               )
             : null;
+          const defaultName = defaultCtx
+            ? defaultCtx.template_ref !== null
+              ? (customOptions.find((o) => o.id === defaultCtx.template_ref)
+                  ?.label ?? t("customUnavailable"))
+              : defaultCtx.template_key !== null
+                ? t("legacySpecialtyTemplate")
+                : t("default.summarySpecialty")
+            : t("default.summarySpecialty");
           const showValidationError =
             adding && validation !== null && validation !== "empty";
           const panelId = `ctx-panel-${vt}`;
@@ -303,11 +347,19 @@ export default function VisitTypeContextsEditor({
                     {visitTypeLabel(vt)}
                   </span>
                 </span>
-                {contexts.length > 0 && (
-                  <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-gold-50 px-1.5 text-xs font-medium text-navy-800">
-                    {contexts.length}
+                <span className="flex min-w-0 items-center gap-2">
+                  {/* Collapsed summary (TE-4h): the whole mapping is
+                      scannable without expanding. Display names can be PHI —
+                      render-only, never logged. */}
+                  <span className="truncate text-xs text-gray-500">
+                    {t("default.summary", { name: defaultName })}
                   </span>
-                )}
+                  {contexts.length > 0 && (
+                    <span className="inline-flex h-5 min-w-5 shrink-0 items-center justify-center rounded-full bg-gold-50 px-1.5 text-xs font-medium text-navy-800">
+                      {contexts.length}
+                    </span>
+                  )}
+                </span>
               </button>
 
               {isOpen && (
@@ -315,6 +367,59 @@ export default function VisitTypeContextsEditor({
                   id={panelId}
                   className="border-t border-gray-100 px-3 py-3 space-y-2"
                 >
+                  {/* TE-4h: the visit type's default template — a dedicated
+                      control over the `is_default` row, so it can never be
+                      mistaken for (or deleted as) a context. */}
+                  <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                    <span className="shrink-0 text-sm font-medium text-navy-800 sm:w-40">
+                      {t("default.label")}
+                    </span>
+                    <select
+                      value={
+                        defaultCtx
+                          ? (defaultCtx.template_ref ??
+                            defaultCtx.template_key ??
+                            "")
+                          : ""
+                      }
+                      onChange={(e) => setDefaultTemplate(vt, e.target.value)}
+                      aria-label={t("default.aria", {
+                        visit: visitTypeLabel(vt),
+                      })}
+                      className="form-select flex-1"
+                    >
+                      <option value="">{t("defaultTemplate")}</option>
+                      {defaultCtx &&
+                        defaultCtx.template_ref === null &&
+                        defaultCtx.template_key !== null && (
+                          /* Legacy built-in pin (pre-TE-4e, or iOS): keep it
+                           * visible and re-pickable, same guard as rows. */
+                          <option value={defaultCtx.template_key}>
+                            {t("legacySpecialtyTemplate")}
+                          </option>
+                        )}
+                      {customOptions.length > 0 && (
+                        <optgroup label={t("customGroup")}>
+                          {customOptions.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              {o.label}
+                            </option>
+                          ))}
+                        </optgroup>
+                      )}
+                      {defaultCtx?.template_ref != null &&
+                        !customIdSet.has(defaultCtx.template_ref) && (
+                          /* Stale ref: same graceful display as rows. */
+                          <option value={defaultCtx.template_ref}>
+                            {t("customUnavailable")}
+                          </option>
+                        )}
+                    </select>
+                  </div>
+                  <p className="pb-1 text-xs text-gray-500">
+                    {t("default.hint")}
+                  </p>
+
                   {contexts.length === 0 && !adding && (
                     <p className="text-xs text-gray-500">{t("empty")}</p>
                   )}

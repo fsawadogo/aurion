@@ -1,11 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from "vitest";
-import {
-  render,
-  screen,
-  waitFor,
-  fireEvent,
-  within,
-} from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 
 import { withIntl } from "./helpers/intl";
 
@@ -33,12 +27,34 @@ vi.mock("next/link", () => ({
 }));
 // Keep the real i18n keys but avoid pulling the full editor component tree.
 vi.mock("@/components/portal/VisitTypeContextsEditor", () => ({
-  // The rich accordion is exercised in its own spec (VisitTypeContexts.spec);
-  // here it's a stub so the tab renders. The flat default dropdown + Save
-  // button (the tab's own logic) are what these tests drive.
-  default: () => null,
+  // The rich accordion (incl. the TE-4h default-template control) is
+  // exercised in its own spec (VisitTypeContexts.spec); here it's a stub
+  // whose one button mutates the draft, so the tab's own logic —
+  // draft/dirty/save wiring — is what these tests drive.
+  default: ({
+    onChange,
+  }: {
+    onChange: (next: Record<string, unknown>) => void;
+  }) => (
+    <button
+      data-testid="editor-stub-mutate"
+      onClick={() =>
+        onChange({
+          follow_up: [
+            {
+              id: "ctx_stub1",
+              label: "Follow-up",
+              template_key: null,
+              template_ref: "c1",
+              is_default: true,
+              description: null,
+            },
+          ],
+        })
+      }
+    />
+  ),
   BUILT_IN_TEMPLATE_KEYS: ["general", "orthopedic_surgery", "plastic_surgery"],
-  newContextId: () => "ctx_test1234",
 }));
 
 import {
@@ -110,17 +126,27 @@ describe("VisitTypesTab", () => {
     );
   });
 
-  it("clinician: sets their own per-visit default via an is_default context; saves on the Save button; never fetches org defaults", async () => {
+  it("clinician: one surface — the accordion, no flat per-visit selects (TE-4h)", async () => {
     vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
     render(withIntl(<VisitTypesTab />));
 
-    const sel = await screen.findByTestId("visit-type-template-follow_up");
-    // TE-4f: selecting edits the DRAFT — no immediate PUT (the flat dropdown
-    // and the accordion share one save).
-    fireEvent.change(sel, { target: { value: "custom:c1" } });
+    // The editor (stub) renders; the flat clinician dropdowns are gone.
+    await screen.findByTestId("editor-stub-mutate");
+    expect(screen.queryByTestId("visit-type-template-follow_up")).toBeNull();
+    // The doubled heading and the stale Profile pointer are gone too.
+    expect(screen.queryByText("Sub-contexts")).toBeNull();
+    expect(screen.queryByText(/set your own in my profile/i)).toBeNull();
+  });
+
+  it("clinician: editor edits the DRAFT; Save persists it; never fetches org defaults", async () => {
+    vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
+    render(withIntl(<VisitTypesTab />));
+
+    // Mutating via the editor edits the draft — no immediate PUT (the
+    // default control and context rows share one save, TE-4f/TE-4h).
+    fireEvent.click(await screen.findByTestId("editor-stub-mutate"));
     expect(updateMyProfile).not.toHaveBeenCalled();
 
-    // Save persists the whole draft.
     fireEvent.click(screen.getByTestId("visit-types-save"));
     await waitFor(() => expect(updateMyProfile).toHaveBeenCalled());
     const arg = vi.mocked(updateMyProfile).mock.calls.at(-1)![0] as {
@@ -133,84 +159,6 @@ describe("VisitTypesTab", () => {
     expect(def?.template_ref).toBe("c1");
     // A clinician never hits the admin-gated org endpoint.
     expect(listOrgVisitTypeTemplates).not.toHaveBeenCalled();
-  });
-
-  it("clinician: dropdown offers specialty-default + custom only, no built-in specialty templates (TE-4g)", async () => {
-    vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
-    render(withIntl(<VisitTypesTab />));
-
-    const sel = (await screen.findByTestId(
-      "visit-type-template-follow_up",
-    )) as HTMLSelectElement;
-    const values = within(sel)
-      .getAllByRole("option")
-      .map((o) => (o as HTMLOptionElement).value);
-    // The clinician's specialty template comes from their profile, not this
-    // menu — so no built-in specialty options are offered (TE-4g).
-    expect(values.some((v) => v.startsWith("builtin:"))).toBe(false);
-    // Specialty default ("") + both of the clinician's own customs remain.
-    expect(values).toContain("");
-    expect(values).toContain("custom:c1");
-    expect(values).toContain("custom:c2");
-  });
-
-  // A default context created before TE-4g (or by iOS) still pinned to a
-  // built-in template_key.
-  const LEGACY_PIN_PROFILE = {
-    consultation_types: ["follow_up", "pre_op"],
-    contexts_per_visit_type: {
-      follow_up: [
-        {
-          id: "ctx_legacy",
-          label: "Follow-up",
-          template_key: "orthopedic_surgery",
-          template_ref: null,
-          is_default: true,
-          description: null,
-        },
-      ],
-    },
-  };
-
-  it("clinician: a default still pinned to a built-in shows a re-pick placeholder, not a blank select (TE-4g)", async () => {
-    vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
-    vi.mocked(getMyProfile).mockResolvedValue(LEGACY_PIN_PROFILE as never);
-    render(withIntl(<VisitTypesTab />));
-
-    const sel = (await screen.findByTestId(
-      "visit-type-template-follow_up",
-    )) as HTMLSelectElement;
-    // The pin is preserved and visible — NOT silently blanked to "".
-    expect(sel.value).toBe("builtin:orthopedic_surgery");
-    expect(screen.getByText("Specialty template (re-pick)")).toBeTruthy();
-    // Re-picking a custom moves off the legacy pin (no built-in re-selection).
-    fireEvent.change(sel, { target: { value: "custom:c1" } });
-    expect(sel.value).toBe("custom:c1");
-  });
-
-  it("clinician: picking Specialty default from a legacy pin clears it in the saved payload (TE-4g)", async () => {
-    vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
-    vi.mocked(getMyProfile).mockResolvedValue(LEGACY_PIN_PROFILE as never);
-    render(withIntl(<VisitTypesTab />));
-
-    const sel = (await screen.findByTestId(
-      "visit-type-template-follow_up",
-    )) as HTMLSelectElement;
-    // The expected un-pin: fall back to the profile-resolved specialty default.
-    fireEvent.change(sel, { target: { value: "" } });
-    expect(sel.value).toBe("");
-    // The placeholder unmounts once the draft moves off the legacy value.
-    expect(screen.queryByText("Specialty template (re-pick)")).toBeNull();
-
-    // Save must actually DROP the pinned default context — if a refactor ever
-    // preserves the row (e.g. to keep its label), the built-in template_key
-    // would silently keep resolving on the server for every follow-up.
-    fireEvent.click(screen.getByTestId("visit-types-save"));
-    await waitFor(() => expect(updateMyProfile).toHaveBeenCalled());
-    const arg = vi.mocked(updateMyProfile).mock.calls.at(-1)![0] as {
-      contexts_per_visit_type: Record<string, unknown>;
-    };
-    expect(arg.contexts_per_visit_type.follow_up).toBeUndefined();
   });
 
   it("admin: selecting the specialty default clears the org default", async () => {
@@ -232,9 +180,8 @@ describe("VisitTypesTab", () => {
     await waitFor(() =>
       expect(screen.getByText("Failed to load visit types.")).toBeTruthy(),
     );
-    expect(
-      screen.queryByText("Org visit-type defaults are set by your admin."),
-    ).toBeNull();
+    // Neither surface renders on a failed load.
+    expect(screen.queryByTestId("visit-types-save")).toBeNull();
   });
 
   it("clinician: Save is disabled until a change makes the draft dirty (TE-4f)", async () => {
@@ -245,10 +192,7 @@ describe("VisitTypesTab", () => {
     // Clean draft on load → nothing to save.
     expect(save).toBeDisabled();
 
-    fireEvent.change(
-      await screen.findByTestId("visit-type-template-follow_up"),
-      { target: { value: "custom:c1" } },
-    );
+    fireEvent.click(screen.getByTestId("editor-stub-mutate"));
     // Draft now differs from the saved snapshot → Save enabled.
     expect(save).toBeEnabled();
   });
@@ -260,5 +204,6 @@ describe("VisitTypesTab", () => {
     await screen.findByTestId("visit-type-template-follow_up");
     // The accordion + Save are the clinician surface only.
     expect(screen.queryByTestId("visit-types-save")).toBeNull();
+    expect(screen.queryByTestId("editor-stub-mutate")).toBeNull();
   });
 });

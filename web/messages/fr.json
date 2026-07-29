@@ -971,7 +971,7 @@
     },
     "contexts": {
       "label": "Contextes par type de consultation",
-      "description": "Ajoutez des contextes sous un type de consultation (ex. « genou gauche », « révision ») et associez-en chacun à l'un de vos gabarits personnalisés au besoin. Laissez le gabarit sur votre spécialité par défaut pour en hériter.",
+      "description": "Chaque type de consultation a un gabarit par défaut et des contextes optionnels (ex. « genou gauche », « révision »), chacun pouvant être associé à l'un de vos gabarits personnalisés. Ce qui reste sur votre spécialité par défaut en hérite.",
       "noVisitTypes": "Ajoutez un type de consultation ci-dessus pour y rattacher des contextes.",
       "empty": "Aucun contexte pour l’instant.",
       "addContext": "Ajouter un contexte",
@@ -987,6 +987,13 @@
       "customGroup": "Gabarits personnalisés",
       "customUnavailable": "Gabarit personnalisé (indisponible)",
       "legacySpecialtyTemplate": "Modèle de spécialité (à resélectionner)",
+      "default": {
+        "label": "Modèle par défaut",
+        "hint": "Utilisé lorsqu'aucun contexte n'est choisi sur l'appareil.",
+        "aria": "Modèle par défaut pour « {visit} »",
+        "summary": "Par défaut : {name}",
+        "summarySpecialty": "Modèle par défaut de la spécialité"
+      },
       "delete": "Supprimer le contexte « {label} »",
       "limit": "Maximum 30 contextes par type de consultation.",
       "templates": {
@@ -1131,8 +1138,6 @@
     "duplicateError": "Impossible de copier le modèle.",
     "visitsHeading": "Types de visite",
     "visitsAdminHint": "Définissez le modèle par défaut de l’organisation pour chaque type de visite. Les cliniciens en héritent sauf s’ils définissent le leur dans Mon profil.",
-    "visitsClinicianNote": "Les valeurs par défaut par type de visite sont définies par votre administrateur.",
-    "visitsGoToProfile": "Définissez le vôtre dans Mon profil →",
     "visitsSpecialtyDefault": "Modèle par défaut de la spécialité",
     "visitsBuiltinGroup": "Modèles intégrés",
     "visitsSharedGroup": "Modèles partagés",
@@ -1141,9 +1146,6 @@
     "visitsLoadError": "Échec du chargement des types de visite.",
     "visitsSaveError": "Impossible d’enregistrer la valeur par défaut.",
     "visitsRetry": "Réessayer",
-    "visitsClinicianHint": "Définissez votre modèle par défaut pour chaque type de visite. Il s’applique lorsque vous ne choisissez pas de contexte précis sur l’appareil; laissez « Modèle par défaut de la spécialité » pour en hériter.",
-    "visitsMineGroup": "Mes modèles",
-    "visitsProfileSubcontexts": "Besoin de modèles par contexte (p. ex. « genou gauche »)? Gérez-les dans Mon profil.",
     "fromNote": "À partir d’une consultation",
     "fromNoteTitle": "Créer un modèle à partir d’une note",
     "fromNoteHint": "Choisissez une consultation — PeriTwin en extrait un modèle réutilisable à partir de sa note, que vous affinez ensuite par clavardage. Aucune donnée du patient n’est copiée dans le modèle.",
@@ -1153,9 +1155,7 @@
     "fromNoteLoadError": "Impossible de charger vos consultations.",
     "fromNoteError": "Impossible de démarrer à partir de cette note.",
     "fromNoteRetry": "Réessayer",
-    "visitsContextsTitle": "Sous-contextes",
-    "visitsContextsHint": "Ajoutez des contextes sous un type de visite (p. ex. « genou gauche », « révision ») et associez chacun à un modèle. Laissez sur le modèle de la spécialité pour hériter.",
-    "visitsSaveButton": "Enregistrer les contextes",
+    "visitsSaveButton": "Enregistrer les modifications",
     "visitsUnsaved": "Modifications non enregistrées"
   },
   "TemplateNew": {

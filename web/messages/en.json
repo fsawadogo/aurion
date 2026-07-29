@@ -971,7 +971,7 @@
     },
     "contexts": {
       "label": "Visit-type contexts",
-      "description": "Add contexts under a visit type (e.g. \"left knee\", \"revision\") and optionally pin each to one of your custom templates. Leave the template on your specialty default to inherit it.",
+      "description": "Each visit type has a default template plus optional contexts (e.g. \"left knee\", \"revision\"), each pinnable to one of your custom templates. Anything left on your specialty default inherits it.",
       "noVisitTypes": "Add a visit type above to attach contexts to it.",
       "empty": "No contexts yet.",
       "addContext": "Add context",
@@ -987,6 +987,13 @@
       "customGroup": "Custom templates",
       "customUnavailable": "Custom template (unavailable)",
       "legacySpecialtyTemplate": "Specialty template (re-pick)",
+      "default": {
+        "label": "Default template",
+        "hint": "Used when no context is picked on the device.",
+        "aria": "Default template for \"{visit}\"",
+        "summary": "Default: {name}",
+        "summarySpecialty": "Specialty default"
+      },
       "delete": "Remove context \"{label}\"",
       "limit": "30 contexts maximum per visit type.",
       "templates": {
@@ -1131,8 +1138,6 @@
     "duplicateError": "Couldn't copy the template.",
     "visitsHeading": "Visit Types",
     "visitsAdminHint": "Set the org-wide default template for each visit type. Clinicians inherit it unless they set their own in My Profile.",
-    "visitsClinicianNote": "Org visit-type defaults are set by your admin.",
-    "visitsGoToProfile": "Set your own in My Profile →",
     "visitsSpecialtyDefault": "Specialty default",
     "visitsBuiltinGroup": "Built-in templates",
     "visitsSharedGroup": "Shared templates",
@@ -1141,9 +1146,6 @@
     "visitsLoadError": "Failed to load visit types.",
     "visitsSaveError": "Couldn't save the default.",
     "visitsRetry": "Retry",
-    "visitsClinicianHint": "Set your default template for each visit type. It applies when you don't pick a specific context on the device; leave it on Specialty default to inherit.",
-    "visitsMineGroup": "My templates",
-    "visitsProfileSubcontexts": "Need per-context templates (e.g. \"left knee\")? Manage them in My Profile.",
     "fromNote": "From a past encounter",
     "fromNoteTitle": "Create a template from a past note",
     "fromNoteHint": "Pick an encounter — PeriTwin reverse-engineers a reusable template from its note, then you refine it in chat. No patient details are copied into the template.",
@@ -1153,9 +1155,7 @@
     "fromNoteLoadError": "Couldn't load your encounters.",
     "fromNoteError": "Couldn't start from that note.",
     "fromNoteRetry": "Retry",
-    "visitsContextsTitle": "Sub-contexts",
-    "visitsContextsHint": "Add contexts under a visit type (e.g. “left knee”, “revision”) and pin each to a template. Leave on Specialty default to inherit.",
-    "visitsSaveButton": "Save contexts",
+    "visitsSaveButton": "Save changes",
     "visitsUnsaved": "Unsaved changes"
   },
   "TemplateNew": {
