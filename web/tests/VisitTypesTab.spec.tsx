@@ -154,25 +154,27 @@ describe("VisitTypesTab", () => {
     expect(values).toContain("custom:c2");
   });
 
+  // A default context created before TE-4g (or by iOS) still pinned to a
+  // built-in template_key.
+  const LEGACY_PIN_PROFILE = {
+    consultation_types: ["follow_up", "pre_op"],
+    contexts_per_visit_type: {
+      follow_up: [
+        {
+          id: "ctx_legacy",
+          label: "Follow-up",
+          template_key: "orthopedic_surgery",
+          template_ref: null,
+          is_default: true,
+          description: null,
+        },
+      ],
+    },
+  };
+
   it("clinician: a default still pinned to a built-in shows a re-pick placeholder, not a blank select (TE-4g)", async () => {
     vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
-    // A default context created before TE-4g (or by iOS) still pinned to a
-    // built-in template_key.
-    vi.mocked(getMyProfile).mockResolvedValue({
-      consultation_types: ["follow_up", "pre_op"],
-      contexts_per_visit_type: {
-        follow_up: [
-          {
-            id: "ctx_legacy",
-            label: "Follow-up",
-            template_key: "orthopedic_surgery",
-            template_ref: null,
-            is_default: true,
-            description: null,
-          },
-        ],
-      },
-    } as never);
+    vi.mocked(getMyProfile).mockResolvedValue(LEGACY_PIN_PROFILE as never);
     render(withIntl(<VisitTypesTab />));
 
     const sel = (await screen.findByTestId(
@@ -184,6 +186,31 @@ describe("VisitTypesTab", () => {
     // Re-picking a custom moves off the legacy pin (no built-in re-selection).
     fireEvent.change(sel, { target: { value: "custom:c1" } });
     expect(sel.value).toBe("custom:c1");
+  });
+
+  it("clinician: picking Specialty default from a legacy pin clears it in the saved payload (TE-4g)", async () => {
+    vi.mocked(getMe).mockResolvedValue({ role: "CLINICIAN" } as never);
+    vi.mocked(getMyProfile).mockResolvedValue(LEGACY_PIN_PROFILE as never);
+    render(withIntl(<VisitTypesTab />));
+
+    const sel = (await screen.findByTestId(
+      "visit-type-template-follow_up",
+    )) as HTMLSelectElement;
+    // The expected un-pin: fall back to the profile-resolved specialty default.
+    fireEvent.change(sel, { target: { value: "" } });
+    expect(sel.value).toBe("");
+    // The placeholder unmounts once the draft moves off the legacy value.
+    expect(screen.queryByText("Specialty template (re-pick)")).toBeNull();
+
+    // Save must actually DROP the pinned default context — if a refactor ever
+    // preserves the row (e.g. to keep its label), the built-in template_key
+    // would silently keep resolving on the server for every follow-up.
+    fireEvent.click(screen.getByTestId("visit-types-save"));
+    await waitFor(() => expect(updateMyProfile).toHaveBeenCalled());
+    const arg = vi.mocked(updateMyProfile).mock.calls.at(-1)![0] as {
+      contexts_per_visit_type: Record<string, unknown>;
+    };
+    expect(arg.contexts_per_visit_type.follow_up).toBeUndefined();
   });
 
   it("admin: selecting the specialty default clears the org default", async () => {
