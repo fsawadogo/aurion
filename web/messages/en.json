@@ -641,6 +641,10 @@
       "note_review_chat_enabled": {
         "name": "“Fix this note” chat",
         "description": "Adds a chat panel under the generated note: plain-language edits (“shorten the HPI”) applied as grounded, auto-versioned changes. Every applied edit creates a new note version."
+      },
+      "grounded_visual_findings_enabled": {
+        "name": "Grounded visual findings",
+        "description": "Let the video produce cited clinical exam findings (e.g. reduced knee flexion ~110°) instead of only literal descriptions — every finding stays cited to the frame it rests on, never an ungrounded diagnosis. Separate switch from Grounded synthesis. Leave OFF until validated on real footage on the lab page; enabling writes AI-derived findings into live patient notes (physician review still gates signing)."
       }
     },
     "chatTools": "Chat tools",

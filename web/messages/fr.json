@@ -641,6 +641,10 @@
       "note_review_chat_enabled": {
         "name": "Clavardage « Corriger cette note »",
         "description": "Ajoute un panneau de clavardage sous la note générée : des modifications en langage simple (« raccourcir l'HMA ») appliquées comme des changements ancrés et versionnés automatiquement. Chaque modification appliquée crée une nouvelle version de la note."
+      },
+      "grounded_visual_findings_enabled": {
+        "name": "Constats visuels ancrés",
+        "description": "Laisse la vidéo produire des constats cliniques cités (p. ex. flexion du genou réduite ~110°) plutôt que de simples descriptions — chaque constat reste cité à l'image dont il provient, jamais un diagnostic non ancré. Interrupteur distinct de la synthèse ancrée. À laisser OFF jusqu'à validation sur des séquences réelles sur la page labo; l'activation inscrit des constats générés par l'IA dans des notes patients en production (la révision par le médecin conditionne toujours la signature)."
       }
     },
     "chatTools": "Outils de conversation",
