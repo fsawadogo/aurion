@@ -287,6 +287,12 @@ resource "aws_appconfig_configuration_profile" "main" {
             # here (additionalProperties = false) or the portal Feature Flags
             # save is rejected by AWS (the backend dumps the full config).
             cross_clinician_chart_enabled = { type = "boolean" }
+            # Grounded visual findings — video produces cited exam findings
+            # (Stage-2 vision shifts descriptive→grounded, source_id=frame_id
+            # invariant). SEPARATE from grounded_synthesis_enabled. NOT in
+            # `required` so older documents validate under additionalProperties
+            # = false — the backend Pydantic schema defaults it false.
+            grounded_visual_findings_enabled = { type = "boolean" }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in

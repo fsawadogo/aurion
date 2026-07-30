@@ -563,6 +563,9 @@ export interface FeatureFlags {
   // future typed pick/parse from silently dropping it, which would default it
   // to False server-side and dark the feature on an unrelated flag save.
   cross_clinician_chart_enabled: boolean;
+  // Grounded visual findings — video produces cited exam findings (separate
+  // lever from grounded_synthesis_enabled).
+  grounded_visual_findings_enabled: boolean;
 }
 
 export interface UpdateFeatureFlagsResponse {

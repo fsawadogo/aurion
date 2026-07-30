@@ -644,7 +644,9 @@
       }
     },
     "chatTools": "Chat tools",
-    "chatToolsHint": "Conversational surfaces for clinicians in the web portal. Each ships dark behind its own flag."
+    "chatToolsHint": "Conversational surfaces for clinicians in the web portal. Each ships dark behind its own flag.",
+    "groundedVisualFindings": "Grounded visual findings",
+    "groundedVisualFindingsHint": "Lets the video produce cited clinical exam findings (e.g. reduced knee flexion ~110°) instead of only literal descriptions — every finding is cited to the frame it rests on. Separate from Grounded synthesis. Validate on the lab page before enabling for live patient notes."
   },
   "Providers": {
     "eyebrow": "Admin",

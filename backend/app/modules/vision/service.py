@@ -41,7 +41,10 @@ from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
 from app.modules.config.schema import AppConfigSchema, VisualEvidenceMode
 from app.modules.providers.usage_service import try_record_provider_usage
-from app.modules.providers.vision.shared import VISION_SYSTEM_PROMPT
+from app.modules.providers.vision.shared import (
+    VISION_GROUNDED_SYSTEM_PROMPT,
+    VISION_SYSTEM_PROMPT,
+)
 from app.modules.vision.clip_metrics import ClipTelemetry
 
 # ── Visual evidence sentinel ─────────────────────────────────────────────
@@ -423,8 +426,16 @@ async def caption_visual_evidence(
     anchor_segments: Optional[list[TranscriptSegment]] = None,
     template: Optional[Template] = None,
     note: Optional[Note] = None,
+    grounded: bool = False,
 ) -> list[FrameCaption]:
     """Caption a mixed list of frames + clips using kind-routed providers.
+
+    ``grounded`` (grounded_visual_findings_enabled, resolved ONCE per Stage-2
+    run in ``run_stage2_vision``) selects the base vision system prompt: the
+    grounded clinical-findings prompt when True, the strict-descriptive
+    constant when False. Only takes effect where the caller did NOT supply a
+    per-physician prompt override (those still win). Grounding stays structural
+    downstream — ``_build_visual_claim`` keeps source_id=frame_id either way.
 
     ``anchor_segments`` (#324) is the pool an evidence item is anchored
     against (nearest segment by timestamp). It defaults to
@@ -580,8 +591,19 @@ async def caption_visual_evidence(
             evidence_kind="clip" if kind == "clip" else "frame",
             anchor_text=anchor.text,
         )
+        # Base prompt selection: grounded clinical findings vs strict
+        # descriptive. A per-physician override (`system_for_kind` non-None)
+        # always wins over both; the base is only the fallback.
+        base_prompt = (
+            VISION_GROUNDED_SYSTEM_PROMPT if grounded else VISION_SYSTEM_PROMPT
+        )
         if focus is not None:
-            system_for_kind = (system_for_kind or VISION_SYSTEM_PROMPT) + focus
+            system_for_kind = (system_for_kind or base_prompt) + focus
+        elif grounded and system_for_kind is None:
+            # No section-focus block (no template / unpredictable section) but
+            # grounded is on and no physician override: still swap the base so
+            # the grounded floor applies uniformly across the run.
+            system_for_kind = base_prompt
         _started = time.monotonic()
         try:
             caption = await _dispatch_caption(

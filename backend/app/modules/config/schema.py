@@ -333,6 +333,18 @@ class FeatureFlagsConfig(BaseModel):
     # cross-clinician PHI is reachable until compliance flips it. Same
     # opt-in posture as `video_import_enabled` / `grounded_synthesis_enabled`.
     cross_clinician_chart_enabled: bool = False
+    # ── Grounded visual findings (video produces exam findings) ───────────
+    # When ON, the Stage-2 VISION prompt shifts from strict-descriptive
+    # ("describe only what is literally visible") to grounded clinical
+    # findings: the model may state the finding the visible evidence supports
+    # (e.g. "reduced knee flexion, reaches ~110°"), and the merge attaches
+    # source_id=frame_id so every finding is cited to the frame it rests on —
+    # never an ungrounded diagnosis. Deliberately SEPARATE from
+    # grounded_synthesis_enabled (which governs Stage-1 A&P synthesis): the
+    # video-findings decision (Faical, 2026-07-30, recorded go) is validated
+    # and enabled independently of the contested A&P flag. Ships DARK; scoped
+    # to the visual sections only (History/Plan stay transcript-grounded).
+    grounded_visual_findings_enabled: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────

@@ -112,6 +112,10 @@ class FeatureFlagsResponse(BaseModel):
     # this field can't 422 — and while the feature is dark, a missing field
     # resolves to the safe OFF value.
     cross_clinician_chart_enabled: bool = False
+    # Grounded visual findings (video produces cited exam findings). Defaulted
+    # (like grounded_synthesis_enabled) so a save from a portal build predating
+    # this field can't 422; resolves to safe OFF while dark.
+    grounded_visual_findings_enabled: bool = False
 
 
 class UpdateFeatureFlagsResponse(BaseModel):
@@ -222,6 +226,9 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         clinician_prompts_note_only=cfg_feature_flags.clinician_prompts_note_only,
         cross_clinician_chart_enabled=(
             cfg_feature_flags.cross_clinician_chart_enabled
+        ),
+        grounded_visual_findings_enabled=(
+            cfg_feature_flags.grounded_visual_findings_enabled
         ),
     )
 

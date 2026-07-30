@@ -644,7 +644,9 @@
       }
     },
     "chatTools": "Outils de conversation",
-    "chatToolsHint": "Surfaces conversationnelles pour les cliniciens dans le portail web. Chacune est livrée éteinte derrière son propre indicateur."
+    "chatToolsHint": "Surfaces conversationnelles pour les cliniciens dans le portail web. Chacune est livrée éteinte derrière son propre indicateur.",
+    "groundedVisualFindings": "Constats visuels ancrés",
+    "groundedVisualFindingsHint": "Permet à la vidéo de produire des constats cliniques cités (p. ex. flexion du genou réduite ~110°) plutôt que de simples descriptions — chaque constat est cité à l'image dont il provient. Distinct de la synthèse ancrée. À valider sur la page labo avant activation sur des notes patients réelles."
   },
   "Providers": {
     "eyebrow": "Admin",
