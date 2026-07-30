@@ -1,4 +1,29 @@
 {
+  "AdminGroundedLab": {
+    "eyebrow": "Admin workspace",
+    "title": "Grounded Lab",
+    "description": "Replay a session's clip through the vision layer twice — descriptive vs grounded — to validate grounded findings before they reach live patient notes.",
+    "loadError": "Couldn't load sessions with captured media.",
+    "pickerTitle": "Choose a session",
+    "sessionLabel": "Session",
+    "runButton": "Run comparison",
+    "readOnlyNote": "Read-only: this replays the captured clip and never changes the patient's note.",
+    "noSessionsTitle": "No sessions with captured media",
+    "noSessionsBody": "Sessions appear here while their masked frames and clips are still retained. Record or import an encounter with video, then come back.",
+    "runError": "The comparison couldn't run. Please try again.",
+    "noMedia": "This session's frames and clips have been purged or none were captured, so there's nothing to compare.",
+    "summaryTitle": "Comparison summary",
+    "statFrames": "Frames",
+    "statDescriptive": "Descriptive findings",
+    "statGrounded": "Grounded findings",
+    "statMode": "Evidence mode",
+    "noFindingsTitle": "No findings produced",
+    "noFindingsBody": "Neither mode produced a captioned finding from this session's media.",
+    "colFrame": "Frame",
+    "colDescriptive": "Descriptive",
+    "colGrounded": "Grounded",
+    "noFinding": "No finding"
+  },
   "AdminPromptStudio": {
     "eyebrow": "Admin workspace",
     "title": "Prompt Studio",
@@ -95,7 +120,8 @@
       "complianceReports": "Compliance Reports",
       "uploadEncounter": "Upload Video",
       "evalUpload": "Eval Upload",
-      "patientChart": "Patient Chart"
+      "patientChart": "Patient Chart",
+      "groundedLab": "Grounded Lab"
     },
     "expand": "Expand sidebar",
     "collapse": "Collapse sidebar",

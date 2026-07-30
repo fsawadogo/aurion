@@ -19,6 +19,7 @@ from app.api.v1.admin import (
     emr,
     eval,
     feature_flags,
+    grounded_lab,
     media,
     metrics,
     patient_chart,
@@ -47,6 +48,7 @@ router.include_router(compliance.router)
 router.include_router(emr.router)
 router.include_router(probe.router)
 router.include_router(feature_flags.router)
+router.include_router(grounded_lab.router)
 router.include_router(media.router)
 router.include_router(analytics.router)
 router.include_router(video_import.router)

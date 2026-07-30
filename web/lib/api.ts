@@ -12,6 +12,8 @@ import type {
   EvalSession,
   EvalSessionDetail,
   FeatureFlags,
+  GroundedLabRunResponse,
+  GroundedLabSessionsResponse,
   LoginResult,
   MaskingReport,
   MediaDownloadUrls,
@@ -610,6 +612,23 @@ export async function updateFeatureFlags(
     method: "POST",
     body: JSON.stringify(payload),
   });
+  return res.json();
+}
+
+/* ─── Grounded Lab (admin) — descriptive vs grounded on the same clip ────────*/
+
+export async function getGroundedLabSessions(): Promise<GroundedLabSessionsResponse> {
+  const res = await fetchWithAuth("/api/v1/admin/grounded-lab/sessions");
+  return res.json();
+}
+
+export async function runGroundedLab(
+  sessionId: string,
+): Promise<GroundedLabRunResponse> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/grounded-lab/${sessionId}/run`,
+    { method: "POST" },
+  );
   return res.json();
 }
 
