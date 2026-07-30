@@ -120,6 +120,7 @@ EXPECTED_VALUES: dict[str, str] = {
     # Windowed media retention (#338) — download URLs minted for an
     # ADMIN/EVAL_TEAM reviewer via the admin Captured Media page.
     "EVIDENCE_DOWNLOADED": "evidence_downloaded",
+    "GROUNDED_LAB_RUN": "grounded_lab_run",
     # Privacy / account
     "BIOMETRIC_CONSENT_CONFIRMED": "biometric_consent_confirmed",
     "VOICE_ENROLLMENT_COMPLETE": "voice_enrollment_complete",

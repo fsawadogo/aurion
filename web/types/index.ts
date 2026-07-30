@@ -1438,3 +1438,56 @@ export interface PromptUserPromptValidationError {
   matched_phrase: string | null;
   missing_anchor_group: number | null;
 }
+
+/* ─── Grounded Lab (admin) ───────────────────────────────────────────────────
+ *
+ * Descriptive-vs-grounded replay of a session's captured clip. Mirrors
+ * backend/app/api/v1/admin/grounded_lab.py response models. Carries NO patient
+ * identifier — physician name + timing + counts only.
+ */
+export interface GroundedLabSessionItem {
+  session_id: string;
+  physician_name: string;
+  started_at: string;
+  specialty: string | null;
+  visit_type: string | null;
+  state: string;
+  frame_count: number;
+  clip_count: number;
+}
+
+export interface GroundedLabSessionsResponse {
+  items: GroundedLabSessionItem[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface GroundedLabFinding {
+  text: string;
+  confidence: string;
+  confidence_reason: string;
+  integration_status: string;
+  conflict_flag: boolean;
+  conflict_detail: string | null;
+}
+
+export interface GroundedLabPair {
+  frame_id: string;
+  timestamp_ms: number;
+  audio_anchor_id: string;
+  evidence_kind: string;
+  descriptive: GroundedLabFinding | null;
+  grounded: GroundedLabFinding | null;
+}
+
+export interface GroundedLabRunResponse {
+  session_id: string;
+  specialty: string | null;
+  evidence_mode: string;
+  provider_used: string | null;
+  frame_count: number;
+  descriptive_findings: number;
+  grounded_findings: number;
+  pairs: GroundedLabPair[];
+}

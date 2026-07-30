@@ -30,6 +30,7 @@ import {
   Bell,
   FileCheck2,
   UploadCloud,
+  Microscope,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
@@ -106,6 +107,12 @@ const navigation: {
   // video_import_enabled flag is on (see the feature-flag gate below).
   { tKey: "evalUpload", href: "/portal/admin/upload", icon: UploadCloud, roles: ["EVAL_TEAM", "ADMIN"] },
   { tKey: "eval",       href: "/eval",      icon: FlaskConical,  roles: ["EVAL_TEAM", "ADMIN"] },
+  // Grounded Lab — descriptive-vs-grounded replay of a session's clip to
+  // validate grounded visual findings before they ride live notes. ADMIN +
+  // EVAL_TEAM, matching the backend require_role on /admin/grounded-lab/*.
+  // NOT flag-gated: the page always runs both modes, so it works whether the
+  // live grounded_visual_findings_enabled flag is on or off.
+  { tKey: "groundedLab", href: "/portal/admin/grounded-lab", icon: Microscope, roles: ["EVAL_TEAM", "ADMIN"] },
   // ── Clinician portal surface (PR-C onward) ──
   // CLINICIAN-only personal workspace. Admin/eval/compliance roles do NOT
   // see these: the /me/* endpoints behind them are CLINICIAN-gated (so they

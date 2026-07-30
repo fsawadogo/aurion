@@ -223,6 +223,14 @@ class AuditEventType(StrEnum):
     # signed URL, or any object body. The row's existence is the audit
     # signal that a reviewer pulled download links for the raw media.
     EVIDENCE_DOWNLOADED = "evidence_downloaded"
+    # An admin/eval reviewer replayed a session's captured frames/clips through
+    # the vision layer TWICE — descriptive vs grounded — on the "Grounded Lab"
+    # page to validate grounded visual findings before trusting them on live
+    # notes ([[grounded-visual-findings]]). READ-ONLY: the run never writes a
+    # note version or mutates the chart. The row carries the actor UUID, the
+    # PHI-free evidence count, and the per-mode finding counts — NEVER a caption
+    # body, S3 key, or any patient content.
+    GROUNDED_LAB_RUN = "grounded_lab_run"
 
     # ── Privacy / account ────────────────────────────────────────────────
     BIOMETRIC_CONSENT_CONFIRMED = "biometric_consent_confirmed"
@@ -834,6 +842,9 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     # how many objects, not WHAT was downloaded.
     AuditEventType.EVIDENCE_DOWNLOADED: frozenset(
         {"actor_id", "evidence_kind", "audio_count", "clip_count"}
+    ),
+    AuditEventType.GROUNDED_LAB_RUN: frozenset(
+        {"actor_id", "frame_count", "descriptive_findings", "grounded_findings"}
     ),
     # Privacy / account — iOS-only voice events stay empty
     AuditEventType.BIOMETRIC_CONSENT_CONFIRMED: frozenset(),

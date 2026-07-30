@@ -1,4 +1,29 @@
 {
+  "AdminGroundedLab": {
+    "eyebrow": "Espace admin",
+    "title": "Labo ancré",
+    "description": "Rejouez le clip d'une séance dans la couche vision à deux reprises — descriptif ou ancré — pour valider les constats ancrés avant qu'ils n'atteignent les notes cliniques réelles.",
+    "loadError": "Impossible de charger les séances avec médias capturés.",
+    "pickerTitle": "Choisir une séance",
+    "sessionLabel": "Séance",
+    "runButton": "Lancer la comparaison",
+    "readOnlyNote": "Lecture seule : ceci rejoue le clip capturé et ne modifie jamais la note du patient.",
+    "noSessionsTitle": "Aucune séance avec médias capturés",
+    "noSessionsBody": "Les séances apparaissent ici tant que leurs images et clips masqués sont conservés. Enregistrez ou importez une rencontre avec vidéo, puis revenez.",
+    "runError": "La comparaison n'a pas pu s'exécuter. Veuillez réessayer.",
+    "noMedia": "Les images et clips de cette séance ont été purgés ou aucun n'a été capturé : il n'y a rien à comparer.",
+    "summaryTitle": "Résumé de la comparaison",
+    "statFrames": "Images",
+    "statDescriptive": "Constats descriptifs",
+    "statGrounded": "Constats ancrés",
+    "statMode": "Mode de preuve",
+    "noFindingsTitle": "Aucun constat produit",
+    "noFindingsBody": "Aucun des deux modes n'a produit de constat à partir des médias de cette séance.",
+    "colFrame": "Image",
+    "colDescriptive": "Descriptif",
+    "colGrounded": "Ancré",
+    "noFinding": "Aucun constat"
+  },
   "AdminPromptStudio": {
     "eyebrow": "Espace admin",
     "title": "Studio d'invites",
@@ -95,7 +120,8 @@
       "complianceReports": "Rapports de conformité",
       "uploadEncounter": "Téléverser une vidéo",
       "evalUpload": "Téléversement éval",
-      "patientChart": "Dossier patient"
+      "patientChart": "Dossier patient",
+      "groundedLab": "Labo ancré"
     },
     "expand": "Déployer le menu",
     "collapse": "Réduire le menu",
