@@ -781,6 +781,25 @@ async def resolve_conflict_endpoint(
             ),
         )
 
+    # Capture the note SECTION this conflict lives in BEFORE resolving —
+    # `reject_visual` removes the claim, so it can't be re-derived after.
+    # The section id is a structural label (e.g. "physical_exam"), never PHI;
+    # logging it makes the physician's choice mineable per-section for the
+    # correction-memory / auto-resolution layer the roadmap calls the moat
+    # (capture now, mine later). Best-effort: a lookup miss just omits it.
+    conflict_section_id: str | None = None
+    _pre = await get_latest_note(str(session_id), db)
+    if _pre is not None:
+        conflict_section_id = next(
+            (
+                section.id
+                for section in _pre.sections
+                for claim in section.claims
+                if claim.id == claim_id
+            ),
+            None,
+        )
+
     try:
         updated = await resolve_conflict(
             session_id=str(session_id),
@@ -792,12 +811,17 @@ async def resolve_conflict_endpoint(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc))
 
+    audit_kwargs: dict = {
+        "claim_id": claim_id,
+        "action": body.action,
+        "new_version": updated.version,
+    }
+    if conflict_section_id is not None:
+        audit_kwargs["section_id"] = conflict_section_id
     await write_audit(
         session_id,
         AuditEventType.CONFLICT_RESOLVED,
-        claim_id=claim_id,
-        action=body.action,
-        new_version=updated.version,
+        **audit_kwargs,
     )
 
     return _to_note_response(updated)
