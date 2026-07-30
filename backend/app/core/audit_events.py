@@ -678,7 +678,12 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
         {"actor_id", "target_clinician_id", "version"}
     ),
     AuditEventType.SESSION_TEMPLATE_KEY_COERCED: frozenset(),
-    AuditEventType.CONFLICT_RESOLVED: frozenset({"claim_id", "action", "new_version"}),
+    AuditEventType.CONFLICT_RESOLVED: frozenset(
+        # section_id (structural label, e.g. "physical_exam" — never PHI)
+        # makes the choice mineable per-physician per-section for the
+        # correction-memory / auto-resolution layer (capture now, mine later).
+        {"claim_id", "action", "new_version", "section_id"}
+    ),
     # Frames / masking
     AuditEventType.FRAME_UPLOADED: frozenset(
         {

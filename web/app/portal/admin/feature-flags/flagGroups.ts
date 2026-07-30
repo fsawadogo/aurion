@@ -45,6 +45,11 @@ export const FLAG_GROUPS = [
     flags: ["template_engine_enabled"],
   },
   {
+    titleKey: "groundedVisualFindings",
+    hintKey: "groundedVisualFindingsHint",
+    flags: ["grounded_visual_findings_enabled"],
+  },
+  {
     titleKey: "videoImport",
     hintKey: "videoImportHint",
     flags: ["multi_clip_import_enabled"],

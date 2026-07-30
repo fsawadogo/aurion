@@ -218,6 +218,12 @@ async def run_stage2_vision(
             )
             template_for_capture = None
 
+    # Grounded visual findings — resolve ONCE per run (same one-snapshot
+    # discipline as template_engine above): the flag lets the vision layer
+    # state cited clinical findings instead of literal descriptions. Reading
+    # it per frame could mix grounded and descriptive captions in one note.
+    grounded_visual = get_config().feature_flags.grounded_visual_findings_enabled
+
     clip_telemetry: list[ClipTelemetry] = []
     captions_raw = await caption_visual_evidence(
         evidence=evidence_items,
@@ -230,6 +236,7 @@ async def run_stage2_vision(
         anchor_segments=transcript.segments,
         template=template_for_capture,
         note=note,
+        grounded=grounded_visual,
     )
 
     # Drop low-confidence captions before conflict classification.

@@ -115,7 +115,8 @@ def _note() -> Note:
 def _flags(template_engine_enabled: bool):
     return SimpleNamespace(
         feature_flags=SimpleNamespace(
-            template_engine_enabled=template_engine_enabled
+            template_engine_enabled=template_engine_enabled,
+            grounded_visual_findings_enabled=False
         )
     )
 

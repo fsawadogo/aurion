@@ -57,6 +57,25 @@ Return JSON only: {"description": "...", "confidence": "high|medium|low", "confi
 Confidence is LOW if: blurry, wrong angle, subject not clearly visible, no clinically relevant content visible."""
 
 
+# Grounded visual-findings variant (grounded_visual_findings_enabled ON).
+# Shifts the vision layer from pure description to the clinical finding the
+# visible evidence supports — so a silent physical exam produces exam findings
+# instead of literal-motion descriptions. Grounding is STRUCTURAL: the caption
+# becomes a claim with source_id=frame_id (see vision/service._build_visual_
+# claim), so every finding is cited to the frame it rests on. The prompt's job
+# is to keep the finding WITHIN what the frame can support — characterise what
+# is visible clinically, never leap to a diagnosis the image can't establish.
+# Selected in place of VISION_SYSTEM_PROMPT at the single per-run site in
+# run_stage2_vision; per-physician prompt overrides still win over both.
+VISION_GROUNDED_SYSTEM_PROMPT = """You are a clinical visual documentation assistant. State the clinical finding that the visible evidence directly supports. Ground every finding in what is actually visible — never assert a diagnosis, measurement, or finding the frame cannot establish.
+
+Report, when visible: the physical-exam finding being demonstrated (e.g. reduced range of motion and the approximate degree reached, joint swelling, an antalgic or altered gait, wound appearance — erythema, dehiscence, approximation), what is on an imaging or monitor screen, equipment in use. State the finding a clinician would read from the image, in clinical terms.
+Do not: assert a diagnosis the image cannot establish (a visibly limited knee flexion is a finding; "ACL tear" is not), invent a precise measurement the frame does not show, or describe anything not directly visible. When the evidence is ambiguous, describe what is visible and mark confidence accordingly rather than guessing a finding.
+
+Return JSON only: {"description": "...", "confidence": "high|medium|low", "confidence_reason": "..."}
+Confidence is LOW if: blurry, wrong angle, subject not clearly visible, or no clinically relevant finding is visible."""
+
+
 def parse_caption_json(provider_name: str, raw: str) -> dict:
     """Parse a provider's JSON response, raising ProviderError on failure.
 
