@@ -10,14 +10,6 @@ import { Button } from "@/components/ui/button"
 import { Link } from "@/i18n/navigation"
 import { SITE } from "@/lib/site"
 
-/** In-page section anchors (kept alongside the page menu). */
-const SECTIONS = [
-  { href: "#continuum", key: "continuum" },
-  { href: "#platform", key: "platform" },
-  { href: "#workbench", key: "workbench" },
-  { href: "#colleague", key: "colleague" },
-] as const
-
 /** Page menu — Partners and Pilots; Physician portal and Contact us render distinctly. */
 const PAGE_LINKS = [
   { href: "/partners", key: "partners" },
@@ -48,19 +40,6 @@ export function LandingHeader() {
             className="h-11 w-auto md:h-14 lg:h-16"
           />
         </Link>
-
-        {/* Section anchors — appear at xl so they don't crowd the page menu */}
-        <nav className="hidden items-center gap-unit-6 xl:flex">
-          {SECTIONS.map((section) => (
-            <a
-              key={section.key}
-              href={section.href}
-              className="font-mono text-[14px] font-medium tracking-tight text-on-surface-variant transition-colors hover:text-primary"
-            >
-              {t(`nav.${section.key}`)}
-            </a>
-          ))}
-        </nav>
 
         <div className="flex items-center gap-unit-4">
           {/* Page menu — desktop */}
@@ -114,20 +93,6 @@ export function LandingHeader() {
           className="border-t border-outline-variant/30 bg-surface-container-lowest px-margin-mobile py-unit-6 lg:hidden"
         >
           <ul className="flex flex-col gap-unit-2">
-            {SECTIONS.map((section) => (
-              <li key={section.key}>
-                <a
-                  href={section.href}
-                  onClick={() => setMenuOpen(false)}
-                  className="block rounded-lg px-unit-4 py-unit-3 font-mono text-[15px] text-on-surface-variant transition-colors hover:bg-surface-container hover:text-primary"
-                >
-                  {t(`nav.${section.key}`)}
-                </a>
-              </li>
-            ))}
-
-            {/* Page menu */}
-            <li className="mt-unit-2 border-t border-outline-variant/30 pt-unit-4" />
             {PAGE_LINKS.map((link) => (
               <li key={link.key}>
                 <Link
@@ -150,10 +115,10 @@ export function LandingHeader() {
                 {t("nav.physicianPortal")}
               </a>
             </li>
-            <li className="mt-unit-2 flex flex-col gap-unit-2 pt-unit-2">
+            <li className="mt-unit-2 pt-unit-2">
               <Button
                 asChild
-                className="h-12 rounded-lg bg-secondary font-mono text-[15px] font-medium text-on-secondary hover:bg-secondary/90"
+                className="h-12 w-full rounded-lg bg-secondary font-mono text-[15px] font-medium text-on-secondary hover:bg-secondary/90"
               >
                 <Link href="/contact" onClick={() => setMenuOpen(false)}>
                   {t("nav.contact")}
