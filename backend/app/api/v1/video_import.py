@@ -648,6 +648,35 @@ def _mask_and_store_frame(
     return result
 
 
+def _cadence_windows(
+    total_ms: int, cadence_seconds: int, max_frames: int
+) -> list[tuple[int, int]]:
+    """Zero-length sampling windows every ``cadence_seconds`` across ``total_ms``.
+
+    Each cadence point is a ``(t, t)`` window so it reuses the existing
+    per-clip routing + ``extract_frames_at_windows`` (which yields a window's
+    midpoint = ``t`` for a zero-length window). Returns points at 0, N, 2N, …
+    up to ``total_ms``. If that would exceed ``max_frames``, the interval is
+    widened (thinned) to fit the cap so a long video can't fan out into
+    thousands of vision calls — the caller logs the thinning, never silent.
+    Cadence off (``cadence_seconds<=0``) or an unknown duration returns [].
+    """
+    if cadence_seconds <= 0 or total_ms <= 0:
+        return []
+    step_ms = cadence_seconds * 1000
+    # Thin to fit the cap: if 0..total_ms at step_ms would produce more than
+    # max_frames points, widen the step so exactly ~max_frames points span it.
+    n_points = total_ms // step_ms + 1
+    if n_points > max_frames:
+        step_ms = total_ms // max(max_frames - 1, 1)
+    points: list[tuple[int, int]] = []
+    t = 0
+    while t <= total_ms and len(points) < max_frames:
+        points.append((t, t))
+        t += step_ms
+    return points
+
+
 async def _extract_and_mask_frames(
     db: AsyncSession, session_id: uuid.UUID, clips: list[tuple[str, int]]
 ) -> tuple[int, int, int]:
@@ -684,9 +713,11 @@ async def _extract_and_mask_frames(
         return (0, 0, 0)
 
     triggers = [s for s in transcript.segments if s.is_visual_trigger]
-    if not triggers:
-        return (0, 0, 0)
 
+    cfg = get_config().pipeline
+    cadence_seconds = cfg.video_import_cadence_seconds
+
+    # Trigger windows (keyword-anchored). Empty when nothing was flagged.
     windows = [
         (
             s.start_ms - get_frame_window_ms(s.trigger_type),
@@ -694,7 +725,28 @@ async def _extract_and_mask_frames(
         )
         for s in triggers
     ]
-    fps = get_config().pipeline.video_import_fps
+
+    # Cadence windows (time-anchored): sample the whole timeline so a SILENT
+    # exam still yields frames even with zero spoken triggers. Total duration is
+    # the last segment end on the merged transcript timeline (no ffprobe needed).
+    total_ms = max((s.end_ms for s in transcript.segments), default=0)
+    cadence = _cadence_windows(
+        total_ms, cadence_seconds, cfg.video_import_max_cadence_frames
+    )
+    if cadence:
+        logger.info(
+            "Video-import cadence sampling: session=%s points=%d "
+            "cadence_s=%d duration_ms=%d triggers=%d",
+            session_id, len(cadence), cadence_seconds, total_ms, len(triggers),
+        )
+    windows = windows + cadence
+
+    # Nothing to extract: no spoken triggers AND cadence off/empty. Preserves
+    # the pre-cadence fast-skip (byte-identical when cadence_seconds == 0).
+    if not windows:
+        return (0, 0, 0)
+
+    fps = cfg.video_import_fps
 
     # Route each merged-timeline window to the clip that owns its start, then
     # extract per clip (clip-local windows) and re-offset to the merged ts.
