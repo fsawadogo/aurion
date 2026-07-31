@@ -71,8 +71,13 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
             async with httpx.AsyncClient(timeout=300.0) as client:
                 response = await client.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                    params={"key": _GOOGLE_AI_API_KEY},
-                    headers={"Content-Type": "application/json"},
+                    # Key rides an auth HEADER, never the ?key= URL query param:
+                    # httpx logs the request URL (and puts it in HTTPStatusError),
+                    # so a key in the URL leaks to CloudWatch. A header does not.
+                    headers={
+                        "Content-Type": "application/json",
+                        "x-goog-api-key": _GOOGLE_AI_API_KEY,
+                    },
                     json={
                         "systemInstruction": {
                             "parts": [{"text": effective_system}]
@@ -131,7 +136,9 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
                     f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                    params={"key": _GOOGLE_AI_API_KEY},
+                    # Key rides an auth HEADER, never the ?key= URL query param
+                    # (httpx logs the URL / embeds it in errors → CloudWatch leak).
+                    headers={"x-goog-api-key": _GOOGLE_AI_API_KEY},
                     json={
                         "systemInstruction": {"parts": [{"text": system}]},
                         "contents": [
