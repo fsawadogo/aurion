@@ -88,6 +88,23 @@ class PipelineConfig(BaseModel):
     # frames inside each trigger window before masking. 1 fps keeps the
     # vision cost + the number of masked frames bounded.
     video_import_fps: int = Field(default=1, ge=1, le=10)
+    # Cadence-based frame extraction for UPLOADED videos. Interval, in seconds,
+    # at which the import samples a frame across the WHOLE video timeline —
+    # regardless of spoken visual triggers. 0 (the default) is off: frames are
+    # extracted only at trigger-keyword timestamps (back-compat). When >0, a
+    # SILENT physical exam (a clinician examining without narrating the exam
+    # words the trigger classifier keys on) still yields time-anchored frames
+    # for the vision layer. Mirrors the live-capture clip cadence floor
+    # (`clip_cadence_seconds`) but for the server-side import frame path.
+    # Cadence frames are UNIONED with trigger frames (dedup by timestamp), so
+    # enabling it never removes a trigger frame. Bounds 0..120 — 0 disables,
+    # 120s ceiling keeps a pathological setting sane.
+    video_import_cadence_seconds: int = Field(default=0, ge=0, le=120)
+    # Hard ceiling on how many cadence frames a single import samples, so a long
+    # video at a short cadence can't fan out into thousands of vision calls. If
+    # the cadence would exceed this, the sampling is thinned to fit and the drop
+    # is logged (never silent). Trigger frames are NOT counted against this cap.
+    video_import_max_cadence_frames: int = Field(default=60, ge=1, le=500)
     # Max number of evidence items (frames/clips) captioned CONCURRENTLY in
     # Stage 2. The captioning fan-out (``caption_visual_evidence``) previously
     # fired one Gemini request per frame with no bound, so a large frame set

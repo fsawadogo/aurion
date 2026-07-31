@@ -176,6 +176,16 @@ resource "aws_appconfig_configuration_profile" "main" {
             # MUST match PipelineConfig.video_import_fps. NOT in `required` so
             # an older document validates — the Pydantic default (1) supplies it.
             video_import_fps = { type = "integer", minimum = 1, maximum = 10 }
+            # Cadence-based frame extraction for uploaded videos. Interval (s) at
+            # which the import samples a frame across the whole timeline
+            # regardless of spoken triggers, so a SILENT exam still yields frames.
+            # 0 = off (back-compat). Bounds 0..120 MUST match
+            # PipelineConfig.video_import_cadence_seconds. NOT in `required`.
+            video_import_cadence_seconds = { type = "integer", minimum = 0, maximum = 120 }
+            # Hard ceiling on cadence frames per import (thins a long video so it
+            # can't fan out into thousands of vision calls). Bounds 1..500 MUST
+            # match PipelineConfig.video_import_max_cadence_frames. NOT required.
+            video_import_max_cadence_frames = { type = "integer", minimum = 1, maximum = 500 }
             # Max evidence items captioned CONCURRENTLY in Stage 2. Bounds 1..32
             # MUST match PipelineConfig.vision_max_concurrency. NOT in `required`
             # so an older document validates — the Pydantic default (4) supplies

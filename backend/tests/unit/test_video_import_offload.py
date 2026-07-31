@@ -98,7 +98,12 @@ async def test_extract_and_mask_frames_offloads_per_frame() -> None:
         faces_blurred=1, reason=None,
     )
     cfg = SimpleNamespace(
-        pipeline=SimpleNamespace(video_import_fps=1),
+        pipeline=SimpleNamespace(
+            video_import_fps=1,
+            # Cadence off — this test exercises the trigger-only path.
+            video_import_cadence_seconds=0,
+            video_import_max_cadence_frames=60,
+        ),
         feature_flags=SimpleNamespace(video_import_drop_zero_face_frames=True),
     )
     with patch.object(vi, "get_config", return_value=cfg), patch.object(
