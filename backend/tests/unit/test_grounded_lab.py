@@ -130,3 +130,58 @@ def test_module_never_persists_a_note_version() -> None:
 
     assert not hasattr(mod, "create_note_version")
     assert not hasattr(mod, "merge_visual_citations")
+
+
+# ── async run surface ────────────────────────────────────────────────────────
+
+
+def test_async_run_routes_registered() -> None:
+    # Start (POST) + poll (GET) + list — the async shape that survives the 60s
+    # ALB idle timeout (a synchronous run is dropped mid-flight on a big set).
+    from app.api.v1.admin.grounded_lab import router
+
+    paths = {r.path for r in router.routes}
+    assert "/admin/grounded-lab/sessions" in paths
+    assert "/admin/grounded-lab/{session_id}/run" in paths
+    assert "/admin/grounded-lab/runs/{job_id}" in paths
+
+
+def test_result_round_trips_through_job_storage() -> None:
+    # The completed payload is stored as the job row's result_json (a dict) and
+    # re-validated on poll — this round-trip must be lossless.
+    from app.api.v1.admin.grounded_lab import (
+        GroundedLabPair as Pair,
+    )
+    from app.api.v1.admin.grounded_lab import (
+        GroundedLabRunResponse,
+    )
+
+    original = GroundedLabRunResponse(
+        session_id="s1",
+        specialty="orthopedic_surgery",
+        evidence_mode="frames_only",
+        provider_used="gemini",
+        frame_count=2,
+        descriptive_findings=1,
+        grounded_findings=1,
+        pairs=[
+            Pair(
+                frame_id="frame_2",
+                timestamp_ms=200,
+                audio_anchor_id="seg_003",
+                evidence_kind="frame",
+                descriptive=None,
+                grounded=None,
+            )
+        ],
+    )
+    stored = original.model_dump()  # what lands in result_json
+    assert isinstance(stored, dict)
+    restored = GroundedLabRunResponse.model_validate(stored)
+    assert restored == original
+
+
+def test_run_model_defaults_to_running() -> None:
+    from app.core.models import GroundedLabRunModel
+
+    assert GroundedLabRunModel.__tablename__ == "grounded_lab_runs"

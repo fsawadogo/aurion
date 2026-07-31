@@ -685,6 +685,42 @@ class VideoImportJobModel(Base):
     )
 
 
+class GroundedLabRunModel(Base):
+    """Tracks async "Grounded Lab" descriptive-vs-grounded replay runs.
+
+    A lab run re-captions a session's frames/clips TWICE (descriptive +
+    grounded), which for a large frame set takes minutes — well past the 60s
+    ALB idle timeout. So the run is async: ``POST /run`` creates a row
+    (``running``), a detached task does the captioning and writes the paired
+    result JSON, and ``GET /runs/{id}`` polls until ``completed``/``failed``.
+    Mirrors ``VideoImportJobModel``'s poll/recover shape so the portal survives
+    navigation. READ-ONLY: nothing here mutates the session's note.
+    """
+
+    __tablename__ = "grounded_lab_runs"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    actor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    # running → completed|failed
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
+    # The GroundedLabRunResponse payload (pairs + summary); NULL until complete.
+    result_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    started_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+
 class EvalScoreModel(Base):
     """Eval team quality scores submitted per session.
 

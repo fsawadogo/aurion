@@ -11,6 +11,7 @@
     "noSessionsTitle": "Aucune séance avec médias capturés",
     "noSessionsBody": "Les séances apparaissent ici tant que leurs images et clips masqués sont conservés. Enregistrez ou importez une rencontre avec vidéo, puis revenez.",
     "runError": "La comparaison n'a pas pu s'exécuter. Veuillez réessayer.",
+    "runningHint": "Réexécution du clip dans les deux modes. Cela peut prendre quelques minutes pour un grand nombre d'images ; vous pouvez laisser cette page ouverte.",
     "noMedia": "Les images et clips de cette séance ont été purgés ou aucun n'a été capturé : il n'y a rien à comparer.",
     "summaryTitle": "Résumé de la comparaison",
     "statFrames": "Images",
