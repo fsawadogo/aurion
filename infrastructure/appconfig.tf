@@ -176,6 +176,12 @@ resource "aws_appconfig_configuration_profile" "main" {
             # MUST match PipelineConfig.video_import_fps. NOT in `required` so
             # an older document validates — the Pydantic default (1) supplies it.
             video_import_fps = { type = "integer", minimum = 1, maximum = 10 }
+            # Max evidence items captioned CONCURRENTLY in Stage 2. Bounds 1..32
+            # MUST match PipelineConfig.vision_max_concurrency. NOT in `required`
+            # so an older document validates — the Pydantic default (4) supplies
+            # it. Caps the Gemini fan-out so a large frame set drains under the
+            # vision rate limit instead of 429-storming.
+            vision_max_concurrency = { type = "integer", minimum = 1, maximum = 32 }
           }
         }
         feature_flags = {

@@ -531,6 +531,13 @@ async def caption_visual_evidence(
     processed_counter = 0
     progress_step = max(1, total_evidence // 10) if total_evidence else 1
 
+    # Bound captioning concurrency so a large frame set doesn't fire every
+    # Gemini request at once and blow the vision rate limit in one burst (which
+    # made every call 429 → backoff retry-storm → ~0 captions survive → an
+    # audio-only note). The semaphore lets frames drain a few at a time under
+    # the limit. Resolved once per run (get_config is a 30s poller).
+    _caption_sem = asyncio.Semaphore(get_config().pipeline.vision_max_concurrency)
+
     async def _emit_initial_progress() -> None:
         if total_evidence > 0 and session_id:
             from app.api.v1.websocket import notify_stage2_progress
@@ -762,7 +769,8 @@ async def caption_visual_evidence(
         """Wrap _caption_single with a progress counter so the WebSocket
         sees incremental progress instead of just the final delivery."""
         nonlocal processed_counter
-        result = await _caption_single(item)
+        async with _caption_sem:
+            result = await _caption_single(item)
         processed_counter += 1
         # Emit on every Nth item OR at the very end so the final
         # state always shows "N / N" before stage2_delivered fires.

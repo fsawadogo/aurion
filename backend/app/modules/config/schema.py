@@ -88,6 +88,16 @@ class PipelineConfig(BaseModel):
     # frames inside each trigger window before masking. 1 fps keeps the
     # vision cost + the number of masked frames bounded.
     video_import_fps: int = Field(default=1, ge=1, le=10)
+    # Max number of evidence items (frames/clips) captioned CONCURRENTLY in
+    # Stage 2. The captioning fan-out (``caption_visual_evidence``) previously
+    # fired one Gemini request per frame with no bound, so a large frame set
+    # hit the vision provider's rate limit all at once — every call 429'd, the
+    # backoff retried them together in a storm, and almost none survived (a
+    # silent-exam note came back audio-only). Bounding concurrency lets the
+    # frames drain a few at a time under the rate limit so captions actually
+    # land. 4 is a safe default for the dev Gemini quota; raise once on a
+    # higher tier. Combined with the provider's 429 backoff.
+    vision_max_concurrency: int = Field(default=4, ge=1, le=32)
     # ── Dual-mode visual evidence ──────────────────────────────────────
     # Default `FRAMES_ONLY` so every existing call site is byte-identical
     # to today's pilot build. The eval team flips per-session via the
