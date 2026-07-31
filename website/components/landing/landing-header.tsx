@@ -115,7 +115,7 @@ export function LandingHeader() {
                 {t("nav.physicianPortal")}
               </a>
             </li>
-            <li className="mt-unit-2 flex flex-col gap-unit-2 pt-unit-2">
+            <li className="mt-unit-2 pt-unit-2">
               <Button
                 asChild
                 className="h-12 rounded-lg bg-secondary font-mono text-[15px] font-medium text-on-secondary hover:bg-secondary/90"
