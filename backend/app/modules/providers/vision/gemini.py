@@ -11,9 +11,11 @@ schema + caption builder live in `shared.py`.
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import logging
 import os
+import random
 from typing import Final
 
 import httpx
@@ -45,6 +47,92 @@ _MODEL = "gemini-2.5-pro"
 # path (which could carry session-id segments traceable to a patient).
 _LOG_KEY_PREFIX_LEN: Final[int] = 12
 
+# Rate-limit / transient-error retry policy. The dev Gemini key throttles hard
+# when a Stage-2 run (or the Grounded Lab replay) captions many frames at once:
+# a single-shot call turns a 429 into a discarded frame, and a whole session
+# into zero findings. Bounded exponential backoff with full jitter lets a burst
+# drain instead of collapsing. 429 = rate limit, 503 = transient upstream.
+_RETRY_STATUSES: Final[frozenset[int]] = frozenset({429, 503})
+_MAX_RETRIES: Final[int] = 5
+_BACKOFF_BASE_SECONDS: Final[float] = 1.0
+_BACKOFF_MAX_SECONDS: Final[float] = 30.0
+
+_GENERATE_CONTENT_URL: Final[str] = (
+    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+)
+
+
+def _redact(text: str) -> str:
+    """Strip the Google AI API key from any string headed for a log line or a
+    raised error.
+
+    httpx embeds the full request URL — including the ``?key=…`` query param —
+    in its ``HTTPStatusError`` message, so an un-redacted ``str(e)`` writes the
+    live secret to CloudWatch. Redact at every point ``str(e)`` can escape.
+    """
+    if _GOOGLE_AI_API_KEY:
+        return text.replace(_GOOGLE_AI_API_KEY, "***")
+    return text
+
+
+def _retry_after_seconds(response: httpx.Response) -> float | None:
+    """Parse a ``Retry-After`` header (delta-seconds form) when present."""
+    raw = response.headers.get("Retry-After")
+    if raw is None:
+        return None
+    try:
+        return max(0.0, float(raw))
+    except ValueError:
+        return None
+
+
+async def _post_generate_content(
+    client: httpx.AsyncClient,
+    model: str,
+    json_body: dict,
+    *,
+    label: str,
+) -> httpx.Response:
+    """POST to Gemini ``generateContent`` with bounded backoff on 429/503.
+
+    Retries a rate-limited / transiently-failed call up to ``_MAX_RETRIES``
+    times, honouring a ``Retry-After`` header when the server sends one, else
+    backing off 1s, 2s, 4s, … with full jitter, capped at
+    ``_BACKOFF_MAX_SECONDS``. The API key is never logged (only the status and
+    the delay). Once retries are exhausted — or on any non-retryable status —
+    the response's ``raise_for_status`` propagates so the existing fallback
+    chain still engages.
+    """
+    url = _GENERATE_CONTENT_URL.format(model=model)
+    attempt = 0
+    while True:
+        response = await client.post(
+            url,
+            params={"key": _GOOGLE_AI_API_KEY},
+            headers={"Content-Type": "application/json"},
+            json=json_body,
+        )
+        if response.status_code in _RETRY_STATUSES and attempt < _MAX_RETRIES:
+            delay = _retry_after_seconds(response)
+            if delay is None:
+                backoff = min(
+                    _BACKOFF_BASE_SECONDS * (2**attempt), _BACKOFF_MAX_SECONDS
+                )
+                delay = random.uniform(0.0, backoff)
+            logger.warning(
+                "Gemini %s rate-limited (HTTP %d); retry %d/%d in %.1fs",
+                label,
+                response.status_code,
+                attempt + 1,
+                _MAX_RETRIES,
+                delay,
+            )
+            await asyncio.sleep(delay)
+            attempt += 1
+            continue
+        response.raise_for_status()
+        return response
+
 
 class GeminiVisionProvider(VisionProvider):
     """Gemini Vision provider for frame captioning."""
@@ -67,11 +155,10 @@ class GeminiVisionProvider(VisionProvider):
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                    params={"key": _GOOGLE_AI_API_KEY},
-                    headers={"Content-Type": "application/json"},
-                    json={
+                response = await _post_generate_content(
+                    client,
+                    model,
+                    {
                         "systemInstruction": {"parts": [{"text": effective_system}]},
                         "contents": [
                             {
@@ -101,8 +188,8 @@ class GeminiVisionProvider(VisionProvider):
                             "responseSchema": VISION_RESPONSE_SCHEMA,
                         },
                     },
+                    label="frame vision",
                 )
-                response.raise_for_status()
                 data = response.json()
                 try:
                     text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -114,8 +201,9 @@ class GeminiVisionProvider(VisionProvider):
                 return build_frame_caption(frame, anchor, content, "gemini")
 
         except httpx.HTTPError as e:
-            logger.error("Gemini vision failed: frame=%s error=%s", frame.frame_id, str(e))
-            raise ProviderError("gemini", f"Vision captioning failed: {e}", e)
+            redacted = _redact(str(e))
+            logger.error("Gemini vision failed: frame=%s error=%s", frame.frame_id, redacted)
+            raise ProviderError("gemini", f"Vision captioning failed: {redacted}", e)
 
     async def caption_clip(
         self,
@@ -169,11 +257,10 @@ class GeminiVisionProvider(VisionProvider):
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await client.post(
-                    f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
-                    params={"key": _GOOGLE_AI_API_KEY},
-                    headers={"Content-Type": "application/json"},
-                    json={
+                response = await _post_generate_content(
+                    client,
+                    model,
+                    {
                         "systemInstruction": {"parts": [{"text": effective_system}]},
                         "contents": [
                             {
@@ -207,8 +294,8 @@ class GeminiVisionProvider(VisionProvider):
                             "responseSchema": VISION_RESPONSE_SCHEMA,
                         },
                     },
+                    label="clip vision",
                 )
-                response.raise_for_status()
                 data = response.json()
                 try:
                     text = data["candidates"][0]["content"]["parts"][0]["text"]
@@ -241,9 +328,11 @@ class GeminiVisionProvider(VisionProvider):
 
         except httpx.HTTPError as e:
             # No PHI in error or log line -- only the truncated key prefix.
+            # Redact the API key: httpx embeds the ?key=… URL in its error.
+            redacted = _redact(str(e))
             logger.error(
                 "Gemini clip vision failed: clip=%s error=%s",
                 clip.s3_key[:_LOG_KEY_PREFIX_LEN],
-                str(e),
+                redacted,
             )
-            raise ProviderError("gemini", f"Clip captioning failed: {e}", e)
+            raise ProviderError("gemini", f"Clip captioning failed: {redacted}", e)
