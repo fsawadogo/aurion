@@ -118,7 +118,7 @@ export function LandingHeader() {
             <li className="mt-unit-2 pt-unit-2">
               <Button
                 asChild
-                className="h-12 rounded-lg bg-secondary font-mono text-[15px] font-medium text-on-secondary hover:bg-secondary/90"
+                className="h-12 w-full rounded-lg bg-secondary font-mono text-[15px] font-medium text-on-secondary hover:bg-secondary/90"
               >
                 <Link href="/contact" onClick={() => setMenuOpen(false)}>
                   {t("nav.contact")}
