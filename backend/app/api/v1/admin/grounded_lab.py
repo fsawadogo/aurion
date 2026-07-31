@@ -66,8 +66,8 @@ from app.modules.note_gen.service import get_latest_note, resolve_session_templa
 from app.modules.vision.service import (
     caption_visual_evidence,
     resolve_evidence_mode,
+    retrieve_all_masked_frames,
     retrieve_clips_for_triggers,
-    retrieve_frames_for_triggers,
 )
 
 logger = logging.getLogger("aurion.admin.grounded_lab")
@@ -279,8 +279,12 @@ async def _compute_lab_result(
 
     evidence_mode = resolve_evidence_mode(session)
 
+    # ALL stored frames, not just trigger-window ones: a cadence-sampled
+    # session (silent exam, zero triggers) has frames in S3 that trigger
+    # retrieval can't reach. Extraction already decided the set, so the lab
+    # replays everything captured.
     frames = (
-        await retrieve_frames_for_triggers(str(session_id), trigger_segments)
+        await retrieve_all_masked_frames(str(session_id))
         if evidence_mode != VisualEvidenceMode.CLIPS_ONLY
         else []
     )

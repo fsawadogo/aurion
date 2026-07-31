@@ -661,8 +661,18 @@ def _stage2_harness(monkeypatch, *, session_row, flag_on, resolver):
     monkeypatch.setattr(route, "get_latest_note", lambda *_a, **_k: _async(_note()))
     monkeypatch.setattr(route, "resolve_session_template", _resolver)
     monkeypatch.setattr(route, "caption_visual_evidence", _capture_captions)
+    # One stored frame so Stage 2 has evidence to caption (the route now
+    # fast-skips on ZERO evidence). Retrieval is all-frames, not trigger-window.
+    from app.core.types import MaskedFrame as _MaskedFrame
+
+    _one_frame = [
+        _MaskedFrame(
+            frame_id="frame_01000", session_id="s1", timestamp_ms=1000,
+            s3_key="frames/s1/1000.jpg", masking_confirmed=True,
+        )
+    ]
     monkeypatch.setattr(
-        route, "retrieve_frames_for_triggers", lambda *_a, **_k: _async([])
+        route, "retrieve_all_masked_frames", lambda *_a, **_k: _async(_one_frame)
     )
     monkeypatch.setattr(
         route, "retrieve_clips_for_triggers", lambda *_a, **_k: _async([])

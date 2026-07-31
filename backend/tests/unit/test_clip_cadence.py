@@ -306,7 +306,7 @@ async def test_silent_exam_clips_only_runs_stage2() -> None:
         patch.object(vision_api, "resolve_evidence_mode", return_value=VisualEvidenceMode.CLIPS_ONLY),
         patch.object(vision_api, "get_latest_note", AsyncMock(return_value=_stage1_note())),
         patch.object(vision_api, "retrieve_clips_for_triggers", mock_retrieve_clips),
-        patch.object(vision_api, "retrieve_frames_for_triggers", AsyncMock(return_value=[])),
+        patch.object(vision_api, "retrieve_all_masked_frames", AsyncMock(return_value=[])),
         patch.object(vision_api, "caption_visual_evidence", mock_caption),
         patch.object(vision_api, "reconcile_captions", AsyncMock(side_effect=lambda caps, note, system_prompt=None: caps)),
         patch.object(vision_api, "create_note_version", AsyncMock()),
@@ -328,9 +328,12 @@ async def test_silent_exam_clips_only_runs_stage2() -> None:
     assert resp.enriches_count == 1
 
 
-async def test_silent_exam_frames_only_still_short_circuits() -> None:
-    """Frames are trigger-anchored, so FRAMES_ONLY + zero triggers still
-    fast-skips (no retrieval, STAGE2_COMPLETE reason=no_visual_triggers)."""
+async def test_silent_exam_frames_only_with_no_stored_frames_short_circuits() -> None:
+    """FRAMES_ONLY + zero triggers + NO stored frames still fast-skips. The skip
+    now keys off "no evidence" (post-cadence), not "no triggers": if the S3
+    prefix is empty, Stage 2 completes with reason=no_visual_evidence and never
+    captions. (When cadence HAS stored frames, retrieval returns them and Stage
+    2 proceeds — covered by the retrieve_all_masked_frames path.)"""
     db = _db_for(_transcript_json(with_trigger=False))
     session_uuid = uuid.UUID(SESSION_ID)
 
@@ -342,17 +345,17 @@ async def test_silent_exam_frames_only_still_short_circuits() -> None:
         patch.object(vision_api, "resolve_evidence_mode", return_value=VisualEvidenceMode.FRAMES_ONLY),
         patch.object(vision_api, "get_latest_note", AsyncMock(return_value=_stage1_note())),
         patch.object(vision_api, "retrieve_clips_for_triggers", mock_retrieve_clips),
-        patch.object(vision_api, "retrieve_frames_for_triggers", AsyncMock(return_value=[])),
+        patch.object(vision_api, "retrieve_all_masked_frames", AsyncMock(return_value=[])),
         patch.object(vision_api, "caption_visual_evidence", mock_caption),
         patch.object(vision_api, "write_audit", mock_write_audit),
     ):
         resp = await vision_api.run_stage2_vision(session_uuid, db)
 
-    # Short-circuited — no retrieval, no captioning.
+    # No evidence → skip: clips not retrieved (FRAMES_ONLY), nothing captioned.
     mock_retrieve_clips.assert_not_awaited()
     mock_caption.assert_not_awaited()
     reasons = [
         c.kwargs.get("reason") for c in mock_write_audit.await_args_list
     ]
-    assert "no_visual_triggers" in reasons
+    assert "no_visual_evidence" in reasons
     assert resp.frames_processed == 0
