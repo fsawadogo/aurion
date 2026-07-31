@@ -18,6 +18,7 @@
 import { FlaskConical, Play, Quote, TriangleAlert } from "lucide-react";
 import {
   ApiError,
+  getGroundedLabRun,
   getGroundedLabSessions,
   humanizeError,
   runGroundedLab,
@@ -28,7 +29,15 @@ import type {
   GroundedLabRunResponse,
   GroundedLabSessionItem,
 } from "@/types";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+
+// The run is async: a large frame set is captioned over minutes (past the ALB
+// idle timeout), so we poll the job until it completes.
+const POLL_INTERVAL_MS = 3000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 import { useTranslations } from "next-intl";
 import Badge from "@/components/ui/Badge";
 import Button from "@/components/ui/Button";
@@ -131,14 +140,41 @@ export default function GroundedLabPage() {
     void load();
   }, [load]);
 
+  // Monotonic run token: a re-run (or unmount) bumps it so an in-flight poll
+  // loop from a superseded run never writes stale state.
+  const runSeqRef = useRef(0);
+  useEffect(() => () => {
+    runSeqRef.current += 1;
+  }, []);
+
   const onRun = useCallback(async () => {
     if (!selected) return;
+    const seq = (runSeqRef.current += 1);
+    const isCurrent = () => runSeqRef.current === seq;
     setRunning(true);
     setRunError(null);
     setResult(null);
     try {
-      setResult(await runGroundedLab(selected));
+      const started = await runGroundedLab(selected);
+      // Poll the job until it completes or fails.
+      for (;;) {
+        if (!isCurrent()) return;
+        const status = await getGroundedLabRun(started.job_id);
+        if (!isCurrent()) return;
+        if (status.status === "completed" && status.result) {
+          setResult(status.result);
+          break;
+        }
+        if (status.status === "failed") {
+          setRunError(
+            status.error === "no_media" ? t("noMedia") : t("runError"),
+          );
+          break;
+        }
+        await sleep(POLL_INTERVAL_MS);
+      }
     } catch (e) {
+      if (!isCurrent()) return;
       // 409 = the session's media was purged / never captured.
       if (e instanceof ApiError && e.status === 409) {
         setRunError(t("noMedia"));
@@ -146,7 +182,7 @@ export default function GroundedLabPage() {
         setRunError(humanizeError(e, t("runError")));
       }
     } finally {
-      setRunning(false);
+      if (isCurrent()) setRunning(false);
     }
   }, [selected, t]);
 
@@ -229,6 +265,9 @@ export default function GroundedLabPage() {
 
       {running && (
         <Card>
+          <p className="mb-3 text-aurion-callout text-navy-500" data-testid="grounded-lab-running">
+            {t("runningHint")}
+          </p>
           <LoadingSkeleton lines={6} />
         </Card>
       )}

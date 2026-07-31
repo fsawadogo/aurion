@@ -11,6 +11,7 @@
     "noSessionsTitle": "No sessions with captured media",
     "noSessionsBody": "Sessions appear here while their masked frames and clips are still retained. Record or import an encounter with video, then come back.",
     "runError": "The comparison couldn't run. Please try again.",
+    "runningHint": "Replaying the clip through both modes. This can take a few minutes for a large frame set; you can leave this page open.",
     "noMedia": "This session's frames and clips have been purged or none were captured, so there's nothing to compare.",
     "summaryTitle": "Comparison summary",
     "statFrames": "Frames",

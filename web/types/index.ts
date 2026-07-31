@@ -1491,3 +1491,19 @@ export interface GroundedLabRunResponse {
   grounded_findings: number;
   pairs: GroundedLabPair[];
 }
+
+/* Async run: POST /run returns a job that a large frame set fills in over
+ * minutes (past the 60s ALB idle timeout), polled via GET /runs/{job_id}. */
+export interface GroundedLabRunStartResponse {
+  job_id: string;
+  session_id: string;
+  status: string; // "running"
+}
+
+export interface GroundedLabRunStatusResponse {
+  job_id: string;
+  session_id: string;
+  status: "running" | "completed" | "failed";
+  error: string | null;
+  result: GroundedLabRunResponse | null;
+}

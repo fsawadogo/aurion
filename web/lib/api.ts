@@ -12,7 +12,8 @@ import type {
   EvalSession,
   EvalSessionDetail,
   FeatureFlags,
-  GroundedLabRunResponse,
+  GroundedLabRunStartResponse,
+  GroundedLabRunStatusResponse,
   GroundedLabSessionsResponse,
   LoginResult,
   MaskingReport,
@@ -624,11 +625,18 @@ export async function getGroundedLabSessions(): Promise<GroundedLabSessionsRespo
 
 export async function runGroundedLab(
   sessionId: string,
-): Promise<GroundedLabRunResponse> {
+): Promise<GroundedLabRunStartResponse> {
   const res = await fetchWithAuth(
     `/api/v1/admin/grounded-lab/${sessionId}/run`,
     { method: "POST" },
   );
+  return res.json();
+}
+
+export async function getGroundedLabRun(
+  jobId: string,
+): Promise<GroundedLabRunStatusResponse> {
+  const res = await fetchWithAuth(`/api/v1/admin/grounded-lab/runs/${jobId}`);
   return res.json();
 }
 
