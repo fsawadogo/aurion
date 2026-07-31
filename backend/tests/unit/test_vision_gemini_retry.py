@@ -95,6 +95,17 @@ async def test_success_first_try_makes_one_call() -> None:
     assert client.post.await_count == 1
 
 
+async def test_key_rides_a_header_not_the_url(monkeypatch: pytest.MonkeyPatch) -> None:
+    # The key must NOT go in ?key= (httpx logs the URL → CloudWatch leak). It
+    # rides the x-goog-api-key auth header instead.
+    monkeypatch.setattr(gemini, "_GOOGLE_AI_API_KEY", "AIzaSyHEADERONLY")
+    client = _client([_response(200)])
+    await _post_generate_content(client, "gemini-x", {}, label="frame vision")
+    _, kwargs = client.post.call_args
+    assert kwargs.get("params") is None
+    assert kwargs["headers"]["x-goog-api-key"] == "AIzaSyHEADERONLY"
+
+
 async def test_retry_after_header_is_honoured(monkeypatch: pytest.MonkeyPatch) -> None:
     slept: list[float] = []
 

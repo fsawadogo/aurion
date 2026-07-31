@@ -108,8 +108,14 @@ async def _post_generate_content(
     while True:
         response = await client.post(
             url,
-            params={"key": _GOOGLE_AI_API_KEY},
-            headers={"Content-Type": "application/json"},
+            # Key rides an auth HEADER, never the ?key= URL query param — httpx
+            # logs the request URL at INFO ("HTTP Request: POST <url>") and
+            # embeds it in HTTPStatusError, so a key in the URL leaks to
+            # CloudWatch on every call. A header appears in neither.
+            headers={
+                "Content-Type": "application/json",
+                "x-goog-api-key": _GOOGLE_AI_API_KEY,
+            },
             json=json_body,
         )
         if response.status_code in _RETRY_STATUSES and attempt < _MAX_RETRIES:
