@@ -40,8 +40,8 @@ from app.modules.vision.service import (
     has_unresolved_conflicts,
     merge_visual_citations,
     resolve_evidence_mode,
+    retrieve_all_masked_frames,
     retrieve_clips_for_triggers,
-    retrieve_frames_for_triggers,
 )
 
 logger = logging.getLogger("aurion.api.vision")
@@ -134,29 +134,14 @@ async def run_stage2_vision(
         else VisualEvidenceMode.FRAMES_ONLY
     )
 
-    # No-trigger short-circuit (#324 — relaxed). Frames are extracted ONLY
-    # at trigger timestamps, so a FRAMES_ONLY session with zero spoken
-    # triggers has nothing to retrieve and fast-skips (existing behavior).
-    # But clips are extracted on a cadence floor independent of spoken
-    # triggers, so CLIPS_ONLY / HYBRID must PROCEED with zero triggers —
-    # a silent physical exam still produces cadence clips to caption.
-    if not trigger_segments and evidence_mode == VisualEvidenceMode.FRAMES_ONLY:
-        await write_audit(
-            session_id,
-            AuditEventType.STAGE2_COMPLETE,
-            frames=0, conflicts=0,
-            reason="no_visual_triggers",
-        )
-        return VisionProcessingResponse(
-            session_id=str(session_id),
-            frames_processed=0, frames_discarded=0,
-            enriches_count=0, repeats_count=0, conflicts_count=0,
-            captions=[],
-        )
-
-    # Retrieve frames and/or clips per the resolved mode.
+    # Retrieve frames and/or clips per the resolved mode. Frames use the
+    # ALL-frames retriever (not trigger-window): frames are stored by the
+    # extractor (trigger windows on live iOS; trigger windows + CADENCE points
+    # on server import), and re-filtering by trigger at retrieval time both is
+    # redundant for trigger sessions (S3 holds only trigger frames → identical
+    # set) and drops cadence frames for a SILENT exam (zero spoken triggers).
     frames = (
-        await retrieve_frames_for_triggers(str(session_id), trigger_segments)
+        await retrieve_all_masked_frames(str(session_id))
         if evidence_mode != VisualEvidenceMode.CLIPS_ONLY
         else []
     )
@@ -166,6 +151,23 @@ async def run_stage2_vision(
         else []
     )
     evidence_items = [*frames, *clips]
+
+    # Nothing to caption — a truly silent session with no stored frames and no
+    # cadence clips. Fast-skip (replaces the old no-trigger short-circuit, which
+    # keyed off triggers and so wrongly skipped cadence frames).
+    if not evidence_items:
+        await write_audit(
+            session_id,
+            AuditEventType.STAGE2_COMPLETE,
+            frames=0, conflicts=0,
+            reason="no_visual_evidence",
+        )
+        return VisionProcessingResponse(
+            session_id=str(session_id),
+            frames_processed=0, frames_discarded=0,
+            enriches_count=0, repeats_count=0, conflicts_count=0,
+            captions=[],
+        )
 
     # 4. Captions — single dispatch site for the unified evidence list.
     # ``clip_telemetry`` is the per-clip telemetry sink; the captioning

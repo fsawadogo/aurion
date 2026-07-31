@@ -278,6 +278,64 @@ async def retrieve_frames_for_triggers(
     return unique
 
 
+async def retrieve_all_masked_frames(session_id: str) -> list[MaskedFrame]:
+    """Retrieve EVERY masked frame stored for a session, ignoring triggers.
+
+    ``retrieve_frames_for_triggers`` returns only frames inside a trigger
+    window — so a session captured via CADENCE sampling (a silent exam, zero
+    spoken triggers) has frames in S3 that trigger-window retrieval can never
+    reach. This returns the full stored set: frame extraction already decided
+    what to capture (trigger windows + cadence points), so re-filtering by
+    triggers at retrieval time is both redundant for trigger sessions and wrong
+    for cadence ones. For a trigger-only session the returned set is identical
+    to ``retrieve_frames_for_triggers`` (S3 holds only the trigger frames), so
+    swapping this in is byte-identical there.
+    """
+    s3 = get_s3_client()
+    prefix = f"frames/{session_id}/"
+    frames: list[MaskedFrame] = []
+    seen: set[str] = set()
+    try:
+        response = await with_retry(
+            s3.list_objects_v2,
+            Bucket=FRAMES_BUCKET,
+            Prefix=prefix,
+            max_retries=3,
+            base_delay=1.0,
+            operation="s3_list_all_frames",
+            session_id=session_id,
+        )
+        for obj in response.get("Contents", []):
+            key = obj["Key"]
+            try:
+                ts_ms = int(key.rsplit("/", 1)[-1].split(".")[0])
+            except (ValueError, IndexError):
+                continue
+            frame_id = f"frame_{ts_ms:05d}"
+            if frame_id in seen:
+                continue
+            seen.add(frame_id)
+            frames.append(
+                MaskedFrame(
+                    frame_id=frame_id,
+                    session_id=session_id,
+                    timestamp_ms=ts_ms,
+                    s3_key=key,
+                    masking_confirmed=True,
+                )
+            )
+    except (BotoCoreError, ClientError) as e:
+        logger.error(
+            "All-frame retrieval failed: session=%s error=%s",
+            str(session_id)[:8], str(e),
+        )
+    frames.sort(key=lambda f: f.timestamp_ms)
+    logger.info(
+        "All frames retrieved: session=%s frames=%d", str(session_id)[:8], len(frames)
+    )
+    return frames
+
+
 # ── Clip Retrieval (P1-3, #324) ───────────────────────────────────────────
 #
 # Parallels `retrieve_frames_for_triggers` for the clip path. Clips live
