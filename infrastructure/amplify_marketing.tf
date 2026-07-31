@@ -25,6 +25,18 @@ variable "marketing_domain" {
   default     = "peritwin.com"
 }
 
+variable "marketing_domain_alt" {
+  description = <<-EOT
+    Second apex domain that serves the SAME marketing site (dual-domain, like
+    portal.peritwin.com + portal.aurionclinical.com share one Amplify app).
+    Added as a second domain association on the same app + main branch. Its
+    zone is authoritative at Cloudflare; cut its DNS over from the old Netlify
+    site to Amplify using the marketing_alt_* outputs below.
+  EOT
+  type        = string
+  default     = "peritwin.ai"
+}
+
 variable "marketing_github_org" {
   description = "GitHub owner of the marketing-site repo (OIDC trust scope)."
   type        = string
@@ -92,6 +104,28 @@ resource "aws_amplify_branch" "marketing_main" {
 resource "aws_amplify_domain_association" "marketing" {
   app_id      = aws_amplify_app.marketing.id
   domain_name = var.marketing_domain
+
+  wait_for_verification = false
+
+  sub_domain {
+    branch_name = aws_amplify_branch.marketing_main.branch_name
+    prefix      = ""
+  }
+
+  sub_domain {
+    branch_name = aws_amplify_branch.marketing_main.branch_name
+    prefix      = "www"
+  }
+}
+
+# Second custom domain — peritwin.ai (apex + www), SAME app + branch, so it
+# serves the identical marketing site. Mirrors the portal's dual-domain setup.
+# Amplify provisions a separate ACM cert for this domain; its validation +
+# per-subdomain CNAMEs are surfaced via the marketing_alt_* outputs and must be
+# created at Cloudflare (DNS-only), replacing the old Netlify records.
+resource "aws_amplify_domain_association" "marketing_alt" {
+  app_id      = aws_amplify_app.marketing.id
+  domain_name = var.marketing_domain_alt
 
   wait_for_verification = false
 
@@ -195,4 +229,14 @@ output "marketing_cert_validation_record" {
 output "marketing_domain_records" {
   description = "Per-subdomain DNS records to create at Cloudflare (apex uses CNAME flattening, DNS-only)."
   value       = [for s in aws_amplify_domain_association.marketing.sub_domain : s.dns_record]
+}
+
+output "marketing_alt_cert_validation_record" {
+  description = "peritwin.ai — ACM validation CNAME to create at Cloudflare (DNS-only)."
+  value       = aws_amplify_domain_association.marketing_alt.certificate_verification_dns_record
+}
+
+output "marketing_alt_domain_records" {
+  description = "peritwin.ai — per-subdomain DNS records to create at Cloudflare (apex CNAME flattening, DNS-only). REPLACES the old Netlify records."
+  value       = [for s in aws_amplify_domain_association.marketing_alt.sub_domain : s.dns_record]
 }
