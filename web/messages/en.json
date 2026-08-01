@@ -672,12 +672,18 @@
       "grounded_visual_findings_enabled": {
         "name": "Grounded visual findings",
         "description": "Let the video produce cited clinical exam findings (e.g. reduced knee flexion ~110°) instead of only literal descriptions — every finding stays cited to the frame it rests on, never an ungrounded diagnosis. Separate switch from Grounded synthesis. Leave OFF until validated on real footage on the lab page; enabling writes AI-derived findings into live patient notes (physician review still gates signing)."
+      },
+      "parallel_fusion_enabled": {
+        "name": "Parallel fusion (Fusion B)",
+        "description": "Gates live use of the parallel-then-merge architecture: an independent note is generated from the video and merged section-by-section with the audio note (visual for the exam, audio for history and plan), conflicts surfaced. The A/B comparison in the Grounded Lab runs regardless of this flag — leave OFF until a fusion approach is chosen."
       }
     },
     "chatTools": "Chat tools",
     "chatToolsHint": "Conversational surfaces for clinicians in the web portal. Each ships dark behind its own flag.",
     "groundedVisualFindings": "Grounded visual findings",
-    "groundedVisualFindingsHint": "Lets the video produce cited clinical exam findings (e.g. reduced knee flexion ~110°) instead of only literal descriptions — every finding is cited to the frame it rests on. Separate from Grounded synthesis. Validate on the lab page before enabling for live patient notes."
+    "groundedVisualFindingsHint": "Lets the video produce cited clinical exam findings (e.g. reduced knee flexion ~110°) instead of only literal descriptions — every finding is cited to the frame it rests on. Separate from Grounded synthesis. Validate on the lab page before enabling for live patient notes.",
+    "parallelFusion": "Parallel fusion (Fusion B)",
+    "parallelFusionHint": "Gates live use of parallel-then-merge note assembly. The audio-vs-video A/B comparison in the Grounded Lab runs regardless; flip this only once a fusion approach is chosen for live notes."
   },
   "Providers": {
     "eyebrow": "Admin",

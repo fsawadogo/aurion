@@ -50,6 +50,11 @@ export const FLAG_GROUPS = [
     flags: ["grounded_visual_findings_enabled"],
   },
   {
+    titleKey: "parallelFusion",
+    hintKey: "parallelFusionHint",
+    flags: ["parallel_fusion_enabled"],
+  },
+  {
     titleKey: "videoImport",
     hintKey: "videoImportHint",
     flags: ["multi_clip_import_enabled"],

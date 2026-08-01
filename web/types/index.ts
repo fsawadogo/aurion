@@ -566,6 +566,9 @@ export interface FeatureFlags {
   // Grounded visual findings — video produces cited exam findings (separate
   // lever from grounded_synthesis_enabled).
   grounded_visual_findings_enabled: boolean;
+  // Fusion B (parallel-then-merge) — gates future live use; the A/B comparison
+  // in the Grounded Lab runs regardless.
+  parallel_fusion_enabled: boolean;
 }
 
 export interface UpdateFeatureFlagsResponse {
