@@ -62,9 +62,19 @@ from app.core.types import FrameCaption, Note, SessionState, Template, Transcrip
 from app.modules.auth.service import CurrentUser, require_role
 from app.modules.config.appconfig_client import get_config
 from app.modules.config.schema import VisualEvidenceMode
-from app.modules.note_gen.service import get_latest_note, resolve_session_template
+from app.modules.note_gen.fusion import (
+    generate_video_note,
+    merge_parallel_notes,
+)
+from app.modules.note_gen.service import (
+    get_latest_note,
+    get_note_by_stage,
+    resolve_session_template,
+)
+from app.modules.vision.reconcile import reconcile_captions
 from app.modules.vision.service import (
     caption_visual_evidence,
+    merge_visual_citations,
     resolve_evidence_mode,
     retrieve_all_masked_frames,
     retrieve_clips_for_triggers,
@@ -531,6 +541,268 @@ async def get_grounded_lab_run(
         else None
     )
     return GroundedLabRunStatusResponse(
+        job_id=str(job.id),
+        session_id=str(job.session_id),
+        status=job.status,
+        error=job.error_message,
+        result=result,
+    )
+
+
+# ══ Fusion A vs Fusion B comparison ══════════════════════════════════════════
+#
+# Runs BOTH multimodal fusion architectures on the same session and returns the
+# two resulting notes side by side, so the founders can pick one empirically
+# before committing (the roadmap's "implement and compare the two fusion
+# approaches; report which produces the better note").
+#
+#   Fusion A (transcript-as-context, current): Stage-1 audio note, then the
+#     video captions are reconciled and MERGED as visual claims into it.
+#   Fusion B (parallel-then-merge): an INDEPENDENT note is generated from the
+#     video and merged section-by-section with the audio note.
+#
+# READ-ONLY: builds two Note objects for review; never writes a note version.
+
+
+class FusionCompareResult(BaseModel):
+    session_id: str
+    specialty: Optional[str] = None
+    frame_count: int
+    # Serialized Note payloads (Note.model_dump()) for A and B.
+    note_a: dict
+    note_b: dict
+    sections_a: int  # populated sections in A
+    sections_b: int  # populated sections in B
+    conflicts_b: int  # surfaced audio/visual conflicts in B
+
+
+class FusionCompareStartResponse(BaseModel):
+    job_id: str
+    session_id: str
+    status: str  # "running"
+
+
+class FusionCompareStatusResponse(BaseModel):
+    job_id: str
+    session_id: str
+    status: str  # running | completed | failed
+    error: Optional[str] = None
+    result: Optional[FusionCompareResult] = None
+
+
+def _populated_section_count(note: Note) -> int:
+    return sum(1 for s in note.sections if s.claims)
+
+
+async def _compute_fusion_compare(
+    session_id: uuid.UUID, session: SessionModel, db: AsyncSession
+) -> FusionCompareResult:
+    """Build the Fusion A and Fusion B notes from the SAME Stage-1 base + media.
+
+    Read-only: no note version is written. Raises ValueError("no_audio_note")
+    when the session has no Stage-1 note to build from, ("no_media") when its
+    frames/clips are gone.
+    """
+    audio_note = await get_note_by_stage(str(session_id), 1, db)
+    if audio_note is None:
+        audio_note = await get_latest_note(str(session_id), db)
+    if audio_note is None:
+        raise ValueError("no_audio_note")
+
+    row = (
+        await db.execute(
+            select(TranscriptModel).where(TranscriptModel.session_id == session_id)
+        )
+    ).scalar_one_or_none()
+    transcript: Optional[Transcript] = (
+        Transcript.model_validate_json(row.transcript_json) if row is not None else None
+    )
+    trigger_segments = (
+        [s for s in transcript.segments if s.is_visual_trigger] if transcript else []
+    )
+    anchor_segments = transcript.segments if transcript else []
+    anchor_texts = {s.id: s.text for s in anchor_segments}
+
+    evidence_mode = resolve_evidence_mode(session)
+    frames = (
+        await retrieve_all_masked_frames(str(session_id))
+        if evidence_mode != VisualEvidenceMode.CLIPS_ONLY
+        else []
+    )
+    clips = (
+        await retrieve_clips_for_triggers(str(session_id), trigger_segments)
+        if evidence_mode != VisualEvidenceMode.FRAMES_ONLY
+        else []
+    )
+    evidence_items = [*frames, *clips]
+    if not evidence_items:
+        raise ValueError("no_media")
+
+    template: Optional[Template] = None
+    if get_config().feature_flags.template_engine_enabled:
+        try:
+            template = await resolve_session_template(session, db)
+        except Exception:
+            logger.warning(
+                "Fusion-compare template resolution failed for session=%s",
+                session_id, exc_info=True,
+            )
+            template = None
+
+    grounded = get_config().feature_flags.grounded_visual_findings_enabled
+
+    # ── Fusion A: caption → reconcile → merge INTO a copy of the audio note.
+    captions = await caption_visual_evidence(
+        evidence=evidence_items,
+        trigger_segments=trigger_segments,
+        anchor_segments=anchor_segments,
+        template=template,
+        note=audio_note,
+        grounded=grounded,
+    )
+    captions = [c for c in captions if c.confidence != "low"]
+    try:
+        captions = await reconcile_captions(captions, audio_note)
+    except Exception:  # noqa: BLE001 — reconcile is best-effort (as in Stage 2)
+        logger.warning("Fusion-compare reconcile failed; merging unreconciled")
+    note_a = merge_visual_citations(
+        audio_note.model_copy(deep=True), captions, template, anchor_texts
+    )
+
+    # ── Fusion B: independent video note → parallel section-weighted merge.
+    video_note = await generate_video_note(
+        str(session_id), evidence_items, template, grounded=grounded
+    )
+    note_b = merge_parallel_notes(audio_note, video_note, template)
+
+    return FusionCompareResult(
+        session_id=str(session_id),
+        specialty=session.specialty,
+        frame_count=len(evidence_items),
+        note_a=note_a.model_dump(),
+        note_b=note_b.model_dump(),
+        sections_a=_populated_section_count(note_a),
+        sections_b=_populated_section_count(note_b),
+        conflicts_b=sum(
+            1
+            for s in note_b.sections
+            for c in s.claims
+            if c.id.startswith("conflict_")
+        ),
+    )
+
+
+async def _run_fusion_compare_in_background(
+    session_id: uuid.UUID, job_id: uuid.UUID, actor_id: uuid.UUID
+) -> None:
+    """Detached task: build both fusion notes, store the result on the job row."""
+    async with async_session_factory() as db:
+        job = await db.get(GroundedLabRunModel, job_id)
+        if job is None:
+            return
+        try:
+            session = await get_session_or_404(db, session_id)
+            result = await _compute_fusion_compare(session_id, session, db)
+            job.status = "completed"
+            job.result_json = result.model_dump()
+            job.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+            await write_audit(
+                session_id,
+                AuditEventType.FUSION_COMPARE_RUN,
+                actor_id=str(actor_id),
+                frame_count=result.frame_count,
+                sections_a=result.sections_a,
+                sections_b=result.sections_b,
+                conflicts_b=result.conflicts_b,
+            )
+        except Exception as exc:  # noqa: BLE001 — record + swallow (detached task)
+            reason = (
+                str(exc.args[0])
+                if isinstance(exc, ValueError) and exc.args
+                else "run_failed"
+            )
+            logger.warning(
+                "Fusion-compare failed: session=%s job=%s reason=%s",
+                session_id, job_id, reason,
+                exc_info=not isinstance(exc, ValueError),
+            )
+            job.status = "failed"
+            job.error_message = reason
+            job.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+
+
+@router.post(
+    "/grounded-lab/{session_id}/fusion-compare",
+    response_model=FusionCompareStartResponse,
+)
+async def run_fusion_compare(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(require_role(UserRole.ADMIN, UserRole.EVAL_TEAM)),
+    db: AsyncSession = Depends(get_db),
+) -> FusionCompareStartResponse:
+    """Start an async Fusion A vs Fusion B comparison; returns a ``job_id``.
+
+    ADMIN or EVAL_TEAM. Validates the session (404) + media presence (409)
+    synchronously, then detaches the compute (captioning + two note builds).
+    Poll ``/fusion-runs/{job_id}``. READ-ONLY: never mutates the chart.
+    """
+    await get_session_or_404(db, session_id)
+    has_media = _list_prefix_count(FRAMES_BUCKET, f"frames/{session_id}/") > 0 or (
+        _list_prefix_count(FRAMES_BUCKET, f"clips/{session_id}/") > 0
+    )
+    if not has_media:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "No retained visual media for this session — nothing to fuse."
+            ),
+        )
+
+    job = GroundedLabRunModel(
+        session_id=session_id, actor_id=user.user_id,
+        run_type="fusion_compare", status="running",
+    )
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    spawn_background_task(
+        _run_fusion_compare_in_background(session_id, job.id, user.user_id),
+        name="fusion-compare",
+    )
+    return FusionCompareStartResponse(
+        job_id=str(job.id), session_id=str(session_id), status="running"
+    )
+
+
+@router.get(
+    "/grounded-lab/fusion-runs/{job_id}",
+    response_model=FusionCompareStatusResponse,
+)
+async def get_fusion_compare_run(
+    job_id: uuid.UUID,
+    user: CurrentUser = Depends(require_role(UserRole.ADMIN, UserRole.EVAL_TEAM)),
+    db: AsyncSession = Depends(get_db),
+) -> FusionCompareStatusResponse:
+    """Poll a fusion-compare run. ADMIN or EVAL_TEAM."""
+    job = await db.get(GroundedLabRunModel, job_id)
+    if job is None or job.run_type != "fusion_compare":
+        raise HTTPException(status_code=404, detail="No such fusion-compare run.")
+
+    if job.status == "running" and datetime.now(timezone.utc) - job.started_at > _RUN_BUDGET:
+        job.status = "failed"
+        job.error_message = "timed_out"
+        job.completed_at = datetime.now(timezone.utc)
+        await db.commit()
+
+    result = (
+        FusionCompareResult.model_validate(job.result_json)
+        if job.status == "completed" and job.result_json is not None
+        else None
+    )
+    return FusionCompareStatusResponse(
         job_id=str(job.id),
         session_id=str(job.session_id),
         status=job.status,

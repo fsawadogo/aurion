@@ -706,9 +706,16 @@ class GroundedLabRunModel(Base):
         UUID(as_uuid=True), nullable=False, index=True
     )
     actor_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    # Discriminates the async lab jobs that share this table: "grounded_lab"
+    # (descriptive-vs-grounded captions) vs "fusion_compare" (Fusion A vs
+    # Fusion B notes). The poll endpoint keys result_json validation off this.
+    run_type: Mapped[str] = mapped_column(
+        String(30), nullable=False, default="grounded_lab"
+    )
     # running → completed|failed
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="running")
-    # The GroundedLabRunResponse payload (pairs + summary); NULL until complete.
+    # The result payload — a GroundedLabRunResponse (pairs) or a
+    # FusionCompareResult (two notes), per run_type; NULL until complete.
     result_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     error_message: Mapped[str | None] = mapped_column(Text, nullable=True)
     started_at: Mapped[datetime] = mapped_column(

@@ -12,6 +12,7 @@ import type {
   EvalSession,
   EvalSessionDetail,
   FeatureFlags,
+  FusionCompareStatusResponse,
   GroundedLabRunStartResponse,
   GroundedLabRunStatusResponse,
   GroundedLabSessionsResponse,
@@ -637,6 +638,25 @@ export async function getGroundedLabRun(
   jobId: string,
 ): Promise<GroundedLabRunStatusResponse> {
   const res = await fetchWithAuth(`/api/v1/admin/grounded-lab/runs/${jobId}`);
+  return res.json();
+}
+
+export async function runFusionCompare(
+  sessionId: string,
+): Promise<GroundedLabRunStartResponse> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/grounded-lab/${sessionId}/fusion-compare`,
+    { method: "POST" },
+  );
+  return res.json();
+}
+
+export async function getFusionCompareRun(
+  jobId: string,
+): Promise<FusionCompareStatusResponse> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/grounded-lab/fusion-runs/${jobId}`,
+  );
   return res.json();
 }
 

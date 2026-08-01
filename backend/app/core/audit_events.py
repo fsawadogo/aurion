@@ -231,6 +231,12 @@ class AuditEventType(StrEnum):
     # PHI-free evidence count, and the per-mode finding counts — NEVER a caption
     # body, S3 key, or any patient content.
     GROUNDED_LAB_RUN = "grounded_lab_run"
+    # An admin/eval reviewer ran the Fusion A vs Fusion B note comparison on the
+    # Grounded Lab — the current transcript-as-context merge vs the
+    # parallel-then-merge note, side by side. READ-ONLY: builds two Note objects
+    # for review, never writes a note version. PHI-free — actor + section counts
+    # only, never note bodies.
+    FUSION_COMPARE_RUN = "fusion_compare_run"
 
     # ── Privacy / account ────────────────────────────────────────────────
     BIOMETRIC_CONSENT_CONFIRMED = "biometric_consent_confirmed"
@@ -845,6 +851,9 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.GROUNDED_LAB_RUN: frozenset(
         {"actor_id", "frame_count", "descriptive_findings", "grounded_findings"}
+    ),
+    AuditEventType.FUSION_COMPARE_RUN: frozenset(
+        {"actor_id", "frame_count", "sections_a", "sections_b", "conflicts_b"}
     ),
     # Privacy / account — iOS-only voice events stay empty
     AuditEventType.BIOMETRIC_CONSENT_CONFIRMED: frozenset(),

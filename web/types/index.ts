@@ -1510,3 +1510,43 @@ export interface GroundedLabRunStatusResponse {
   error: string | null;
   result: GroundedLabRunResponse | null;
 }
+
+/* Fusion A vs Fusion B note comparison. note_a / note_b are serialized Note
+ * payloads (sections → claims). Mirrors backend FusionCompareResult. */
+export interface FusionNoteClaim {
+  id: string;
+  text: string;
+  source_type: string;
+  source_id: string;
+}
+
+export interface FusionNoteSection {
+  id: string;
+  title: string;
+  status: string;
+  claims: FusionNoteClaim[];
+}
+
+export interface FusionNote {
+  provider_used?: string;
+  sections: FusionNoteSection[];
+}
+
+export interface FusionCompareResult {
+  session_id: string;
+  specialty: string | null;
+  frame_count: number;
+  note_a: FusionNote;
+  note_b: FusionNote;
+  sections_a: number;
+  sections_b: number;
+  conflicts_b: number;
+}
+
+export interface FusionCompareStatusResponse {
+  job_id: string;
+  session_id: string;
+  status: "running" | "completed" | "failed";
+  error: string | null;
+  result: FusionCompareResult | null;
+}
