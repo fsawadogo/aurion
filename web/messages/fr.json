@@ -696,6 +696,10 @@
       "parallel_fusion_enabled": {
         "name": "Fusion parallèle (Fusion B)",
         "description": "Conditionne l'usage en production de l'architecture parallèle-puis-fusion : une note indépendante est générée à partir de la vidéo puis fusionnée section par section avec la note audio (visuel pour l'examen, audio pour l'anamnèse et le plan), les conflits étant signalés. La comparaison A/B dans le labo ancré s'exécute indépendamment de cet indicateur — à laisser OFF tant qu'une approche de fusion n'est pas choisie."
+      },
+      "correction_memory_enabled": {
+        "name": "Mémoire des corrections",
+        "description": "Enregistre chaque modification qu'un médecin apporte en cours d'application à une note générée (le texte avant et après, la section) afin que le système puisse ensuite classer chaque correction et en distiller des règles propres au médecin — les corrections accumulées constituent un coût de changement. Capture seulement ; le texte avant/après est du contenu de note, cloisonné par propriétaire. Livré éteint ; activez pour commencer la capture pendant le pilote."
       }
     },
     "chatTools": "Outils de conversation",
@@ -703,7 +707,9 @@
     "groundedVisualFindings": "Constats visuels ancrés",
     "groundedVisualFindingsHint": "Permet à la vidéo de produire des constats cliniques cités (p. ex. flexion du genou réduite ~110°) plutôt que de simples descriptions — chaque constat est cité à l'image dont il provient. Distinct de la synthèse ancrée. À valider sur la page labo avant activation sur des notes patients réelles.",
     "parallelFusion": "Fusion parallèle (Fusion B)",
-    "parallelFusionHint": "Conditionne l'usage en production de l'assemblage parallèle-puis-fusion. La comparaison A/B audio-vs-vidéo dans le labo ancré s'exécute indépendamment; n'activez ceci qu'une fois une approche de fusion choisie pour les notes réelles."
+    "parallelFusionHint": "Conditionne l'usage en production de l'assemblage parallèle-puis-fusion. La comparaison A/B audio-vs-vidéo dans le labo ancré s'exécute indépendamment; n'activez ceci qu'une fois une approche de fusion choisie pour les notes réelles.",
+    "correctionMemory": "Mémoire des corrections",
+    "correctionMemoryHint": "Enregistre les modifications de note en cours d'application (texte avant/après + section) pour classer les corrections et en distiller des règles propres au médecin. Capture seulement, cloisonnée par propriétaire; activez pour constituer l'historique des corrections pendant le pilote."
   },
   "Providers": {
     "eyebrow": "Admin",

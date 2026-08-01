@@ -313,6 +313,9 @@ resource "aws_appconfig_configuration_profile" "main" {
             # false. Gates any future LIVE use of parallel fusion — the A/B
             # comparison in the Grounded Lab runs regardless of this flag.
             parallel_fusion_enabled = { type = "boolean" }
+            # Correction memory — logs in-app note edits. NOT `required`; backend
+            # defaults it false. Gates capture only.
+            correction_memory_enabled = { type = "boolean" }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in

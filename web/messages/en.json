@@ -696,6 +696,10 @@
       "parallel_fusion_enabled": {
         "name": "Parallel fusion (Fusion B)",
         "description": "Gates live use of the parallel-then-merge architecture: an independent note is generated from the video and merged section-by-section with the audio note (visual for the exam, audio for history and plan), conflicts surfaced. The A/B comparison in the Grounded Lab runs regardless of this flag — leave OFF until a fusion approach is chosen."
+      },
+      "correction_memory_enabled": {
+        "name": "Correction memory",
+        "description": "Logs every in-app edit a physician makes to a generated note (the before and after text, the section) so the system can later classify each correction and distil per-physician rules — the accumulated corrections are switching cost. Capture only; the before/after text is note content, owner-scoped. Ships dark; turn ON to start capturing during the pilot."
       }
     },
     "chatTools": "Chat tools",
@@ -703,7 +707,9 @@
     "groundedVisualFindings": "Grounded visual findings",
     "groundedVisualFindingsHint": "Lets the video produce cited clinical exam findings (e.g. reduced knee flexion ~110°) instead of only literal descriptions — every finding is cited to the frame it rests on. Separate from Grounded synthesis. Validate on the lab page before enabling for live patient notes.",
     "parallelFusion": "Parallel fusion (Fusion B)",
-    "parallelFusionHint": "Gates live use of parallel-then-merge note assembly. The audio-vs-video A/B comparison in the Grounded Lab runs regardless; flip this only once a fusion approach is chosen for live notes."
+    "parallelFusionHint": "Gates live use of parallel-then-merge note assembly. The audio-vs-video A/B comparison in the Grounded Lab runs regardless; flip this only once a fusion approach is chosen for live notes.",
+    "correctionMemory": "Correction memory",
+    "correctionMemoryHint": "Logs in-app note edits (before/after text + section) so corrections can be classified and distilled into per-physician rules. Capture only, owner-scoped; turn ON to start building the correction history during the pilot."
   },
   "Providers": {
     "eyebrow": "Admin",
