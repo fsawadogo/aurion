@@ -309,6 +309,10 @@ resource "aws_appconfig_configuration_profile" "main" {
             # `required` so older documents validate under additionalProperties
             # = false — the backend Pydantic schema defaults it false.
             grounded_visual_findings_enabled = { type = "boolean" }
+            # Fusion B (parallel-then-merge). NOT `required`; backend defaults it
+            # false. Gates any future LIVE use of parallel fusion — the A/B
+            # comparison in the Grounded Lab runs regardless of this flag.
+            parallel_fusion_enabled = { type = "boolean" }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in

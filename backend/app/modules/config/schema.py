@@ -372,6 +372,18 @@ class FeatureFlagsConfig(BaseModel):
     # and enabled independently of the contested A&P flag. Ships DARK; scoped
     # to the visual sections only (History/Plan stay transcript-grounded).
     grounded_visual_findings_enabled: bool = False
+    # ── Parallel fusion (Fusion B — parallel-then-merge) ──────────────────
+    # The pipeline's default fusion is "A" (transcript-as-context): Stage 1
+    # generates the note from audio, Stage 2 captions video and MERGES visual
+    # claims INTO that note. "B" (parallel-then-merge) instead generates an
+    # INDEPENDENT note from the video (captions → pseudo-transcript → the same
+    # note-gen engine) and merges the two whole notes section-by-section, with
+    # modality weighting (visual for the exam/procedure sections, audio for
+    # history/discussion/plan) and conflicts surfaced, not silently resolved.
+    # This flag does NOT change live note generation — the two approaches are
+    # compared READ-ONLY in the Grounded Lab so the founders can pick one before
+    # committing. Ships DARK; wiring B into the live pipeline is a later gate.
+    parallel_fusion_enabled: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────

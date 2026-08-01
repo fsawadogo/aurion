@@ -116,6 +116,9 @@ class FeatureFlagsResponse(BaseModel):
     # (like grounded_synthesis_enabled) so a save from a portal build predating
     # this field can't 422; resolves to safe OFF while dark.
     grounded_visual_findings_enabled: bool = False
+    # Fusion B (parallel-then-merge). Optional-with-default so a save from an
+    # older portal build can't 422; gates future live use, dark by default.
+    parallel_fusion_enabled: bool = False
 
 
 class UpdateFeatureFlagsResponse(BaseModel):
@@ -230,6 +233,7 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         grounded_visual_findings_enabled=(
             cfg_feature_flags.grounded_visual_findings_enabled
         ),
+        parallel_fusion_enabled=cfg_feature_flags.parallel_fusion_enabled,
     )
 
 
