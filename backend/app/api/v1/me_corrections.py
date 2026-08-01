@@ -22,6 +22,7 @@ from app.core.models import CorrectionModel
 from app.core.types import UserRole
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.config.appconfig_client import get_config
+from app.modules.corrections.classify import classify_pending_for_clinician
 
 router = APIRouter(prefix="/me", tags=["me"])
 
@@ -101,3 +102,34 @@ async def list_my_corrections(
     return CorrectionsResponse(
         items=items, total=total, page=page, page_size=page_size, enabled=enabled
     )
+
+
+class ClassifyResponse(BaseModel):
+    """Per-label counts from a classification pass."""
+
+    typo: int = 0
+    semantic: int = 0
+    medical: int = 0
+    skipped: int = 0
+
+
+@router.post("/corrections/classify", response_model=ClassifyResponse)
+async def classify_my_corrections(
+    limit: int = Query(100, ge=1, le=500),
+    user: CurrentUser = Depends(require_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> ClassifyResponse:
+    """Classify the clinician's still-unclassified corrections (typo / semantic
+    / medical). ADMIN can't reach this — it's the clinician's own data.
+
+    Flag-gated: 409 when ``correction_memory_enabled`` is off (no corrections
+    are being captured, so there is nothing to classify). Each label is filled
+    on its row; the response is the per-label count from this pass.
+    """
+    if not get_config().feature_flags.correction_memory_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Correction memory is not enabled.",
+        )
+    counts = await classify_pending_for_clinician(user.user_id, db, limit=limit)
+    return ClassifyResponse(**counts)
