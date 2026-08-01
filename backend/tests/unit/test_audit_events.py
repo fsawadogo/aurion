@@ -121,6 +121,7 @@ EXPECTED_VALUES: dict[str, str] = {
     # ADMIN/EVAL_TEAM reviewer via the admin Captured Media page.
     "EVIDENCE_DOWNLOADED": "evidence_downloaded",
     "GROUNDED_LAB_RUN": "grounded_lab_run",
+    "FUSION_COMPARE_RUN": "fusion_compare_run",
     # Privacy / account
     "BIOMETRIC_CONSENT_CONFIRMED": "biometric_consent_confirmed",
     "VOICE_ENROLLMENT_COMPLETE": "voice_enrollment_complete",

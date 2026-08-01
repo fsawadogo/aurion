@@ -124,12 +124,20 @@ def test_run_event_rejects_a_caption_body() -> None:
 
 
 def test_module_never_persists_a_note_version() -> None:
-    # The lab must not mutate the chart. Guard against a future edit importing a
-    # note-writing helper into the module.
+    # The lab must not mutate the chart. The persistence call is
+    # create_note_version — its absence is the real read-only invariant.
+    # (merge_visual_citations IS imported for the Fusion A/B compare, but it is
+    # a pure merge that returns a Note and is only ever called on a deep copy —
+    # it never persists, so it is not a chart-mutation risk.)
     import app.api.v1.admin.grounded_lab as mod
 
     assert not hasattr(mod, "create_note_version")
-    assert not hasattr(mod, "merge_visual_citations")
+    # The fusion compare runs merge on a COPY of the audio note — assert the
+    # source string never calls create_note_version.
+    import inspect
+
+    src = inspect.getsource(mod)
+    assert "create_note_version" not in src
 
 
 # ── async run surface ────────────────────────────────────────────────────────
@@ -144,6 +152,43 @@ def test_async_run_routes_registered() -> None:
     assert "/admin/grounded-lab/sessions" in paths
     assert "/admin/grounded-lab/{session_id}/run" in paths
     assert "/admin/grounded-lab/runs/{job_id}" in paths
+
+
+def test_fusion_compare_routes_registered() -> None:
+    from app.api.v1.admin.grounded_lab import router
+
+    paths = {r.path for r in router.routes}
+    assert "/admin/grounded-lab/{session_id}/fusion-compare" in paths
+    assert "/admin/grounded-lab/fusion-runs/{job_id}" in paths
+
+
+def test_fusion_compare_result_round_trips() -> None:
+    # The two-note payload is stored as result_json and re-validated on poll.
+    from app.api.v1.admin.grounded_lab import FusionCompareResult
+
+    original = FusionCompareResult(
+        session_id="s1", specialty="orthopedic_surgery", frame_count=9,
+        note_a={"sections": [], "provider_used": "anthropic"},
+        note_b={"sections": [], "provider_used": "fusion_b"},
+        sections_a=3, sections_b=4, conflicts_b=1,
+    )
+    restored = FusionCompareResult.model_validate(original.model_dump())
+    assert restored == original
+
+
+def test_fusion_compare_audit_is_phi_free_counts() -> None:
+    from app.core.audit_events import ALLOWED_AUDIT_KWARGS, AuditEventType
+
+    allowed = ALLOWED_AUDIT_KWARGS[AuditEventType.FUSION_COMPARE_RUN]
+    assert allowed == {
+        "actor_id", "frame_count", "sections_a", "sections_b", "conflicts_b",
+    }
+
+
+def test_run_type_column_default() -> None:
+    from app.core.models import GroundedLabRunModel
+
+    assert GroundedLabRunModel.run_type.default.arg == "grounded_lab"
 
 
 def test_result_round_trips_through_job_storage() -> None:

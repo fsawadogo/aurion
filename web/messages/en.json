@@ -23,7 +23,17 @@
     "colFrame": "Frame",
     "colDescriptive": "Descriptive",
     "colGrounded": "Grounded",
-    "noFinding": "No finding"
+    "noFinding": "No finding",
+    "modeGrounded": "Descriptive vs grounded",
+    "modeFusion": "Fusion A vs B",
+    "modeGroundedHint": "Replay the clip through the vision layer twice — strict descriptive vs grounded — on the same frames.",
+    "modeFusionHint": "Compare two multimodal architectures: Fusion A (audio note, video merged in as claims) vs Fusion B (independent video note, merged section-by-section with the audio note).",
+    "fusionSummaryTitle": "Fusion comparison summary",
+    "statSectionsA": "Sections (A)",
+    "statSectionsB": "Sections (B)",
+    "statConflictsB": "Conflicts (B)",
+    "colFusionA": "Fusion A — transcript-as-context",
+    "colFusionB": "Fusion B — parallel-then-merge"
   },
   "AdminPromptStudio": {
     "eyebrow": "Admin workspace",

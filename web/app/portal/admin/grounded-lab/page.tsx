@@ -18,12 +18,16 @@
 import { FlaskConical, Play, Quote, TriangleAlert } from "lucide-react";
 import {
   ApiError,
+  getFusionCompareRun,
   getGroundedLabRun,
   getGroundedLabSessions,
   humanizeError,
+  runFusionCompare,
   runGroundedLab,
 } from "@/lib/api";
 import type {
+  FusionCompareResult,
+  FusionNote,
   GroundedLabFinding,
   GroundedLabPair,
   GroundedLabRunResponse,
@@ -63,6 +67,57 @@ function formatTimestamp(ms: number): string {
   const m = Math.floor(totalSeconds / 60);
   const s = totalSeconds % 60;
   return `${m}:${s.toString().padStart(2, "0")}`;
+}
+
+// One note column in the Fusion A/B comparison: the note's sections, each with
+// its claims. Conflict claims (surfaced audio/visual disagreements in Fusion B)
+// are flagged amber.
+function FusionNoteColumn({ note }: { note: FusionNote }) {
+  const populated = note.sections.filter((s) => s.claims.length > 0);
+  if (populated.length === 0) {
+    return (
+      <p className="px-4 py-3 text-aurion-micro italic text-navy-300">
+        No populated sections.
+      </p>
+    );
+  }
+  return (
+    <div className="divide-y divide-hairline">
+      {populated.map((section) => (
+        <div key={section.id} className="px-4 py-3">
+          <p className="mb-1.5 text-aurion-micro font-semibold uppercase tracking-wide text-navy-500">
+            {section.title || section.id}
+          </p>
+          <ul className="space-y-1.5">
+            {section.claims.map((claim) => {
+              const isConflict = claim.id.startsWith("conflict_");
+              return (
+                <li
+                  key={claim.id}
+                  className={`text-aurion-callout ${
+                    isConflict ? "text-amber-800" : "text-navy-800"
+                  }`}
+                >
+                  {isConflict && (
+                    <TriangleAlert
+                      className="mr-1 inline h-3 w-3"
+                      aria-hidden="true"
+                    />
+                  )}
+                  {claim.text}
+                  {claim.source_type === "visual" && (
+                    <span className="ml-1 text-aurion-micro text-navy-400">
+                      · visual
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function FindingCell({
@@ -114,9 +169,15 @@ export default function GroundedLabPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Two comparison modes share the session picker: "grounded" (descriptive vs
+  // grounded captions, same clip) and "fusion" (Fusion A vs Fusion B notes).
+  const [mode, setMode] = useState<"grounded" | "fusion">("grounded");
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [result, setResult] = useState<GroundedLabRunResponse | null>(null);
+  const [fusionResult, setFusionResult] = useState<FusionCompareResult | null>(
+    null,
+  );
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -154,15 +215,26 @@ export default function GroundedLabPage() {
     setRunning(true);
     setRunError(null);
     setResult(null);
+    setFusionResult(null);
     try {
-      const started = await runGroundedLab(selected);
+      const started =
+        mode === "fusion"
+          ? await runFusionCompare(selected)
+          : await runGroundedLab(selected);
       // Poll the job until it completes or fails.
       for (;;) {
         if (!isCurrent()) return;
-        const status = await getGroundedLabRun(started.job_id);
+        const status =
+          mode === "fusion"
+            ? await getFusionCompareRun(started.job_id)
+            : await getGroundedLabRun(started.job_id);
         if (!isCurrent()) return;
         if (status.status === "completed" && status.result) {
-          setResult(status.result);
+          if (mode === "fusion") {
+            setFusionResult(status.result as FusionCompareResult);
+          } else {
+            setResult(status.result as GroundedLabRunResponse);
+          }
           break;
         }
         if (status.status === "failed") {
@@ -184,7 +256,7 @@ export default function GroundedLabPage() {
     } finally {
       if (isCurrent()) setRunning(false);
     }
-  }, [selected, t]);
+  }, [selected, mode, t]);
 
   function sessionLabel(s: GroundedLabSessionItem): string {
     const when = s.started_at ? new Date(s.started_at).toLocaleString() : "";
@@ -212,6 +284,33 @@ export default function GroundedLabPage() {
       )}
 
       <Card className="mb-5" title={t("pickerTitle")}>
+        {/* Mode toggle: which comparison to run on the picked session. */}
+        <div
+          className="mb-4 inline-flex rounded-aurion-md border border-hairline p-0.5"
+          role="tablist"
+          data-testid="grounded-lab-mode"
+        >
+          {(["grounded", "fusion"] as const).map((m) => (
+            <button
+              key={m}
+              type="button"
+              role="tab"
+              aria-selected={mode === m}
+              onClick={() => setMode(m)}
+              className={`rounded-[10px] px-3 py-1.5 text-aurion-micro font-medium transition-colors ${
+                mode === m
+                  ? "bg-navy-800 text-white"
+                  : "text-navy-500 hover:text-navy-700"
+              }`}
+              data-testid={`grounded-lab-mode-${m}`}
+            >
+              {m === "grounded" ? t("modeGrounded") : t("modeFusion")}
+            </button>
+          ))}
+        </div>
+        <p className="mb-3 text-aurion-micro text-navy-400">
+          {mode === "grounded" ? t("modeGroundedHint") : t("modeFusionHint")}
+        </p>
         {loading ? (
           <LoadingSkeleton lines={3} />
         ) : sessions.length === 0 ? (
@@ -373,6 +472,62 @@ export default function GroundedLabPage() {
               </ul>
             </Card>
           )}
+        </div>
+      )}
+
+      {fusionResult && !running && (
+        <div data-testid="grounded-lab-fusion-result">
+          <Card className="mb-4" title={t("fusionSummaryTitle")}>
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statFrames")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {fusionResult.frame_count}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statSectionsA")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {fusionResult.sections_a}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statSectionsB")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {fusionResult.sections_b}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statConflictsB")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {fusionResult.conflicts_b}
+                </dd>
+              </div>
+            </dl>
+          </Card>
+
+          <Card noPadding>
+            <div className="grid grid-cols-2 border-b border-hairline bg-navy-50/40 text-aurion-micro font-semibold uppercase tracking-wide text-navy-500">
+              <div className="px-4 py-2">{t("colFusionA")}</div>
+              <div className="px-4 py-2">{t("colFusionB")}</div>
+            </div>
+            <div className="grid grid-cols-2">
+              <div>
+                <FusionNoteColumn note={fusionResult.note_a} />
+              </div>
+              <div className="border-l border-hairline">
+                <FusionNoteColumn note={fusionResult.note_b} />
+              </div>
+            </div>
+          </Card>
         </div>
       )}
     </div>

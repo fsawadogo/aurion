@@ -23,7 +23,17 @@
     "colFrame": "Image",
     "colDescriptive": "Descriptif",
     "colGrounded": "Ancré",
-    "noFinding": "Aucun constat"
+    "noFinding": "Aucun constat",
+    "modeGrounded": "Descriptif vs ancré",
+    "modeFusion": "Fusion A vs B",
+    "modeGroundedHint": "Rejoue le clip dans la couche vision deux fois — descriptif strict vs ancré — sur les mêmes images.",
+    "modeFusionHint": "Compare deux architectures multimodales : Fusion A (note audio, vidéo fusionnée comme constats) vs Fusion B (note vidéo indépendante, fusionnée section par section avec la note audio).",
+    "fusionSummaryTitle": "Résumé de la comparaison de fusion",
+    "statSectionsA": "Sections (A)",
+    "statSectionsB": "Sections (B)",
+    "statConflictsB": "Conflits (B)",
+    "colFusionA": "Fusion A — transcription-comme-contexte",
+    "colFusionB": "Fusion B — parallèle-puis-fusion"
   },
   "AdminPromptStudio": {
     "eyebrow": "Espace admin",
