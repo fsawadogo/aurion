@@ -3,7 +3,7 @@ import Image from "next/image"
 import { getTranslations } from "next-intl/server"
 
 import { Link } from "@/i18n/navigation"
-import { SITE } from "@/lib/site"
+import { LOGO, SITE } from "@/lib/site"
 
 const PLATFORM_LINKS = [
   { key: "digitalTwin", href: "#platform" },
@@ -30,10 +30,10 @@ export async function LandingFooter() {
         <div className="space-y-unit-4">
           {/* Full lockup — the tagline is part of the artwork, so no separate line */}
           <Image
-            src="/peritwin-logo.png"
+            src={LOGO.src}
             alt={`${t("brand")} — ${t("footer.tagline")}`}
-            width={1248}
-            height={667}
+            width={LOGO.width}
+            height={LOGO.height}
             className="h-auto w-full max-w-[260px]"
           />
         </div>

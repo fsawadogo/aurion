@@ -6,7 +6,7 @@ import { getMessages, getTranslations, setRequestLocale } from "next-intl/server
 import { LandingHeader } from "@/components/landing/landing-header"
 import { LocaleHtmlAttributes } from "@/components/locale-html-attributes"
 import { routing } from "@/i18n/routing"
-import { SITE } from "@/lib/site"
+import { LOGO, SITE } from "@/lib/site"
 
 type Props = {
   children: React.ReactNode
@@ -35,9 +35,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
       locale,
       images: [
         {
-          url: "/peritwin-logo.png",
-          width: 1491,
-          height: 1055,
+          url: LOGO.src,
+          width: LOGO.width,
+          height: LOGO.height,
           alt: `${SITE.productName} — ${SITE.companyLegalName}`,
         },
       ],
