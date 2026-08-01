@@ -32,3 +32,11 @@ export const SITE = {
   heroVideo: "/peritwin-demo.mp4",
   heroVideoPoster: "/peritwin-demo-poster.jpg",
 }
+
+/** Full brand lockup (tagline is part of the artwork). Single source for the
+ * header, footer, and OG image so the intrinsic dims can't drift. */
+export const LOGO = {
+  src: "/peritwin-logo.png",
+  width: 1248,
+  height: 667,
+} as const

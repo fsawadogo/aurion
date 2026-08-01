@@ -8,7 +8,7 @@ import { useState } from "react"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/i18n/navigation"
-import { SITE } from "@/lib/site"
+import { LOGO, SITE } from "@/lib/site"
 
 /** Page menu — Partners and Pilots; Physician portal and Contact us render distinctly. */
 const PAGE_LINKS = [
@@ -24,18 +24,18 @@ export function LandingHeader() {
     <header className="glass-panel fixed top-0 z-100 w-full border-x-0 border-t-0 border-b border-b-outline-variant/30">
       <div className="mx-auto flex max-w-(--breakpoint-2xl) items-center justify-between gap-unit-6 px-margin-mobile py-unit-4 md:px-margin-desktop md:py-unit-6">
 
-        {/* Wordmark */}
         <Link
           href="/"
-          className="flex min-h-11 shrink-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="flex shrink-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           aria-label={`${t("brand")} — ${t("nav.home")}`}
         >
-          {/* Full lockup — same artwork as the footer (tagline is part of it) */}
+          {/* Full lockup — same artwork as the footer; the labeled Link carries
+              the accessible name, so the img is decorative (alt="") */}
           <Image
-            src="/peritwin-logo.png"
-            alt={`${t("brand")} — ${t("footer.tagline")}`}
-            width={1248}
-            height={667}
+            src={LOGO.src}
+            alt=""
+            width={LOGO.width}
+            height={LOGO.height}
             priority
             className="h-12 w-auto md:h-16 lg:h-20"
           />
