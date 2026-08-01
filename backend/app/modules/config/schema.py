@@ -384,6 +384,17 @@ class FeatureFlagsConfig(BaseModel):
     # compared READ-ONLY in the Grounded Lab so the founders can pick one before
     # committing. Ships DARK; wiring B into the live pipeline is a later gate.
     parallel_fusion_enabled: bool = False
+    # ── Correction memory (the moat) ──────────────────────────────────────
+    # When ON, every in-app physician edit to a note is LOGGED as a correction
+    # (the pre-edit text, the post-edit text, the section, the claim) so the
+    # system can later classify it (typo / semantic / medical) and distil the
+    # patterns into per-physician rules — "would you like this to be the rule
+    # from now on?". The roadmap's adoption driver: the accumulated corrections
+    # are switching cost. This flag gates ONLY the capture; the pre-edit and
+    # post-edit text are note content (same PHI boundary as note_versions),
+    # owner-scoped. The distilled rules (a later slice) are PHI-free. Ships
+    # DARK; capture is a no-op until flipped.
+    correction_memory_enabled: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────

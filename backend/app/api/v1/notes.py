@@ -33,6 +33,7 @@ from app.core.types import ProviderError, SessionState, Transcript
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.config.appconfig_client import get_config
+from app.modules.corrections.service import record_corrections
 from app.modules.note_gen.service import (
     UnresolvedConflictError,
     approve_note,
@@ -871,6 +872,20 @@ async def edit_note_endpoint(
         version=updated_note.version,
         sections_edited=list(body.edits.keys()),
     )
+
+    # Correction memory (the moat): log each edit as a correction so it can be
+    # classified + distilled into per-physician rules later. Flag-gated; the
+    # capture shares this request's transaction (committed by get_db). Never
+    # fail the edit on a capture hiccup — the note edit is what matters.
+    if get_config().feature_flags.correction_memory_enabled:
+        try:
+            await record_corrections(
+                user.user_id, session_id, updated_note, body.edits.keys(), db
+            )
+        except Exception:  # noqa: BLE001 — capture is best-effort
+            logger.warning(
+                "Correction capture failed for session=%s", session_id, exc_info=True
+            )
 
     return _to_note_response(updated_note)
 

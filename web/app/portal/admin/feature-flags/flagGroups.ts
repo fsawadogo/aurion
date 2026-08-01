@@ -55,6 +55,11 @@ export const FLAG_GROUPS = [
     flags: ["parallel_fusion_enabled"],
   },
   {
+    titleKey: "correctionMemory",
+    hintKey: "correctionMemoryHint",
+    flags: ["correction_memory_enabled"],
+  },
+  {
     titleKey: "videoImport",
     hintKey: "videoImportHint",
     flags: ["multi_clip_import_enabled"],

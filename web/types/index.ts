@@ -569,6 +569,8 @@ export interface FeatureFlags {
   // Fusion B (parallel-then-merge) — gates future live use; the A/B comparison
   // in the Grounded Lab runs regardless.
   parallel_fusion_enabled: boolean;
+  // Correction memory — log in-app note edits to mine into per-physician rules.
+  correction_memory_enabled: boolean;
 }
 
 export interface UpdateFeatureFlagsResponse {

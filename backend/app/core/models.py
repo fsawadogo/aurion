@@ -728,6 +728,49 @@ class GroundedLabRunModel(Base):
     )
 
 
+class CorrectionModel(Base):
+    """One in-app physician correction to a generated note (correction memory).
+
+    Captured when the flag ``correction_memory_enabled`` is ON: every time a
+    clinician edits a claim in-app, the pre-edit and post-edit text are recorded
+    here with the section + claim they belong to. This is the raw material the
+    system later classifies (typo / semantic / medical) and distils into
+    per-physician rules — the roadmap's moat ("capture the data now, mine it
+    later").
+
+    PHI boundary: ``before_text``/``after_text`` ARE note content, so this table
+    sits inside the same PHI boundary as ``note_versions`` — owner-scoped
+    (``clinician_id``), never exposed cross-clinician except to eval/admin. The
+    distilled rules that come later are the PHI-free layer. ``classification``
+    is NULL until the (later) analysis pass fills it.
+    """
+
+    __tablename__ = "corrections"
+
+    id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), primary_key=True, default=uuid.uuid4
+    )
+    clinician_id: Mapped[uuid.UUID] = mapped_column(
+        UUID(as_uuid=True), nullable=False, index=True
+    )
+    session_id: Mapped[uuid.UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    section_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    claim_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    # The correction itself — note content (PHI).
+    before_text: Mapped[str] = mapped_column(Text, nullable=False)
+    after_text: Mapped[str] = mapped_column(Text, nullable=False)
+    # Filled by the later classification pass: "typo" | "semantic" | "medical".
+    # NULL = not yet classified.
+    classification: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    # The note version this correction produced (append-only versioning).
+    note_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+
+
 class EvalScoreModel(Base):
     """Eval team quality scores submitted per session.
 
