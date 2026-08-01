@@ -57,7 +57,7 @@ export const FLAG_GROUPS = [
   {
     titleKey: "correctionMemory",
     hintKey: "correctionMemoryHint",
-    flags: ["correction_memory_enabled"],
+    flags: ["correction_memory_enabled", "correction_rules_in_prompt_enabled"],
   },
   {
     titleKey: "videoImport",

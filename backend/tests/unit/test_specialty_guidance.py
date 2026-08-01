@@ -209,7 +209,10 @@ def _stub_provider() -> MagicMock:
 def _fake_config(enabled: bool) -> SimpleNamespace:
     return SimpleNamespace(
         feature_flags=SimpleNamespace(
-            specialty_style_in_prompt_enabled=enabled
+            specialty_style_in_prompt_enabled=enabled,
+            # Correction-rules injection stays off in this test — it's an
+            # independent lever from the specialty-style layer under test.
+            correction_rules_in_prompt_enabled=False,
         )
     )
 

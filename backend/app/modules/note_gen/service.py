@@ -999,6 +999,21 @@ async def generate_stage1_note(
             template, clinician_id, db
         )
 
+    # Correction-memory rules (flag-gated). The physician's accepted style rules
+    # — distilled from their own typo/semantic corrections — are appended to the
+    # SYSTEM prompt so the note writes in their voice. Fenced below the
+    # descriptive boundary (a rule shapes wording, never grounding). OFF → the
+    # prompt is byte-identical to the pre-feature build.
+    if get_config().feature_flags.correction_rules_in_prompt_enabled:
+        # Local import: corrections.rules pulls the provider registry, which
+        # transitively touches this module — keep it lazy to avoid a cycle.
+        from app.modules.corrections.rules import render_correction_rules_prefix
+
+        rules_clinician_id = await _resolve_session_clinician_id(session_id, db)
+        rules_prefix = await render_correction_rules_prefix(rules_clinician_id, db)
+        if rules_prefix:
+            system_prompt = system_prompt + rules_prefix
+
     # Wrap the registry call to capture per-call telemetry (issue #73).
     # Both the success and failure paths record so dashboards can show
     # failure / fallback rates accurately. Telemetry is best-effort —

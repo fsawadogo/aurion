@@ -121,6 +121,8 @@ class FeatureFlagsResponse(BaseModel):
     parallel_fusion_enabled: bool = False
     # Correction memory — log in-app note edits as corrections to mine later.
     correction_memory_enabled: bool = False
+    # Inject a physician's accepted correction rules into their note generation.
+    correction_rules_in_prompt_enabled: bool = False
 
 
 class UpdateFeatureFlagsResponse(BaseModel):
@@ -237,6 +239,9 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         ),
         parallel_fusion_enabled=cfg_feature_flags.parallel_fusion_enabled,
         correction_memory_enabled=cfg_feature_flags.correction_memory_enabled,
+        correction_rules_in_prompt_enabled=(
+            cfg_feature_flags.correction_rules_in_prompt_enabled
+        ),
     )
 
 
