@@ -700,6 +700,10 @@
       "correction_memory_enabled": {
         "name": "Mémoire des corrections",
         "description": "Enregistre chaque modification qu'un médecin apporte en cours d'application à une note générée (le texte avant et après, la section) afin que le système puisse ensuite classer chaque correction et en distiller des règles propres au médecin — les corrections accumulées constituent un coût de changement. Capture seulement ; le texte avant/après est du contenu de note, cloisonné par propriétaire. Livré éteint ; activez pour commencer la capture pendant le pilote."
+      },
+      "correction_rules_in_prompt_enabled": {
+        "name": "Règles de correction dans l'invite",
+        "description": "Injecte les règles de correction acceptées d'un médecin (distillées de ses corrections typographiques/sémantiques) dans sa génération de notes, pour que les notes s'écrivent dans sa voix. Levier distinct de la capture — curez d'abord les règles, puis activez ceci pour qu'elles façonnent les notes réelles. Style seulement, cloisonné sous la limite d'ancrage. Livré éteint."
       }
     },
     "chatTools": "Outils de conversation",

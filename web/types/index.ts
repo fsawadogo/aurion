@@ -571,6 +571,8 @@ export interface FeatureFlags {
   parallel_fusion_enabled: boolean;
   // Correction memory — log in-app note edits to mine into per-physician rules.
   correction_memory_enabled: boolean;
+  // Inject a physician's accepted correction rules into their note generation.
+  correction_rules_in_prompt_enabled: boolean;
 }
 
 export interface UpdateFeatureFlagsResponse {

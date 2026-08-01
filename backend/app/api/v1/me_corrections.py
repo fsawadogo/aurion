@@ -23,8 +23,17 @@ from app.core.types import UserRole
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.config.appconfig_client import get_config
 from app.modules.corrections.classify import classify_pending_for_clinician
+from app.modules.corrections.rules import (
+    get_correction_rules,
+    set_correction_rules,
+    suggest_rules,
+)
 
 router = APIRouter(prefix="/me", tags=["me"])
+
+# A physician's rules block is bounded — it's a short list of style preferences,
+# not free-form text; the cap keeps it out of the descriptive-boundary weeds.
+_MAX_RULES_CHARS = 4000
 
 
 async def require_clinician(
@@ -133,3 +142,69 @@ async def classify_my_corrections(
         )
     counts = await classify_pending_for_clinician(user.user_id, db, limit=limit)
     return ClassifyResponse(**counts)
+
+
+# ── Rules — the physician's accepted style preferences ───────────────────────
+
+
+class RulesResponse(BaseModel):
+    rules: str  # the physician's rules block ("" when none)
+
+
+class RulesUpdate(BaseModel):
+    rules: str  # the full rules block to save (the physician's curated list)
+
+
+class RuleSuggestionsResponse(BaseModel):
+    suggestions: list[str] = Field(default_factory=list)
+
+
+@router.get("/corrections/rules", response_model=RulesResponse)
+async def get_my_correction_rules(
+    user: CurrentUser = Depends(require_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> RulesResponse:
+    """The clinician's saved correction rules ("" when none)."""
+    return RulesResponse(rules=await get_correction_rules(user.user_id, db))
+
+
+@router.put("/corrections/rules", response_model=RulesResponse)
+async def set_my_correction_rules(
+    body: RulesUpdate,
+    user: CurrentUser = Depends(require_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> RulesResponse:
+    """Save the clinician's curated correction rules (the "accept" action).
+
+    Bounded to keep the block a short list of style preferences. Owner-scoped;
+    the rules are PHI-free physician preferences, not patient data.
+    """
+    if len(body.rules) > _MAX_RULES_CHARS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Rules block too long (max {_MAX_RULES_CHARS} chars).",
+        )
+    await set_correction_rules(user.user_id, body.rules, db)
+    await db.commit()
+    return RulesResponse(rules=await get_correction_rules(user.user_id, db))
+
+
+@router.get("/corrections/rule-suggestions", response_model=RuleSuggestionsResponse)
+async def get_my_rule_suggestions(
+    user: CurrentUser = Depends(require_clinician),
+    db: AsyncSession = Depends(get_db),
+) -> RuleSuggestionsResponse:
+    """Distil the clinician's typo/semantic corrections into candidate rules —
+    the "would you like this to be the rule from now on?" surface.
+
+    Flag-gated (409 when correction memory is off). Medical corrections are
+    excluded upstream. Returns [] when there's nothing clear to learn yet.
+    """
+    if not get_config().feature_flags.correction_memory_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Correction memory is not enabled.",
+        )
+    return RuleSuggestionsResponse(
+        suggestions=await suggest_rules(user.user_id, db)
+    )

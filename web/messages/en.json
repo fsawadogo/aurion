@@ -700,6 +700,10 @@
       "correction_memory_enabled": {
         "name": "Correction memory",
         "description": "Logs every in-app edit a physician makes to a generated note (the before and after text, the section) so the system can later classify each correction and distil per-physician rules — the accumulated corrections are switching cost. Capture only; the before/after text is note content, owner-scoped. Ships dark; turn ON to start capturing during the pilot."
+      },
+      "correction_rules_in_prompt_enabled": {
+        "name": "Correction rules in prompt",
+        "description": "Injects a physician's accepted correction rules (distilled from their typo/semantic corrections) into their note generation, so notes start writing in their voice. Separate lever from capture — curate the rules first, then turn this ON to let them shape live notes. Style only, fenced below the grounding boundary. Ships dark."
       }
     },
     "chatTools": "Chat tools",

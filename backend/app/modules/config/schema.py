@@ -395,6 +395,13 @@ class FeatureFlagsConfig(BaseModel):
     # owner-scoped. The distilled rules (a later slice) are PHI-free. Ships
     # DARK; capture is a no-op until flipped.
     correction_memory_enabled: bool = False
+    # When ON, a physician's accepted correction RULES (distilled from their
+    # typo/semantic corrections) are injected into their note-generation system
+    # prompt — the note starts writing in their voice. Separate lever from
+    # correction_memory_enabled (capture): you capture + classify + curate rules
+    # first, then flip THIS to let the rules shape live notes. Fenced below the
+    # descriptive boundary — a rule shapes wording, never grounding. Ships DARK.
+    correction_rules_in_prompt_enabled: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────

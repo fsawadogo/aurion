@@ -316,6 +316,9 @@ resource "aws_appconfig_configuration_profile" "main" {
             # Correction memory — logs in-app note edits. NOT `required`; backend
             # defaults it false. Gates capture only.
             correction_memory_enabled = { type = "boolean" }
+            # Inject accepted correction rules into note generation. NOT
+            # `required`; backend defaults it false.
+            correction_rules_in_prompt_enabled = { type = "boolean" }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in
