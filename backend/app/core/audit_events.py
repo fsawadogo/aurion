@@ -237,6 +237,11 @@ class AuditEventType(StrEnum):
     # for review, never writes a note version. PHI-free — actor + section counts
     # only, never note bodies.
     FUSION_COMPARE_RUN = "fusion_compare_run"
+    # An admin/eval reviewer ran the modality comparison on the Grounded Lab —
+    # the note generated from AUDIO only, from VIDEO only, and from BOTH merged,
+    # side by side. READ-ONLY: builds three Note objects for review, never
+    # writes a note version. PHI-free — actor + populated-section counts only.
+    MODALITY_COMPARE_RUN = "modality_compare_run"
 
     # ── Privacy / account ────────────────────────────────────────────────
     BIOMETRIC_CONSENT_CONFIRMED = "biometric_consent_confirmed"
@@ -854,6 +859,9 @@ ALLOWED_AUDIT_KWARGS: dict[AuditEventType, frozenset[str]] = {
     ),
     AuditEventType.FUSION_COMPARE_RUN: frozenset(
         {"actor_id", "frame_count", "sections_a", "sections_b", "conflicts_b"}
+    ),
+    AuditEventType.MODALITY_COMPARE_RUN: frozenset(
+        {"actor_id", "frame_count", "sections_audio", "sections_visual", "sections_merged"}
     ),
     # Privacy / account — iOS-only voice events stay empty
     AuditEventType.BIOMETRIC_CONSENT_CONFIRMED: frozenset(),

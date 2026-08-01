@@ -113,6 +113,7 @@ async def generate_video_note(
     grounded: bool,
     output_language: str = "en",
     provider_override: Optional[str] = None,
+    captions: Optional[list] = None,
 ) -> Optional[Note]:
     """Generate an INDEPENDENT note from the video evidence alone.
 
@@ -121,15 +122,22 @@ async def generate_video_note(
     with the visual-documentation prompt. Returns ``None`` when the evidence
     yields no usable captions (nothing visible), so the caller can fall back to
     the audio note. READ-ONLY: never persists a note version.
+
+    ``captions`` — when the caller has ALREADY captioned the evidence (e.g. the
+    modality-compare endpoint, which needs the same captions for its "merged"
+    note), pass them in to avoid captioning the media twice. This matters under
+    the vision provider's rate limit: a second caption pass would double the
+    429 pressure. ``None`` (the default) captions here as before.
     """
-    captions = await caption_visual_evidence(
-        evidence=evidence,
-        trigger_segments=[],
-        anchor_segments=[],
-        template=template,
-        note=None,
-        grounded=grounded,
-    )
+    if captions is None:
+        captions = await caption_visual_evidence(
+            evidence=evidence,
+            trigger_segments=[],
+            anchor_segments=[],
+            template=template,
+            note=None,
+            grounded=grounded,
+        )
     captions = [c for c in captions if c.confidence != "low"]
     pseudo = _pseudo_transcript_from_captions(session_id, captions)
     if not pseudo.segments:

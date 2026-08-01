@@ -33,7 +33,17 @@
     "statSectionsB": "Sections (B)",
     "statConflictsB": "Conflits (B)",
     "colFusionA": "Fusion A — transcription-comme-contexte",
-    "colFusionB": "Fusion B — parallèle-puis-fusion"
+    "colFusionB": "Fusion B — parallèle-puis-fusion",
+    "modeModality": "Audio / visuel / fusionné",
+    "modeModalityHint": "Générez la note de trois façons à partir de la même séance — audio seul, vidéo seule, et les deux fusionnés — pour voir exactement ce que chaque modalité apporte.",
+    "modalitySummaryTitle": "Résumé de la comparaison par modalité",
+    "statSectionsAudio": "Sections (audio)",
+    "statSectionsVisual": "Sections (visuel)",
+    "statSectionsMerged": "Sections (fusionné)",
+    "colAudioOnly": "Audio seul",
+    "colVisualOnly": "Visuel seul",
+    "colMerged": "Fusionné (les deux)",
+    "noVisualNote": "La vidéo n'a produit aucune note utilisable (rien de cliniquement visible, ou légendes indisponibles)."
   },
   "AdminPromptStudio": {
     "eyebrow": "Espace admin",

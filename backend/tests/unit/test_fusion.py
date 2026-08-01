@@ -225,3 +225,36 @@ async def test_generate_video_note_none_when_no_captions() -> None:
             "s1", evidence=[MagicMock()], template=template, grounded=False
         )
     assert note is None
+
+
+@pytest.mark.asyncio
+async def test_generate_video_note_reuses_passed_captions() -> None:
+    # When captions are supplied (modality-compare shares one captioning pass),
+    # the function must NOT caption again — a second pass would double the
+    # vision rate-limit pressure.
+    from app.core.types import Template, TemplateSection
+
+    template = Template(
+        key="orthopedic_surgery", display_name="Orthopedic Surgery",
+        sections=[TemplateSection(id="physical_exam", title="Physical Exam", required=True)],
+    )
+    engine_note = _note(
+        _section("physical_exam", _claim("c1", "finding", "transcript")),
+        provider="gemini",
+    )
+    provider = MagicMock()
+    provider.generate_note = AsyncMock(return_value=engine_note)
+    registry = MagicMock()
+    registry.get_note_provider_with_fallback = MagicMock(return_value=provider)
+    caption_mock = AsyncMock(return_value=[_caption(1, "should not be called")])
+
+    with (
+        patch.object(fusion, "get_registry", return_value=registry),
+        patch.object(fusion, "caption_visual_evidence", caption_mock),
+    ):
+        note = await fusion.generate_video_note(
+            "s1", evidence=[MagicMock()], template=template, grounded=True,
+            captions=[_caption(1000, "reduced knee flexion")],
+        )
+    assert note is not None
+    caption_mock.assert_not_awaited()  # reused the passed captions

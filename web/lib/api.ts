@@ -17,6 +17,7 @@ import type {
   GroundedLabRunStatusResponse,
   GroundedLabSessionsResponse,
   LoginResult,
+  ModalityCompareStatusResponse,
   MaskingReport,
   MediaDownloadUrls,
   MetricFilters,
@@ -656,6 +657,25 @@ export async function getFusionCompareRun(
 ): Promise<FusionCompareStatusResponse> {
   const res = await fetchWithAuth(
     `/api/v1/admin/grounded-lab/fusion-runs/${jobId}`,
+  );
+  return res.json();
+}
+
+export async function runModalityCompare(
+  sessionId: string,
+): Promise<GroundedLabRunStartResponse> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/grounded-lab/${sessionId}/modality-compare`,
+    { method: "POST" },
+  );
+  return res.json();
+}
+
+export async function getModalityCompareRun(
+  jobId: string,
+): Promise<ModalityCompareStatusResponse> {
+  const res = await fetchWithAuth(
+    `/api/v1/admin/grounded-lab/modality-runs/${jobId}`,
   );
   return res.json();
 }

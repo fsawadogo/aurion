@@ -33,7 +33,17 @@
     "statSectionsB": "Sections (B)",
     "statConflictsB": "Conflicts (B)",
     "colFusionA": "Fusion A — transcript-as-context",
-    "colFusionB": "Fusion B — parallel-then-merge"
+    "colFusionB": "Fusion B — parallel-then-merge",
+    "modeModality": "Audio / visual / merged",
+    "modeModalityHint": "Generate the note three ways from the same session — from audio only, from video only, and from both merged — to see exactly what each modality contributes.",
+    "modalitySummaryTitle": "Modality comparison summary",
+    "statSectionsAudio": "Sections (audio)",
+    "statSectionsVisual": "Sections (visual)",
+    "statSectionsMerged": "Sections (merged)",
+    "colAudioOnly": "Audio only",
+    "colVisualOnly": "Visual only",
+    "colMerged": "Merged (both)",
+    "noVisualNote": "The video produced no usable note (nothing clinically visible, or captions unavailable)."
   },
   "AdminPromptStudio": {
     "eyebrow": "Admin workspace",
