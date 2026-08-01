@@ -1550,3 +1550,26 @@ export interface FusionCompareStatusResponse {
   error: string | null;
   result: FusionCompareResult | null;
 }
+
+/* Modality comparison: the note from audio-only, visual-only, and both merged.
+ * Mirrors backend ModalityCompareResult. note_visual is null when the video
+ * yielded no usable captions. */
+export interface ModalityCompareResult {
+  session_id: string;
+  specialty: string | null;
+  frame_count: number;
+  note_audio: FusionNote;
+  note_visual: FusionNote | null;
+  note_merged: FusionNote;
+  sections_audio: number;
+  sections_visual: number;
+  sections_merged: number;
+}
+
+export interface ModalityCompareStatusResponse {
+  job_id: string;
+  session_id: string;
+  status: "running" | "completed" | "failed";
+  error: string | null;
+  result: ModalityCompareResult | null;
+}

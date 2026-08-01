@@ -809,3 +809,257 @@ async def get_fusion_compare_run(
         error=job.error_message,
         result=result,
     )
+
+
+# ══ Modality comparison — audio-only vs visual-only vs merged ═════════════════
+#
+# The roadmap's toggle test page: generate the note three ways from the same
+# session and read them side by side, so it's obvious what each modality
+# contributes.
+#
+#   Audio-only : the Stage-1 note (transcript → note). What the conversation
+#     alone produces.
+#   Visual-only: an independent note from the video (captions → note). What the
+#     images alone produce.
+#   Merged     : the standard merged note (audio + visual claims) — production
+#     Fusion A behaviour.
+#
+# The three share ONE captioning pass (visual-only + merged both need it), so
+# the media is captioned once, not twice — important under the vision rate
+# limit. READ-ONLY: three Note objects for review; never writes a note version.
+
+
+class ModalityCompareResult(BaseModel):
+    session_id: str
+    specialty: Optional[str] = None
+    frame_count: int
+    note_audio: dict
+    note_visual: Optional[dict] = None  # None when the video yielded nothing
+    note_merged: dict
+    sections_audio: int
+    sections_visual: int
+    sections_merged: int
+
+
+class ModalityCompareStartResponse(BaseModel):
+    job_id: str
+    session_id: str
+    status: str
+
+
+class ModalityCompareStatusResponse(BaseModel):
+    job_id: str
+    session_id: str
+    status: str
+    error: Optional[str] = None
+    result: Optional[ModalityCompareResult] = None
+
+
+async def _compute_modality_compare(
+    session_id: uuid.UUID, session: SessionModel, db: AsyncSession
+) -> ModalityCompareResult:
+    """Build the audio-only, visual-only, and merged notes from one session.
+
+    Read-only. Captions the media ONCE and reuses it for both the visual-only
+    note and the merge. Raises ValueError("no_audio_note")/("no_media").
+    """
+    audio_note = await get_note_by_stage(str(session_id), 1, db)
+    if audio_note is None:
+        audio_note = await get_latest_note(str(session_id), db)
+    if audio_note is None:
+        raise ValueError("no_audio_note")
+
+    row = (
+        await db.execute(
+            select(TranscriptModel).where(TranscriptModel.session_id == session_id)
+        )
+    ).scalar_one_or_none()
+    transcript: Optional[Transcript] = (
+        Transcript.model_validate_json(row.transcript_json) if row is not None else None
+    )
+    trigger_segments = (
+        [s for s in transcript.segments if s.is_visual_trigger] if transcript else []
+    )
+    anchor_segments = transcript.segments if transcript else []
+    anchor_texts = {s.id: s.text for s in anchor_segments}
+
+    evidence_mode = resolve_evidence_mode(session)
+    frames = (
+        await retrieve_all_masked_frames(str(session_id))
+        if evidence_mode != VisualEvidenceMode.CLIPS_ONLY
+        else []
+    )
+    clips = (
+        await retrieve_clips_for_triggers(str(session_id), trigger_segments)
+        if evidence_mode != VisualEvidenceMode.FRAMES_ONLY
+        else []
+    )
+    evidence_items = [*frames, *clips]
+    if not evidence_items:
+        raise ValueError("no_media")
+
+    template: Optional[Template] = None
+    if get_config().feature_flags.template_engine_enabled:
+        try:
+            template = await resolve_session_template(session, db)
+        except Exception:
+            logger.warning(
+                "Modality-compare template resolution failed for session=%s",
+                session_id, exc_info=True,
+            )
+            template = None
+
+    grounded = get_config().feature_flags.grounded_visual_findings_enabled
+
+    # ── ONE captioning pass, shared by visual-only + merged.
+    captions = await caption_visual_evidence(
+        evidence=evidence_items,
+        trigger_segments=trigger_segments,
+        anchor_segments=anchor_segments,
+        template=template,
+        note=audio_note,
+        grounded=grounded,
+    )
+    captions = [c for c in captions if c.confidence != "low"]
+
+    # Visual-only note: the video alone (reuses the captions above).
+    visual_note = await generate_video_note(
+        str(session_id), evidence_items, template, grounded=grounded, captions=captions,
+    )
+
+    # Merged note: audio + reconciled visual claims (production Fusion A).
+    merged_captions = list(captions)
+    try:
+        merged_captions = await reconcile_captions(merged_captions, audio_note)
+    except Exception:  # noqa: BLE001 — reconcile is best-effort
+        logger.warning("Modality-compare reconcile failed; merging unreconciled")
+    merged_note = merge_visual_citations(
+        audio_note.model_copy(deep=True), merged_captions, template, anchor_texts
+    )
+
+    return ModalityCompareResult(
+        session_id=str(session_id),
+        specialty=session.specialty,
+        frame_count=len(evidence_items),
+        note_audio=audio_note.model_dump(),
+        note_visual=visual_note.model_dump() if visual_note else None,
+        note_merged=merged_note.model_dump(),
+        sections_audio=_populated_section_count(audio_note),
+        sections_visual=_populated_section_count(visual_note) if visual_note else 0,
+        sections_merged=_populated_section_count(merged_note),
+    )
+
+
+async def _run_modality_compare_in_background(
+    session_id: uuid.UUID, job_id: uuid.UUID, actor_id: uuid.UUID
+) -> None:
+    async with async_session_factory() as db:
+        job = await db.get(GroundedLabRunModel, job_id)
+        if job is None:
+            return
+        try:
+            session = await get_session_or_404(db, session_id)
+            result = await _compute_modality_compare(session_id, session, db)
+            job.status = "completed"
+            job.result_json = result.model_dump()
+            job.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+            await write_audit(
+                session_id,
+                AuditEventType.MODALITY_COMPARE_RUN,
+                actor_id=str(actor_id),
+                frame_count=result.frame_count,
+                sections_audio=result.sections_audio,
+                sections_visual=result.sections_visual,
+                sections_merged=result.sections_merged,
+            )
+        except Exception as exc:  # noqa: BLE001 — record + swallow (detached task)
+            reason = (
+                str(exc.args[0])
+                if isinstance(exc, ValueError) and exc.args
+                else "run_failed"
+            )
+            logger.warning(
+                "Modality-compare failed: session=%s job=%s reason=%s",
+                session_id, job_id, reason,
+                exc_info=not isinstance(exc, ValueError),
+            )
+            job.status = "failed"
+            job.error_message = reason
+            job.completed_at = datetime.now(timezone.utc)
+            await db.commit()
+
+
+@router.post(
+    "/grounded-lab/{session_id}/modality-compare",
+    response_model=ModalityCompareStartResponse,
+)
+async def run_modality_compare(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(require_role(UserRole.ADMIN, UserRole.EVAL_TEAM)),
+    db: AsyncSession = Depends(get_db),
+) -> ModalityCompareStartResponse:
+    """Start an async audio-only vs visual-only vs merged comparison.
+
+    ADMIN or EVAL_TEAM. Validates the session (404) + media (409), then detaches
+    the compute. Poll ``/modality-runs/{job_id}``. READ-ONLY.
+    """
+    await get_session_or_404(db, session_id)
+    has_media = _list_prefix_count(FRAMES_BUCKET, f"frames/{session_id}/") > 0 or (
+        _list_prefix_count(FRAMES_BUCKET, f"clips/{session_id}/") > 0
+    )
+    if not has_media:
+        raise HTTPException(
+            status_code=409,
+            detail="No retained visual media for this session — nothing to compare.",
+        )
+
+    job = GroundedLabRunModel(
+        session_id=session_id, actor_id=user.user_id,
+        run_type="modality_compare", status="running",
+    )
+    db.add(job)
+    await db.commit()
+    await db.refresh(job)
+
+    spawn_background_task(
+        _run_modality_compare_in_background(session_id, job.id, user.user_id),
+        name="modality-compare",
+    )
+    return ModalityCompareStartResponse(
+        job_id=str(job.id), session_id=str(session_id), status="running"
+    )
+
+
+@router.get(
+    "/grounded-lab/modality-runs/{job_id}",
+    response_model=ModalityCompareStatusResponse,
+)
+async def get_modality_compare_run(
+    job_id: uuid.UUID,
+    user: CurrentUser = Depends(require_role(UserRole.ADMIN, UserRole.EVAL_TEAM)),
+    db: AsyncSession = Depends(get_db),
+) -> ModalityCompareStatusResponse:
+    """Poll a modality-compare run. ADMIN or EVAL_TEAM."""
+    job = await db.get(GroundedLabRunModel, job_id)
+    if job is None or job.run_type != "modality_compare":
+        raise HTTPException(status_code=404, detail="No such modality-compare run.")
+
+    if job.status == "running" and datetime.now(timezone.utc) - job.started_at > _RUN_BUDGET:
+        job.status = "failed"
+        job.error_message = "timed_out"
+        job.completed_at = datetime.now(timezone.utc)
+        await db.commit()
+
+    result = (
+        ModalityCompareResult.model_validate(job.result_json)
+        if job.status == "completed" and job.result_json is not None
+        else None
+    )
+    return ModalityCompareStatusResponse(
+        job_id=str(job.id),
+        session_id=str(job.session_id),
+        status=job.status,
+        error=job.error_message,
+        result=result,
+    )

@@ -191,6 +191,51 @@ def test_run_type_column_default() -> None:
     assert GroundedLabRunModel.run_type.default.arg == "grounded_lab"
 
 
+def test_modality_compare_routes_registered() -> None:
+    from app.api.v1.admin.grounded_lab import router
+
+    paths = {r.path for r in router.routes}
+    assert "/admin/grounded-lab/{session_id}/modality-compare" in paths
+    assert "/admin/grounded-lab/modality-runs/{job_id}" in paths
+
+
+def test_modality_compare_result_round_trips() -> None:
+    from app.api.v1.admin.grounded_lab import ModalityCompareResult
+
+    original = ModalityCompareResult(
+        session_id="s1", specialty="orthopedic_surgery", frame_count=11,
+        note_audio={"sections": []},
+        note_visual={"sections": []},
+        note_merged={"sections": []},
+        sections_audio=5, sections_visual=2, sections_merged=6,
+    )
+    restored = ModalityCompareResult.model_validate(original.model_dump())
+    assert restored == original
+
+
+def test_modality_visual_note_may_be_absent() -> None:
+    # The video can yield nothing (silent/blurry) — visual note is then None and
+    # its section count is 0, but audio + merged still populate.
+    from app.api.v1.admin.grounded_lab import ModalityCompareResult
+
+    r = ModalityCompareResult(
+        session_id="s1", frame_count=11,
+        note_audio={"sections": []}, note_visual=None, note_merged={"sections": []},
+        sections_audio=5, sections_visual=0, sections_merged=5,
+    )
+    assert r.note_visual is None
+
+
+def test_modality_compare_audit_is_phi_free_counts() -> None:
+    from app.core.audit_events import ALLOWED_AUDIT_KWARGS, AuditEventType
+
+    allowed = ALLOWED_AUDIT_KWARGS[AuditEventType.MODALITY_COMPARE_RUN]
+    assert allowed == {
+        "actor_id", "frame_count",
+        "sections_audio", "sections_visual", "sections_merged",
+    }
+
+
 def test_result_round_trips_through_job_storage() -> None:
     # The completed payload is stored as the job row's result_json (a dict) and
     # re-validated on poll — this round-trip must be lossless.

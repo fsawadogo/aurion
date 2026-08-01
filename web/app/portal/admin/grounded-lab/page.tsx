@@ -21,9 +21,11 @@ import {
   getFusionCompareRun,
   getGroundedLabRun,
   getGroundedLabSessions,
+  getModalityCompareRun,
   humanizeError,
   runFusionCompare,
   runGroundedLab,
+  runModalityCompare,
 } from "@/lib/api";
 import type {
   FusionCompareResult,
@@ -32,6 +34,7 @@ import type {
   GroundedLabPair,
   GroundedLabRunResponse,
   GroundedLabSessionItem,
+  ModalityCompareResult,
 } from "@/types";
 import { useCallback, useEffect, useRef, useState } from "react";
 
@@ -169,15 +172,20 @@ export default function GroundedLabPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Two comparison modes share the session picker: "grounded" (descriptive vs
-  // grounded captions, same clip) and "fusion" (Fusion A vs Fusion B notes).
-  const [mode, setMode] = useState<"grounded" | "fusion">("grounded");
+  // Three comparison modes share the session picker: "grounded" (descriptive
+  // vs grounded captions), "fusion" (Fusion A vs B notes), and "modality"
+  // (audio-only vs visual-only vs merged notes).
+  const [mode, setMode] = useState<"grounded" | "fusion" | "modality">(
+    "grounded",
+  );
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [result, setResult] = useState<GroundedLabRunResponse | null>(null);
   const [fusionResult, setFusionResult] = useState<FusionCompareResult | null>(
     null,
   );
+  const [modalityResult, setModalityResult] =
+    useState<ModalityCompareResult | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -216,22 +224,29 @@ export default function GroundedLabPage() {
     setRunError(null);
     setResult(null);
     setFusionResult(null);
+    setModalityResult(null);
     try {
       const started =
         mode === "fusion"
           ? await runFusionCompare(selected)
-          : await runGroundedLab(selected);
+          : mode === "modality"
+            ? await runModalityCompare(selected)
+            : await runGroundedLab(selected);
       // Poll the job until it completes or fails.
       for (;;) {
         if (!isCurrent()) return;
         const status =
           mode === "fusion"
             ? await getFusionCompareRun(started.job_id)
-            : await getGroundedLabRun(started.job_id);
+            : mode === "modality"
+              ? await getModalityCompareRun(started.job_id)
+              : await getGroundedLabRun(started.job_id);
         if (!isCurrent()) return;
         if (status.status === "completed" && status.result) {
           if (mode === "fusion") {
             setFusionResult(status.result as FusionCompareResult);
+          } else if (mode === "modality") {
+            setModalityResult(status.result as ModalityCompareResult);
           } else {
             setResult(status.result as GroundedLabRunResponse);
           }
@@ -290,7 +305,7 @@ export default function GroundedLabPage() {
           role="tablist"
           data-testid="grounded-lab-mode"
         >
-          {(["grounded", "fusion"] as const).map((m) => (
+          {(["grounded", "fusion", "modality"] as const).map((m) => (
             <button
               key={m}
               type="button"
@@ -304,12 +319,20 @@ export default function GroundedLabPage() {
               }`}
               data-testid={`grounded-lab-mode-${m}`}
             >
-              {m === "grounded" ? t("modeGrounded") : t("modeFusion")}
+              {m === "grounded"
+                ? t("modeGrounded")
+                : m === "fusion"
+                  ? t("modeFusion")
+                  : t("modeModality")}
             </button>
           ))}
         </div>
         <p className="mb-3 text-aurion-micro text-navy-400">
-          {mode === "grounded" ? t("modeGroundedHint") : t("modeFusionHint")}
+          {mode === "grounded"
+            ? t("modeGroundedHint")
+            : mode === "fusion"
+              ? t("modeFusionHint")
+              : t("modeModalityHint")}
         </p>
         {loading ? (
           <LoadingSkeleton lines={3} />
@@ -525,6 +548,72 @@ export default function GroundedLabPage() {
               </div>
               <div className="border-l border-hairline">
                 <FusionNoteColumn note={fusionResult.note_b} />
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {modalityResult && !running && (
+        <div data-testid="grounded-lab-modality-result">
+          <Card className="mb-4" title={t("modalitySummaryTitle")}>
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statFrames")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {modalityResult.frame_count}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statSectionsAudio")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {modalityResult.sections_audio}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statSectionsVisual")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {modalityResult.sections_visual}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statSectionsMerged")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {modalityResult.sections_merged}
+                </dd>
+              </div>
+            </dl>
+          </Card>
+
+          <Card noPadding>
+            <div className="grid grid-cols-3 border-b border-hairline bg-navy-50/40 text-aurion-micro font-semibold uppercase tracking-wide text-navy-500">
+              <div className="px-4 py-2">{t("colAudioOnly")}</div>
+              <div className="px-4 py-2">{t("colVisualOnly")}</div>
+              <div className="px-4 py-2">{t("colMerged")}</div>
+            </div>
+            <div className="grid grid-cols-3">
+              <div>
+                <FusionNoteColumn note={modalityResult.note_audio} />
+              </div>
+              <div className="border-l border-hairline">
+                {modalityResult.note_visual ? (
+                  <FusionNoteColumn note={modalityResult.note_visual} />
+                ) : (
+                  <p className="px-4 py-3 text-aurion-micro italic text-navy-300">
+                    {t("noVisualNote")}
+                  </p>
+                )}
+              </div>
+              <div className="border-l border-hairline">
+                <FusionNoteColumn note={modalityResult.note_merged} />
               </div>
             </div>
           </Card>
