@@ -30,14 +30,14 @@ export function LandingHeader() {
           className="flex min-h-11 shrink-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           aria-label={`${t("brand")} — ${t("nav.home")}`}
         >
-          {/* Icon + wordmark lockup, tagline omitted so it stays legible at nav height */}
+          {/* Full lockup — same artwork as the footer (tagline is part of it) */}
           <Image
-            src="/peritwin-nav.png"
-            alt={t("brand")}
-            width={901}
-            height={250}
+            src="/peritwin-logo.png"
+            alt={`${t("brand")} — ${t("footer.tagline")}`}
+            width={1248}
+            height={667}
             priority
-            className="h-11 w-auto md:h-14 lg:h-16"
+            className="h-12 w-auto md:h-16 lg:h-20"
           />
         </Link>
 
