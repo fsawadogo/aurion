@@ -38,16 +38,17 @@ export function LandingHeader() {
           className="flex min-h-11 shrink-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           aria-label={`${t("brand")} — ${t("nav.home")}`}
         >
-          {/* Full lockup — same artwork as the footer, tagline ("Your clinical
-              digital twin. Ask Peri.") baked in. Sized taller than a bare
-              wordmark so the tagline stays legible at nav height. */}
+          {/* Full lockup — EXACTLY the same artwork + treatment as the footer,
+              tagline ("Your clinical digital twin. Ask Peri.") baked in.
+              Width-based sizing (matches the footer) so the tagline reads at
+              the same proportion; capped so the fixed header stays usable. */}
           <Image
             src="/peritwin-logo.png"
             alt={`${t("brand")} — ${t("footer.tagline")}`}
             width={1248}
             height={667}
             priority
-            className="h-12 w-auto md:h-16 lg:h-20"
+            className="h-auto w-40 max-w-full md:w-52 lg:w-60"
           />
         </Link>
 
