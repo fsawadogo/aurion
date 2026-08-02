@@ -3,7 +3,7 @@ import Image from "next/image"
 import { getTranslations } from "next-intl/server"
 
 import { Link } from "@/i18n/navigation"
-import { LOGO, SITE } from "@/lib/site"
+import { LOGO, LOGO_WIDTH_CLASS, SITE } from "@/lib/site"
 
 const PLATFORM_LINKS = [
   { key: "digitalTwin", href: "#platform" },
@@ -27,14 +27,14 @@ export async function LandingFooter() {
     <footer className="w-full border-t border-outline-variant/20 bg-surface-container-low py-unit-12 md:py-unit-16">
       <div className="mx-auto grid max-w-(--breakpoint-2xl) grid-cols-1 gap-unit-12 px-margin-mobile md:grid-cols-2 md:px-margin-desktop lg:grid-cols-4 lg:gap-gutter">
 
-        <div className="space-y-unit-4">
+        <div>
           {/* Full lockup — the tagline is part of the artwork, so no separate line */}
           <Image
             src={LOGO.src}
             alt={`${t("brand")} — ${t("footer.tagline")}`}
             width={LOGO.width}
             height={LOGO.height}
-            className="h-auto w-full max-w-[260px]"
+            className={LOGO_WIDTH_CLASS}
           />
         </div>
 

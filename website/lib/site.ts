@@ -34,9 +34,22 @@ export const SITE = {
 }
 
 /** Full brand lockup (tagline is part of the artwork). Single source for the
- * header, footer, and OG image so the intrinsic dims can't drift. */
+ * footer and OG image so the intrinsic dims can't drift. */
 export const LOGO = {
   src: "/peritwin-logo.png",
   width: 1248,
   height: 667,
 } as const
+
+/** Header variant of the lockup — same icon + wordmark, no tagline line. */
+export const NAV_LOGO = {
+  src: "/peritwin-nav.png",
+  width: 901,
+  height: 250,
+} as const
+
+/** CPO 2026-08-02: header and footer marks render at the same WIDTH
+ * everywhere — 160px on phones, 260px from md — across their different
+ * artworks. Shared so the pair can't drift again. Tailwind v4 auto-scans
+ * this file; keep the class literal inline — no template strings/concat. */
+export const LOGO_WIDTH_CLASS = "h-auto w-40 max-w-full md:w-[260px]"

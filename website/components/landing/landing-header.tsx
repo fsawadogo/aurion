@@ -8,7 +8,7 @@ import { useState } from "react"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/i18n/navigation"
-import { LOGO, SITE } from "@/lib/site"
+import { LOGO_WIDTH_CLASS, NAV_LOGO, SITE } from "@/lib/site"
 
 /** Page menu — Partners and Pilots; Physician portal and Contact us render distinctly. */
 const PAGE_LINKS = [
@@ -26,18 +26,19 @@ export function LandingHeader() {
 
         <Link
           href="/"
-          className="flex shrink-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="flex min-h-11 min-w-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           aria-label={`${t("brand")} — ${t("nav.home")}`}
         >
-          {/* Full lockup — same artwork as the footer; the labeled Link carries
-              the accessible name, so the img is decorative (alt="") */}
+          {/* Icon + wordmark, no tagline (per CPO); width-matched to the
+              footer lockup. The labeled Link carries the accessible name,
+              so the img is decorative (alt="") */}
           <Image
-            src={LOGO.src}
+            src={NAV_LOGO.src}
             alt=""
-            width={LOGO.width}
-            height={LOGO.height}
+            width={NAV_LOGO.width}
+            height={NAV_LOGO.height}
             priority
-            className="h-12 w-auto md:h-16 lg:h-20"
+            className={LOGO_WIDTH_CLASS}
           />
         </Link>
 
