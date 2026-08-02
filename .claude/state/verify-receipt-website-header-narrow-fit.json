@@ -1,0 +1,16 @@
+{
+  "task_id": "website-header-narrow-fit",
+  "branch": "lane-website/header-narrow-fit",
+  "verified_at": "2026-08-02T15:30:00-04:00",
+  "checks": {
+    "scope_note": "Uzziel device screenshot: wordmark overlapped the EN/FR switcher on his iPhone. Screenshot decodes to a 320pt viewport (960x2079 @3x = Display Zoom) - the exact sub-360 regime #728's review receipted as a known squeeze. Reproduced emulated at 320: -15px overlap. Direction from Uzziel: buttons can be smaller.",
+    "typecheck": "tsc --noEmit clean.",
+    "build": "static export green 17/17.",
+    "fix": "Both changes gated to min-[360px] so >=360 is untouched: switcher pills 36px below 360 / 44px from 360 (WCAG AAA target held where it fits; 36px still clears 2.5.8 AA 24px minimum - trade-off recorded in the component comment per CPO direction) / 36px at lg as before; logo pieces one notch down below 360 (icon h-11, word h-8).",
+    "live_measurements": "320: pieces 28x44 + 90x32, switcher 86px, +26px gap (was -15 OVERLAP), no row overflow; 360: 35x56 + 124x44, switcher 102, 9px gap - byte-identical to #728; 375: identical (24px gap); 1440: pills 36x36 - the lg cascade WINS over min-[360px] (the riskiest mechanism, verified two ways).",
+    "cascade_proof": "simplify agent verified in the built chunk (10trtrm5g7~go.css): exactly one @media (min-width:360px) block carrying all 4 new utilities, emitted BEFORE sm/md/lg blocks; Tailwind v4 sorts min-width variants numerically so arbitrary min-[360px] (22.5rem) interleaves before lg (64rem); equal specificity + same layer -> source order decides -> lg wins at >=1024. twMerge confirmed to pass the class string through unchanged. Live 1440 measurement independently agrees (36px).",
+    "simplify": "1 agent (all angles, tiny diff): CLEAN, no changes. Considered and rejected with reasons: windowed max-lg stacked variants (identical CSS, bigger diff, no codebase precedent, order-dependence now proven safe); named xs breakpoint (no @theme breakpoint precedent, only 3 arbitrary-variant lines in the whole site, self-documenting inline); hamburger compaction (fits with ~28px slack at 320, shrinking would cut tap target for zero gain). Drawer/focus untouched; comments verified accurate.",
+    "stack_boots": "n/a - marketing site only.",
+    "operator_step_post_merge": "None - site.yml auto-deploys both domains on merge."
+  }
+}
