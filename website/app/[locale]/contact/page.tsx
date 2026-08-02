@@ -26,7 +26,7 @@ export default async function ContactPage({ params }: Props) {
   const t = await getTranslations("contact")
 
   return (
-    <main className="min-h-[calc(100vh-6rem)] bg-surface px-margin-mobile pb-24 pt-28 md:px-margin-desktop md:pt-32">
+    <main className="min-h-[calc(100vh-6rem)] bg-surface px-margin-mobile pb-24 pt-28 md:px-margin-desktop md:pt-48">
       <div className="mx-auto max-w-lg">
         <p className="mb-3 font-mono text-[12px] font-bold tracking-[0.25em] text-secondary uppercase">
           {t("eyebrow")}

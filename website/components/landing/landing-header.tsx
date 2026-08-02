@@ -30,8 +30,10 @@ export function LandingHeader() {
           aria-label={`${t("brand")} — ${t("nav.home")}`}
         >
           {/* Icon + wordmark as separate pieces (per CPO: icon bigger, writing
-              as-is). The labeled Link carries the accessible name, so both
-              imgs are decorative (alt="") */}
+              as-is). icon = crop of peritwin-mark.png; word = crop of the
+              deleted peritwin-nav.png (git history) — see
+              docs/plans/website-header-icon-bigger.md. The labeled Link
+              carries the accessible name, so both imgs are decorative (alt="") */}
           <Image
             src="/peritwin-icon.png"
             alt=""
@@ -46,7 +48,7 @@ export function LandingHeader() {
             width={705}
             height={250}
             priority
-            className="ml-1 h-[44px] w-auto md:ml-3 md:h-[72px]"
+            className="ml-1 h-11 w-auto md:ml-3 md:h-18"
           />
         </Link>
 

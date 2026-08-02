@@ -26,7 +26,7 @@ export default async function PartnersPage({ params }: Props) {
   const t = await getTranslations("partners")
 
   return (
-    <main className="flex min-h-[calc(100vh-6rem)] items-center bg-surface px-margin-mobile pt-28 pb-24 md:px-margin-desktop md:pt-32">
+    <main className="flex min-h-[calc(100vh-6rem)] items-center bg-surface px-margin-mobile pt-28 pb-24 md:px-margin-desktop md:pt-48">
       <div className="mx-auto max-w-2xl text-center">
         <p className="mb-4 font-mono text-[12px] font-bold tracking-[0.25em] text-secondary uppercase">
           {t("eyebrow")}
