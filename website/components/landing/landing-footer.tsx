@@ -3,7 +3,7 @@ import Image from "next/image"
 import { getTranslations } from "next-intl/server"
 
 import { Link } from "@/i18n/navigation"
-import { LOGO, LOGO_WIDTH_CLASS, SITE } from "@/lib/site"
+import { LOGO, SITE } from "@/lib/site"
 
 const PLATFORM_LINKS = [
   { key: "digitalTwin", href: "#platform" },
@@ -34,7 +34,7 @@ export async function LandingFooter() {
             alt={`${t("brand")} — ${t("footer.tagline")}`}
             width={LOGO.width}
             height={LOGO.height}
-            className={LOGO_WIDTH_CLASS}
+            className="h-auto w-40 max-w-full md:w-[260px]"
           />
         </div>
 
