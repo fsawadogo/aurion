@@ -51,3 +51,22 @@ size)", accepting the taller header bar (~190px desktop).
 
 tsc --noEmit → build → exported-HTML checks → live DOM measurements →
 receipt → /simplify → PR (§9). Uzziel merges; site.yml auto-deploys.
+
+## Revision (2026-08-02, mid-branch)
+
+Uzziel then asked to **remove the tagline line from the top logo**. Final
+shipped state supersedes §Change above:
+
+- Header uses restored `peritwin-nav.png` (icon + wordmark, no tagline;
+  deleted in #721, recovered from history) via a new `NAV_LOGO` constant.
+  Footer + OG keep the full lockup via `LOGO`.
+- Width parity stands across the two artworks — one shared
+  `LOGO_WIDTH_CLASS` ("h-auto w-40 max-w-full md:w-[260px]") consumed by
+  both Images: 260px from md, **160px (w-40)** on phones (measured row
+  budget 165px; the plan's earlier w-44/176px overflowed by 3px).
+- Header bar is ~122px md+ / ~88px mobile — SHORTER than the ~190px this
+  plan accepted, so §Change-3's spacer bumps were reverted to main's
+  values (contact pt-28 md:pt-32 → +6/+24 clear measured; scroll-padding
+  6rem → anchors +70px clear).
+- Banked win: the priority-preloaded header logo drops 189,572 → 83,995
+  bytes (−56%) on every page.

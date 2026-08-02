@@ -47,3 +47,8 @@ export const NAV_LOGO = {
   width: 901,
   height: 250,
 } as const
+
+/** CPO 2026-08-02: header and footer marks render at the same WIDTH
+ * everywhere — 160px on phones, 260px from md — across their different
+ * artworks. Shared so the pair can't drift again. */
+export const LOGO_WIDTH_CLASS = "h-auto w-40 max-w-full md:w-[260px]"

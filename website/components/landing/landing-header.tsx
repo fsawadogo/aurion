@@ -8,7 +8,7 @@ import { useState } from "react"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/i18n/navigation"
-import { NAV_LOGO, SITE } from "@/lib/site"
+import { LOGO_WIDTH_CLASS, NAV_LOGO, SITE } from "@/lib/site"
 
 /** Page menu — Partners and Pilots; Physician portal and Contact us render distinctly. */
 const PAGE_LINKS = [
@@ -38,7 +38,7 @@ export function LandingHeader() {
             width={NAV_LOGO.width}
             height={NAV_LOGO.height}
             priority
-            className="h-auto w-40 max-w-full md:w-[260px]"
+            className={LOGO_WIDTH_CLASS}
           />
         </Link>
 
