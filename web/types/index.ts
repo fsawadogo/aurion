@@ -573,6 +573,10 @@ export interface FeatureFlags {
   correction_memory_enabled: boolean;
   // Inject a physician's accepted correction rules into their note generation.
   correction_rules_in_prompt_enabled: boolean;
+  // Standalone visual evidence — let the video stream carry a note when audio
+  // is empty/thin (video-import path). Dark; face-less-frame retention needs
+  // compliance sign-off before a real-PHI env enables it.
+  visual_evidence_standalone_enabled: boolean;
 }
 
 export interface UpdateFeatureFlagsResponse {

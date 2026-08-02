@@ -319,6 +319,10 @@ resource "aws_appconfig_configuration_profile" "main" {
             # Inject accepted correction rules into note generation. NOT
             # `required`; backend defaults it false.
             correction_rules_in_prompt_enabled = { type = "boolean" }
+            # Standalone visual evidence — video can carry a note when audio is
+            # empty/thin (video-import path). NOT `required`; backend defaults it
+            # false. Face-less-frame retention needs compliance sign-off to enable.
+            visual_evidence_standalone_enabled = { type = "boolean" }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in

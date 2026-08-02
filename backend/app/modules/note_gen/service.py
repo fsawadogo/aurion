@@ -1096,6 +1096,63 @@ async def generate_stage1_note(
     return note
 
 
+async def build_and_persist_minimal_note(
+    *,
+    specialty: str,
+    session_id: str,
+    db: AsyncSession,
+    template_key: Optional[str] = None,
+    custom_template_id: Optional[str] = None,
+) -> Note:
+    """Persist an EMPTY Stage-1 note — all template sections ``not_captured``.
+
+    The standalone-visual path (``visual_evidence_standalone_enabled``) calls
+    this when the audio transcript is empty/thin. Instead of hard-failing the
+    video import, we lay down a structurally-complete but empty note so the
+    orchestrator can proceed to frame extraction + Stage-2 vision, which then
+    POPULATE the sections from the video (cited to their frame).
+
+    No provider call is made — there is no audio source material for an audio
+    note, so CLAUDE.md §"The Single Most Important Constraint" is honoured:
+    zero generative call, zero hallucination surface. Every section is honestly
+    ``not_captured`` until the visual merge fills it. ``create_note_version``
+    assigns the version and (re)computes the completeness score (0.0 here).
+    """
+    template = await _resolve_stage1_template(
+        template_key=template_key,
+        specialty=specialty,
+        custom_template_id=custom_template_id,
+        db=db,
+    )
+    note = Note(
+        session_id=session_id,
+        stage=1,
+        provider_used="none",
+        specialty=specialty,
+        completeness_score=0.0,
+        sections=[
+            NoteSection(
+                id=s.id,
+                title=getattr(s, "title", "") or s.id,
+                status="not_captured",
+                claims=[],
+            )
+            for s in template.sections
+        ],
+    )
+    await create_note_version(
+        session_id, note, db, stats_trigger="minimal_visual_note"
+    )
+    logger.info(
+        "Minimal visual-only Stage-1 note persisted (empty transcript, "
+        "standalone-visual path): session=%s specialty=%s sections=%d",
+        session_id,
+        specialty,
+        len(note.sections),
+    )
+    return note
+
+
 async def _load_session_participants(
     session_id: str, db: AsyncSession
 ) -> list[dict]:

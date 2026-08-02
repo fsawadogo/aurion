@@ -226,6 +226,23 @@ async def run_stage2_vision(
     # it per frame could mix grounded and descriptive captions in one note.
     grounded_visual = get_config().feature_flags.grounded_visual_findings_enabled
 
+    # Standalone-visual: resolve ONCE per run (same one-snapshot discipline).
+    # When the audio note is the minimal empty note (provider "none"), the video
+    # carries the note — frames get synthesized silent anchors so a silent EXAM
+    # (frames, no clips) is captioned instead of dropped, and the note is built
+    # from the captions directly rather than merged into an anchorless note.
+    standalone_visual = (
+        get_config().feature_flags.visual_evidence_standalone_enabled
+    )
+    # The video carries the note when the AUDIO produced nothing usable: the
+    # minimal empty note (provider "none"), OR a sparse-audio note that came back
+    # with zero claims in every section (merging into it can't flip a
+    # not_captured section to populated, so the exam findings would be lost).
+    audio_note_empty = note.provider_used == "none" or all(
+        not s.claims for s in note.sections
+    )
+    visual_only_note = standalone_visual and audio_note_empty
+
     clip_telemetry: list[ClipTelemetry] = []
     captions_raw = await caption_visual_evidence(
         evidence=evidence_items,
@@ -239,6 +256,9 @@ async def run_stage2_vision(
         template=template_for_capture,
         note=note,
         grounded=grounded_visual,
+        # Silent EXAM (frames, empty transcript): give frames the same
+        # synthesized silent anchor clips already get, so they're captioned.
+        synthesize_frame_anchors=visual_only_note,
     )
 
     # Drop low-confidence captions before conflict classification.
@@ -269,17 +289,54 @@ async def run_stage2_vision(
     # TE-4: the merge must be given the SAME routing inputs capture was, or a
     # frame is aimed at one section's guidance and filed under another. That
     # means the template AND the anchor text its trigger keywords match on.
-    enriched = merge_visual_citations(
-        note,
-        captions,
-        template_for_capture,
-        {s.id: s.text for s in transcript.segments},
-    )
-    enriched.session_id = str(session_id)
-    enriched.stage = 2
-    await create_note_version(
-        str(session_id), enriched, db, stats_trigger="vision_merge"
-    )
+    if visual_only_note:
+        # Silent import: the audio note is empty and its sections have no audio
+        # anchors to merge onto. Build the note DIRECTLY from the video captions
+        # via the validated video-note path (captions → pseudo-transcript →
+        # note-gen), which files visual findings into the exam/imaging sections
+        # and keeps every claim source_type="visual", cited to its frame. Falls
+        # back to the empty note if the video yielded nothing usable.
+        from app.modules.note_gen.fusion import generate_video_note
+        from app.modules.note_gen.service import get_template
+
+        try:
+            note_template = template_for_capture or get_template(note.specialty)
+        except Exception:  # noqa: BLE001 — never fail Stage 2 over a template
+            note_template = template_for_capture
+        video_note = await generate_video_note(
+            str(session_id),
+            evidence_items,
+            note_template,
+            grounded=grounded_visual,
+            output_language=(
+                session_row.output_language if session_row is not None else "en"
+            ),
+            captions=captions,
+        )
+        if video_note is not None:
+            video_note.session_id = str(session_id)
+            video_note.stage = 2
+            video_note.specialty = note.specialty
+            enriched = video_note
+            await create_note_version(
+                str(session_id), enriched, db, stats_trigger="visual_only_note"
+            )
+        else:
+            # Video produced no usable captions — keep the honest empty note.
+            enriched = note
+            enriched.stage = 2
+    else:
+        enriched = merge_visual_citations(
+            note,
+            captions,
+            template_for_capture,
+            {s.id: s.text for s in transcript.segments},
+        )
+        enriched.session_id = str(session_id)
+        enriched.stage = 2
+        await create_note_version(
+            str(session_id), enriched, db, stats_trigger="vision_merge"
+        )
 
     enriches = sum(1 for c in captions if c.integration_status == "ENRICHES")
     repeats = sum(1 for c in captions if c.integration_status == "REPEATS")

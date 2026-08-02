@@ -30,7 +30,11 @@ from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.cleanup.service import purge_audio_for_session
 from app.modules.config.appconfig_client import get_config
-from app.modules.note_gen.service import EmptyTranscriptError, generate_stage1_note
+from app.modules.note_gen.service import (
+    EmptyTranscriptError,
+    build_and_persist_minimal_note,
+    generate_stage1_note,
+)
 from app.modules.phi_audit.service import scan_transcript_for_phi
 from app.modules.session.service import (
     InvalidTransitionError,
@@ -114,7 +118,13 @@ async def _purge_raw_audio_if_not_retained(session_id) -> None:
         )
 
 
-async def run_stage1(db: AsyncSession, session, audio_bytes: bytes):
+async def run_stage1(
+    db: AsyncSession,
+    session,
+    audio_bytes: bytes,
+    *,
+    allow_visual_only: bool = False,
+):
     """Run the Stage 1 pipeline for a session and return the transcript.
 
     Extracted verbatim from the transcription route so BOTH the HTTP path
@@ -205,27 +215,53 @@ async def run_stage1(db: AsyncSession, session, audio_bytes: bytes):
             encounter_context=session.encounter_context,
         )
     except EmptyTranscriptError as exc:
-        try:
-            await transition_session(
-                db, session, SessionState.STAGE1_FAILED_NO_AUDIO
-            )
-        except InvalidTransitionError:
-            logger.warning(
-                "Stage 1 guard fired but session=%s could not transition "
-                "to STAGE1_FAILED_NO_AUDIO from state=%s",
+        # Standalone-visual path: the audio is empty/thin, but this is a video
+        # import and the flag is on — DON'T hard-fail. Lay down a minimal empty
+        # note so the orchestrator proceeds to frame extraction + Stage-2 vision,
+        # which populate the sections from the video (cited to their frame). No
+        # generative call was made (the guard fired first), so there is zero
+        # hallucination surface — every section stays not_captured until vision.
+        if allow_visual_only:
+            await write_audit(
                 session_id,
-                session.state.value,
+                AuditEventType.STAGE1_SKIPPED_NO_TRANSCRIPT,
+                reason=exc.reason,
             )
-        await write_audit(
-            session_id, AuditEventType.STAGE1_FAILED, reason=exc.reason
-        )
-        raise HTTPException(
-            status_code=422,
-            detail={
-                "reason": exc.reason,
-                "message": exc.human_message,
-            },
-        )
+            stage1_note = await build_and_persist_minimal_note(
+                specialty=session.specialty,
+                session_id=str(session_id),
+                db=db,
+                template_key=pinned_key,
+                custom_template_id=pinned_custom_id,
+            )
+            logger.info(
+                "Empty transcript on standalone-visual import — minimal note "
+                "created, continuing to vision: session=%s reason=%s",
+                session_id,
+                exc.reason,
+            )
+        else:
+            try:
+                await transition_session(
+                    db, session, SessionState.STAGE1_FAILED_NO_AUDIO
+                )
+            except InvalidTransitionError:
+                logger.warning(
+                    "Stage 1 guard fired but session=%s could not transition "
+                    "to STAGE1_FAILED_NO_AUDIO from state=%s",
+                    session_id,
+                    session.state.value,
+                )
+            await write_audit(
+                session_id, AuditEventType.STAGE1_FAILED, reason=exc.reason
+            )
+            raise HTTPException(
+                status_code=422,
+                detail={
+                    "reason": exc.reason,
+                    "message": exc.human_message,
+                },
+            )
     except Exception as exc:
         reason = str(exc)[:200]
         # Move the session to the terminal STAGE1_FAILED state. Without this

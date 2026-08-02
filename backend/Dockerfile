@@ -39,6 +39,16 @@ RUN mkdir -p /app/models && \
       https://raw.githubusercontent.com/opencv/opencv_3rdparty/dnn_samples_face_detector_20170830/res10_300x300_ssd_iter_140000.caffemodel \
       || echo "WARN: res10 caffemodel download failed — runtime falls back to Haar"
 
+# Download the EAST scene-text detector for the standalone-visual secondary
+# redaction pass (keep-faceless frames get their on-screen text blurred before
+# storage). BEST-EFFORT like res10: if the download fails the build still
+# succeeds and the runtime FAILS CLOSED — a face-less frame is DROPPED (never
+# stored un-scrubbed) exactly as today. So a missing model can only reduce the
+# feature's yield, never weaken PHI masking.
+RUN curl -fsSL -o /app/models/frozen_east_text_detection.pb \
+      https://raw.githubusercontent.com/oyyd/frozen_east_text_detection.pb/master/frozen_east_text_detection.pb \
+      || echo "WARN: EAST text model download failed — faceless frames drop (fail-closed)"
+
 # Install Python dependencies
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

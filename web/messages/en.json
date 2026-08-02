@@ -704,6 +704,10 @@
       "correction_rules_in_prompt_enabled": {
         "name": "Correction rules in prompt",
         "description": "Injects a physician's accepted correction rules (distilled from their typo/semantic corrections) into their note generation, so notes start writing in their voice. Separate lever from capture — curate the rules first, then turn this ON to let them shape live notes. Style only, fenced below the grounding boundary. Ships dark."
+      },
+      "visual_evidence_standalone_enabled": {
+        "name": "Standalone visual evidence",
+        "description": "Lets the video stream carry a note when the audio is empty or thin (uploaded-video path only): an empty transcript no longer fails the import, cadence sampling is forced so a silent exam still yields frames, face-less exam close-ups are kept after a fail-closed text-redaction pass, and Stage-2 vision runs to populate the note. Never loosens grounding — findings stay descriptive and cited to their frame. Ships dark; keeping face-less frames needs compliance sign-off before a real-PHI environment enables it."
       }
     },
     "chatTools": "Chat tools",
@@ -713,7 +717,9 @@
     "parallelFusion": "Parallel fusion (Fusion B)",
     "parallelFusionHint": "Gates live use of parallel-then-merge note assembly. The audio-vs-video A/B comparison in the Grounded Lab runs regardless; flip this only once a fusion approach is chosen for live notes.",
     "correctionMemory": "Correction memory",
-    "correctionMemoryHint": "Logs in-app note edits (before/after text + section) so corrections can be classified and distilled into per-physician rules. Capture only, owner-scoped; turn ON to start building the correction history during the pilot."
+    "correctionMemoryHint": "Logs in-app note edits (before/after text + section) so corrections can be classified and distilled into per-physician rules. Capture only, owner-scoped; turn ON to start building the correction history during the pilot.",
+    "standaloneVisual": "Standalone visual evidence",
+    "standaloneVisualHint": "Lets an uploaded video carry a note when its audio is empty or thin — forces cadence frame sampling for silent exams, keeps face-less exam close-ups after a fail-closed text-redaction pass, and runs Stage-2 vision to populate the note. Findings stay descriptive and cited to their frame. Ships dark; keeping face-less frames needs compliance sign-off before a real-PHI environment enables it."
   },
   "Providers": {
     "eyebrow": "Admin",
