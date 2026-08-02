@@ -34,7 +34,7 @@ export async function LandingFooter() {
             alt={`${t("brand")} — ${t("footer.tagline")}`}
             width={LOGO.width}
             height={LOGO.height}
-            className="h-auto w-full max-w-[260px]"
+            className="h-auto w-40 max-w-full md:w-[260px]"
           />
         </div>
 

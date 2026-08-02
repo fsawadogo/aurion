@@ -26,7 +26,7 @@ export function LandingHeader() {
 
         <Link
           href="/"
-          className="flex shrink-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+          className="flex min-w-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           aria-label={`${t("brand")} — ${t("nav.home")}`}
         >
           {/* Full lockup — same artwork as the footer; the labeled Link carries
@@ -37,7 +37,7 @@ export function LandingHeader() {
             width={LOGO.width}
             height={LOGO.height}
             priority
-            className="h-12 w-auto md:h-16 lg:h-20"
+            className="h-auto w-40 max-w-full md:w-[260px]"
           />
         </Link>
 
