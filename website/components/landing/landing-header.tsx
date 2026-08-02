@@ -40,7 +40,7 @@ export function LandingHeader() {
             width={331}
             height={524}
             priority
-            className="h-14 w-auto md:h-28"
+            className="h-11 w-auto min-[360px]:h-14 md:h-28"
           />
           <Image
             src="/peritwin-word.png"
@@ -48,7 +48,7 @@ export function LandingHeader() {
             width={705}
             height={250}
             priority
-            className="ml-1 h-11 w-auto md:ml-3 md:h-18"
+            className="ml-1 h-8 w-auto min-[360px]:h-11 md:ml-3 md:h-18"
           />
         </Link>
 
