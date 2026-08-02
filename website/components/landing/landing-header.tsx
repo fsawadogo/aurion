@@ -8,7 +8,7 @@ import { useState } from "react"
 import { LanguageSwitcher } from "@/components/language-switcher"
 import { Button } from "@/components/ui/button"
 import { Link } from "@/i18n/navigation"
-import { LOGO, LOGO_WIDTH_CLASS, SITE } from "@/lib/site"
+import { SITE } from "@/lib/site"
 
 /** Page menu — Partners and Pilots; Physician portal and Contact us render distinctly. */
 const PAGE_LINKS = [
@@ -29,16 +29,26 @@ export function LandingHeader() {
           className="flex min-h-11 min-w-0 items-center rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
           aria-label={`${t("brand")} — ${t("nav.home")}`}
         >
-          {/* Icon + wordmark, no tagline (per CPO); width-matched to the
-              SAME full lockup as the footer (LOGO, tagline baked in). The labeled
-              Link carries the accessible name, so the img is decorative (alt="") */}
+          {/* Icon + wordmark as separate pieces (per CPO: icon bigger, writing
+              as-is). icon = crop of peritwin-mark.png; word = crop of the
+              deleted peritwin-nav.png (git history) — see
+              docs/plans/website-header-icon-bigger.md. The labeled Link
+              carries the accessible name, so both imgs are decorative (alt="") */}
           <Image
-            src={LOGO.src}
+            src="/peritwin-icon.png"
             alt=""
-            width={LOGO.width}
-            height={LOGO.height}
+            width={331}
+            height={524}
             priority
-            className={LOGO_WIDTH_CLASS}
+            className="h-14 w-auto md:h-28"
+          />
+          <Image
+            src="/peritwin-word.png"
+            alt=""
+            width={705}
+            height={250}
+            priority
+            className="ml-1 h-11 w-auto md:ml-3 md:h-18"
           />
         </Link>
 
