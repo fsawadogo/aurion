@@ -34,9 +34,16 @@ export const SITE = {
 }
 
 /** Full brand lockup (tagline is part of the artwork). Single source for the
- * header, footer, and OG image so the intrinsic dims can't drift. */
+ * footer and OG image so the intrinsic dims can't drift. */
 export const LOGO = {
   src: "/peritwin-logo.png",
   width: 1248,
   height: 667,
+} as const
+
+/** Header variant of the lockup — same icon + wordmark, no tagline line. */
+export const NAV_LOGO = {
+  src: "/peritwin-nav.png",
+  width: 901,
+  height: 250,
 } as const
