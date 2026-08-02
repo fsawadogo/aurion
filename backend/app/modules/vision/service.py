@@ -485,6 +485,7 @@ async def caption_visual_evidence(
     template: Optional[Template] = None,
     note: Optional[Note] = None,
     grounded: bool = False,
+    synthesize_frame_anchors: bool = False,
 ) -> list[FrameCaption]:
     """Caption a mixed list of frames + clips using kind-routed providers.
 
@@ -621,17 +622,18 @@ async def caption_visual_evidence(
         pool = anchor_segments if anchor_segments is not None else trigger_segments
         anchor = _find_anchor_segment(item.timestamp_ms, pool)
         if anchor is None:
-            if kind != "clip":
+            if kind != "clip" and not synthesize_frame_anchors:
                 # Frame path unchanged — a frame with no anchor is dropped.
                 return None
-            # Cadence clip + truly silent transcript (zero segments):
-            # synthesize an empty-text anchor at the clip's own timestamp
-            # so the clip is still captioned, with NO audio context. We
-            # never fabricate speech — the empty text is the honest
-            # "silent" signal; the clip renders as a time-anchored passive
-            # visual observation.
+            # Cadence clip, OR (standalone-visual) a FRAME on a truly silent
+            # transcript: synthesize an empty-text anchor at the item's own
+            # timestamp so it is still captioned, with NO audio context. We
+            # never fabricate speech — the empty text is the honest "silent"
+            # signal; the item renders as a time-anchored passive visual
+            # observation. ``synthesize_frame_anchors`` extends this from clips
+            # to frames so a silent EXAM (frames, no clips) still gets read.
             anchor = TranscriptSegment(
-                id=f"clip_silent_{item.timestamp_ms}",
+                id=f"{kind}_silent_{item.timestamp_ms}",
                 start_ms=item.timestamp_ms,
                 end_ms=item.timestamp_ms,
                 text="",

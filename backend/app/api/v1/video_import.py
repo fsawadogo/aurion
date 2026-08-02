@@ -617,7 +617,12 @@ async def _download_to_path(client: Any, key: str, dest_path: str) -> None:
 
 
 def _mask_and_store_frame(
-    s3: Any, session_id: uuid.UUID, ts_ms: int, jpg_bytes: bytes, drop_zero_face: bool
+    s3: Any,
+    session_id: uuid.UUID,
+    ts_ms: int,
+    jpg_bytes: bytes,
+    drop_zero_face: bool,
+    redact_faceless: bool = False,
 ):
     """Mask one frame and, on success, store it to S3 — a single blocking unit.
 
@@ -626,9 +631,13 @@ def _mask_and_store_frame(
     ``asyncio.to_thread``) so neither blocks the event loop. Returns the
     ``mask_frame`` result so the caller emits the (async) audit on the loop.
     Fail-closed is preserved: a non-success result skips the store entirely, so
-    an unmasked frame is never written.
+    an unmasked frame is never written. ``redact_faceless`` (standalone-visual)
+    keeps a zero-face frame after a fail-closed text-redaction pass instead of
+    dropping it.
     """
-    result = mask_frame(jpg_bytes, drop_zero_face=drop_zero_face)
+    result = mask_frame(
+        jpg_bytes, drop_zero_face=drop_zero_face, redact_faceless=redact_faceless
+    )
     if result.status == "success" and result.image_bytes is not None:
         # Server-issued masking proof — asserts the success invariant before the
         # masked frame is stored (P0-02), same contract as the iOS frame path.
@@ -636,7 +645,9 @@ def _mask_and_store_frame(
             frame_type="video",
             masking_status="success",
             faces_detected=result.faces_detected,
-            phi_regions_redacted=0,
+            # getattr keeps legacy result stubs (no secondary-redaction field)
+            # working; the real MaskedFrameResult always carries it (default 0).
+            phi_regions_redacted=getattr(result, "text_regions_redacted", 0),
         )
         # Store under the SAME key shape the vision pipeline already reads.
         s3.put_object(
@@ -646,6 +657,13 @@ def _mask_and_store_frame(
             ContentType="image/jpeg",
         )
     return result
+
+
+# Fallback cadence for the standalone-visual path when the operator hasn't set
+# `video_import_cadence_seconds`. 3s across a silent exam yields enough frames
+# for the vision layer to catch a maneuver without flooding the provider (the
+# `video_import_max_cadence_frames` cap still bounds the total).
+_STANDALONE_CADENCE_SECONDS = 3
 
 
 def _cadence_windows(
@@ -678,7 +696,10 @@ def _cadence_windows(
 
 
 async def _extract_and_mask_frames(
-    db: AsyncSession, session_id: uuid.UUID, clips: list[tuple[str, int]]
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    clips: list[tuple[str, int]],
+    total_duration_ms: int = 0,
 ) -> tuple[int, int, int]:
     """Extract frames at the transcript's trigger windows + mask each.
 
@@ -717,6 +738,14 @@ async def _extract_and_mask_frames(
     cfg = get_config().pipeline
     cadence_seconds = cfg.video_import_cadence_seconds
 
+    # Standalone-visual path: FORCE cadence sampling so a silent/thin-audio exam
+    # still yields frames even when the operator hasn't set a cadence, and derive
+    # the timeline duration from the video file when the transcript timeline is
+    # empty (an empty transcript has no segment end to sample across).
+    standalone = get_config().feature_flags.visual_evidence_standalone_enabled
+    if standalone and cadence_seconds <= 0:
+        cadence_seconds = _STANDALONE_CADENCE_SECONDS
+
     # Trigger windows (keyword-anchored). Empty when nothing was flagged.
     windows = [
         (
@@ -727,9 +756,13 @@ async def _extract_and_mask_frames(
     ]
 
     # Cadence windows (time-anchored): sample the whole timeline so a SILENT
-    # exam still yields frames even with zero spoken triggers. Total duration is
-    # the last segment end on the merged transcript timeline (no ffprobe needed).
+    # exam still yields frames even with zero spoken triggers. Prefer the last
+    # segment end on the merged transcript timeline (no ffprobe needed); when
+    # that is empty (empty transcript, standalone path) fall back to the actual
+    # video duration the orchestrator measured from the audio track.
     total_ms = max((s.end_ms for s in transcript.segments), default=0)
+    if total_ms <= 0:
+        total_ms = total_duration_ms
     cadence = _cadence_windows(
         total_ms, cadence_seconds, cfg.video_import_max_cadence_frames
     )
@@ -771,6 +804,10 @@ async def _extract_and_mask_frames(
         frames.extend((local_ts + offset, jpg) for local_ts, jpg in local_frames)
 
     drop_zero = get_config().feature_flags.video_import_drop_zero_face_frames
+    # Standalone-visual: KEEP a face-less frame after a fail-closed text-redaction
+    # pass instead of dropping it (retains clinical close-ups without on-screen
+    # PHI). Precedence over drop_zero is handled inside mask_frame.
+    redact_faceless = standalone
     s3 = get_s3_client()
     masked = 0
     dropped = 0
@@ -778,7 +815,13 @@ async def _extract_and_mask_frames(
         # Mask + store off the event loop (OpenCV is CPU-bound, put_object is
         # sync boto3); the audit stays async on the loop.
         result = await asyncio.to_thread(
-            _mask_and_store_frame, s3, session_id, ts_ms, jpg_bytes, drop_zero
+            _mask_and_store_frame,
+            s3,
+            session_id,
+            ts_ms,
+            jpg_bytes,
+            drop_zero,
+            redact_faceless,
         )
         if result.status == "success" and result.image_bytes is not None:
             await write_audit(
@@ -937,7 +980,16 @@ async def _run_video_import_in_background(
                 await transition_session(db, session, SessionState.PROCESSING_STAGE1)
                 await write_audit(session_id, AuditEventType.STAGE1_STARTED)
 
-                await run_stage1(db, session, audio_bytes)  # → AWAITING_REVIEW
+                # Standalone-visual (flag): an empty/thin transcript no longer
+                # hard-fails the import — run_stage1 lays down a minimal empty
+                # note so the pipeline proceeds to frames + Stage-2 vision, which
+                # populate it from the video. OFF → byte-identical (422 on empty).
+                standalone = (
+                    get_config().feature_flags.visual_evidence_standalone_enabled
+                )
+                await run_stage1(
+                    db, session, audio_bytes, allow_visual_only=standalone
+                )  # → AWAITING_REVIEW
                 # Persist the transcript + Stage 1 note + state transition now.
                 # The orchestrator owns a manual session (async_session_factory
                 # does NOT auto-commit — unlike the request-scoped get_db), so
@@ -951,7 +1003,7 @@ async def _run_video_import_in_background(
                 #    written to S3 (frames-absent). VID-04 swaps in real masking
                 #    + S3 storage behind the same call.
                 extracted, masked, dropped = await _extract_and_mask_frames(
-                    db, session_id, clips_with_offset
+                    db, session_id, clips_with_offset, total_duration_ms=cumulative_ms
                 )
 
             # 3. Purge every raw clip (fail-closed: a purge failure aborts the
@@ -966,8 +1018,13 @@ async def _run_video_import_in_background(
             #    AWAITING_REVIEW for human review. Final approval +
             #    conflict resolution always stay human (the session is left in
             #    PROCESSING_STAGE2, never auto-approved to REVIEW_COMPLETE).
+            #    Standalone-visual imports ALSO auto-advance so the video
+            #    findings actually populate the note (an empty audio note would
+            #    otherwise sit at AWAITING_REVIEW with nothing to review). Final
+            #    approval + conflict resolution still stay human (left in
+            #    PROCESSING_STAGE2, never auto-approved to REVIEW_COMPLETE).
             new_version = None
-            if job.auto_advance_stage2:
+            if job.auto_advance_stage2 or standalone:
                 new_version = await _auto_advance_stage2(db, session, session_id)
 
             await jobs.mark_completed(

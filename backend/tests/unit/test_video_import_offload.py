@@ -50,7 +50,9 @@ def test_mask_and_store_frame_masks_then_stores_on_success() -> None:
         out = vi._mask_and_store_frame(s3, sid, 1234, b"raw", True)
 
     assert out is result
-    mask.assert_called_once_with(b"raw", drop_zero_face=True)
+    mask.assert_called_once_with(
+        b"raw", drop_zero_face=True, redact_faceless=False
+    )
     s3.put_object.assert_called_once()
     kwargs = s3.put_object.call_args.kwargs
     assert kwargs["Bucket"] == vi.FRAMES_BUCKET
@@ -104,7 +106,11 @@ async def test_extract_and_mask_frames_offloads_per_frame() -> None:
             video_import_cadence_seconds=0,
             video_import_max_cadence_frames=60,
         ),
-        feature_flags=SimpleNamespace(video_import_drop_zero_face_frames=True),
+        feature_flags=SimpleNamespace(
+            video_import_drop_zero_face_frames=True,
+            # Standalone-visual off — this test exercises the default path.
+            visual_evidence_standalone_enabled=False,
+        ),
     )
     with patch.object(vi, "get_config", return_value=cfg), patch.object(
         vi, "get_frame_window_ms", return_value=0

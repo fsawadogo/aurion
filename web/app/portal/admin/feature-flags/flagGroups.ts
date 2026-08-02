@@ -65,6 +65,11 @@ export const FLAG_GROUPS = [
     flags: ["multi_clip_import_enabled"],
   },
   {
+    titleKey: "standaloneVisual",
+    hintKey: "standaloneVisualHint",
+    flags: ["visual_evidence_standalone_enabled"],
+  },
+  {
     titleKey: "noteOptions",
     hintKey: "noteOptionsHint",
     flags: ["note_options_enabled"],

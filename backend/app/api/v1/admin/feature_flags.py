@@ -123,6 +123,10 @@ class FeatureFlagsResponse(BaseModel):
     correction_memory_enabled: bool = False
     # Inject a physician's accepted correction rules into their note generation.
     correction_rules_in_prompt_enabled: bool = False
+    # Standalone visual evidence — let the video stream carry a note when audio
+    # is empty/thin (video-import path only). Dark; face-less-frame retention
+    # needs compliance sign-off before a real-PHI env enables it.
+    visual_evidence_standalone_enabled: bool = False
 
 
 class UpdateFeatureFlagsResponse(BaseModel):
@@ -241,6 +245,9 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         correction_memory_enabled=cfg_feature_flags.correction_memory_enabled,
         correction_rules_in_prompt_enabled=(
             cfg_feature_flags.correction_rules_in_prompt_enabled
+        ),
+        visual_evidence_standalone_enabled=(
+            cfg_feature_flags.visual_evidence_standalone_enabled
         ),
     )
 

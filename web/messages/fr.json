@@ -704,6 +704,10 @@
       "correction_rules_in_prompt_enabled": {
         "name": "Règles de correction dans l'invite",
         "description": "Injecte les règles de correction acceptées d'un médecin (distillées de ses corrections typographiques/sémantiques) dans sa génération de notes, pour que les notes s'écrivent dans sa voix. Levier distinct de la capture — curez d'abord les règles, puis activez ceci pour qu'elles façonnent les notes réelles. Style seulement, cloisonné sous la limite d'ancrage. Livré éteint."
+      },
+      "visual_evidence_standalone_enabled": {
+        "name": "Preuve visuelle autonome",
+        "description": "Permet au flux vidéo de porter une note lorsque l'audio est vide ou ténu (chemin d'import vidéo uniquement) : un transcript vide ne fait plus échouer l'import, l'échantillonnage à cadence est forcé pour qu'un examen silencieux produise quand même des images, les gros plans d'examen sans visage sont conservés après une passe de caviardage de texte à sûreté intégrée, et la vision d'étape 2 s'exécute pour peupler la note. N'assouplit jamais l'ancrage — les constats restent descriptifs et cités à leur image. Livré éteint; conserver les images sans visage requiert l'aval conformité avant activation dans un environnement à vraies données PHI."
       }
     },
     "chatTools": "Outils de conversation",
@@ -713,7 +717,9 @@
     "parallelFusion": "Fusion parallèle (Fusion B)",
     "parallelFusionHint": "Conditionne l'usage en production de l'assemblage parallèle-puis-fusion. La comparaison A/B audio-vs-vidéo dans le labo ancré s'exécute indépendamment; n'activez ceci qu'une fois une approche de fusion choisie pour les notes réelles.",
     "correctionMemory": "Mémoire des corrections",
-    "correctionMemoryHint": "Enregistre les modifications de note en cours d'application (texte avant/après + section) pour classer les corrections et en distiller des règles propres au médecin. Capture seulement, cloisonnée par propriétaire; activez pour constituer l'historique des corrections pendant le pilote."
+    "correctionMemoryHint": "Enregistre les modifications de note en cours d'application (texte avant/après + section) pour classer les corrections et en distiller des règles propres au médecin. Capture seulement, cloisonnée par propriétaire; activez pour constituer l'historique des corrections pendant le pilote.",
+    "standaloneVisual": "Preuve visuelle autonome",
+    "standaloneVisualHint": "Permet à une vidéo importée de porter une note lorsque son audio est vide ou ténu — force l'échantillonnage d'images à cadence pour les examens silencieux, conserve les gros plans d'examen sans visage après une passe de caviardage de texte à sûreté intégrée, et exécute la vision d'étape 2 pour peupler la note. Les constats restent descriptifs et cités à leur image. Livré éteint; conserver les images sans visage requiert l'aval conformité avant activation dans un environnement à vraies données PHI."
   },
   "Providers": {
     "eyebrow": "Admin",

@@ -116,7 +116,10 @@ def _flags(template_engine_enabled: bool):
     return SimpleNamespace(
         feature_flags=SimpleNamespace(
             template_engine_enabled=template_engine_enabled,
-            grounded_visual_findings_enabled=False
+            grounded_visual_findings_enabled=False,
+            # Standalone-visual is an independent lever from the template-aware
+            # capture under test — off keeps the standard merge path.
+            visual_evidence_standalone_enabled=False,
         )
     )
 

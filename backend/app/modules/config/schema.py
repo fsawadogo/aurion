@@ -402,6 +402,28 @@ class FeatureFlagsConfig(BaseModel):
     # first, then flip THIS to let the rules shape live notes. Fenced below the
     # descriptive boundary — a rule shapes wording, never grounding. Ships DARK.
     correction_rules_in_prompt_enabled: bool = False
+    # ── Standalone visual evidence (video can carry a note) ────────────────
+    # Relaxes "audio is the spine" in a controlled way for the video-import
+    # path so the VIDEO stream can contribute findings even when the audio
+    # transcript is empty or thin. When ON (and this is a video import):
+    #   1. An empty/low transcript no longer HARD-FAILS the import — a minimal
+    #      note (all template sections, `not_captured`) is created so the
+    #      pipeline proceeds to frame extraction + Stage-2 vision.
+    #   2. Frame extraction FORCES cadence sampling across the whole video even
+    #      with zero spoken triggers (falls back to `_STANDALONE_CADENCE_SECONDS`
+    #      when `video_import_cadence_seconds` is 0), and derives the video
+    #      duration from the file when the transcript timeline is empty.
+    #   3. A face-less frame is KEPT (not dropped) after a fail-closed secondary
+    #      text-region redaction pass, instead of being discarded outright.
+    #   4. Stage-2 vision is RUN for these sessions so the visual findings
+    #      actually populate the note (not left as an empty AWAITING_REVIEW).
+    # Ships DARK. It NEVER loosens grounding — visual claims stay descriptive and
+    # cited to their frame; it only changes WHETHER the video path runs, not what
+    # it may say. The face-less-frame retention (#3) additionally requires
+    # compliance sign-off before any real-PHI env turns this on (same posture as
+    # `video_import_enabled` / `grounded_visual_findings_enabled`). When OFF the
+    # video-import pipeline is byte-identical to the pre-feature build.
+    visual_evidence_standalone_enabled: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────
