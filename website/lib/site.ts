@@ -50,5 +50,6 @@ export const NAV_LOGO = {
 
 /** CPO 2026-08-02: header and footer marks render at the same WIDTH
  * everywhere — 160px on phones, 260px from md — across their different
- * artworks. Shared so the pair can't drift again. */
+ * artworks. Shared so the pair can't drift again. Tailwind v4 auto-scans
+ * this file; keep the class literal inline — no template strings/concat. */
 export const LOGO_WIDTH_CLASS = "h-auto w-40 max-w-full md:w-[260px]"
