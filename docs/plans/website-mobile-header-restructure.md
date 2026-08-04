@@ -30,9 +30,13 @@ Desktop marketing site explicitly good per Marie — mobile only.
 
 - 375: logo pieces 45+158=207px of a 259px budget (was 163/165 with the
   switcher in-row) — the "whole space" ask; faces 72px (+29% vs today).
-- 320: 147px of 204 budget. md band: row 1 only, 161px header as today.
-- Header heights: ~125px (<360), ~157px (360-767), 161px (md+,
-  unchanged), so anchors (192px effective offset) still clear.
+- 320: 147px of 204 budget. md band: row 1 only, 162px header as today.
+- Header heights MEASURED: 144px (<360), 168px (360-767), 162px (md+,
+  unchanged). Anchor jumps land the section top at exactly 192px
+  (scroll-padding 6rem + scroll-mt-24, additive — re-measured by forced
+  instant scrollIntoView this round, consistent with #728/#729's
+  empirical landings) → +24px clear of the 168px header, heading +72.
+  Thin but positive; watch item if the sub-md header ever grows again.
 
 ## AC
 

@@ -1,0 +1,16 @@
+{
+  "task_id": "website-mobile-header-restructure",
+  "branch": "lane-website/mobile-header-restructure",
+  "verified_at": "2026-08-03T19:05:00-04:00",
+  "checks": {
+    "scope_note": "Pilot feedback (Dr. M Gdalevitch via Uzziel): 'eng/french be under and the logo take up the whole space next to the menu on mobile'. Below md the header becomes two rows (big logo + hamburger; slim right-aligned EN/FR row under); md+ byte-identical (switcher wrapper hidden md:block, row 2 md:hidden). Supersedes #729's sub-360 pill compaction (reverted - moot on a full-width row). Desktop marketing explicitly good per Marie - untouched.",
+    "typecheck": "tsc --noEmit clean.",
+    "build": "static export green 17/17.",
+    "live_measurements": "375: logo 207px wide (was 163), faces 72px (+29%), switcher 102x54 BELOW right-aligned (top 105 > link bottom 89), header 168px, home +86 / contact +24 / partners +39 clear, no overflow; 320: pieces 30x48+113x40, header 144, +110 clear, fits with 57px slack; 768: BYTE-IDENTICAL to main (in-row switcher, 162px, md logo 71x112+203x72), +173; 1440: 162px, lg pills 36 (switcher revert cascade verified live). Anchor jumps RE-MEASURED by forced instant scrollIntoView at 375: section top lands at exactly 192px (scroll-padding 96 + scroll-mt 96 additive) = +24 clear of the 168px header, heading +72.",
+    "acceptance_criteria": "AC-1 met (no switcher in row 1 below md, EN/FR own row, faces 72px at 375; md+ geometry unchanged); AC-2 met at 320/375/768/1440 all pages measured; AC-3 met (tsc, 17/17, drawer untouched - zero diff lines).",
+    "simplify": "1 agent (all angles). Its ONE functional finding (anchor jumps land 23px under the header) was EMPIRICALLY REFUTED: its model summed scroll-mt + section padding but DROPPED the scroll-padding-top term; forced-scroll measurement lands the section at 192px (+24 clear), consistent with #728 altitude spec-math and #729 reviewer's 191.63-192.31 landings. Applied from the round: plan-doc numbers corrected to measured values (168px not ~157) + the thin +24 anchor clearance recorded as a watch item; PR body carries the supersedes-#729 note. Its clean verdicts adopted: double-mounted LanguageSwitcher is correct and idiomatic (display:none excludes from the a11y tree - exactly one Language landmark exposed at any width; the file already double-mounts PAGE_LINKS for the drawer; single-mount would forfeit byte-identical md+); pt-48 unification is exact at md+ (zero delta) and appropriate sub-md; row-2 spacing correct (16px is row 1's own padding, adding pt would double-space); min-[360px] at 2 adjacent call sites stays below the named-breakpoint bar.",
+    "watch_items": "(a) sub-md anchor clearance is +24 - if the sub-md header grows again, anchors break first (scroll-mt-44 md:scroll-mt-24 is the ready fix); (b) #729's plan doc describes the now-reverted sub-360 pill compaction - superseded, noted in PR body, history not rewritten.",
+    "stack_boots": "n/a - marketing site only.",
+    "operator_step_post_merge": "None - site.yml auto-deploys both domains."
+  }
+}
