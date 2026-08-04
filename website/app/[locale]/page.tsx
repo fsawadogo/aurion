@@ -26,7 +26,7 @@ export default async function Home({ params }: Props) {
         nested scroll container and made touch scrolling fight the page scroller.
         `clip` contains the same overflow without creating a scrollport.
       */}
-      <main className="overflow-x-clip pt-24 md:pt-32">
+      <main className="overflow-x-clip pt-36 md:pt-32">
 
         {/* Personalized Clinical Intelligence. Ask Peri. */}
         <HeroSection />
