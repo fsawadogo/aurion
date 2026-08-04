@@ -21,7 +21,7 @@ export function LandingHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <header className="glass-panel fixed top-0 z-100 w-full border-x-0 border-t-0 border-b border-b-outline-variant/30">
+    <header className="glass-panel fixed top-0 z-100 max-h-dvh w-full overflow-y-auto overscroll-contain border-x-0 border-t-0 border-b border-b-outline-variant/30">
       <div className="mx-auto flex max-w-(--breakpoint-2xl) items-center justify-between gap-unit-6 px-margin-mobile py-unit-4 md:px-margin-desktop md:py-unit-6">
 
         <Link
