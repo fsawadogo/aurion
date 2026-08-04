@@ -27,12 +27,11 @@ export function LanguageSwitcher() {
           key={locale}
           href={pathname}
           locale={locale}
-          // min-h/w 44px keeps the tap target at the WCAG target size on touch
-          // from 360px up; below that (320-class / Display Zoom phones) the row
-          // can't fit full-size pills beside the logo, so they compact to 36px
-          // (per CPO: buttons can be smaller). lg uses the desktop 36px look.
+          // min-h/w 44px keeps the tap target at the WCAG target size on touch;
+          // lg uses the desktop 36px look. (The sub-360 compaction from #729 is
+          // gone — on its own header row the full pills fit any width.)
           className={cn(
-            "flex min-h-9 min-w-9 items-center justify-center rounded-md px-unit-2 font-mono text-[13px] font-medium transition-colors min-[360px]:min-h-11 min-[360px]:min-w-11 lg:min-h-9 lg:min-w-9",
+            "flex min-h-11 min-w-11 items-center justify-center rounded-md px-unit-2 font-mono text-[13px] font-medium transition-colors lg:min-h-9 lg:min-w-9",
             active === locale
               ? "bg-primary text-on-primary"
               : "text-on-surface-variant hover:text-primary",

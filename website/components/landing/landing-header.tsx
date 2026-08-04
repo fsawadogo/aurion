@@ -21,7 +21,7 @@ export function LandingHeader() {
   const [menuOpen, setMenuOpen] = useState(false)
 
   return (
-    <header className="glass-panel fixed top-0 z-100 w-full border-x-0 border-t-0 border-b border-b-outline-variant/30">
+    <header className="glass-panel fixed top-0 z-100 max-h-dvh w-full overflow-y-auto overscroll-contain border-x-0 border-t-0 border-b border-b-outline-variant/30">
       <div className="mx-auto flex max-w-(--breakpoint-2xl) items-center justify-between gap-unit-6 px-margin-mobile py-unit-4 md:px-margin-desktop md:py-unit-6">
 
         <Link
@@ -40,7 +40,7 @@ export function LandingHeader() {
             width={331}
             height={524}
             priority
-            className="h-11 w-auto min-[360px]:h-14 md:h-28"
+            className="h-12 w-auto min-[360px]:h-18 md:h-28"
           />
           <Image
             src="/peritwin-word.png"
@@ -48,7 +48,7 @@ export function LandingHeader() {
             width={705}
             height={250}
             priority
-            className="ml-1 h-8 w-auto min-[360px]:h-11 md:ml-3 md:h-18"
+            className="ml-1 h-10 w-auto min-[360px]:h-14 md:ml-3 md:h-18"
           />
         </Link>
 
@@ -75,7 +75,12 @@ export function LandingHeader() {
             </a>
           </nav>
 
-          <LanguageSwitcher />
+          {/* From md the switcher lives in-row; below md it gets its own
+              row under the logo (per pilot feedback: EN/FR under, logo
+              takes the whole space next to the menu). */}
+          <div className="hidden md:block">
+            <LanguageSwitcher />
+          </div>
 
           <Button
             asChild
@@ -96,6 +101,11 @@ export function LandingHeader() {
             {menuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
           </button>
         </div>
+      </div>
+
+      {/* Sub-md switcher row — EN/FR under the logo row, right-aligned. */}
+      <div className="flex justify-end px-margin-mobile pb-unit-2 md:hidden">
+        <LanguageSwitcher />
       </div>
 
       {menuOpen && (
