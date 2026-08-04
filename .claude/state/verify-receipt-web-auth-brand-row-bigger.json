@@ -1,0 +1,16 @@
+{
+  "task_id": "web-auth-brand-row-bigger",
+  "branch": "lane-web/auth-brand-row-bigger",
+  "verified_at": "2026-08-03T17:20:00-04:00",
+  "checks": {
+    "scope_note": "Pilot feedback from Dr. M Gdalevitch (iMessage screenshots relayed by Uzziel): portal sign-in brand row 'super small even on web' (desktop dark + mobile light shots). Marketing site desktop explicitly good per Marie; marketing MOBILE restructure is its own branch; iOS logo = Faical handoff.",
+    "lint": "eslint clean x2 (post-feat, post-simplify).",
+    "tests": "vitest 431/431 x2 (51 files) - full web suite.",
+    "build": "next build compiled successfully x2 INCLUDING type-check (this app's build does typecheck, unlike website/) with full route table. Exit code 1 both times comes ONLY from the postbuild script 'cp -r public/.well-known out/.well-known' - a Linux-only command (AASA copy) that runs in CI/Amplify on ubuntu; pre-existing Windows-local limitation, recorded not silently skipped. First build attempt also hit a .next collision with the concurrently running dev server (PageNotFoundError /_document) - reruns after stopping the server compiled clean; same shared-.next lesson as the website lane.",
+    "visual_verification": "Browser pane could not composite (not displayed) and the Chrome extension was offline, so no pixel screenshots. DOM-verified at base breakpoint via the pane's detached document: mark 64px tall (h-16), wordmark font-size 36px - the new base sizes are live. sm: step (h-20/2.75rem) verified by class emission + compiled build (standard Tailwind v3 sm breakpoint, no novel cascade mechanism). Uzziel can eyeball on deploy; the change is a pure scale-up of an existing layout.",
+    "acceptance_criteria": "AC-1 base sizes DOM-verified (64px mark / 36px wordmark), sm sizes compile-verified (80px / 44px); two-tone hexes untouched (dark-mode Twin visibility preserved per the in-file comment); AC-2 forgot/reset inherit via the shared shell (no per-screen edits - verified single consumer chain); AC-3 gates green as above.",
+    "simplify": "1 agent (all angles). Applied: stale at-chrome-scale comment fixed; wordmark px -> rem (2.25/2.75rem, identical at default root) so mark and wordmark scale TOGETHER under browser font-size preferences (the mark was already rem-based - pre-existing drift the scale-up made more visible). Verified clean: the brand pattern (mark png + two-tone hex pair + font-display) exists ONLY in this component - sidebar and splash use the separate legacy family by design, nothing to extract; overflow math measured against the real 600x600 PNG (ink 315x510): 155px headroom in the 420px column at sm, 71px at 320-wide phones, no wrap possible; mb-8 fine (centered column, card keeps hierarchy); text-4xl+leading-none would also equal 36px but the rem pair keeps symmetry with the arbitrary 44px which has no standard step. Backlog observation chipped: portal splash still ships the old gold Aurion lockup art (alt says PeriTwin, artwork does not).",
+    "stack_boots": "n/a - presentational component only; no API surface.",
+    "operator_step_post_merge": "None - web.yml deploys the portal on merge (Amplify, both portal domains)."
+  }
+}
