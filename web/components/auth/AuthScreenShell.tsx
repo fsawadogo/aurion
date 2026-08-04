@@ -48,7 +48,7 @@ export default function AuthScreenShell({
       />
 
       <div className="relative z-10 w-full max-w-[420px] animate-aurion-slide-up">
-        {/* Brand row — mark + live-type wordmark at chrome scale. */}
+        {/* Brand row — mark + live-type wordmark, prominent per pilot feedback. */}
         <div className="mb-8 flex items-center justify-center gap-3">
           <Image
             src="/brand/peritwin-mark.png"
@@ -62,7 +62,9 @@ export default function AuthScreenShell({
           {/* Brand hexes on purpose (not theme tokens): the wordmark sits
               on the light brand field in BOTH themes, and navy-900 flips
               near-white in dark mode — which made "Twin" invisible. */}
-          <span className="font-display text-[36px] font-bold leading-none tracking-tight sm:text-[44px]">
+          {/* rem (not px) so the wordmark scales WITH the rem-based mark under
+              browser font-size preferences: 2.25rem/2.75rem = 36/44px default. */}
+          <span className="font-display text-[2.25rem] font-bold leading-none tracking-tight sm:text-[2.75rem]">
             <span className="text-[#5D72DB]">Peri</span>
             <span className="text-[#25349B]">Twin</span>
           </span>
