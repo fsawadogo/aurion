@@ -8,6 +8,7 @@ once the base.py provider-interface refactor surfaces ``usage`` per call.
 
 from __future__ import annotations
 
+import uuid
 from datetime import datetime
 from typing import Optional
 
@@ -156,6 +157,77 @@ async def provider_usage(
         provider_type=provider_type,
         totals=TotalsResponse(**totals.__dict__),
         by_provider=[ProviderRollupResponse(**r.__dict__) for r in by_provider],
+    )
+
+
+# ── Per-session usage (exact per-call breakdown for ONE encounter) ───────────
+
+
+class SessionUsageRow(BaseModel):
+    provider_type: str
+    provider_name: str
+    model_name: str | None
+    operation: str
+    input_tokens: int | None
+    output_tokens: int | None
+    cost_usd: float | None
+    latency_ms: int
+    success: bool
+    fallback_used: bool
+    created_at: datetime
+
+
+class SessionUsageResponse(BaseModel):
+    session_id: str
+    call_count: int
+    total_input_tokens: int
+    total_output_tokens: int
+    total_cost_usd: float
+    rows: list[SessionUsageRow]
+
+
+@router.get(
+    "/providers/usage/session/{session_id}",
+    response_model=SessionUsageResponse,
+)
+async def provider_usage_for_session(
+    session_id: uuid.UUID,
+    user: CurrentUser = Depends(
+        require_role(UserRole.ADMIN, UserRole.COMPLIANCE_OFFICER)
+    ),
+    db: AsyncSession = Depends(get_db),
+    service: ProviderUsageService = Depends(get_provider_usage_service),
+) -> SessionUsageResponse:
+    """The exact per-call AI-provider token/cost breakdown for ONE session —
+    every model call (transcription, note-gen, critique, reconcile, vision),
+    oldest-first, with the summed session total. This is the accurate answer
+    to "what did this encounter consume", now that every call (incl. the
+    critique + reconcile passes) records a ``provider_usage`` row. ADMIN /
+    COMPLIANCE_OFFICER only.
+    """
+    rows = await service.by_session(db, session_id)
+    return SessionUsageResponse(
+        session_id=str(session_id),
+        call_count=len(rows),
+        total_input_tokens=sum(r.input_tokens or 0 for r in rows),
+        total_output_tokens=sum(r.output_tokens or 0 for r in rows),
+        total_cost_usd=round(sum(r.cost_usd or 0.0 for r in rows), 6),
+        rows=[
+            SessionUsageRow(
+                provider_type=r.provider_type,
+                provider_name=r.provider_name,
+                model_name=r.model_name,
+                operation=r.operation,
+                input_tokens=r.input_tokens,
+                output_tokens=r.output_tokens,
+                cost_usd=r.cost_usd,
+                latency_ms=r.latency_ms,
+                success=r.success,
+                fallback_used=r.fallback_used,
+                created_at=r.created_at,
+            )
+            for r in rows
+        ],
     )
 
 

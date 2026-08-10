@@ -279,7 +279,12 @@ async def run_stage2_vision(
         else None
     )
     captions = await reconcile_captions(
-        captions_filtered, note, system_prompt=reconcile_system_prompt
+        captions_filtered,
+        note,
+        system_prompt=reconcile_system_prompt,
+        # Record this (registry-bypassing) Anthropic call's tokens/cost.
+        db=db,
+        session_id=str(session_id),
     )
 
     # 6. Merge into a new Stage 2 note version. ``stats_trigger`` flows

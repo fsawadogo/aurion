@@ -23,8 +23,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
+import uuid
+from typing import Optional
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.types import Note, Transcript
 
@@ -115,11 +119,22 @@ def _build_critique_prompt(note: Note, transcript: Transcript) -> str:
     )
 
 
-async def critique_note(note: Note, transcript: Transcript) -> Note:
+async def critique_note(
+    note: Note,
+    transcript: Transcript,
+    *,
+    db: Optional[AsyncSession] = None,
+    session_id: Optional[str] = None,
+) -> Note:
     """Audit + apply conservative fixes to a Stage 1 note.
 
     Returns the same Note object, mutated in place. Best-effort: any
     failure preserves the original note unchanged.
+
+    ``db`` + ``session_id`` (when provided by the Stage-1 caller) let this
+    second Claude call record a ``provider_usage`` row so its tokens/cost are
+    counted in per-session consumption — it is otherwise invisible to
+    telemetry (it bypasses the instrumented registry path). PHI-free.
     """
     if not _ANTHROPIC_API_KEY:
         logger.info("critique: ANTHROPIC_API_KEY not set — skipping")
@@ -129,6 +144,7 @@ async def critique_note(note: Note, transcript: Transcript) -> Note:
 
     user_prompt = _build_critique_prompt(note, transcript)
 
+    _started = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -163,6 +179,25 @@ async def critique_note(note: Note, transcript: Transcript) -> Note:
             )
             response.raise_for_status()
             data = response.json()
+
+        # Telemetry: count this (registry-bypassing) second Claude call so
+        # per-session token/cost is complete. Best-effort — never blocks the
+        # note. usage = {"input_tokens": N, "output_tokens": M}.
+        if db is not None:
+            from app.modules.providers.usage_service import record_offline_call
+
+            usage = data.get("usage") or {}
+            await record_offline_call(
+                db,
+                provider_type="note_generation",
+                provider_name="anthropic",
+                model=_MODEL,
+                operation="critique_note",
+                input_tokens=int(usage.get("input_tokens", 0)),
+                output_tokens=int(usage.get("output_tokens", 0)),
+                latency_ms=int((time.monotonic() - _started) * 1000),
+                session_id=uuid.UUID(session_id) if session_id else None,
+            )
 
         payload: dict | None = None
         for block in data.get("content", []):

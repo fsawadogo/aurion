@@ -256,6 +256,21 @@ class ProviderUsageService:
             ),
         )
 
+    async def by_session(
+        self, db: AsyncSession, session_id: uuid.UUID
+    ) -> list[ProviderUsageModel]:
+        """Every provider call for one session, oldest-first — the exact
+        per-call token/cost breakdown backing the per-session usage endpoint.
+        """
+        rows = (
+            await db.execute(
+                select(ProviderUsageModel)
+                .where(ProviderUsageModel.session_id == session_id)
+                .order_by(ProviderUsageModel.created_at)
+            )
+        ).scalars().all()
+        return list(rows)
+
 
 _INSTANCE: ProviderUsageService | None = None
 
@@ -266,6 +281,63 @@ def get_provider_usage_service() -> ProviderUsageService:
     if _INSTANCE is None:
         _INSTANCE = ProviderUsageService()
     return _INSTANCE
+
+
+async def record_offline_call(
+    db: AsyncSession,
+    *,
+    provider_type: str,
+    provider_name: str,
+    model: str,
+    operation: str,
+    input_tokens: int,
+    output_tokens: int,
+    latency_ms: int,
+    session_id: uuid.UUID | None,
+    success: bool = True,
+) -> None:
+    """Record a ``provider_usage`` row for a model call made OUTSIDE the
+    provider registry (the critique + reconcile passes), so its tokens/cost are
+    counted in per-session consumption. Prices via the shared core rate sheet,
+    exactly like ``_record_provider_usage`` — but takes explicit token counts
+    rather than the registry's ContextVar (these callers don't set it).
+
+    Best-effort: a telemetry hiccup must never alter the calling pipeline.
+    """
+    # Local import avoids a module-load cycle (cost_rates is leaf; safe either
+    # way, but keep it lazy to match the rest of this module's discipline).
+    from app.core.cost_rates import (
+        USD_MICROS_PER_DOLLAR,
+        estimate_cost_usd_micros,
+    )
+
+    cost_usd: float | None = None
+    if success:
+        cost_usd = (
+            estimate_cost_usd_micros(
+                provider_name, model, input_tokens, output_tokens
+            )
+            / USD_MICROS_PER_DOLLAR
+        )
+    try:
+        await get_provider_usage_service().record(
+            db,
+            provider_type=provider_type,
+            provider_name=provider_name,
+            operation=operation,
+            latency_ms=latency_ms,
+            success=success,
+            model_name=model,
+            session_id=session_id,
+            input_tokens=input_tokens,
+            output_tokens=output_tokens,
+            cost_usd=cost_usd,
+        )
+    except Exception:  # noqa: BLE001 — telemetry is best-effort
+        logger.warning(
+            "record_offline_call failed (%s/%s)", provider_type, operation,
+            exc_info=True,
+        )
 
 
 def _coerce_session_id(value: str | uuid.UUID | None) -> uuid.UUID | None:

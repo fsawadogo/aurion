@@ -308,7 +308,7 @@ async def test_silent_exam_clips_only_runs_stage2() -> None:
         patch.object(vision_api, "retrieve_clips_for_triggers", mock_retrieve_clips),
         patch.object(vision_api, "retrieve_all_masked_frames", AsyncMock(return_value=[])),
         patch.object(vision_api, "caption_visual_evidence", mock_caption),
-        patch.object(vision_api, "reconcile_captions", AsyncMock(side_effect=lambda caps, note, system_prompt=None: caps)),
+        patch.object(vision_api, "reconcile_captions", AsyncMock(side_effect=lambda caps, note, system_prompt=None, **_kw: caps)),
         patch.object(vision_api, "create_note_version", AsyncMock()),
         patch.object(vision_api, "record_clip_metrics", AsyncMock()),
         patch.object(vision_api, "write_audit", mock_write_audit),
