@@ -22,9 +22,12 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
+import uuid
 from typing import Optional
 
 import httpx
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.types import FrameCaption, Note
 
@@ -116,6 +119,9 @@ async def reconcile_captions(
     captions: list[FrameCaption],
     note: Note,
     system_prompt: Optional[str] = None,
+    *,
+    db: Optional[AsyncSession] = None,
+    session_id: Optional[str] = None,
 ) -> list[FrameCaption]:
     """Reconcile visual captions against the Stage 1 note via a single
     LLM call. Returns the same captions with ``integration_status`` and
@@ -147,6 +153,7 @@ async def reconcile_captions(
     # AI-PROMPTS-B — assembled prompt or base constant.
     effective_system = system_prompt or RECONCILE_SYSTEM_PROMPT
 
+    _started = time.monotonic()
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
             response = await client.post(
@@ -181,6 +188,24 @@ async def reconcile_captions(
             )
             response.raise_for_status()
             data = response.json()
+
+        # Telemetry: count this (registry-bypassing) Stage-2 Claude call so
+        # per-session token/cost is complete. Best-effort — never blocks Stage 2.
+        if db is not None:
+            from app.modules.providers.usage_service import record_offline_call
+
+            usage = data.get("usage") or {}
+            await record_offline_call(
+                db,
+                provider_type="note_generation",
+                provider_name="anthropic",
+                model=_MODEL,
+                operation="reconcile_captions",
+                input_tokens=int(usage.get("input_tokens", 0)),
+                output_tokens=int(usage.get("output_tokens", 0)),
+                latency_ms=int((time.monotonic() - _started) * 1000),
+                session_id=uuid.UUID(session_id) if session_id else None,
+            )
 
         decisions_payload: dict | None = None
         for block in data.get("content", []):
