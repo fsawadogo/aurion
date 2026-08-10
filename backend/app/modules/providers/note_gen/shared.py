@@ -359,10 +359,23 @@ def parse_note_response(
     raw = json.loads(text)
     sections: list[NoteSection] = []
 
-    for raw_section in raw.get("sections", []):
+    raw_sections = raw.get("sections", []) if isinstance(raw, dict) else []
+    for raw_section in raw_sections:
+        # The model occasionally emits a section — or a claim — as a bare
+        # STRING instead of an object. Skip the malformed entry rather than
+        # crash the entire Stage-1 note (`'str' object has no attribute 'get'`):
+        # the template backfill below still guarantees every required section
+        # is present (as not_captured), so a dropped malformed section is
+        # recovered honestly instead of failing the physician's whole note.
+        if not isinstance(raw_section, dict):
+            logger.warning(
+                "Skipping non-dict section in note response (%s)",
+                type(raw_section).__name__,
+            )
+            continue
         claims = [
             NoteClaim(
-                id=c.get("id", f"claim_{raw_section['id']}_{i}"),
+                id=c.get("id", f"claim_{raw_section.get('id', 'section')}_{i}"),
                 text=c.get("text", ""),
                 source_type=c.get("source_type", "transcript"),
                 source_id=c.get("source_id", ""),
@@ -380,6 +393,7 @@ def parse_note_response(
                 ],
             )
             for i, c in enumerate(raw_section.get("claims", []))
+            if isinstance(c, dict)  # skip a claim the model returned as a string
         ]
         sections.append(
             NoteSection(
