@@ -73,3 +73,46 @@ def test_populated_required_is_nonzero():
 def test_empty_note_event_allowlist():
     allowed = ALLOWED_AUDIT_KWARGS[AuditEventType.STAGE1_EMPTY_NOTE]
     assert allowed == frozenset({"segment_count", "transcript_char_count", "completeness"})
+
+
+# ── Malformed model output must NOT crash the whole note ─────────────────────
+# Regression: the model occasionally emits a SECTION or a CLAIM as a bare
+# string instead of an object; `.get()` on it raised
+# `'str' object has no attribute 'get'` and failed the entire Stage-1 note
+# (500 → STAGE1_FAILED). parse_note_response now skips the malformed entry and
+# the template backfill recovers the section as not_captured.
+def test_section_returned_as_string_is_skipped_not_crash():
+    content = """{"sections": [
+        "chief_complaint",
+        {"id": "physical_exam", "title": "PE", "status": "populated",
+         "claims": [{"id": "c1", "text": "Knee moves well.", "source_type": "transcript",
+                     "source_id": "seg_001", "source_quote": "knee"}]}
+    ]}"""
+    note = parse_note_response(content, _transcript(), _template(), stage=1, provider_name="anthropic")
+    ids = {s.id for s in note.sections}
+    assert {"chief_complaint", "physical_exam", "plan"}.issubset(ids)
+    pe = next(s for s in note.sections if s.id == "physical_exam")
+    assert pe.status == "populated" and len(pe.claims) == 1
+
+
+def test_claim_returned_as_string_is_skipped_not_crash():
+    content = """{"sections": [
+        {"id": "physical_exam", "title": "PE", "status": "populated",
+         "claims": [
+            "just a bare string claim",
+            {"id": "c1", "text": "Tender medial joint line.", "source_type": "transcript",
+             "source_id": "seg_001", "source_quote": "tender"}
+         ]}
+    ]}"""
+    note = parse_note_response(content, _transcript(), _template(), stage=1, provider_name="anthropic")
+    pe = next(s for s in note.sections if s.id == "physical_exam")
+    # the bare-string claim is dropped; the valid one survives
+    assert len(pe.claims) == 1
+    assert pe.claims[0].text == "Tender medial joint line."
+
+
+def test_non_dict_root_yields_empty_not_crash():
+    # Model returned a JSON array instead of an object — must not crash.
+    note = parse_note_response('["oops"]', _transcript(), _template(), stage=1, provider_name="anthropic")
+    assert note.completeness_score == 0.0
+    assert {"chief_complaint", "physical_exam", "plan"}.issubset({s.id for s in note.sections})
