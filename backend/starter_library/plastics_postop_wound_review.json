@@ -1,0 +1,95 @@
+{
+  "key": "plastics_postop_wound_review",
+  "display_name": "Plastic Surgery — Post-Op / Wound Review",
+  "version": "1.0",
+  "detail_level": "standard",
+  "sections": [
+    {
+      "id": "interval_history",
+      "title": "Interval History / Évolution depuis la dernière visite",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "What has happened since the last visit, as stated: pain (better, worse, unchanged, with any score given), drainage or odour noticed, fever or systemic symptoms reported, dressing changes performed and by whom, adherence to wound care and activity restrictions, and antibiotics or other medications started or stopped. Record only what the patient or physician states."
+    },
+    {
+      "id": "prior_procedure",
+      "title": "Prior Procedure / Intervention antérieure",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "The prior operation as referenced during the visit: procedure name, site and laterality, and date or interval since. Include the flap or graft type when stated. Capture only as stated in this encounter; do not reconstruct operative detail. Leave not_captured if no prior procedure is discussed."
+    },
+    {
+      "id": "wound_assessment",
+      "title": "Wound / Flap Assessment — Évaluation de la plaie",
+      "required": true,
+      "visual_trigger_keywords": [
+        "wound",
+        "incision",
+        "flap",
+        "graft",
+        "wound edges",
+        "approximation",
+        "granulation",
+        "epithelialization",
+        "dimensions",
+        "measuring",
+        "depth",
+        "drainage",
+        "exudate",
+        "erythema",
+        "induration",
+        "perfusion",
+        "capillary refill",
+        "congestion",
+        "pallor",
+        "undermining",
+        "tunneling",
+        "eschar",
+        "slough",
+        "necrosis",
+        "maceration",
+        "dehiscence",
+        "sutures",
+        "staples",
+        "drain",
+        "looking at",
+        "right here",
+        "this area"
+      ],
+      "description": "Each finding as stated: location and laterality; dimensions as length × width × depth in cm (with undermining or tunnelling depth and clock position when given); wound-bed tissue types with proportions; exudate amount and character; wound edges and approximation; periwound skin; flap or graft viability (colour match, capillary refill in seconds, warmth, turgor, congestion or pallor); drain output; suture or staple status. Describe only — never state a trajectory the physician did not voice.",
+      "measurement_output_expected": true
+    },
+    {
+      "id": "donor_site",
+      "title": "Donor Site / Site donneur",
+      "required": false,
+      "visual_trigger_keywords": [
+        "donor site",
+        "donor",
+        "harvest site",
+        "split thickness",
+        "graft site",
+        "dressing",
+        "healing",
+        "looking at",
+        "this area"
+      ],
+      "description": "Donor-site findings as stated: location and laterality, dimensions in cm when measured, epithelialization, exudate, dressing status, and any pain or complication the physician describes. Describe only what is stated. Leave not_captured if no donor site is examined.",
+      "measurement_output_expected": true
+    },
+    {
+      "id": "assessment",
+      "title": "Progress / Assessment — Évolution et évaluation",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "The physician's stated view of healing progress, one claim per problem and attributed to the physician (e.g. 'Provider assessed…'). Include whether progress is as expected and any complication named (infection, dehiscence, partial flap loss). Record only conclusions actually voiced. Where grounded synthesis is enabled, cite the interval-history or wound-assessment source(s) each statement rests on."
+    },
+    {
+      "id": "plan",
+      "title": "Plan / Plan de traitement",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "The plan as stated, one claim per item: dressing regimen and frequency; debridement or suture/staple/drain removal performed or scheduled; antibiotics or other medication changes; investigations or cultures ordered; referrals (wound care, physiotherapy, nutrition); activity and bathing restrictions; scar-management advice; return precautions; and follow-up interval or discharge from care."
+    }
+  ]
+}

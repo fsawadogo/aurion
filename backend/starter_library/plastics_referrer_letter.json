@@ -1,0 +1,89 @@
+{
+  "key": "plastics_referrer_letter",
+  "display_name": "Plastic Surgery — Letter to Referring Physician",
+  "version": "1.0",
+  "detail_level": "standard",
+  "sections": [
+    {
+      "id": "reason_for_referral",
+      "title": "Reason for Referral / Motif de la référence",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Why the patient was referred and by whom, as stated in the encounter: the presenting concern with site and laterality, duration, and the referring physician's stated question when mentioned. One or two claims. Record only what was said — never restate the referral reason as a diagnosis."
+    },
+    {
+      "id": "history_summary",
+      "title": "History / Résumé de l'histoire",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Condensed history as stated during the visit: onset and mechanism, course of the wound or concern, prior wound care and reconstruction attempted with their result, and the relevant medical, surgical, and medication background the patient reported — including healing-relevant factors (diabetes, vascular disease, immunosuppression, radiation, smoking) when stated. One claim per element, written for a colleague."
+    },
+    {
+      "id": "examination_findings",
+      "title": "Findings on Examination / Constatations à l'examen",
+      "required": true,
+      "visual_trigger_keywords": [
+        "wound",
+        "incision",
+        "flap",
+        "graft",
+        "donor site",
+        "dimensions",
+        "measuring",
+        "granulation",
+        "exudate",
+        "erythema",
+        "perfusion",
+        "capillary refill",
+        "dehiscence",
+        "necrosis",
+        "looking at",
+        "this area"
+      ],
+      "description": "The positive and relevant negative findings from this visit, with location and laterality: wound dimensions in cm, wound-bed tissue and proportions, exudate, wound edges, periwound skin, flap or graft viability, and any stated signs of infection. Record only what the physician stated, never inferring aetiology. One claim per finding.",
+      "measurement_output_expected": true
+    },
+    {
+      "id": "investigations_reviewed",
+      "title": "Investigations Reviewed / Examens révisés",
+      "required": false,
+      "visual_trigger_keywords": [
+        "X-ray",
+        "MRI",
+        "CT",
+        "ultrasound",
+        "Doppler",
+        "swab",
+        "culture",
+        "bloodwork",
+        "lab",
+        "looking at",
+        "pulling up",
+        "on the screen",
+        "report"
+      ],
+      "description": "Imaging, swab, culture, and laboratory results reviewed during the visit — test, date when stated, laterality, and the findings exactly as the physician described them on screen. One claim per study or finding. Leave not_captured if nothing was reviewed."
+    },
+    {
+      "id": "impression",
+      "title": "Impression / Impression clinique",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "The physician's stated impression, one claim per problem and explicitly attributed to the physician. Include contributing factors and any degree of certainty the physician voiced. Record only conclusions actually spoken — never supply an impression the physician did not state. Where grounded synthesis is enabled, cite the examination, investigation, or history source(s) each statement rests on."
+    },
+    {
+      "id": "recommendations",
+      "title": "Recommendations / Recommandations",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Management recommended, as stated: dressing regimen and frequency, debridement or procedures performed or planned, antibiotics or other medications, reconstructive or surgical options offered with the risks and expected recovery counselled, smoking or nutrition counselling, and options declined or deferred by the patient when stated. One claim per recommendation."
+    },
+    {
+      "id": "actions_for_referrer",
+      "title": "Actions for the Referring Physician / Suivi demandé",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "What the referring physician is being asked to do, as stated: dressing supplies or community nursing to arrange, prescriptions or monitoring to continue, red flags warranting earlier re-referral, and who is responsible for the next step. Close with the follow-up interval in this clinic or a statement that the patient has been discharged back to the referrer, exactly as stated."
+    }
+  ]
+}

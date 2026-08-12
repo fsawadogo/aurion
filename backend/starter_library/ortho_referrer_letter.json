@@ -1,0 +1,88 @@
+{
+  "key": "ortho_referrer_letter",
+  "display_name": "Orthopedics — Letter to Referring Physician",
+  "version": "1.0",
+  "detail_level": "standard",
+  "sections": [
+    {
+      "id": "reason_for_referral",
+      "title": "Reason for Referral / Motif de la référence",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Why the patient was referred and by whom, as stated in the encounter: the presenting problem with site and laterality, duration, and the referring physician's stated question when mentioned. One or two claims. Record only what was said — never restate the referral reason as a diagnosis."
+    },
+    {
+      "id": "history_summary",
+      "title": "History / Résumé de l'histoire",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Condensed history as stated during the visit: onset and course of the problem, functional impact, treatments already tried and their result, and the relevant medical, surgical, and medication background the patient reported. Patient- and physician-stated information only — one claim per distinct element, written for a colleague rather than as a verbatim transcript."
+    },
+    {
+      "id": "examination_findings",
+      "title": "Findings on Examination / Constatations à l'examen",
+      "required": true,
+      "visual_trigger_keywords": [
+        "range of motion",
+        "ROM",
+        "flexion",
+        "extension",
+        "rotation",
+        "palpation",
+        "tenderness",
+        "strength",
+        "special test",
+        "gait",
+        "instability",
+        "goniometer",
+        "looking here",
+        "you can see"
+      ],
+      "description": "The positive and relevant negative findings from this visit's examination, with laterality and the structure or test name: inspection, palpation, range of motion in degrees, strength on the 0-5 MRC scale when graded, named special tests with result AND side, and neurovascular status. Record only what the physician stated. One claim per finding.",
+      "measurement_output_expected": true
+    },
+    {
+      "id": "investigations_reviewed",
+      "title": "Investigations Reviewed / Examens révisés",
+      "required": false,
+      "visual_trigger_keywords": [
+        "X-ray",
+        "x-ray",
+        "radiograph",
+        "MRI",
+        "CT",
+        "ultrasound",
+        "bloodwork",
+        "lab",
+        "looking at",
+        "pulling up",
+        "on the screen",
+        "AP view",
+        "lateral view",
+        "report"
+      ],
+      "description": "Imaging and laboratory results reviewed during the visit — modality or test, date when stated, laterality, and the findings exactly as the physician described them on screen. One claim per study or finding. Leave not_captured if nothing was reviewed."
+    },
+    {
+      "id": "impression",
+      "title": "Impression / Impression clinique",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "The physician's stated impression, one claim per problem and explicitly attributed to the physician. Include any differential or degree of certainty the physician voiced. Record only conclusions actually spoken — never supply an impression the physician did not state. Where grounded synthesis is enabled, cite the examination, investigation, or history source(s) each statement rests on."
+    },
+    {
+      "id": "recommendations",
+      "title": "Recommendations / Recommandations",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "Management recommended, as stated: investigations ordered, treatments started or adjusted, injections or surgery offered with the risks and expectations counselled, physiotherapy or activity guidance, and options declined or deferred by the patient when stated. One claim per recommendation."
+    },
+    {
+      "id": "actions_for_referrer",
+      "title": "Actions for the Referring Physician / Suivi demandé",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "What the referring physician is being asked to do, as stated: tests to arrange, prescriptions or monitoring to continue, red flags warranting earlier re-referral, and who is responsible for the next step. Close with the follow-up interval in this clinic or a statement that the patient has been discharged back to the referrer, exactly as stated."
+    }
+  ]
+}
