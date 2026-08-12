@@ -4,29 +4,48 @@
  * /portal/admin/grounded-lab — Grounded Lab (descriptive vs grounded).
  *
  * ADMIN / EVAL_TEAM surface to VALIDATE grounded visual findings before they
- * ride live patient notes. Pick a past session whose masked clip is still in
- * S3, replay it through the vision layer twice — strict Descriptive vs Grounded
- * — and read the two finding sets side by side, each still cited to its frame.
+ * ride live patient notes. Two ways in:
+ *   • Pick a past session whose masked clip is still in S3, OR
+ *   • Upload a video right here — it's ingested through the same admin
+ *     video-import pipeline (masking + transcription), then the comparison
+ *     runs on the resulting session automatically.
+ * Either way the clip is replayed through the vision layer twice — strict
+ * Descriptive vs Grounded — and the two finding sets read side by side, each
+ * still cited to its frame.
  *
- * READ-ONLY: the backend replay never writes a note version or mutates the
- * chart. The page is intentionally NOT gated on
+ * READ-ONLY comparison: the backend replay never writes a note version or
+ * mutates the chart. The page is intentionally NOT gated on
  * `grounded_visual_findings_enabled` — it always runs both modes, so it works
  * whether the live flag is on or off (validate before flipping, re-validate
- * after).
+ * after). The UPLOAD path is gated on `video_import_enabled` (the admin
+ * video-import endpoints 404 while that feature is dark), so it degrades to a
+ * hint when import is off; picking an existing session always works.
  */
 
-import { FlaskConical, Play, Quote, TriangleAlert } from "lucide-react";
+import {
+  FlaskConical,
+  Film,
+  Play,
+  Quote,
+  ShieldCheck,
+  TriangleAlert,
+  UploadCloud,
+} from "lucide-react";
 import {
   ApiError,
+  createAdminVideoImport,
+  getAdminVideoImportStatus,
   getFusionCompareRun,
   getGroundedLabRun,
   getGroundedLabSessions,
   getModalityCompareRun,
   humanizeError,
+  processAdminVideoImport,
   runFusionCompare,
   runGroundedLab,
   runModalityCompare,
 } from "@/lib/api";
+import { getPortalFeatureFlags } from "@/lib/portal-api";
 import type {
   FusionCompareResult,
   FusionNote,
@@ -55,6 +74,49 @@ import PageHeader from "@/components/portal/PageHeader";
 
 const INPUT_CLS =
   "w-full rounded-aurion-md border border-hairline bg-white px-3 py-2 text-aurion-callout text-navy-800 focus:outline-none focus:ring-2 focus:ring-gold-300/40";
+
+// Upload constraints — mirror the video-import surface so a clip accepted here
+// is accepted by the backend presign.
+const MAX_VIDEO_BYTES = 2 * 1024 * 1024 * 1024; // 2 GB
+const ACCEPTED_VIDEO = ["video/mp4", "video/quicktime", "video/webm"];
+const UPLOAD_SPECIALTIES = [
+  "orthopedic_surgery",
+  "plastic_surgery",
+  "musculoskeletal",
+  "emergency_medicine",
+  "general",
+];
+
+function humanBytes(n: number): string {
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+/** Raw S3 PUT with upload progress. No Aurion bearer — the presign is the auth. */
+function putWithProgress(
+  url: string,
+  file: File,
+  onProgress: (pct: number) => void,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader(
+      "Content-Type",
+      file.type || "application/octet-stream",
+    );
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () =>
+      xhr.status >= 200 && xhr.status < 300
+        ? resolve()
+        : reject(new Error(`upload_failed_${xhr.status}`));
+    xhr.onerror = () => reject(new Error("upload_network_error"));
+    xhr.send(file);
+  });
+}
 
 function confidenceVariant(
   c: string,
@@ -167,13 +229,18 @@ function FindingCell({
 
 export default function GroundedLabPage() {
   const t = useTranslations("AdminGroundedLab");
+  const tSpec = useTranslations("Specialties");
   const [sessions, setSessions] = useState<GroundedLabSessionItem[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Three comparison modes share the session picker: "grounded" (descriptive
-  // vs grounded captions), "fusion" (Fusion A vs B notes), and "modality"
+  // Input source: an existing captured session, or a clip uploaded right here.
+  const [source, setSource] = useState<"session" | "upload">("session");
+  const [videoImportEnabled, setVideoImportEnabled] = useState(false);
+
+  // Three comparison modes share the input: "grounded" (descriptive vs
+  // grounded captions), "fusion" (Fusion A vs B notes), and "modality"
   // (audio-only vs visual-only vs merged notes).
   const [mode, setMode] = useState<"grounded" | "fusion" | "modality">(
     "grounded",
@@ -186,6 +253,17 @@ export default function GroundedLabPage() {
   );
   const [modalityResult, setModalityResult] =
     useState<ModalityCompareResult | null>(null);
+
+  // Upload sub-flow state. `uploadPhase` drives the compact stepper; a prepared
+  // clip hands its session_id straight into the comparison run.
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [uploadSpecialty, setUploadSpecialty] = useState("general");
+  const [uploadConsent, setUploadConsent] = useState(false);
+  const [uploadPhase, setUploadPhase] = useState<
+    "idle" | "uploading" | "processing"
+  >("idle");
+  const [uploadPct, setUploadPct] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -203,6 +281,14 @@ export default function GroundedLabPage() {
     } finally {
       setLoading(false);
     }
+    // Gate the upload option on the video-import feature. Best-effort: a fetch
+    // failure just leaves the upload tab showing its "import is off" hint.
+    try {
+      const flags = await getPortalFeatureFlags();
+      setVideoImportEnabled(!!flags.video_import_enabled);
+    } catch {
+      setVideoImportEnabled(false);
+    }
   }, [t]);
 
   useEffect(() => {
@@ -216,62 +302,164 @@ export default function GroundedLabPage() {
     runSeqRef.current += 1;
   }, []);
 
-  const onRun = useCallback(async () => {
-    if (!selected) return;
-    const seq = (runSeqRef.current += 1);
-    const isCurrent = () => runSeqRef.current === seq;
-    setRunning(true);
-    setRunError(null);
-    setResult(null);
-    setFusionResult(null);
-    setModalityResult(null);
+  const onRun = useCallback(
+    async (overrideSessionId?: string) => {
+      const sid = overrideSessionId ?? selected;
+      if (!sid) return;
+      const seq = (runSeqRef.current += 1);
+      const isCurrent = () => runSeqRef.current === seq;
+      setRunning(true);
+      setRunError(null);
+      setResult(null);
+      setFusionResult(null);
+      setModalityResult(null);
+      try {
+        const started =
+          mode === "fusion"
+            ? await runFusionCompare(sid)
+            : mode === "modality"
+              ? await runModalityCompare(sid)
+              : await runGroundedLab(sid);
+        // Poll the job until it completes or fails.
+        for (;;) {
+          if (!isCurrent()) return;
+          const status =
+            mode === "fusion"
+              ? await getFusionCompareRun(started.job_id)
+              : mode === "modality"
+                ? await getModalityCompareRun(started.job_id)
+                : await getGroundedLabRun(started.job_id);
+          if (!isCurrent()) return;
+          if (status.status === "completed" && status.result) {
+            if (mode === "fusion") {
+              setFusionResult(status.result as FusionCompareResult);
+            } else if (mode === "modality") {
+              setModalityResult(status.result as ModalityCompareResult);
+            } else {
+              setResult(status.result as GroundedLabRunResponse);
+            }
+            break;
+          }
+          if (status.status === "failed") {
+            setRunError(
+              status.error === "no_media" ? t("noMedia") : t("runError"),
+            );
+            break;
+          }
+          await sleep(POLL_INTERVAL_MS);
+        }
+      } catch (e) {
+        if (!isCurrent()) return;
+        // 409 = the session's media was purged / never captured.
+        if (e instanceof ApiError && e.status === 409) {
+          setRunError(t("noMedia"));
+        } else {
+          setRunError(humanizeError(e, t("runError")));
+        }
+      } finally {
+        if (isCurrent()) setRunning(false);
+      }
+    },
+    [selected, mode, t],
+  );
+
+  // Upload token: guards the ingest poll loop the same way runSeqRef guards the
+  // comparison poll, so a superseded upload never flips state on a later one.
+  const uploadSeqRef = useRef(0);
+  useEffect(() => () => {
+    uploadSeqRef.current += 1;
+  }, []);
+
+  const pickUploadFile = useCallback(
+    (f: File | null) => {
+      setUploadError(null);
+      if (!f) return;
+      if (!ACCEPTED_VIDEO.includes(f.type)) {
+        setUploadError(t("uploadBadFormat"));
+        return;
+      }
+      if (f.size === 0) {
+        setUploadError(t("uploadEmpty"));
+        return;
+      }
+      if (f.size > MAX_VIDEO_BYTES) {
+        setUploadError(t("uploadTooLarge"));
+        return;
+      }
+      setUploadFile(f);
+    },
+    [t],
+  );
+
+  // Upload a clip → ingest it through the admin video-import pipeline (masking
+  // + transcription) → run the selected comparison on the resulting session.
+  const onUploadAndCompare = useCallback(async () => {
+    if (!uploadFile || !uploadConsent) return;
+    const seq = (uploadSeqRef.current += 1);
+    const isCurrent = () => uploadSeqRef.current === seq;
+    setUploadError(null);
+    setUploadPct(0);
+    setUploadPhase("uploading");
     try {
-      const started =
-        mode === "fusion"
-          ? await runFusionCompare(selected)
-          : mode === "modality"
-            ? await runModalityCompare(selected)
-            : await runGroundedLab(selected);
-      // Poll the job until it completes or fails.
+      const created = await createAdminVideoImport({
+        specialty: uploadSpecialty,
+        encounter_type: "doctor_patient",
+        output_language: "en",
+        consent_attested: true,
+        consent_method: "attested",
+      });
+      await putWithProgress(created.upload_url, uploadFile, (pct) => {
+        if (isCurrent()) setUploadPct(pct);
+      });
+      if (!isCurrent()) return;
+      setUploadPhase("processing");
+      await processAdminVideoImport(created.session_id);
+      // Poll the import until the session has masked media + a transcript.
       for (;;) {
         if (!isCurrent()) return;
-        const status =
-          mode === "fusion"
-            ? await getFusionCompareRun(started.job_id)
-            : mode === "modality"
-              ? await getModalityCompareRun(started.job_id)
-              : await getGroundedLabRun(started.job_id);
+        const s = await getAdminVideoImportStatus(created.session_id);
         if (!isCurrent()) return;
-        if (status.status === "completed" && status.result) {
-          if (mode === "fusion") {
-            setFusionResult(status.result as FusionCompareResult);
-          } else if (mode === "modality") {
-            setModalityResult(status.result as ModalityCompareResult);
-          } else {
-            setResult(status.result as GroundedLabRunResponse);
-          }
-          break;
+        if (s.status === "failed") {
+          setUploadError(s.error_message || t("uploadError"));
+          setUploadPhase("idle");
+          return;
         }
-        if (status.status === "failed") {
-          setRunError(
-            status.error === "no_media" ? t("noMedia") : t("runError"),
-          );
+        if (
+          s.status === "completed" ||
+          s.session_state === "AWAITING_REVIEW"
+        ) {
           break;
         }
         await sleep(POLL_INTERVAL_MS);
       }
+      if (!isCurrent()) return;
+      // Surface the prepared clip in the session picker too, so switching back
+      // to "Choose a session" shows it, and select it.
+      const item: GroundedLabSessionItem = {
+        session_id: created.session_id,
+        physician_name: t("uploadedClipLabel"),
+        started_at: new Date().toISOString(),
+        specialty: uploadSpecialty,
+        visit_type: null,
+        state: "AWAITING_REVIEW",
+        frame_count: 1,
+        clip_count: 1,
+      };
+      setSessions((prev) => [
+        item,
+        ...prev.filter((p) => p.session_id !== created.session_id),
+      ]);
+      setSelected(created.session_id);
+      setUploadPhase("idle");
+      setUploadPct(0);
+      // Kick the comparison straight away on the freshly-prepared clip.
+      void onRun(created.session_id);
     } catch (e) {
       if (!isCurrent()) return;
-      // 409 = the session's media was purged / never captured.
-      if (e instanceof ApiError && e.status === 409) {
-        setRunError(t("noMedia"));
-      } else {
-        setRunError(humanizeError(e, t("runError")));
-      }
-    } finally {
-      if (isCurrent()) setRunning(false);
+      setUploadError(humanizeError(e, t("uploadError")));
+      setUploadPhase("idle");
     }
-  }, [selected, mode, t]);
+  }, [uploadFile, uploadConsent, uploadSpecialty, onRun, t]);
 
   function sessionLabel(s: GroundedLabSessionItem): string {
     const when = s.started_at ? new Date(s.started_at).toLocaleString() : "";
@@ -279,6 +467,8 @@ export default function GroundedLabPage() {
     const spec = s.specialty ? ` · ${s.specialty}` : "";
     return `${s.physician_name} — ${when}${spec} (${media})`;
   }
+
+  const uploadBusy = uploadPhase !== "idle";
 
   return (
     <div className="aurion-page-padded" data-testid="grounded-lab-page">
@@ -299,7 +489,7 @@ export default function GroundedLabPage() {
       )}
 
       <Card className="mb-5" title={t("pickerTitle")}>
-        {/* Mode toggle: which comparison to run on the picked session. */}
+        {/* Mode toggle: which comparison to run on the chosen input. */}
         <div
           className="mb-4 inline-flex rounded-aurion-md border border-hairline p-0.5"
           role="tablist"
@@ -334,45 +524,206 @@ export default function GroundedLabPage() {
               ? t("modeFusionHint")
               : t("modeModalityHint")}
         </p>
-        {loading ? (
-          <LoadingSkeleton lines={3} />
-        ) : sessions.length === 0 ? (
+
+        {/* Source toggle: an existing session, or upload a clip right here. */}
+        <div
+          className="mb-4 inline-flex rounded-aurion-md border border-hairline p-0.5"
+          role="tablist"
+          data-testid="grounded-lab-source"
+        >
+          {(["session", "upload"] as const).map((s) => (
+            <button
+              key={s}
+              type="button"
+              role="tab"
+              aria-selected={source === s}
+              onClick={() => setSource(s)}
+              disabled={uploadBusy}
+              className={`rounded-[10px] px-3 py-1.5 text-aurion-micro font-medium transition-colors disabled:opacity-50 ${
+                source === s
+                  ? "bg-navy-800 text-white"
+                  : "text-navy-500 hover:text-navy-700"
+              }`}
+              data-testid={`grounded-lab-source-${s}`}
+            >
+              {s === "session" ? t("sourceSession") : t("sourceUpload")}
+            </button>
+          ))}
+        </div>
+
+        {source === "session" ? (
+          loading ? (
+            <LoadingSkeleton lines={3} />
+          ) : sessions.length === 0 ? (
+            <EmptyPanelState
+              icon={<FlaskConical className="h-5 w-5" aria-hidden="true" />}
+              title={t("noSessionsTitle")}
+              hint={t("noSessionsBody")}
+            />
+          ) : (
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+              <label className="flex-1">
+                <span className="mb-1 block text-aurion-micro font-medium text-navy-500">
+                  {t("sessionLabel")}
+                </span>
+                <select
+                  className={INPUT_CLS}
+                  value={selected}
+                  onChange={(e) => setSelected(e.target.value)}
+                  data-testid="grounded-lab-session-select"
+                >
+                  {sessions.map((s) => (
+                    <option key={s.session_id} value={s.session_id}>
+                      {sessionLabel(s)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <Button
+                onClick={() => void onRun()}
+                loading={running}
+                disabled={!selected || running}
+                data-testid="grounded-lab-run-button"
+              >
+                <Play className="mr-1.5 h-4 w-4" aria-hidden="true" />
+                {t("runButton")}
+              </Button>
+            </div>
+          )
+        ) : !videoImportEnabled ? (
           <EmptyPanelState
-            icon={<FlaskConical className="h-5 w-5" aria-hidden="true" />}
-            title={t("noSessionsTitle")}
-            hint={t("noSessionsBody")}
+            icon={<UploadCloud className="h-5 w-5" aria-hidden="true" />}
+            title={t("uploadDisabledTitle")}
+            hint={t("uploadDisabledBody")}
           />
         ) : (
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
-            <label className="flex-1">
+          <div className="space-y-4" data-testid="grounded-lab-upload">
+            <p className="text-aurion-micro text-navy-400">{t("sourceHint")}</p>
+
+            <label
+              className={
+                "flex cursor-pointer flex-col items-center justify-center rounded-aurion-md border-2 border-dashed border-hairline px-6 py-8 text-center transition-colors hover:border-navy-300 " +
+                (uploadBusy ? "pointer-events-none opacity-60" : "")
+              }
+            >
+              <UploadCloud
+                className="mb-2 h-7 w-7 text-navy-300"
+                aria-hidden="true"
+              />
+              {uploadFile ? (
+                <span className="text-aurion-callout font-medium text-navy-700">
+                  <Film className="mr-1 inline h-4 w-4" aria-hidden="true" />
+                  {uploadFile.name} · {humanBytes(uploadFile.size)}
+                </span>
+              ) : (
+                <>
+                  <span className="text-aurion-callout font-medium text-navy-700">
+                    {t("uploadDropzone")}
+                  </span>
+                  <span className="mt-1 text-aurion-micro text-navy-400">
+                    {t("uploadAccepted")}
+                  </span>
+                </>
+              )}
+              <input
+                type="file"
+                accept="video/mp4,video/quicktime,video/webm"
+                className="hidden"
+                disabled={uploadBusy}
+                data-testid="grounded-lab-upload-input"
+                onChange={(e) => {
+                  pickUploadFile(e.target.files?.[0] ?? null);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+
+            <label className="block sm:max-w-xs">
               <span className="mb-1 block text-aurion-micro font-medium text-navy-500">
-                {t("sessionLabel")}
+                {t("uploadSpecialty")}
               </span>
               <select
                 className={INPUT_CLS}
-                value={selected}
-                onChange={(e) => setSelected(e.target.value)}
-                data-testid="grounded-lab-session-select"
+                value={uploadSpecialty}
+                disabled={uploadBusy}
+                onChange={(e) => setUploadSpecialty(e.target.value)}
+                data-testid="grounded-lab-upload-specialty"
               >
-                {sessions.map((s) => (
-                  <option key={s.session_id} value={s.session_id}>
-                    {sessionLabel(s)}
+                {UPLOAD_SPECIALTIES.map((s) => (
+                  <option key={s} value={s}>
+                    {tSpec(s)}
                   </option>
                 ))}
               </select>
             </label>
+
+            <label className="flex items-start gap-2 rounded-aurion-md border border-amber-200 bg-amber-50 px-4 py-3 text-aurion-callout text-amber-800">
+              <ShieldCheck
+                className="mt-0.5 h-4 w-4 flex-shrink-0 text-amber-600"
+                aria-hidden="true"
+              />
+              <span className="flex cursor-pointer items-start gap-2">
+                <input
+                  type="checkbox"
+                  className="mt-0.5"
+                  checked={uploadConsent}
+                  disabled={uploadBusy}
+                  onChange={(e) => setUploadConsent(e.target.checked)}
+                  data-testid="grounded-lab-upload-consent"
+                />
+                <span>{t("uploadConsentLabel")}</span>
+              </span>
+            </label>
+
+            {uploadError && (
+              <p
+                className="rounded-aurion-md border border-red-200 bg-red-50 px-4 py-3 text-aurion-callout text-red-700"
+                role="alert"
+                data-testid="grounded-lab-upload-error"
+              >
+                {uploadError}
+              </p>
+            )}
+
+            {uploadPhase === "uploading" && (
+              <div data-testid="grounded-lab-upload-progress">
+                <div className="h-2 w-full overflow-hidden rounded-full bg-navy-50">
+                  <div
+                    className="h-full rounded-full bg-aurion-gold transition-all"
+                    style={{ width: `${uploadPct}%` }}
+                  />
+                </div>
+                <p className="mt-2 text-aurion-micro text-navy-400">
+                  {t("uploadingLabel", { percent: uploadPct })}
+                </p>
+              </div>
+            )}
+
+            {uploadPhase === "processing" && (
+              <div
+                className="flex items-center gap-2 text-aurion-callout text-navy-500"
+                data-testid="grounded-lab-upload-processing"
+              >
+                <span className="h-2 w-2 flex-shrink-0 rounded-full bg-aurion-gold animate-aurion-pulse" />
+                {t("preparingLabel")}
+              </div>
+            )}
+
             <Button
-              onClick={onRun}
-              loading={running}
-              disabled={!selected || running}
-              data-testid="grounded-lab-run-button"
+              onClick={() => void onUploadAndCompare()}
+              loading={uploadBusy}
+              disabled={!uploadFile || !uploadConsent || uploadBusy}
+              data-testid="grounded-lab-upload-button"
             >
               <Play className="mr-1.5 h-4 w-4" aria-hidden="true" />
-              {t("runButton")}
+              {t("uploadButton")}
             </Button>
           </div>
         )}
-        <p className="mt-3 text-aurion-micro text-navy-400">{t("readOnlyNote")}</p>
+
+        <p className="mt-3 text-aurion-micro text-navy-400">
+          {t("readOnlyNote")}
+        </p>
       </Card>
 
       {runError && (
