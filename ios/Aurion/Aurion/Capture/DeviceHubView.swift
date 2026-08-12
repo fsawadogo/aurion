@@ -256,6 +256,25 @@ struct DeviceHubView: View {
                     .cornerRadius(12)
                 }
 
+                // Diagnostic readout (troubleshooting): the exact MWDAT
+                // registration state + stream flag, so a stuck connect shows
+                // WHERE it stopped — SDK inactive (no creds) vs configured-but-
+                // no-reachable-device vs mid-registration vs registered — instead
+                // of only the generic "Disconnected". Text-selectable so it can
+                // be copied into a bug report.
+                HStack(spacing: 6) {
+                    Image(systemName: "stethoscope")
+                        .font(.system(size: 11))
+                        .foregroundColor(.aurionTextSecondary)
+                        .accessibilityHidden(true)
+                    Text("Diagnostic — \(mwdatStateLabel)\(mwdat.isStreaming ? " · streaming" : "")")
+                        .aurionFont(11, relativeTo: .caption2)
+                        .foregroundColor(.aurionTextSecondary)
+                        .textSelection(.enabled)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+                .padding(.horizontal, 4)
+
                 // Always-available path into the step-by-step guide.
                 Button {
                     AurionHaptics.selection()
@@ -284,6 +303,22 @@ struct DeviceHubView: View {
         case .registering: return L("devices.meta.registering")
         case .unavailable: return L("devices.meta.sdkUnconfigured")
         default:           return L("devices.meta.connectHint")
+        }
+    }
+
+    /// Human-readable MWDAT registration state for the on-device diagnostic
+    /// readout. Maps each `MWDATManager.Connection` case to what it means for
+    /// the troubleshooter, so a failed connect is self-explanatory.
+    private var mwdatStateLabel: String {
+        switch mwdat.connection {
+        case .unavailable:
+            return "SDK inactive (credentials missing from this build)"
+        case .available:
+            return "SDK ready · glasses not registered yet"
+        case .registering:
+            return "registering…"
+        case .registered:
+            return "registered ✓"
         }
     }
 
