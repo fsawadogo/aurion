@@ -239,12 +239,13 @@ export default function GroundedLabPage() {
   const [source, setSource] = useState<"session" | "upload">("session");
   const [videoImportEnabled, setVideoImportEnabled] = useState(false);
 
-  // Three comparison modes share the input: "grounded" (descriptive vs
-  // grounded captions), "fusion" (Fusion A vs B notes), and "modality"
-  // (audio-only vs visual-only vs merged notes).
-  const [mode, setMode] = useState<"grounded" | "fusion" | "modality">(
-    "grounded",
-  );
+  // Comparison modes share the input: "grounded" (descriptive vs grounded
+  // captions), "fusion" (Fusion A vs B notes), "modality" (audio-only vs
+  // visual-only vs merged notes), and "all" (run all three in one pass and
+  // read them stacked).
+  const [mode, setMode] = useState<
+    "grounded" | "fusion" | "modality" | "all"
+  >("grounded");
   const [running, setRunning] = useState(false);
   const [runError, setRunError] = useState<string | null>(null);
   const [result, setResult] = useState<GroundedLabRunResponse | null>(null);
@@ -313,49 +314,60 @@ export default function GroundedLabPage() {
       setResult(null);
       setFusionResult(null);
       setModalityResult(null);
-      try {
-        const started =
-          mode === "fusion"
-            ? await runFusionCompare(sid)
-            : mode === "modality"
-              ? await runModalityCompare(sid)
-              : await runGroundedLab(sid);
-        // Poll the job until it completes or fails.
-        for (;;) {
-          if (!isCurrent()) return;
-          const status =
-            mode === "fusion"
-              ? await getFusionCompareRun(started.job_id)
-              : mode === "modality"
-                ? await getModalityCompareRun(started.job_id)
-                : await getGroundedLabRun(started.job_id);
-          if (!isCurrent()) return;
-          if (status.status === "completed" && status.result) {
-            if (mode === "fusion") {
-              setFusionResult(status.result as FusionCompareResult);
-            } else if (mode === "modality") {
-              setModalityResult(status.result as ModalityCompareResult);
-            } else {
-              setResult(status.result as GroundedLabRunResponse);
+
+      // Start one comparison and poll its job until done, writing its result as
+      // soon as it lands. Self-contained (catches its own errors) so several can
+      // run concurrently under Promise.all without one failure aborting another.
+      const runOne = async (m: "grounded" | "fusion" | "modality") => {
+        try {
+          const started =
+            m === "fusion"
+              ? await runFusionCompare(sid)
+              : m === "modality"
+                ? await runModalityCompare(sid)
+                : await runGroundedLab(sid);
+          for (;;) {
+            if (!isCurrent()) return;
+            const status =
+              m === "fusion"
+                ? await getFusionCompareRun(started.job_id)
+                : m === "modality"
+                  ? await getModalityCompareRun(started.job_id)
+                  : await getGroundedLabRun(started.job_id);
+            if (!isCurrent()) return;
+            if (status.status === "completed" && status.result) {
+              if (m === "fusion") {
+                setFusionResult(status.result as FusionCompareResult);
+              } else if (m === "modality") {
+                setModalityResult(status.result as ModalityCompareResult);
+              } else {
+                setResult(status.result as GroundedLabRunResponse);
+              }
+              return;
             }
-            break;
+            if (status.status === "failed") {
+              setRunError(
+                status.error === "no_media" ? t("noMedia") : t("runError"),
+              );
+              return;
+            }
+            await sleep(POLL_INTERVAL_MS);
           }
-          if (status.status === "failed") {
-            setRunError(
-              status.error === "no_media" ? t("noMedia") : t("runError"),
-            );
-            break;
+        } catch (e) {
+          if (!isCurrent()) return;
+          // 409 = the session's media was purged / never captured.
+          if (e instanceof ApiError && e.status === 409) {
+            setRunError(t("noMedia"));
+          } else {
+            setRunError(humanizeError(e, t("runError")));
           }
-          await sleep(POLL_INTERVAL_MS);
         }
-      } catch (e) {
-        if (!isCurrent()) return;
-        // 409 = the session's media was purged / never captured.
-        if (e instanceof ApiError && e.status === 409) {
-          setRunError(t("noMedia"));
-        } else {
-          setRunError(humanizeError(e, t("runError")));
-        }
+      };
+
+      const modesToRun: ("grounded" | "fusion" | "modality")[] =
+        mode === "all" ? ["grounded", "fusion", "modality"] : [mode];
+      try {
+        await Promise.all(modesToRun.map(runOne));
       } finally {
         if (isCurrent()) setRunning(false);
       }
@@ -469,6 +481,10 @@ export default function GroundedLabPage() {
   }
 
   const uploadBusy = uploadPhase !== "idle";
+  // In "all" mode each comparison renders the moment it finishes (the others
+  // may still be polling); single-mode keeps the classic "show when the run is
+  // done" behaviour so a re-run never flashes a stale result.
+  const showResults = mode === "all" || !running;
 
   return (
     <div className="aurion-page-padded" data-testid="grounded-lab-page">
@@ -489,13 +505,14 @@ export default function GroundedLabPage() {
       )}
 
       <Card className="mb-5" title={t("pickerTitle")}>
-        {/* Mode toggle: which comparison to run on the chosen input. */}
+        {/* Mode toggle: which comparison to run on the chosen input. "all"
+            runs every comparison in one pass. Wraps on narrow screens. */}
         <div
-          className="mb-4 inline-flex rounded-aurion-md border border-hairline p-0.5"
+          className="mb-4 inline-flex flex-wrap gap-0.5 rounded-aurion-md border border-hairline p-0.5"
           role="tablist"
           data-testid="grounded-lab-mode"
         >
-          {(["grounded", "fusion", "modality"] as const).map((m) => (
+          {(["grounded", "fusion", "modality", "all"] as const).map((m) => (
             <button
               key={m}
               type="button"
@@ -513,7 +530,9 @@ export default function GroundedLabPage() {
                 ? t("modeGrounded")
                 : m === "fusion"
                   ? t("modeFusion")
-                  : t("modeModality")}
+                  : m === "modality"
+                    ? t("modeModality")
+                    : t("modeAll")}
             </button>
           ))}
         </div>
@@ -522,7 +541,9 @@ export default function GroundedLabPage() {
             ? t("modeGroundedHint")
             : mode === "fusion"
               ? t("modeFusionHint")
-              : t("modeModalityHint")}
+              : mode === "modality"
+                ? t("modeModalityHint")
+                : t("modeAllHint")}
         </p>
 
         {/* Source toggle: an existing session, or upload a clip right here. */}
@@ -586,7 +607,7 @@ export default function GroundedLabPage() {
                 data-testid="grounded-lab-run-button"
               >
                 <Play className="mr-1.5 h-4 w-4" aria-hidden="true" />
-                {t("runButton")}
+                {mode === "all" ? t("runAllButton") : t("runButton")}
               </Button>
             </div>
           )
@@ -736,16 +757,28 @@ export default function GroundedLabPage() {
         </div>
       )}
 
-      {running && (
+      {running && !result && !fusionResult && !modalityResult && (
         <Card>
           <p className="mb-3 text-aurion-callout text-navy-500" data-testid="grounded-lab-running">
-            {t("runningHint")}
+            {mode === "all" ? t("runningAllHint") : t("runningHint")}
           </p>
           <LoadingSkeleton lines={6} />
         </Card>
       )}
 
-      {result && !running && (
+      {running &&
+        mode === "all" &&
+        (result || fusionResult || modalityResult) && (
+          <div
+            className="mb-4 flex items-center gap-2 rounded-aurion-md border border-hairline bg-navy-50/40 px-4 py-3 text-aurion-callout text-navy-500"
+            data-testid="grounded-lab-running-more"
+          >
+            <span className="h-2 w-2 flex-shrink-0 rounded-full bg-aurion-gold animate-aurion-pulse" />
+            {t("runningMoreHint")}
+          </div>
+        )}
+
+      {result && showResults && (
         <div data-testid="grounded-lab-result">
           <Card
             className="mb-4"
@@ -849,7 +882,7 @@ export default function GroundedLabPage() {
         </div>
       )}
 
-      {fusionResult && !running && (
+      {fusionResult && showResults && (
         <div data-testid="grounded-lab-fusion-result">
           <Card className="mb-4" title={t("fusionSummaryTitle")}>
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -905,7 +938,7 @@ export default function GroundedLabPage() {
         </div>
       )}
 
-      {modalityResult && !running && (
+      {modalityResult && showResults && (
         <div data-testid="grounded-lab-modality-result">
           <Card className="mb-4" title={t("modalitySummaryTitle")}>
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">

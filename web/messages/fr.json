@@ -60,7 +60,12 @@
     "uploadedClipLabel": "Clip téléversé",
     "uploadBadFormat": "Format non pris en charge. Téléversez une vidéo MP4, MOV ou WebM.",
     "uploadEmpty": "Ce fichier est vide.",
-    "uploadTooLarge": "Cette vidéo dépasse la limite de 2 Go."
+    "uploadTooLarge": "Cette vidéo dépasse la limite de 2 Go.",
+    "modeAll": "Tout à la fois",
+    "modeAllHint": "Lancez les trois comparaisons sur le même clip en une seule passe — descriptif vs ancré, Fusion A/B, et audio/visuel/fusionné — et lisez-les empilées ci-dessous.",
+    "runAllButton": "Lancer toutes les comparaisons",
+    "runningAllHint": "Exécution des trois comparaisons — chacune apparaît ci-dessous dès qu'elle se termine. Cela peut prendre quelques minutes pour un grand ensemble d'images ; vous pouvez laisser cette page ouverte.",
+    "runningMoreHint": "Exécution des autres comparaisons en cours… chacune apparaît dès qu'elle se termine."
   },
   "AdminPromptStudio": {
     "eyebrow": "Espace admin",

@@ -60,7 +60,12 @@
     "uploadedClipLabel": "Uploaded clip",
     "uploadBadFormat": "Unsupported format. Upload an MP4, MOV, or WebM video.",
     "uploadEmpty": "That file is empty.",
-    "uploadTooLarge": "That video is larger than the 2 GB limit."
+    "uploadTooLarge": "That video is larger than the 2 GB limit.",
+    "modeAll": "All at once",
+    "modeAllHint": "Run all three comparisons on the same clip in one pass — descriptive-vs-grounded, Fusion A/B, and audio/visual/merged — and read them stacked below.",
+    "runAllButton": "Run all comparisons",
+    "runningAllHint": "Running all three comparisons — each appears below as soon as it finishes. This can take a few minutes for a large frame set; you can leave this page open.",
+    "runningMoreHint": "Still running the other comparisons… each appears as soon as it finishes."
   },
   "AdminPromptStudio": {
     "eyebrow": "Admin workspace",
