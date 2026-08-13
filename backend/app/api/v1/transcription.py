@@ -32,6 +32,7 @@ from app.modules.cleanup.service import purge_audio_for_session
 from app.modules.config.appconfig_client import get_config
 from app.modules.note_gen.service import (
     EmptyTranscriptError,
+    _resolve_stage1_template,
     build_and_persist_minimal_note,
     generate_stage1_note,
 )
@@ -118,6 +119,35 @@ async def _purge_raw_audio_if_not_retained(session_id) -> None:
         )
 
 
+async def _resolve_trigger_template(db: AsyncSession, session):
+    """The session's Template for trigger classification, or None.
+
+    Uses the SAME pin the note generator resolves from, so classification and
+    generation can never disagree about which template the session is on.
+
+    Returns None on any failure, which makes `classify_triggers` fall back to
+    its global defaults — the behaviour before the template was wired in. A
+    stale custom-template binding must degrade trigger coverage, never fail
+    Stage 1: the note is still produced, just with generic visual cues.
+    """
+    try:
+        pinned_key, pinned_custom_id = stored_template_pin(session)
+        return await _resolve_stage1_template(
+            template_key=pinned_key,
+            specialty=session.specialty,
+            custom_template_id=pinned_custom_id,
+            db=db,
+        )
+    except Exception:  # noqa: BLE001 — coverage degradation, never a hard fail
+        logger.warning(
+            "Trigger-template resolution failed for session=%s — "
+            "falling back to default trigger keywords",
+            str(session.id)[:8],
+            exc_info=True,
+        )
+        return None
+
+
 async def run_stage1(
     db: AsyncSession,
     session,
@@ -157,7 +187,22 @@ async def run_stage1(
         segment_count=len(transcript.segments),
     )
 
-    transcript = await classify_triggers(transcript)
+    # Classify against THIS session's template, not the global defaults.
+    # `classify_triggers` has always accepted a template, but no caller ever
+    # passed one — so every curated `visual_trigger_keywords` list in the
+    # built-in and custom templates was dead weight, and only
+    # DEFAULT_TRIGGER_CATEGORIES ever ran. The defaults cover the generic
+    # cues ("x-ray", "range of motion") but none of the specialty vocabulary
+    # (Hawkins, Neer, Lachman; the plastics wound terms), so segments that
+    # should have anchored a frame never flagged, and the physical-exam and
+    # imaging frames were never extracted to enrich the note.
+    #
+    # Resolved with the same pin the note generator uses below, so trigger
+    # classification and note generation can never disagree about which
+    # template the session is on. Best-effort: a resolution failure falls
+    # back to the defaults rather than failing Stage 1 over it.
+    template_for_triggers = await _resolve_trigger_template(db, session)
+    transcript = await classify_triggers(transcript, template=template_for_triggers)
 
     # Persist the transcript so the Stage 2 vision pipeline can find
     # trigger-flagged segments after /approve-stage1 fires. Upsert.
@@ -452,7 +497,13 @@ async def append_recording(
 
     # Merge in memory (offset + renumber), re-flag triggers, persist once.
     merged = merge_transcripts(existing, addition)
-    merged = await classify_triggers(merged)
+    # Same template-aware classification as run_stage1 — an appended
+    # recording must flag triggers by the session's own template, or the
+    # follow-up segments would silently get weaker visual coverage than the
+    # original ones in the very same transcript.
+    merged = await classify_triggers(
+        merged, template=await _resolve_trigger_template(db, session)
+    )
     row.provider_used = merged.provider_used
     row.transcript_json = merged.model_dump_json()
     await db.flush()

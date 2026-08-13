@@ -22,3 +22,21 @@ services:
       # Explicitly empty so docker-compose's variable substitution
       # doesn't pick up an expired token from .env / shell env.
       - LOCALSTACK_AUTH_TOKEN=
+
+  aurion-api:
+    environment:
+      # Local-only feature-flag overrides (APP_ENV=local gate in
+      # appconfig_client._local_section_overrides). AppConfig is Pro-only and
+      # dropped above, and the admin flag API publishes an AppConfig hosted
+      # version — so without these there is NO way to exercise video import
+      # locally: `video_import_enabled` defaults False and every route 404s.
+      - AURION_FF_VIDEO_IMPORT_ENABLED=true
+      # Forces cadence sampling, keeps face-less frames after a fail-closed
+      # text-redaction pass, and auto-advances Stage 2 — i.e. the three gates
+      # that otherwise leave an imported clip with zero visual enrichment.
+      - AURION_FF_VISUAL_EVIDENCE_STANDALONE_ENABLED=true
+      - AURION_PIPELINE_VIDEO_IMPORT_CADENCE_SECONDS=3
+      # Real Whisper (the local container — no API key) instead of the canned
+      # iOS-Simulator transcript, so trigger classification runs over the
+      # ACTUAL audio of an imported clip. Flip back to 1 for demo capture.
+      - AURION_DEMO_TRANSCRIPT=0

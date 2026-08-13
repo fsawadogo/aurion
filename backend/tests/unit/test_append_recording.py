@@ -174,7 +174,9 @@ async def test_append_happy_path_merges_and_regenerates() -> None:
         patch("app.api.v1.transcription.transcribe_audio",
               AsyncMock(return_value=addition)),
         patch("app.api.v1.transcription.classify_triggers",
-              AsyncMock(side_effect=lambda t: t)),
+              # `template=` is passed now that append classifies against the
+              # session's own template (not the global defaults).
+              AsyncMock(side_effect=lambda t, template=None: t)),
         patch("app.api.v1.transcription.generate_stage1_note", gen),
         patch("app.api.v1.transcription.write_audit", AsyncMock()),
     ):
