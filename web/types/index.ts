@@ -577,6 +577,7 @@ export interface FeatureFlags {
   // is empty/thin (video-import path). Dark; face-less-frame retention needs
   // compliance sign-off before a real-PHI env enables it.
   visual_evidence_standalone_enabled: boolean;
+  keep_low_confidence_visual_findings: boolean;
 }
 
 export interface UpdateFeatureFlagsResponse {

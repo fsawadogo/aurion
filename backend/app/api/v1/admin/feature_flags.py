@@ -127,6 +127,10 @@ class FeatureFlagsResponse(BaseModel):
     # is empty/thin (video-import path only). Dark; face-less-frame retention
     # needs compliance sign-off before a real-PHI env enables it.
     visual_evidence_standalone_enabled: bool = False
+    # Keep low-confidence visual findings instead of discarding them (live notes +
+    # fusion + lab). Defaulted so a save from a portal build predating this field
+    # resolves to the safe OFF value. Default OFF = today.
+    keep_low_confidence_visual_findings: bool = False
 
 
 class UpdateFeatureFlagsResponse(BaseModel):
@@ -248,6 +252,9 @@ def _build_response(cfg_feature_flags: FeatureFlagsConfig) -> FeatureFlagsRespon
         ),
         visual_evidence_standalone_enabled=(
             cfg_feature_flags.visual_evidence_standalone_enabled
+        ),
+        keep_low_confidence_visual_findings=(
+            cfg_feature_flags.keep_low_confidence_visual_findings
         ),
     )
 

@@ -323,6 +323,7 @@ resource "aws_appconfig_configuration_profile" "main" {
             # empty/thin (video-import path). NOT `required`; backend defaults it
             # false. Face-less-frame retention needs compliance sign-off to enable.
             visual_evidence_standalone_enabled = { type = "boolean" }
+            keep_low_confidence_visual_findings = { type = "boolean" }
           }
         }
         # Synthesized-alert detector thresholds (#76; detectors shipped in

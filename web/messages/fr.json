@@ -730,6 +730,10 @@
       "visual_evidence_standalone_enabled": {
         "name": "Preuve visuelle autonome",
         "description": "Permet au flux vidéo de porter une note lorsque l'audio est vide ou ténu (chemin d'import vidéo uniquement) : un transcript vide ne fait plus échouer l'import, l'échantillonnage à cadence est forcé pour qu'un examen silencieux produise quand même des images, les gros plans d'examen sans visage sont conservés après une passe de caviardage de texte à sûreté intégrée, et la vision d'étape 2 s'exécute pour peupler la note. N'assouplit jamais l'ancrage — les constats restent descriptifs et cités à leur image. Livré éteint; conserver les images sans visage requiert l'aval conformité avant activation dans un environnement à vraies données PHI."
+      },
+      "keep_low_confidence_visual_findings": {
+        "name": "Conserver les constats visuels à faible confiance",
+        "description": "Conserve les constats visuels que le modèle a jugés à FAIBLE confiance (flous, sujet non pleinement visible ou contenu clinique marginal) au lieu de les écarter — partout où la vision s'exécute : notes cliniques en direct, fusion et le Laboratoire ancré. Les constats restent descriptifs et cités à leur image, et sont affichés comme à faible confiance; la révision par le médecin conditionne toujours la note. Désactivé par défaut = aujourd'hui (les images à faible confiance sont écartées). L'activer permet à une consultation parlée ou à un clip marginal de produire une sortie visuelle au lieu d'aucune — mais injecte des constats incertains dans les notes en direct, à utiliser délibérément."
       }
     },
     "chatTools": "Outils de conversation",
@@ -741,6 +745,8 @@
     "correctionMemory": "Mémoire des corrections",
     "correctionMemoryHint": "Enregistre les modifications de note en cours d'application (texte avant/après + section) pour classer les corrections et en distiller des règles propres au médecin. Capture seulement, cloisonnée par propriétaire; activez pour constituer l'historique des corrections pendant le pilote.",
     "standaloneVisual": "Preuve visuelle autonome",
+    "keepLowConfidenceVisual": "Conserver les constats visuels à faible confiance",
+    "keepLowConfidenceVisualHint": "Détermine si la vision conserve ou écarte les images jugées à faible confiance. S'applique aux notes cliniques en direct ET au Laboratoire ancré. Désactivé par défaut.",
     "standaloneVisualHint": "Permet à une vidéo importée de porter une note lorsque son audio est vide ou ténu — force l'échantillonnage d'images à cadence pour les examens silencieux, conserve les gros plans d'examen sans visage après une passe de caviardage de texte à sûreté intégrée, et exécute la vision d'étape 2 pour peupler la note. Les constats restent descriptifs et cités à leur image. Livré éteint; conserver les images sans visage requiert l'aval conformité avant activation dans un environnement à vraies données PHI."
   },
   "Providers": {

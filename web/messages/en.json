@@ -730,6 +730,10 @@
       "visual_evidence_standalone_enabled": {
         "name": "Standalone visual evidence",
         "description": "Lets the video stream carry a note when the audio is empty or thin (uploaded-video path only): an empty transcript no longer fails the import, cadence sampling is forced so a silent exam still yields frames, face-less exam close-ups are kept after a fail-closed text-redaction pass, and Stage-2 vision runs to populate the note. Never loosens grounding — findings stay descriptive and cited to their frame. Ships dark; keeping face-less frames needs compliance sign-off before a real-PHI environment enables it."
+      },
+      "keep_low_confidence_visual_findings": {
+        "name": "Keep low-confidence visual findings",
+        "description": "Keeps visual findings the model rated LOW confidence (blurry, subject not fully visible, or marginal clinical content) instead of discarding them — everywhere the vision layer runs: live patient notes, fusion, and the Grounded Lab. Findings stay descriptive and cited to their frame and are shown as low-confidence; physician review still gates the note. Default OFF = today (low-confidence frames dropped). Turning it ON lets a talking-consultation or marginal clip surface some visual output instead of none — but injects uncertain findings into live notes, so use deliberately."
       }
     },
     "chatTools": "Chat tools",
@@ -741,6 +745,8 @@
     "correctionMemory": "Correction memory",
     "correctionMemoryHint": "Logs in-app note edits (before/after text + section) so corrections can be classified and distilled into per-physician rules. Capture only, owner-scoped; turn ON to start building the correction history during the pilot.",
     "standaloneVisual": "Standalone visual evidence",
+    "keepLowConfidenceVisual": "Keep low-confidence visual findings",
+    "keepLowConfidenceVisualHint": "Whether the vision layer keeps or discards frames it rated low-confidence. Applies to live patient notes AND the Grounded Lab. Default OFF.",
     "standaloneVisualHint": "Lets an uploaded video carry a note when its audio is empty or thin — forces cadence frame sampling for silent exams, keeps face-less exam close-ups after a fail-closed text-redaction pass, and runs Stage-2 vision to populate the note. Findings stay descriptive and cited to their frame. Ships dark; keeping face-less frames needs compliance sign-off before a real-PHI environment enables it."
   },
   "Providers": {

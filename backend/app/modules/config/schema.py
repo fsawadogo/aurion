@@ -424,6 +424,13 @@ class FeatureFlagsConfig(BaseModel):
     # `video_import_enabled` / `grounded_visual_findings_enabled`). When OFF the
     # video-import pipeline is byte-identical to the pre-feature build.
     visual_evidence_standalone_enabled: bool = False
+    # Keep LOW-confidence visual findings instead of discarding them — applies
+    # everywhere caption_visual_evidence runs (live Stage-2 notes, fusion, AND the
+    # Grounded Lab). Default OFF = today's behaviour (a frame the model rates
+    # "low" — blurry / subject not visible / no clinical content — is dropped). ON
+    # keeps them; they stay descriptive + cited to their frame and marked
+    # low-confidence, and physician review still gates the note.
+    keep_low_confidence_visual_findings: bool = False
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────
