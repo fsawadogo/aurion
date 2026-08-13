@@ -70,6 +70,11 @@ export const FLAG_GROUPS = [
     flags: ["visual_evidence_standalone_enabled"],
   },
   {
+    titleKey: "keepLowConfidenceVisual",
+    hintKey: "keepLowConfidenceVisualHint",
+    flags: ["keep_low_confidence_visual_findings"],
+  },
+  {
     titleKey: "noteOptions",
     hintKey: "noteOptionsHint",
     flags: ["note_options_enabled"],

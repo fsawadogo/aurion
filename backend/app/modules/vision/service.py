@@ -596,6 +596,9 @@ async def caption_visual_evidence(
     # audio-only note). The semaphore lets frames drain a few at a time under
     # the limit. Resolved once per run (get_config is a 30s poller).
     _caption_sem = asyncio.Semaphore(get_config().pipeline.vision_max_concurrency)
+    # Flag-gated: keep LOW-confidence captions instead of dropping them (default
+    # OFF = today). Resolved once per run (get_config is a 30s poller).
+    _keep_low_confidence = get_config().feature_flags.keep_low_confidence_visual_findings
 
     async def _emit_initial_progress() -> None:
         if total_evidence > 0 and session_id:
@@ -685,7 +688,7 @@ async def caption_visual_evidence(
                 success=True,
                 session_id=session_id,
             )
-            if caption.confidence == "low":
+            if caption.confidence == "low" and not _keep_low_confidence:
                 logger.info(
                     "Low confidence evidence discarded: kind=%s id=%s reason=%s",
                     kind, evidence_id[:32], caption.confidence_reason,
