@@ -445,17 +445,45 @@ export default function GroundedLabPage() {
         await sleep(POLL_INTERVAL_MS);
       }
       if (!isCurrent()) return;
-      // Surface the prepared clip in the session picker too, so switching back
-      // to "Choose a session" shows it, and select it.
-      const item: GroundedLabSessionItem = {
+      // The import flips to AWAITING_REVIEW when the note is ready, but the
+      // masked frames land in S3 (frames/{id}/) a moment LATER. Auto-running
+      // the comparison the instant we see AWAITING_REVIEW therefore races the
+      // frame writes and 409s with "no media" on a clip that is actually fine —
+      // a manual re-run seconds later succeeds. Wait until the session reports
+      // retrievable media before running: the sessions list's frame_count /
+      // clip_count count the SAME S3 prefixes the run reads, so >0 is an exact
+      // "frames are now listable" signal. Bounded so a genuinely empty import
+      // still falls through and surfaces the proper "no media" message.
+      let ready: GroundedLabSessionItem | null = null;
+      for (let attempt = 0; attempt < 20; attempt++) {
+        if (!isCurrent()) return;
+        try {
+          const list = await getGroundedLabSessions();
+          const found = list.items.find(
+            (s) => s.session_id === created.session_id,
+          );
+          if (found && (found.frame_count > 0 || found.clip_count > 0)) {
+            ready = found;
+            break;
+          }
+        } catch {
+          // Transient list failure — keep waiting; the run below still guards.
+        }
+        await sleep(POLL_INTERVAL_MS);
+      }
+      if (!isCurrent()) return;
+      // Surface the prepared clip in the session picker (with real media counts
+      // when the readiness poll saw them; a light placeholder otherwise) and
+      // select it.
+      const item: GroundedLabSessionItem = ready ?? {
         session_id: created.session_id,
         physician_name: t("uploadedClipLabel"),
         started_at: new Date().toISOString(),
         specialty: uploadSpecialty,
         visit_type: null,
         state: "AWAITING_REVIEW",
-        frame_count: 1,
-        clip_count: 1,
+        frame_count: 0,
+        clip_count: 0,
       };
       setSessions((prev) => [
         item,
@@ -464,7 +492,9 @@ export default function GroundedLabPage() {
       setSelected(created.session_id);
       setUploadPhase("idle");
       setUploadPct(0);
-      // Kick the comparison straight away on the freshly-prepared clip.
+      // Run on the freshly-prepared clip. If media never showed up within the
+      // wait window, run anyway so the proper "no media" message surfaces
+      // instead of silently doing nothing.
       void onRun(created.session_id);
     } catch (e) {
       if (!isCurrent()) return;
