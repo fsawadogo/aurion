@@ -123,3 +123,10 @@ website/.next/
 website/out/
 website/out.zip
 website/tsconfig.tsbuildinfo
+
+# Masking detector weights (VID-04/VID-07) — ~107MB, downloaded at Docker
+# build time into /app/models. Kept out of git; for LOCAL runs fetch them
+# into backend/models/ and point FACE_DETECTOR_MODEL_DIR at it, otherwise
+# every face-less frame is dropped fail-closed and video-import testing
+# silently reproduces the very bug it is meant to verify.
+backend/models/
