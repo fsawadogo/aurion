@@ -19,7 +19,7 @@
       "description": "The prior operation or injection as referenced during the visit: procedure name, side/site, and date or interval since. Capture only as stated in this encounter; do not reconstruct operative detail. Leave not_captured if no prior procedure is discussed."
     },
     {
-      "id": "incision_wound_check",
+      "id": "wound_assessment",
       "title": "Incision / Wound Check — Vérification de la plaie",
       "required": false,
       "visual_trigger_keywords": [

@@ -187,16 +187,29 @@ async def classify_triggers(
 
 
 def _build_keyword_map(template: Optional[Template]) -> dict[str, list[str]]:
-    """Build a keyword map from template sections or use defaults."""
+    """Build a keyword map from template sections or use defaults.
+
+    Sections MERGE into their trigger type rather than overwriting it.
+    `_section_id_to_trigger_type` is many-to-one — every id outside its small
+    mapping collapses to `general_visual_pointer` — so a straight assignment
+    silently dropped the keywords of every section but the last one sharing a
+    type. That is the common shape for an authored template (e.g. a letter with
+    `examination_findings` + `investigations_reviewed`: 14 of 28 keywords lost,
+    and with them the frames those words would have triggered). Order is
+    preserved and duplicates collapse, so a keyword listed on two sections is
+    matched once.
+    """
     if template and any(s.visual_trigger_keywords for s in template.sections):
         # Use template-specific keywords
         keyword_map: dict[str, list[str]] = {}
         for section in template.sections:
             if section.visual_trigger_keywords:
                 section_trigger_type = _section_id_to_trigger_type(section.id)
-                keyword_map[section_trigger_type] = [
-                    kw.lower() for kw in section.visual_trigger_keywords
-                ]
+                bucket = keyword_map.setdefault(section_trigger_type, [])
+                for kw in section.visual_trigger_keywords:
+                    lowered = kw.lower()
+                    if lowered not in bucket:
+                        bucket.append(lowered)
         return keyword_map
 
     # Fall back to global defaults

@@ -19,7 +19,7 @@
       "description": "Condensed history as stated during the visit: onset and course of the problem, functional impact, treatments already tried and their result, and the relevant medical, surgical, and medication background the patient reported. Patient- and physician-stated information only — one claim per distinct element, written for a colleague rather than as a verbatim transcript."
     },
     {
-      "id": "examination_findings",
+      "id": "physical_exam",
       "title": "Findings on Examination / Constatations à l'examen",
       "required": true,
       "visual_trigger_keywords": [
@@ -42,7 +42,7 @@
       "measurement_output_expected": true
     },
     {
-      "id": "investigations_reviewed",
+      "id": "imaging_review",
       "title": "Investigations Reviewed / Examens révisés",
       "required": false,
       "visual_trigger_keywords": [

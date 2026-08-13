@@ -19,7 +19,7 @@
       "description": "Condensed history as stated during the visit: onset and mechanism, course of the wound or concern, prior wound care and reconstruction attempted with their result, and the relevant medical, surgical, and medication background the patient reported — including healing-relevant factors (diabetes, vascular disease, immunosuppression, radiation, smoking) when stated. One claim per element, written for a colleague."
     },
     {
-      "id": "examination_findings",
+      "id": "wound_assessment",
       "title": "Findings on Examination / Constatations à l'examen",
       "required": true,
       "visual_trigger_keywords": [
@@ -44,7 +44,7 @@
       "measurement_output_expected": true
     },
     {
-      "id": "investigations_reviewed",
+      "id": "imaging_review",
       "title": "Investigations Reviewed / Examens révisés",
       "required": false,
       "visual_trigger_keywords": [
