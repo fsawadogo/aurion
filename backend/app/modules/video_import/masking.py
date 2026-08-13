@@ -300,6 +300,31 @@ def _odd(n: int) -> int:
     return n if n % 2 == 1 else n + 1
 
 
+def detector_status() -> dict:
+    """Report which masking detectors actually loaded, for /health.
+
+    The Dockerfile downloads all three weight files best-effort (``|| echo
+    WARN``), so a network blip at build time ships an image that silently drops
+    frames instead of failing the build: without EAST, ``_detect_text_regions``
+    raises and every FACE-LESS frame is dropped fail-closed — which is most of a
+    clinical clip (a wound close-up, an X-ray on screen). The result was an
+    import that "succeeded" with ``frames_masked=0`` and a note with no visual
+    enrichment, indistinguishable from a pipeline that was never triggered.
+
+    Exposing it here makes that state visible without shell or log access.
+    Loads through the same cached accessors the pipeline uses, so it reports
+    the truth rather than a filesystem guess. PHI-free: booleans and a path.
+    """
+    return {
+        "model_dir": _MODEL_DIR,
+        # res10 absent is a DEGRADATION, not an outage — detection falls back
+        # to the bundled Haar cascade.
+        "face_detector": "res10_dnn" if _dnn_net() is not None else "haar_fallback",
+        # EAST absent has NO fallback: face-less frames are dropped.
+        "text_detector_loaded": _east_net() is not None,
+    }
+
+
 def mask_frame(
     jpg_bytes: bytes,
     *,
