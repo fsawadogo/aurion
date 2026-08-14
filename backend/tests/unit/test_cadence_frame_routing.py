@@ -448,3 +448,94 @@ class TestStage2RouteWiring:
             "is not threading trigger_segments into the merge, so it fell back "
             "to routing by the audio anchor"
         )
+
+
+class TestRoutingHygiene:
+    """VIS-04 (#746) and VIS-05 (#747)."""
+
+    def test_tier3_fallback_is_independent_of_template_section_order(self):
+        """VIS-04 — two templates declaring the same visual sections in a
+        different ORDER must route an unroutable frame identically.
+
+        The property is template-independence, not which section wins.
+        Previously the loop ran over `note.sections`, so template layout
+        silently decided the outcome.
+        """
+        from app.modules.vision.service import _find_target_section
+
+        def _note_with(order: list[str]) -> Note:
+            return Note(
+                session_id="s1", stage=1, version=1, provider_used="p",
+                specialty="x", completeness_score=1.0,
+                sections=[
+                    NoteSection(id=i, status="populated", claims=[]) for i in order
+                ],
+            )
+
+        exam_first = _find_target_section(
+            _note_with(["physical_exam", "imaging_review"]), "nope"
+        )
+        imaging_first = _find_target_section(
+            _note_with(["imaging_review", "physical_exam"]), "nope"
+        )
+        assert exam_first is not None and imaging_first is not None
+        assert exam_first.id == imaging_first.id, (
+            "tier-3 outcome still depends on template section order"
+        )
+
+    def test_anchor_is_refused_when_the_nearest_speech_is_far_away(self):
+        """VIS-05 — an arbitrary anchor minutes away is worse than none."""
+        from app.modules.vision.service import _find_anchor_segment
+
+        segs = [_trigger(0, 5_000)]
+        near = _find_anchor_segment(3_000, segs)
+        far = _find_anchor_segment(10 * 60 * 1_000, segs)
+        assert near is not None, "a frame beside the speech must still anchor"
+        assert far is None, "a frame ten minutes from any speech must not anchor"
+
+    def test_empty_segment_pool_returns_none(self):
+        from app.modules.vision.service import _find_anchor_segment
+
+        assert _find_anchor_segment(1_000, []) is None
+
+    @pytest.mark.asyncio
+    async def test_a_distant_cadence_frame_is_still_captioned_not_dropped(
+        self, monkeypatch
+    ):
+        """The regression VIS-05 nearly introduced.
+
+        Bounding the anchor makes a cadence frame in a silent stretch legally
+        anchorless — and the frame path DROPS anchorless frames. That would
+        delete exactly the frames VIS-02/03 exist to rescue. A cadence frame
+        no longer needs speech, so it must earn a synthesized anchor instead.
+        """
+        from app.modules.vision import service as vs
+
+        captioned: list[int] = []
+
+        async def _fake_dispatch(_provider, item, anchor, _system_prompt):
+            captioned.append(item.timestamp_ms)
+            return _caption("desc", item.timestamp_ms, anchor.id)
+
+        class _FakeRegistry:
+            def get_vision_provider_for_kind_with_fallback(self, _kind):
+                return object()
+
+        monkeypatch.setattr(vs, "_dispatch_caption", _fake_dispatch)
+        monkeypatch.setattr(vs, "get_registry", lambda: _FakeRegistry())
+        monkeypatch.setattr(
+            vs, "try_record_provider_usage", _noop_async, raising=False
+        )
+
+        triggers = [_trigger(0, 5_000)]
+        # 10 minutes from the only speech in the transcript.
+        far_frame = _masked_frame(10 * 60 * 1_000)
+
+        await vs.caption_visual_evidence(
+            [far_frame], triggers, anchor_segments=triggers
+        )
+
+        assert captioned == [10 * 60 * 1_000], (
+            "a distant cadence frame was dropped instead of captioned with a "
+            "synthesized anchor"
+        )

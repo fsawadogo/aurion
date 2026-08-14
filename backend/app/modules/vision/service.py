@@ -662,8 +662,18 @@ async def caption_visual_evidence(
         # Defaults to trigger_segments for frame-only / legacy callers.
         pool = anchor_segments if anchor_segments is not None else trigger_segments
         anchor = _find_anchor_segment(item.timestamp_ms, pool)
+        # Computed BEFORE the anchor guard: VIS-05 bounds how far a frame may
+        # sit from speech, so a cadence frame in a silent stretch now legally
+        # has no anchor — and the guard below would drop it. Dropping is
+        # exactly what VIS-02/03 exist to stop, and a cadence frame no longer
+        # NEEDS speech: it is captioned un-aimed and routed on its own
+        # content. So it earns a synthesized anchor like a clip does.
+        is_cadence = (
+            kind != "clip"
+            and frame_provenance(trigger_segments, item.timestamp_ms) == "cadence"
+        )
         if anchor is None:
-            if kind != "clip" and not synthesize_frame_anchors:
+            if kind != "clip" and not synthesize_frame_anchors and not is_cadence:
                 # Frame path unchanged — a frame with no anchor is dropped.
                 return None
             # Cadence clip, OR (standalone-visual) a FRAME on a truly silent
@@ -707,10 +717,6 @@ async def caption_visual_evidence(
         # by what it actually shows (VIS-03 in `merge_visual_citations`).
         # Trigger frames keep the block: there the spoken phrase genuinely
         # indicates what is on screen, so aiming does real work.
-        is_cadence = (
-            kind != "clip"
-            and frame_provenance(trigger_segments, item.timestamp_ms) == "cadence"
-        )
         focus = (
             None
             if is_cadence
@@ -983,11 +989,33 @@ async def _dispatch_caption(
     )
 
 
+#: How far a frame may sit from a segment's midpoint and still be anchored to
+#: it (VIS-05). Derived from the configured frame window rather than being a
+#: new magic number: that window is already the pipeline's statement of "how
+#: far from a spoken moment a frame is still ABOUT that moment". The multiple
+#: is deliberately generous — the goal is to reject the absurd (speech minutes
+#: away), not to second-guess the window.
+_ANCHOR_MAX_DISTANCE_MULTIPLE = 4
+
+
 def _find_anchor_segment(
     timestamp_ms: int,
     segments: list[TranscriptSegment],
 ) -> Optional[TranscriptSegment]:
-    """Find the transcript segment closest to a frame timestamp."""
+    """The transcript segment closest to a frame timestamp, or None if far.
+
+    VIS-05: previously returned the nearest segment at ANY distance. On a
+    sparse or silent stretch that could be speech minutes away, and the
+    resulting arbitrary anchor then drove both section routing and the
+    citation attached to the claim. Worst precisely during a SILENT
+    examination — the case `visual_evidence_standalone_enabled` exists to
+    serve, where cadence sampling fires with no nearby speech at all.
+
+    Returning None there is the honest answer: no speech is near this frame.
+    Callers already handle it — clips and standalone-visual frames synthesize
+    an empty-text anchor at the frame's own timestamp (never fabricated
+    speech), and after VIS-03 a cadence frame routes on its own content.
+    """
     best = None
     best_dist = float("inf")
     for seg in segments:
@@ -996,7 +1024,15 @@ def _find_anchor_segment(
         if dist < best_dist:
             best_dist = dist
             best = seg
-    return best
+    if best is None:
+        return None
+    # Sized off the clinic window; a procedural-window frame is bounded by the
+    # same figure, which is the conservative direction (a wider real window
+    # only means we reject fewer anchors, never more).
+    max_distance = (
+        get_frame_window_ms() * _ANCHOR_MAX_DISTANCE_MULTIPLE
+    )
+    return best if best_dist <= max_distance else None
 
 
 # ── Conflict Classification ──────────────────────────────────────────────
@@ -1448,8 +1484,26 @@ def _find_target_section(
     # Third: the built-in visual sections. Reached whenever the template
     # matched nothing — including every engine-off run, which is what keeps
     # that path byte-identical.
-    for section in note.sections:
-        if section.id in _LEGACY_VISUAL_SECTIONS:
+    #
+    # VIS-04: iterate the ALLOW-LIST, not the note.
+    #
+    # The property being fixed is TEMPLATE-INDEPENDENCE, not the choice of
+    # winner. Iterating `note.sections` meant two templates that declare the
+    # same visual sections in a different ORDER routed an identical
+    # content-less frame to different places — indefensible, and invisible.
+    # Driving the loop from the tuple makes the outcome a fixed property of
+    # the code.
+    #
+    # The tuple's order is otherwise arbitrary and this does NOT claim
+    # `imaging_review` is the better default: for a frame we know nothing
+    # about, no choice here is obviously right. Being stable and reviewable
+    # beats being accidental. Note this changes engine-off output too (the
+    # TE-4 "byte-identical when off" promise covered a refactor, not a bug),
+    # and VIS-03 makes this tier much rarer anyway — a cadence frame with any
+    # recognisable content is routed before reaching it.
+    for section_id in _LEGACY_VISUAL_SECTIONS:
+        section = note.get_section(section_id)
+        if section is not None:
             return section
 
     # Last resort: first section with pending_video status
