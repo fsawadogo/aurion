@@ -69,10 +69,23 @@ async def with_retry(
 
     for attempt in range(max_retries + 1):
         try:
-            result = fn(*args, **kwargs)
-            # If fn returns an awaitable, await it
-            if asyncio.iscoroutine(result):
-                result = await result
+            # A SYNC callable must run off the loop. Calling it inline here
+            # blocked the whole worker for the duration of the I/O — and every
+            # boto3 client method is sync, so Stage 2's frame retrieval stalled
+            # the loop once per S3 round-trip. While it did, the response of
+            # the request that spawned the work (`approve-stage1`) could not be
+            # flushed, so the ALB returned a gateway 502/504; an ALB error
+            # response carries no CORS headers, so the browser reported
+            # "blocked by CORS policy" and hid the real timeout. Same failure
+            # mode already fixed at `video_import.py:_download_to_path`.
+            if asyncio.iscoroutinefunction(fn):
+                result = await fn(*args, **kwargs)
+            else:
+                result = await asyncio.to_thread(fn, *args, **kwargs)
+                # A sync callable may still hand back an awaitable (mocks in
+                # tests, thin sync wrappers) — preserve the old contract.
+                if asyncio.iscoroutine(result):
+                    result = await result
             return result  # type: ignore[return-value]
         except (BotoCoreError, ClientError, TimeoutError) as exc:
             last_exc = exc

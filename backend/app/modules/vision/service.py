@@ -222,46 +222,54 @@ async def retrieve_frames_for_triggers(
     """
     frames: list[MaskedFrame] = []
     s3 = get_s3_client()
+    prefix = f"frames/{session_id}/"
+
+    # ONE listing for the whole session, then window-filter in memory. This
+    # listing used to sit inside the per-segment loop against the same prefix,
+    # so an N-trigger session made N identical round-trips — pure waste, and it
+    # multiplied the loop-blocking cost of each one by N.
+    try:
+        response = await with_retry(
+            s3.list_objects_v2,
+            Bucket=FRAMES_BUCKET,
+            Prefix=prefix,
+            max_retries=3,
+            base_delay=1.0,
+            operation="s3_list_frames",
+            session_id=session_id,
+        )
+    except (BotoCoreError, ClientError) as e:
+        logger.error(
+            "Frame retrieval failed: session=%s error=%s",
+            str(session_id)[:8], str(e),
+        )
+        return []
+
+    # Parse each key's timestamp once, rather than once per segment.
+    stored: list[tuple[int, str]] = []
+    for obj in response.get("Contents", []):
+        key = obj["Key"]
+        # Extract timestamp from key: frames/{session_id}/{timestamp_ms}.jpg
+        try:
+            ts_ms = int(key.rsplit("/", 1)[-1].split(".")[0])
+        except (ValueError, IndexError):
+            continue
+        stored.append((ts_ms, key))
 
     for segment in trigger_segments:
         window_ms = get_frame_window_ms(segment.trigger_type)
-        prefix = f"frames/{session_id}/"
-
-        try:
-            response = await with_retry(
-                s3.list_objects_v2,
-                Bucket=FRAMES_BUCKET,
-                Prefix=prefix,
-                max_retries=3,
-                base_delay=1.0,
-                operation="s3_list_frames",
-                session_id=session_id,
-            )
-            for obj in response.get("Contents", []):
-                key = obj["Key"]
-                # Extract timestamp from key: frames/{session_id}/{timestamp_ms}.jpg
-                try:
-                    ts_str = key.rsplit("/", 1)[-1].split(".")[0]
-                    ts_ms = int(ts_str)
-                except (ValueError, IndexError):
-                    continue
-
-                # Check if frame is within the extraction window
-                if segment.start_ms - window_ms <= ts_ms <= segment.end_ms + window_ms:
-                    frames.append(
-                        MaskedFrame(
-                            frame_id=f"frame_{ts_ms:05d}",
-                            session_id=session_id,
-                            timestamp_ms=ts_ms,
-                            s3_key=key,
-                            masking_confirmed=True,
-                        )
+        for ts_ms, key in stored:
+            # Check if frame is within the extraction window
+            if segment.start_ms - window_ms <= ts_ms <= segment.end_ms + window_ms:
+                frames.append(
+                    MaskedFrame(
+                        frame_id=f"frame_{ts_ms:05d}",
+                        session_id=session_id,
+                        timestamp_ms=ts_ms,
+                        s3_key=key,
+                        masking_confirmed=True,
                     )
-        except (BotoCoreError, ClientError) as e:
-            logger.error(
-                "Frame retrieval failed: session=%s segment=%s error=%s",
-                str(session_id)[:8], segment.id, str(e),
-            )
+                )
 
     # Deduplicate by frame_id
     seen = set()
