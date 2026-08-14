@@ -212,6 +212,36 @@ def get_frame_window_ms(trigger_type: Optional[str] = None) -> int:
     return config.pipeline.frame_window_clinic_ms
 
 
+def frame_provenance(
+    trigger_segments: list[TranscriptSegment],
+    timestamp_ms: int,
+) -> str:
+    """``"trigger"`` if this timestamp sits in a trigger window, else ``"cadence"``.
+
+    Stage 2 needs to tell the two kinds of frame apart, and nothing persists
+    that: ``MaskedFrame`` carries no provenance and both kinds are stored as
+    ``frames/{session}/{ts}.jpg`` — a key shape shared with the iOS frame
+    path.
+
+    So DERIVE it rather than store it. This is the same arithmetic
+    ``_extract_and_mask_frames`` used to CHOOSE the windows in the first
+    place, so it reconstructs the extractor's own decision exactly. Storing
+    it instead would mean an S3 ``head_object`` per frame (the per-frame
+    round-trip #741 just removed), a new key prefix (a cross-client contract
+    change), or a DB row — none of which buy anything over recomputing from
+    data already in hand.
+
+    A cadence point that happens to land inside a trigger window is reported
+    as ``"trigger"``. That is correct, not a rounding error: it IS in that
+    window, so the trigger's section genuinely describes what is on screen.
+    """
+    for segment in trigger_segments:
+        window_ms = get_frame_window_ms(segment.trigger_type)
+        if segment.start_ms - window_ms <= timestamp_ms <= segment.end_ms + window_ms:
+            return "trigger"
+    return "cadence"
+
+
 async def retrieve_frames_for_triggers(
     session_id: str,
     trigger_segments: list[TranscriptSegment],
@@ -662,12 +692,35 @@ async def caption_visual_evidence(
         # intact; the block declares itself subordinate to it. `None` when
         # there's no template, no predictable section, or the guidance failed
         # the safety screen — in which case this is byte-identical to before.
-        focus = _section_focus_block(
-            template,
-            note,
-            anchor.id,
-            evidence_kind="clip" if kind == "clip" else "frame",
-            anchor_text=anchor.text,
+        # VIS-02 — a CADENCE frame is not aimed at a section.
+        #
+        # SECTION FOCUS ends with "if nothing relevant to this section is
+        # visible, say so AND report confidence low", and the section is
+        # chosen from the nearest SPOKEN segment. Cadence sampling exists
+        # precisely to catch what the audio does NOT mention, so aiming those
+        # frames by the audio guarantees the mismatch: measured on dev,
+        # 180 of 182 frames discarded, including crisp legible X-rays
+        # rejected as "an imaging study, not a physical examination".
+        #
+        # Un-aimed, the frame is captioned on the base descriptive prompt —
+        # "describe only what is literally visible" — and routed afterwards
+        # by what it actually shows (VIS-03 in `merge_visual_citations`).
+        # Trigger frames keep the block: there the spoken phrase genuinely
+        # indicates what is on screen, so aiming does real work.
+        is_cadence = (
+            kind != "clip"
+            and frame_provenance(trigger_segments, item.timestamp_ms) == "cadence"
+        )
+        focus = (
+            None
+            if is_cadence
+            else _section_focus_block(
+                template,
+                note,
+                anchor.id,
+                evidence_kind="clip" if kind == "clip" else "frame",
+                anchor_text=anchor.text,
+            )
         )
         # Base prompt selection: grounded clinical findings vs strict
         # descriptive. A per-physician override (`system_for_kind` non-None)
@@ -979,6 +1032,7 @@ def merge_visual_citations(
     captions: list[FrameCaption],
     template: Optional[Template] = None,
     anchor_texts: Optional[dict[str, str]] = None,
+    trigger_segments: Optional[list[TranscriptSegment]] = None,
 ) -> Note:
     """Merge frame citations into a Stage 1 note to produce Stage 2.
 
@@ -1000,12 +1054,35 @@ def merge_visual_citations(
 
     **With the engine off the legacy in-loop routing is preserved**, because
     hoisting is itself an output change and OFF must stay byte-identical.
+
+    ``trigger_segments`` (VIS-03) is what lets this distinguish a CADENCE
+    caption from a trigger-anchored one, so the former can be filed by what
+    it shows instead of by the speech nearest in time. ``None`` — every
+    caller but Stage 2 — keeps the pure anchor routing, byte-identical.
     """
     note.stage = 2
     anchor_texts = anchor_texts or {}
     mergeable = [c for c in captions if c.integration_status != "REPEATS"]
 
     def _route(caption: FrameCaption) -> Optional[NoteSection]:
+        # VIS-03 — a cadence caption is filed by what it SHOWS.
+        #
+        # It was captioned with no section aim (VIS-02), so the audio anchor
+        # is exactly the signal we just decided not to trust: the surgeon can
+        # narrate history while holding up an X-ray. Routing it by that
+        # anchor would file a real imaging observation under HPI, which is
+        # worse than an empty section. Content first, anchor as the fallback.
+        #
+        # `trigger_segments is None` keeps every existing caller byte-
+        # identical — only Stage 2 passes it.
+        if trigger_segments is not None and (
+            frame_provenance(trigger_segments, caption.timestamp_ms) == "cadence"
+        ):
+            by_content = _section_for_caption_text(
+                note, template, caption.visual_description
+            )
+            if by_content is not None:
+                return by_content
         return _find_target_section(
             note,
             caption.audio_anchor_id,
@@ -1283,6 +1360,44 @@ def _template_section_for_anchor_text(
         for keyword in section.visual_trigger_keywords:
             if keyword and keyword.lower() in haystack:
                 return section.id
+    return None
+
+
+def _section_for_caption_text(
+    note: Note,
+    template: Optional[Template],
+    caption_text: Optional[str],
+) -> Optional[NoteSection]:
+    """Route a caption by what the FRAME shows, not by what was being said.
+
+    Sibling of :func:`_template_section_for_anchor_text`: same keyword
+    mechanics, different input. Deliberately NOT merged with it — collapsing
+    the two would need a ``source`` flag argument (control coupling), and
+    their fallback semantics differ: an anchor miss falls through to the
+    remaining tiers of :func:`_find_target_section`, while a caption miss
+    falls back to the anchor router wholesale.
+
+    **Restricted to visual sinks.** A caption naming a wound must not be
+    filed under ``plan`` because the plan section happens to declare
+    ``"dressing"`` as a trigger keyword. The candidate set is the template's
+    sections that are ALSO in ``_LEGACY_VISUAL_SECTIONS`` — the same
+    allow-list tier 3 uses — so the model can influence WHICH visual section
+    receives evidence, never whether a non-visual section does.
+
+    Returns ``None`` when there is no template, no caption, or no match; the
+    caller then keeps today's anchor-based routing.
+    """
+    if template is None or not caption_text:
+        return None
+    haystack = caption_text.lower()
+    for section in template.sections:
+        if section.id not in _LEGACY_VISUAL_SECTIONS:
+            continue
+        for keyword in section.visual_trigger_keywords:
+            if keyword and keyword.lower() in haystack:
+                target = note.get_section(section.id)
+                if target is not None:
+                    return target
     return None
 
 
