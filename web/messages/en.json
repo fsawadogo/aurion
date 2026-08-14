@@ -8,6 +8,7 @@
     "sessionLabel": "Session",
     "runButton": "Run comparison",
     "readOnlyNote": "Read-only: this replays the captured clip and never changes the patient's note.",
+    "exportButton": "Export (.docx)",
     "noSessionsTitle": "No sessions with captured media",
     "noSessionsBody": "Sessions appear here while their masked frames and clips are still retained. Record or import an encounter with video, then come back.",
     "runError": "The comparison couldn't run. Please try again.",

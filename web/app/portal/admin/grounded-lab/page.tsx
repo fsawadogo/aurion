@@ -23,6 +23,7 @@
  */
 
 import {
+  Download,
   FlaskConical,
   Film,
   Play,
@@ -44,6 +45,7 @@ import {
   runFusionCompare,
   runGroundedLab,
   runModalityCompare,
+  exportGroundedLabComparison,
 } from "@/lib/api";
 import { getPortalFeatureFlags } from "@/lib/portal-api";
 import type {
@@ -254,6 +256,7 @@ export default function GroundedLabPage() {
   );
   const [modalityResult, setModalityResult] =
     useState<ModalityCompareResult | null>(null);
+  const [exporting, setExporting] = useState<string | null>(null);
 
   // Upload sub-flow state. `uploadPhase` drives the compact stepper; a prepared
   // clip hands its session_id straight into the comparison run.
@@ -502,6 +505,47 @@ export default function GroundedLabPage() {
       setUploadPhase("idle");
     }
   }, [uploadFile, uploadConsent, uploadSpecialty, onRun, t]);
+
+  // Export the currently-shown comparison result as a Word (.docx) document.
+  // Read-only: sends the already-computed result to the backend renderer and
+  // downloads the file it returns; never re-runs the comparison.
+  const onExport = useCallback(
+    async (
+      exportMode: "grounded" | "fusion" | "modality",
+      exportResult: unknown,
+    ) => {
+      if (!exportResult) return;
+      setExporting(exportMode);
+      try {
+        const item = sessions.find((s) => s.session_id === selected);
+        const when = item?.started_at
+          ? new Date(item.started_at).toLocaleString()
+          : "";
+        const spec = item?.specialty ? ` · ${item.specialty}` : "";
+        const label = item
+          ? `${item.physician_name} — ${when}${spec} (${item.frame_count}f · ${item.clip_count}c)`
+          : "";
+        const blob = await exportGroundedLabComparison({
+          mode: exportMode,
+          session_label: label,
+          result: exportResult,
+        });
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = `grounded_lab_${exportMode}.docx`;
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        URL.revokeObjectURL(url);
+      } catch {
+        // Best-effort download; a failure just leaves the button idle.
+      } finally {
+        setExporting(null);
+      }
+    },
+    [sessions, selected],
+  );
 
   function sessionLabel(s: GroundedLabSessionItem): string {
     const when = s.started_at ? new Date(s.started_at).toLocaleString() : "";
@@ -810,6 +854,17 @@ export default function GroundedLabPage() {
 
       {modalityResult && showResults && (
         <div data-testid="grounded-lab-modality-result">
+          <div className="mb-3 flex justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => void onExport("modality", modalityResult)}
+              loading={exporting === "modality"}
+              data-testid="grounded-lab-export-modality"
+            >
+              <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              {t("exportButton")}
+            </Button>
+          </div>
           <Card className="mb-4" title={t("modalitySummaryTitle")}>
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div>
@@ -875,7 +930,18 @@ export default function GroundedLabPage() {
       )}
 
       {result && showResults && (
-        <div data-testid="grounded-lab-result">
+        <div data-testid="grounded-lab-grounded-result">
+          <div className="mb-3 flex justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => void onExport("grounded", result)}
+              loading={exporting === "grounded"}
+              data-testid="grounded-lab-export-grounded"
+            >
+              <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              {t("exportButton")}
+            </Button>
+          </div>
           <Card
             className="mb-4"
             title={t("summaryTitle")}
@@ -980,6 +1046,17 @@ export default function GroundedLabPage() {
 
       {fusionResult && showResults && (
         <div data-testid="grounded-lab-fusion-result">
+          <div className="mb-3 flex justify-end">
+            <Button
+              variant="secondary"
+              onClick={() => void onExport("fusion", fusionResult)}
+              loading={exporting === "fusion"}
+              data-testid="grounded-lab-export-fusion"
+            >
+              <Download className="mr-1.5 h-4 w-4" aria-hidden="true" />
+              {t("exportButton")}
+            </Button>
+          </div>
           <Card className="mb-4" title={t("fusionSummaryTitle")}>
             <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div>

@@ -8,6 +8,7 @@
     "sessionLabel": "Séance",
     "runButton": "Lancer la comparaison",
     "readOnlyNote": "Lecture seule : ceci rejoue le clip capturé et ne modifie jamais la note du patient.",
+    "exportButton": "Exporter (.docx)",
     "noSessionsTitle": "Aucune séance avec médias capturés",
     "noSessionsBody": "Les séances apparaissent ici tant que leurs images et clips masqués sont conservés. Enregistrez ou importez une rencontre avec vidéo, puis revenez.",
     "runError": "La comparaison n'a pas pu s'exécuter. Veuillez réessayer.",
