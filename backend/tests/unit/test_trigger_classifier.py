@@ -5,6 +5,7 @@ import pytest
 from app.core.types import Template, TemplateSection, Transcript, TranscriptSegment
 from app.modules.transcription.trigger_classifier import (
     SUPPRESSION_PHRASES,
+    _build_keyword_map,
     classify_triggers,
 )
 
@@ -203,4 +204,95 @@ class TestMixedSegments:
         ])
         result = await classify_triggers(transcript, template=empty_template)
         # Should use default keywords since template has empty lists
+        assert result.segments[0].is_visual_trigger is True
+
+
+class TestKeywordMapMerging:
+    """Sections sharing a trigger type must MERGE, not overwrite.
+
+    `_section_id_to_trigger_type` is many-to-one — every id outside its small
+    mapping collapses to `general_visual_pointer` — so the previous straight
+    assignment dropped the keywords of every section but the last one sharing a
+    type, and with them the frames those words would have triggered.
+    """
+
+    def test_sections_sharing_a_trigger_type_merge(self):
+        # Two unmapped ids -> both collapse to general_visual_pointer.
+        template = Template(
+            key="letter",
+            display_name="Letter",
+            sections=[
+                TemplateSection(
+                    id="examination_findings",
+                    title="Findings",
+                    visual_trigger_keywords=["range of motion", "palpation"],
+                ),
+                TemplateSection(
+                    id="investigations_reviewed",
+                    title="Investigations",
+                    visual_trigger_keywords=["x-ray", "mri"],
+                ),
+            ],
+        )
+        keyword_map = _build_keyword_map(template)
+        bucket = keyword_map["general_visual_pointer"]
+        # All four survive — pre-fix only the last section's two did.
+        assert bucket == ["range of motion", "palpation", "x-ray", "mri"]
+
+    def test_duplicate_keyword_across_sections_collapses(self):
+        template = Template(
+            key="dup",
+            display_name="Dup",
+            sections=[
+                TemplateSection(
+                    id="a", title="A", visual_trigger_keywords=["Looking At"]
+                ),
+                TemplateSection(
+                    id="b", title="B", visual_trigger_keywords=["looking at", "wound"]
+                ),
+            ],
+        )
+        assert _build_keyword_map(template)["general_visual_pointer"] == [
+            "looking at",
+            "wound",
+        ]
+
+    def test_distinct_trigger_types_stay_separate(self):
+        template = Template(
+            key="ortho",
+            display_name="Ortho",
+            sections=[
+                TemplateSection(
+                    id="physical_exam", title="Exam", visual_trigger_keywords=["flexion"]
+                ),
+                TemplateSection(
+                    id="imaging_review", title="Imaging", visual_trigger_keywords=["x-ray"]
+                ),
+            ],
+        )
+        keyword_map = _build_keyword_map(template)
+        assert keyword_map["active_physical_examination"] == ["flexion"]
+        assert keyword_map["live_imaging_review"] == ["x-ray"]
+
+    @pytest.mark.asyncio
+    async def test_merged_keywords_actually_flag_segments(self):
+        """End-to-end: a word from the FIRST shared-type section still fires."""
+        template = Template(
+            key="letter",
+            display_name="Letter",
+            sections=[
+                TemplateSection(
+                    id="examination_findings",
+                    title="Findings",
+                    visual_trigger_keywords=["range of motion"],
+                ),
+                TemplateSection(
+                    id="investigations_reviewed",
+                    title="Investigations",
+                    visual_trigger_keywords=["x-ray"],
+                ),
+            ],
+        )
+        transcript = _make_transcript(["Let me check your range of motion."])
+        result = await classify_triggers(transcript, template=template)
         assert result.segments[0].is_visual_trigger is True

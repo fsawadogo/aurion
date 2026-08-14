@@ -23,6 +23,70 @@ logger = logging.getLogger("aurion.config")
 
 _POLL_INTERVAL_SECONDS = 30
 
+# Env-var override for the `feature_flags` / `pipeline` sections, LOCAL ONLY.
+#
+# The .env fallback previously carried only the three provider keys, so every
+# flag was pinned to its Pydantic default with no way to change it. Locally
+# that made whole features untestable: `video_import_enabled` defaults False,
+# so every video-import route 404s, and the admin flag API can't help because
+# it publishes an AWS AppConfig hosted version (AppConfig is LocalStack
+# Pro-only and docker-compose.override.yml drops it).
+#
+# Hard-gated on APP_ENV=local. The .env fallback ALSO runs in deployed
+# environments whenever AppConfig is unreachable, and there an env var
+# silently overriding a flag would be a privacy hazard, not a convenience:
+# it could flip a PHI-relevant gate during an outage with no audit trail.
+# AppConfig stays the only way to change a flag anywhere else.
+_LOCAL_OVERRIDE_SECTIONS = {
+    "feature_flags": "AURION_FF_",
+    "pipeline": "AURION_PIPELINE_",
+}
+
+
+def _coerce(raw: str) -> object:
+    """Parse an env string into bool/int/str for Pydantic to validate."""
+    lowered = raw.strip().lower()
+    if lowered in ("true", "1", "yes", "on"):
+        return True
+    if lowered in ("false", "0", "no", "off"):
+        return False
+    try:
+        return int(raw)
+    except ValueError:
+        return raw
+
+
+def _local_section_overrides() -> dict[str, dict]:
+    """Collect `AURION_FF_* / AURION_PIPELINE_*` overrides. `{}` unless local.
+
+    Field names are matched against the real schema, so a typo is reported
+    rather than silently ignored — a flag you think you set but didn't is
+    exactly how an "it didn't work" afternoon happens. Values are coerced
+    loosely and handed to Pydantic, which remains the validation authority.
+    """
+    if os.getenv("APP_ENV", "local") != "local":
+        return {}
+    overrides: dict[str, dict] = {}
+    for section, prefix in _LOCAL_OVERRIDE_SECTIONS.items():
+        valid = AppConfigSchema.model_fields[section].annotation.model_fields
+        values: dict[str, object] = {}
+        for key, raw in os.environ.items():
+            if not key.startswith(prefix):
+                continue
+            field = key[len(prefix):].lower()
+            if field not in valid:
+                logger.warning(
+                    "Ignoring %s — %r is not a field of %s", key, field, section
+                )
+                continue
+            values[field] = _coerce(raw)
+        if values:
+            overrides[section] = values
+            logger.info(
+                "LOCAL env override for %s: %s", section, sorted(values)
+            )
+    return overrides
+
 
 class AppConfigClient:
     """Manages runtime configuration from AWS AppConfig with .env fallback."""
@@ -138,9 +202,12 @@ class AppConfigClient:
         if v := os.getenv("AURION_PROVIDER_VISION"):
             providers_raw["vision"] = v
 
+        overrides = _local_section_overrides()
+
         try:
             config = AppConfigSchema(
                 providers=providers_raw if providers_raw else {},
+                **overrides,
             )
         except Exception:
             logger.warning("Invalid env config, using defaults")

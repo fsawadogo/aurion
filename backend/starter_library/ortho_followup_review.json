@@ -1,0 +1,108 @@
+{
+  "key": "ortho_followup_review",
+  "display_name": "Orthopedics — Follow-Up / Post-Op Review",
+  "version": "1.0",
+  "detail_level": "standard",
+  "sections": [
+    {
+      "id": "interval_history",
+      "title": "Interval History / Évolution depuis la dernière visite",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "What has happened since the last visit, as stated: change in pain (better, worse, unchanged, with any score given), function and activity level, adherence to therapy or restrictions, new symptoms, complications reported, and medications started or stopped. Record only what the patient or physician states — never infer a trajectory that was not voiced."
+    },
+    {
+      "id": "prior_procedure",
+      "title": "Prior Procedure / Intervention antérieure",
+      "required": false,
+      "visual_trigger_keywords": [],
+      "description": "The prior operation or injection as referenced during the visit: procedure name, side/site, and date or interval since. Capture only as stated in this encounter; do not reconstruct operative detail. Leave not_captured if no prior procedure is discussed."
+    },
+    {
+      "id": "wound_assessment",
+      "title": "Incision / Wound Check — Vérification de la plaie",
+      "required": false,
+      "visual_trigger_keywords": [
+        "incision",
+        "wound",
+        "scar",
+        "staples",
+        "sutures",
+        "dressing",
+        "drainage",
+        "erythema",
+        "swelling",
+        "healing",
+        "looking at",
+        "this area",
+        "right here"
+      ],
+      "description": "Post-operative incision findings exactly as stated: location and laterality; wound edges (approximated, gaping, dehiscence); dimensions in cm when measured; drainage amount and character; periwound erythema, induration, or warmth; suture or staple status and whether removed. Describe only — never state that a wound is or is not infected unless the physician says so. Leave not_captured if no incision is examined.",
+      "measurement_output_expected": true
+    },
+    {
+      "id": "physical_exam",
+      "title": "Physical Examination / Examen physique",
+      "required": true,
+      "visual_trigger_keywords": [
+        "range of motion",
+        "ROM",
+        "flexion",
+        "extension",
+        "rotation",
+        "palpation",
+        "tenderness",
+        "swelling",
+        "effusion",
+        "strength",
+        "sensation",
+        "gait",
+        "weight-bearing",
+        "goniometer",
+        "instability",
+        "looking here",
+        "you can see"
+      ],
+      "description": "Findings at this visit as the physician performs them, leading with the structure or test name: gait and weight-bearing status; inspection; palpation with location; range of motion in degrees, active vs passive when distinguished; strength on the 0-5 MRC scale when graded; named special tests with result AND side; neurovascular status. Record only what the physician states, with laterality. One claim per finding.",
+      "measurement_output_expected": true
+    },
+    {
+      "id": "imaging_review",
+      "title": "Imaging Review / Revue de l'imagerie",
+      "required": false,
+      "visual_trigger_keywords": [
+        "X-ray",
+        "x-ray",
+        "radiograph",
+        "MRI",
+        "CT",
+        "ultrasound",
+        "looking at",
+        "pulling up",
+        "on the screen",
+        "AP view",
+        "lateral view",
+        "weight-bearing",
+        "standing",
+        "comparing",
+        "hardware",
+        "union"
+      ],
+      "description": "Post-operative or interval imaging as literally described on screen — modality, laterality, projection/view, and any comparison to prior studies the physician draws. Include hardware position and healing appearance only in the physician's own words. One claim per view or finding. Leave not_captured if no imaging is reviewed."
+    },
+    {
+      "id": "assessment",
+      "title": "Progress / Assessment — Évolution et évaluation",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "The physician's stated view of progress, one claim per problem and attributed to the physician (e.g. 'Provider assessed…'). Include stage of recovery, whether progress is as expected, and any complication named. Record only conclusions the physician actually voiced. Where grounded synthesis is enabled, cite the interval-history, exam, or imaging source(s) each statement rests on."
+    },
+    {
+      "id": "plan",
+      "title": "Plan / Plan de traitement",
+      "required": true,
+      "visual_trigger_keywords": [],
+      "description": "The plan as stated, one claim per item: changes to weight-bearing or activity restrictions; physiotherapy or rehabilitation instructions; medication changes; further investigations ordered; referrals; whether surgery is being considered or scheduled and any risks counselled; return-to-work or sport guidance; return precautions; and follow-up interval or discharge from care."
+    }
+  ]
+}
