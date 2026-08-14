@@ -808,6 +808,72 @@ export default function GroundedLabPage() {
           </div>
         )}
 
+      {modalityResult && showResults && (
+        <div data-testid="grounded-lab-modality-result">
+          <Card className="mb-4" title={t("modalitySummaryTitle")}>
+            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statFrames")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {modalityResult.frame_count}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statSectionsAudio")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {modalityResult.sections_audio}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statSectionsVisual")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {modalityResult.sections_visual}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-aurion-micro text-navy-400">
+                  {t("statSectionsMerged")}
+                </dt>
+                <dd className="text-aurion-callout font-semibold text-navy-800">
+                  {modalityResult.sections_merged}
+                </dd>
+              </div>
+            </dl>
+          </Card>
+
+          <Card noPadding>
+            <div className="grid grid-cols-3 border-b border-hairline bg-navy-50/40 text-aurion-micro font-semibold uppercase tracking-wide text-navy-500">
+              <div className="px-4 py-2">{t("colAudioOnly")}</div>
+              <div className="px-4 py-2">{t("colVisualOnly")}</div>
+              <div className="px-4 py-2">{t("colMerged")}</div>
+            </div>
+            <div className="grid grid-cols-3">
+              <div>
+                <FusionNoteColumn note={modalityResult.note_audio} />
+              </div>
+              <div className="border-l border-hairline">
+                {modalityResult.note_visual ? (
+                  <FusionNoteColumn note={modalityResult.note_visual} />
+                ) : (
+                  <p className="px-4 py-3 text-aurion-micro italic text-navy-300">
+                    {t("noVisualNote")}
+                  </p>
+                )}
+              </div>
+              <div className="border-l border-hairline">
+                <FusionNoteColumn note={modalityResult.note_merged} />
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
       {result && showResults && (
         <div data-testid="grounded-lab-result">
           <Card
@@ -962,72 +1028,6 @@ export default function GroundedLabPage() {
               </div>
               <div className="border-l border-hairline">
                 <FusionNoteColumn note={fusionResult.note_b} />
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
-      {modalityResult && showResults && (
-        <div data-testid="grounded-lab-modality-result">
-          <Card className="mb-4" title={t("modalitySummaryTitle")}>
-            <dl className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div>
-                <dt className="text-aurion-micro text-navy-400">
-                  {t("statFrames")}
-                </dt>
-                <dd className="text-aurion-callout font-semibold text-navy-800">
-                  {modalityResult.frame_count}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-aurion-micro text-navy-400">
-                  {t("statSectionsAudio")}
-                </dt>
-                <dd className="text-aurion-callout font-semibold text-navy-800">
-                  {modalityResult.sections_audio}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-aurion-micro text-navy-400">
-                  {t("statSectionsVisual")}
-                </dt>
-                <dd className="text-aurion-callout font-semibold text-navy-800">
-                  {modalityResult.sections_visual}
-                </dd>
-              </div>
-              <div>
-                <dt className="text-aurion-micro text-navy-400">
-                  {t("statSectionsMerged")}
-                </dt>
-                <dd className="text-aurion-callout font-semibold text-navy-800">
-                  {modalityResult.sections_merged}
-                </dd>
-              </div>
-            </dl>
-          </Card>
-
-          <Card noPadding>
-            <div className="grid grid-cols-3 border-b border-hairline bg-navy-50/40 text-aurion-micro font-semibold uppercase tracking-wide text-navy-500">
-              <div className="px-4 py-2">{t("colAudioOnly")}</div>
-              <div className="px-4 py-2">{t("colVisualOnly")}</div>
-              <div className="px-4 py-2">{t("colMerged")}</div>
-            </div>
-            <div className="grid grid-cols-3">
-              <div>
-                <FusionNoteColumn note={modalityResult.note_audio} />
-              </div>
-              <div className="border-l border-hairline">
-                {modalityResult.note_visual ? (
-                  <FusionNoteColumn note={modalityResult.note_visual} />
-                ) : (
-                  <p className="px-4 py-3 text-aurion-micro italic text-navy-300">
-                    {t("noVisualNote")}
-                  </p>
-                )}
-              </div>
-              <div className="border-l border-hairline">
-                <FusionNoteColumn note={modalityResult.note_merged} />
               </div>
             </div>
           </Card>
