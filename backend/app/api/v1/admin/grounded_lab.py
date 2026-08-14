@@ -40,13 +40,17 @@ flag is on or off — you validate before flipping, and re-validate after.
 
 from __future__ import annotations
 
+import io
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
+from docx import Document
+from docx.shared import Pt, RGBColor
 from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -1062,4 +1066,211 @@ async def get_modality_compare_run(
         status=job.status,
         error=job.error_message,
         result=result,
+    )
+
+
+# ── DOCX export (#export) ────────────────────────────────────────────────────
+#
+# Render a COMPLETED comparison result — the exact payload the client is already
+# displaying — to a Word document. Read-only: it never re-runs a comparison,
+# reads media, or touches a patient note; it only formats what the run produced.
+
+_INDIGO = RGBColor(0x0F, 0x13, 0x34)   # PeriTwin indigo (matches note export)
+_GREY = RGBColor(0x99, 0x99, 0x99)
+_MUTED = RGBColor(0x66, 0x66, 0x66)
+
+_EXPORT_TITLES = {
+    "grounded": "Grounded Lab — Descriptive vs Grounded",
+    "fusion": "Grounded Lab — Fusion A vs B",
+    "modality": "Grounded Lab — Audio / Visual / Merged",
+}
+
+
+class ComparisonExportRequest(BaseModel):
+    """The already-computed comparison the client is showing, to render as DOCX.
+
+    ``result`` is the raw run payload (GroundedLabRunResponse / FusionCompareResult
+    / ModalityCompareResult, model_dumped). Accepted as a dict so one endpoint
+    serves all three shapes without re-declaring them as request bodies.
+    """
+
+    mode: Literal["grounded", "fusion", "modality"]
+    session_label: str = ""
+    result: dict
+
+
+def _fmt_ts(ms: int) -> str:
+    total = int(ms) // 1000
+    return f"{total // 60}:{total % 60:02d}"
+
+
+def _note_to_docx(doc: "Document", note: Optional[dict]) -> None:
+    """Render a Note-shaped dict (sections -> claims) as headings + bullets."""
+    if not isinstance(note, dict):
+        run = doc.add_paragraph().add_run(
+            "The video produced no usable note (nothing clinically visible, or "
+            "captions unavailable)."
+        )
+        run.italic = True
+        run.font.color.rgb = _GREY
+        return
+    sections = [
+        s
+        for s in note.get("sections", [])
+        if isinstance(s, dict) and s.get("claims")
+    ]
+    if not sections:
+        run = doc.add_paragraph().add_run("No populated sections.")
+        run.italic = True
+        run.font.color.rgb = _GREY
+        return
+    for section in sections:
+        heading = doc.add_heading(
+            section.get("title") or section.get("id", "Section"), level=2
+        )
+        if heading.runs:
+            heading.runs[0].font.color.rgb = _INDIGO
+        for claim in section.get("claims", []):
+            if not isinstance(claim, dict):
+                continue
+            para = doc.add_paragraph(style="List Bullet")
+            text_run = para.add_run(claim.get("text", ""))
+            text_run.font.size = Pt(11)
+            source_type = claim.get("source_type")
+            if source_type:
+                cite = para.add_run(f"  [{source_type}]")
+                cite.font.size = Pt(9)
+                cite.italic = True
+                cite.font.color.rgb = _MUTED
+
+
+def _finding_paragraph(doc: "Document", label: str, finding: Optional[dict]) -> None:
+    para = doc.add_paragraph()
+    para.add_run(f"{label}: ").bold = True
+    if isinstance(finding, dict):
+        para.add_run(finding.get("text", ""))
+        tag = para.add_run(
+            f"  [{finding.get('confidence', '')} · "
+            f"{finding.get('integration_status', '')}]"
+        )
+        tag.font.size = Pt(9)
+        tag.italic = True
+        tag.font.color.rgb = _MUTED
+    else:
+        none_run = para.add_run("(no finding)")
+        none_run.italic = True
+        none_run.font.color.rgb = _GREY
+
+
+def _build_comparison_docx(mode: str, session_label: str, result: dict) -> bytes:
+    """Build the DOCX bytes for one comparison result. Defensive against missing
+    keys so a partial payload downgrades gracefully rather than 500ing."""
+    doc = Document()
+
+    title = doc.add_heading(_EXPORT_TITLES.get(mode, "Grounded Lab — Comparison"), level=0)
+    if title.runs:
+        title.runs[0].font.color.rgb = _INDIGO
+
+    meta = doc.add_paragraph()
+    meta.add_run(f"Session: {session_label or '—'}").bold = True
+    meta.add_run(f"  |  Frames: {result.get('frame_count', '—')}")
+    if result.get("provider_used"):
+        meta.add_run(f"  |  Provider: {result['provider_used']}")
+    doc.add_paragraph("")
+
+    if mode == "grounded":
+        summary = doc.add_paragraph()
+        summary.add_run(
+            f"Descriptive findings: {result.get('descriptive_findings', 0)}  |  "
+            f"Grounded findings: {result.get('grounded_findings', 0)}  |  "
+            f"Evidence mode: {result.get('evidence_mode', '—')}"
+        )
+        doc.add_paragraph("")
+        pairs = result.get("pairs") or []
+        if not pairs:
+            run = doc.add_paragraph().add_run("No findings produced.")
+            run.italic = True
+            run.font.color.rgb = _GREY
+        for pair in pairs:
+            if not isinstance(pair, dict):
+                continue
+            heading = doc.add_heading(
+                f"{_fmt_ts(pair.get('timestamp_ms', 0))}  ·  {pair.get('frame_id', '')}",
+                level=2,
+            )
+            if heading.runs:
+                heading.runs[0].font.color.rgb = _INDIGO
+            _finding_paragraph(doc, "Descriptive", pair.get("descriptive"))
+            _finding_paragraph(doc, "Grounded", pair.get("grounded"))
+            doc.add_paragraph("")
+    elif mode == "fusion":
+        summary = doc.add_paragraph()
+        summary.add_run(
+            f"Sections A: {result.get('sections_a', 0)}  |  "
+            f"Sections B: {result.get('sections_b', 0)}  |  "
+            f"Conflicts B: {result.get('conflicts_b', 0)}"
+        )
+        doc.add_paragraph("")
+        for label, key in (
+            ("Fusion A — transcript-as-context", "note_a"),
+            ("Fusion B — parallel-then-merge", "note_b"),
+        ):
+            heading = doc.add_heading(label, level=1)
+            if heading.runs:
+                heading.runs[0].font.color.rgb = _INDIGO
+            _note_to_docx(doc, result.get(key))
+            doc.add_paragraph("")
+    elif mode == "modality":
+        summary = doc.add_paragraph()
+        summary.add_run(
+            f"Sections — audio: {result.get('sections_audio', 0)}  |  "
+            f"visual: {result.get('sections_visual', 0)}  |  "
+            f"merged: {result.get('sections_merged', 0)}"
+        )
+        doc.add_paragraph("")
+        for label, key in (
+            ("Audio only", "note_audio"),
+            ("Visual only", "note_visual"),
+            ("Merged (both)", "note_merged"),
+        ):
+            heading = doc.add_heading(label, level=1)
+            if heading.runs:
+                heading.runs[0].font.color.rgb = _INDIGO
+            _note_to_docx(doc, result.get(key))
+            doc.add_paragraph("")
+
+    doc.add_paragraph("")
+    footer = doc.add_paragraph()
+    footer_run = footer.add_run(
+        "Generated by PeriTwin Grounded Lab — a read-only validation replay. "
+        "Not a patient note."
+    )
+    footer_run.font.size = Pt(8)
+    footer_run.italic = True
+    footer_run.font.color.rgb = _GREY
+
+    buffer = io.BytesIO()
+    doc.save(buffer)
+    return buffer.getvalue()
+
+
+@router.post("/grounded-lab/export")
+async def export_grounded_lab_comparison(
+    body: ComparisonExportRequest,
+    user: CurrentUser = Depends(require_role(UserRole.ADMIN, UserRole.EVAL_TEAM)),
+) -> Response:
+    """Render a completed Grounded-Lab comparison result to a downloadable DOCX.
+
+    Read-only: formats the payload the caller already has on screen; never
+    re-runs the comparison, reads session media, or writes a note. ADMIN /
+    EVAL_TEAM only (same as the run endpoints).
+    """
+    docx_bytes = _build_comparison_docx(body.mode, body.session_label, body.result)
+    filename = f"grounded_lab_{body.mode}.docx"
+    return Response(
+        content=docx_bytes,
+        media_type=(
+            "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+        ),
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )

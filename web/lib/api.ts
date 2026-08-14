@@ -680,6 +680,18 @@ export async function getModalityCompareRun(
   return res.json();
 }
 
+export async function exportGroundedLabComparison(payload: {
+  mode: "grounded" | "fusion" | "modality";
+  session_label: string;
+  result: unknown;
+}): Promise<Blob> {
+  const res = await fetchWithAuth("/api/v1/admin/grounded-lab/export", {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+  return res.blob();
+}
+
 /* ─── Runtime AI-provider overrides (admin / compliance) ─────────────────────
  *
  * GET shows per-type AppConfig baseline + active override + effective value.
