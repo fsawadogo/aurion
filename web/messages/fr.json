@@ -1671,7 +1671,14 @@
     "processing": {
       "title": "Traitement",
       "leaveSafe": "Vous pouvez quitter cette page en toute sécurité — le traitement se poursuit et la note apparaîtra dans Mes notes.",
-      "elapsed": "Temps écoulé {time}."
+      "elapsed": "Temps écoulé {time}.",
+      "cancel": "Annuler le traitement"
+    },
+    "cancelled": {
+      "title": "Traitement annulé",
+      "retryable": "L'enregistrement téléversé est toujours disponible : vous pouvez relancer le traitement sans le téléverser à nouveau.",
+      "retry": "Relancer le traitement",
+      "startOver": "Supprimer et recommencer"
     },
     "stages": {
       "uploading": "Téléversé",
@@ -1688,7 +1695,8 @@
       "uploadFailed": "Le téléversement a échoué. Veuillez réessayer.",
       "processingFailed": "Le traitement a échoué. Veuillez réessayer.",
       "lostContact": "Nous avons perdu le contact avec le traitement. Votre note pourrait apparaître dans Mes notes — actualisez ou vérifiez sous peu.",
-      "retry": "Réessayer"
+      "retry": "Réessayer",
+      "cancelFailed": "Impossible d'annuler le traitement. Réessayez."
     },
     "clips": {
       "title": "Séquences de la consultation",

@@ -31,6 +31,7 @@ import {
 import {
   createAdminVideoImport,
   getAdminVideoImportStatus,
+  humanizeError,
   processAdminVideoImport,
 } from "@/lib/api";
 import {
@@ -42,6 +43,8 @@ import {
   getVideoImportStatus,
   listMyCustomTemplates,
   processVideoImport,
+  cancelVideoImport,
+  discardSession,
   startVideoImportMultipart,
   type VideoImportStatus,
 } from "@/lib/portal-api";
@@ -80,7 +83,7 @@ function humanizeVisitType(key: string): string {
 }
 const POLL_MS = 4000;
 
-type Phase = "form" | "uploading" | "processing" | "error";
+type Phase = "form" | "uploading" | "processing" | "error" | "cancelled";
 
 // Stepper stages, mapped from the backend job status + session state.
 const STAGES = [
@@ -233,6 +236,16 @@ export default function VideoImportClient({
   const [uploadPct, setUploadPct] = useState(0);
   const [stageIndex, setStageIndex] = useState(0);
   const [error, setError] = useState<string | null>(null);
+  // Cancel (wedged-import escape hatch). The session id is needed after the
+  // upload returns so the clinician can act on the job; `cancelledRef` stops
+  // the poll loop, which is otherwise the only thing keeping the spinner alive.
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [cancelling, setCancelling] = useState(false);
+  const cancelledRef = useRef(false);
+  // Whether /process would actually succeed again — the server decides, so the
+  // UI never offers a Retry that 409s. Null until a cancel returns.
+  const [retryable, setRetryable] = useState<boolean | null>(null);
+  const [retryBlockedReason, setRetryBlockedReason] = useState<string | null>(null);
   const dragRef = useRef(false);
   const [, forceDrag] = useState(0);
 
@@ -406,8 +419,12 @@ export default function VideoImportClient({
   }
 
   async function poll(sessionId: string, errorCount = 0): Promise<void> {
+    // A cancel already moved the UI on; a late poll must not drag it back into
+    // "processing" or overwrite the cancelled card with a stale status.
+    if (cancelledRef.current) return;
     try {
       const s = await api.status(sessionId);
+      if (cancelledRef.current) return;
       if (s.status === "failed") {
         setError(s.error_message || t("errors.processingFailed"));
         setPhase("error");
@@ -432,6 +449,75 @@ export default function VideoImportClient({
       }
       window.setTimeout(() => void poll(sessionId, errorCount + 1), POLL_MS);
     }
+  }
+
+  /** Stop waiting on a wedged import.
+   *
+   *  Only the clinician surface has the route; admin/eval keeps the old
+   *  behaviour. Marks the job failed server-side so it stops occupying the
+   *  session, then shows what is actually possible next — the server decides
+   *  retryability, because once processing has begun the raw clip is purged
+   *  and there is nothing left to re-process.
+   */
+  async function onCancelProcessing() {
+    if (!sessionId) return;
+    setCancelling(true);
+    setError(null);
+    try {
+      const res = await cancelVideoImport(sessionId);
+      cancelledRef.current = true;
+      setRetryable(res.retryable);
+      setRetryBlockedReason(res.retry_blocked_reason);
+      setPhase("cancelled");
+    } catch (e) {
+      setError(humanizeError(e, t("errors.cancelFailed")));
+      setPhase("error");
+    } finally {
+      setCancelling(false);
+    }
+  }
+
+  /** Re-run processing on the SAME uploaded clip. Only offered when the server
+   *  said `retryable`, i.e. the clip is still in S3 and the session never left
+   *  CONSENT_PENDING. */
+  async function onRetryProcessing() {
+    if (!sessionId) return;
+    setError(null);
+    setPhase("processing");
+    setStageIndex(0);
+    cancelledRef.current = false;
+    try {
+      await api.process(sessionId);
+      void poll(sessionId);
+    } catch (e) {
+      setError(humanizeError(e, t("errors.processingFailed")));
+      setPhase("error");
+    }
+  }
+
+  /** Discard the wedged session and return to an empty form.
+   *
+   *  Best-effort: if the delete fails we still reset, because leaving the
+   *  clinician staring at a dead session is worse than an orphaned row (which
+   *  the audit trail still accounts for). */
+  async function onStartOver() {
+    if (sessionId) {
+      try {
+        await discardSession(sessionId);
+      } catch {
+        // Intentionally ignored — see above.
+      }
+    }
+    cancelledRef.current = false;
+    setSessionId(null);
+    setRetryable(null);
+    setRetryBlockedReason(null);
+    setError(null);
+    setFiles([]);
+    setConsent(false);
+    setUploadPct(0);
+    setStageIndex(0);
+    setPhase("form");
   }
 
   async function start() {
@@ -497,6 +583,8 @@ export default function VideoImportClient({
 
       setPhase("processing");
       setStageIndex(0);
+      setSessionId(created.session_id);
+      cancelledRef.current = false;
       await api.process(created.session_id);
       void poll(created.session_id);
     } catch (e) {
@@ -900,6 +988,52 @@ export default function VideoImportClient({
               </>
             )}
           </p>
+          {/* Escape hatch. Without it the only exit from a wedged import was
+              the 15-minute watchdog — and that only fires while this page is
+              polling, so closing the tab left the session stuck indefinitely.
+              Clinician surface only: admin/eval has no /cancel route. */}
+          {surface === "clinician" && sessionId && (
+            <div className="mt-4 border-t border-hairline pt-3">
+              <Button
+                variant="secondary"
+                size="sm"
+                loading={cancelling}
+                disabled={cancelling}
+                onClick={() => void onCancelProcessing()}
+                data-testid="cancel-processing"
+              >
+                {t("processing.cancel")}
+              </Button>
+            </div>
+          )}
+        </Card>
+      )}
+
+      {phase === "cancelled" && (
+        <Card title={t("cancelled.title")}>
+          <p className="text-sm text-navy-600">
+            {retryable ? t("cancelled.retryable") : retryBlockedReason}
+          </p>
+          <div className="mt-4 flex items-center gap-3">
+            {retryable && (
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => void onRetryProcessing()}
+                data-testid="retry-processing"
+              >
+                {t("cancelled.retry")}
+              </Button>
+            )}
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => void onStartOver()}
+              data-testid="start-over"
+            >
+              {t("cancelled.startOver")}
+            </Button>
+          </div>
         </Card>
       )}
 

@@ -1671,7 +1671,14 @@
     "processing": {
       "title": "Processing",
       "leaveSafe": "You can safely leave this page — processing continues and the note will appear in My Notes.",
-      "elapsed": "Elapsed {time}."
+      "elapsed": "Elapsed {time}.",
+      "cancel": "Cancel processing"
+    },
+    "cancelled": {
+      "title": "Processing cancelled",
+      "retryable": "The uploaded recording is still available, so you can run processing again without re-uploading.",
+      "retry": "Run processing again",
+      "startOver": "Discard and start over"
     },
     "stages": {
       "uploading": "Uploaded",
@@ -1688,7 +1695,8 @@
       "uploadFailed": "Upload failed. Please try again.",
       "processingFailed": "Processing failed. Please try again.",
       "lostContact": "We lost contact with processing. Your note may still appear in My Notes — refresh or check there shortly.",
-      "retry": "Try again"
+      "retry": "Try again",
+      "cancelFailed": "Couldn't cancel processing. Try again."
     },
     "clips": {
       "title": "Encounter clips",
