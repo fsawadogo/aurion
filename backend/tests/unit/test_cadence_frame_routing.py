@@ -309,3 +309,142 @@ def _masked_frame(timestamp_ms: int):
         s3_key=f"frames/s1/{timestamp_ms}.jpg",
         masking_confirmed=True,
     )
+
+
+class TestStage2RouteWiring:
+    """The real route must thread `trigger_segments` into the merge.
+
+    Everything above tests `merge_visual_citations` directly. That leaves the
+    wiring untested: if `api/v1/vision.py` forgot to pass `trigger_segments`,
+    the merge would silently fall back to anchor routing and every test above
+    would still pass while production stayed broken. This drives
+    `run_stage2_vision` with the REAL merge and asserts on where the claim
+    landed.
+    """
+
+    @pytest.mark.asyncio
+    async def test_cadence_caption_reaches_imaging_through_the_real_route(
+        self, monkeypatch
+    ):
+        import uuid
+        from types import SimpleNamespace
+
+        from app.api.v1 import vision as route
+        from app.core.types import MaskedFrame, Transcript
+
+        # A trigger at 50-55s, and a frame at 200s — far outside it, so the
+        # route must classify the frame as cadence.
+        transcript = Transcript(
+            session_id="s1",
+            provider_used="assemblyai",
+            segments=[
+                TranscriptSegment(
+                    id="seg_0",
+                    start_ms=0,
+                    end_ms=5_000,
+                    text="I've had pain for about a year.",
+                ),
+                _trigger(50_000, 55_000),
+            ],
+        )
+
+        class _Result:
+            def __init__(self, value):
+                self._value = value
+
+            def scalar_one_or_none(self):
+                return self._value
+
+        rows = [
+            _Result(SimpleNamespace(transcript_json=transcript.model_dump_json())),
+            _Result(
+                SimpleNamespace(
+                    template_key=None,
+                    custom_template_id=None,
+                    clinician_id=None,
+                )
+            ),
+        ]
+
+        class _DB:
+            async def execute(self, *_a, **_kw):
+                return rows.pop(0)
+
+        async def _async(value):
+            return value
+
+        async def _noop(*_a, **_kw):
+            return None
+
+        # The caption the model would return for an UN-AIMED X-ray frame.
+        # Its production counterpart was discarded as low-confidence purely
+        # because SECTION FOCUS pointed it at the physical exam.
+        xray_caption = _caption(
+            "A computer screen displaying an X-ray of the right foot.", 200_000
+        )
+
+        note_holder: dict = {}
+
+        async def _capture_version(_sid, note, *_a, **_kw):
+            note_holder["note"] = note
+
+        # VIS-03 only engages when the template engine is ON — with no
+        # template there is nothing to match a caption against, and the merge
+        # takes its legacy anchor-routing path. Dev has this enabled (the
+        # production discard reasons name specific sections, which only
+        # `_section_focus_block` produces, and that needs a template).
+        cfg = get_config().model_copy(deep=True)
+        cfg.feature_flags.template_engine_enabled = True
+        monkeypatch.setattr(route, "get_config", lambda: cfg)
+        monkeypatch.setattr(route, "get_latest_note", lambda *_a, **_k: _async(_note()))
+        monkeypatch.setattr(
+            route, "resolve_session_template", lambda *_a, **_k: _async(_TEMPLATE)
+        )
+        monkeypatch.setattr(
+            route,
+            "caption_visual_evidence",
+            lambda **_kw: _async([xray_caption]),
+        )
+        monkeypatch.setattr(
+            route,
+            "retrieve_all_masked_frames",
+            lambda *_a, **_k: _async(
+                [
+                    MaskedFrame(
+                        frame_id="frame_200000",
+                        session_id="s1",
+                        timestamp_ms=200_000,
+                        s3_key="frames/s1/200000.jpg",
+                        masking_confirmed=True,
+                    )
+                ]
+            ),
+        )
+        monkeypatch.setattr(
+            route, "retrieve_clips_for_triggers", lambda *_a, **_k: _async([])
+        )
+        monkeypatch.setattr(route, "assemble_prompt", lambda *_a, **_k: _async("P"))
+        monkeypatch.setattr(
+            route, "reconcile_captions", lambda *_a, **_k: _async([xray_caption])
+        )
+        monkeypatch.setattr(route, "create_note_version", _capture_version)
+        monkeypatch.setattr(route, "write_audit", _noop)
+        monkeypatch.setattr(route, "record_clip_metrics", _noop)
+        monkeypatch.setattr(route, "has_unresolved_conflicts", lambda _c: False)
+        # NOT patched: merge_visual_citations. That is the code under test.
+
+        await route.run_stage2_vision(uuid.uuid4(), _DB())
+
+        merged = note_holder.get("note")
+        assert merged is not None, "Stage 2 never produced a note version"
+        landed = [
+            s.id
+            for s in merged.sections
+            for c in s.claims
+            if c.source_type == "visual"
+        ]
+        assert landed == ["imaging_review"], (
+            f"cadence X-ray caption landed in {landed or 'nowhere'}; the route "
+            "is not threading trigger_segments into the merge, so it fell back "
+            "to routing by the audio anchor"
+        )
