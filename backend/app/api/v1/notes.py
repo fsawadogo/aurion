@@ -51,10 +51,12 @@ from app.modules.session.service import (
 )
 from app.modules.vision.jobs import (
     create_job,
+    fail_if_stale,
     get_latest_job,
     mark_completed,
     mark_failed,
     mark_running,
+    recover_orphaned_jobs,
 )
 
 logger = logging.getLogger("aurion.api.notes")
@@ -739,6 +741,21 @@ async def get_stage2_status(
     job = await get_latest_job(session_id, db)
     if job is None:
         return Stage2StatusResponse(session_id=str(session_id), status="no_job")
+    # VIS-07 — lazy watchdog, mirroring the video-import status routes.
+    # Stage 2 is a detached background task: if the worker recycles or a step
+    # hangs, it dies before its `except → mark_failed` and the row is stranded
+    # `running` forever. Nothing else reaped these, so sessions sat in
+    # "Finishing visual enrichment…" for weeks. Reaping here means the poll
+    # that would otherwise spin forever is the thing that resolves it.
+    if await fail_if_stale(db, job):
+        await write_audit(
+            session_id,
+            AuditEventType.STAGE2_FAILED,
+            job_id=str(job.id),
+            reason="watchdog: visual enrichment exceeded the processing budget",
+            total_frames=job.frames_processed,
+            failed_frames=0,
+        )
     return Stage2StatusResponse(
         session_id=str(session_id),
         job_id=str(job.id),
@@ -1424,3 +1441,48 @@ def _claim_to_response(
         clip_url=clip_url,
         frame_url=frame_url,
     )
+
+
+async def recover_stuck_stage2_on_startup() -> int:
+    """Reap Stage 2 jobs orphaned by a worker recycle — called once on startup.
+
+    Mirrors ``video_import.recover_stuck_imports_on_startup`` (VIS-07). Stage 2
+    is a detached ``spawn_background_task``; a container recycle kills it before
+    its in-process ``except → mark_failed`` runs, stranding the row ``running``
+    so the dashboard shows "Finishing visual enrichment…" indefinitely.
+
+    The per-poll watchdog only helps while something is still polling, and iOS
+    stops once the clinician moves on — which is how four sessions sat stuck,
+    two of them for weeks. Sweeping at startup clears them without anyone
+    having to revisit the note.
+
+    Owns its own DB session (the lifespan runs before requests are served) and
+    emits ``STAGE2_FAILED`` per reaped session, the same event the in-process
+    handler writes, so a stranded job never lacks an audit entry (CLAUDE.md).
+    Best-effort: any failure is logged and swallowed so recovery never blocks
+    startup. Returns the count.
+    """
+    reaped: list = []
+    try:
+        async with async_session_factory() as db:
+            reaped = await recover_orphaned_jobs(db)
+            for session_id in reaped:
+                await write_audit(
+                    session_id,
+                    AuditEventType.STAGE2_FAILED,
+                    job_id="",
+                    reason=(
+                        "startup recovery: visual enrichment did not complete "
+                        "before a worker restart"
+                    ),
+                    total_frames=0,
+                    failed_frames=0,
+                )
+        if reaped:
+            logger.warning(
+                "Startup recovery failed %d orphaned Stage 2 job(s)", len(reaped)
+            )
+        return len(reaped)
+    except Exception:  # noqa: BLE001 — recovery must never block startup
+        logger.exception("Stage 2 startup recovery failed")
+        return 0

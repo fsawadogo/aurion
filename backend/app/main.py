@@ -24,6 +24,7 @@ from app.api.v1.me_corrections import router as me_corrections_router
 from app.api.v1.me_measurements import router as me_measurements_router
 from app.api.v1.me_prompts import router as me_prompts_router
 from app.api.v1.me_security import router as me_security_router
+from app.api.v1.notes import recover_stuck_stage2_on_startup
 from app.api.v1.notes import router as notes_router
 from app.api.v1.privacy import router as privacy_router
 from app.api.v1.profile import router as profile_router
@@ -67,6 +68,8 @@ async def lifespan(app: FastAPI):
     # Reap video-import jobs orphaned by a prior worker recycle (best-effort,
     # budget-gated; never blocks startup). Complements the per-poll watchdog.
     await recover_stuck_imports_on_startup()
+    # VIS-07 — same sweep for Stage 2 jobs, which had no reaper at all.
+    await recover_stuck_stage2_on_startup()
     appconfig = get_appconfig_client()
     await appconfig.start_polling()
     await start_override_polling()
