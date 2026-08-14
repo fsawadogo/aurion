@@ -153,8 +153,16 @@ async def get_my_audit_log(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
     user: CurrentUser = Depends(get_current_clinician),
+    db: AsyncSession = Depends(get_db),
 ) -> PaginatedAuditResponse:
     """Audit events involving the calling clinician.
+
+    Two scopes, because they need different controls (VIS-06). With
+    `session_id`, ownership is proved explicitly and the session's FULL trail
+    is returned — including the actor-less events the pipeline writes from its
+    background task, which the actor filter used to hide. Without one, the
+    unbounded scan still filters on actor identity, the only sound scope when
+    there is no session to prove ownership of.
 
     Filters on `actor_id == user.user_id` (or `clinician_id == ...`,
     same partition) so a clinician sees only the rows they generated —
@@ -166,19 +174,39 @@ async def get_my_audit_log(
     web portal can reuse its table component verbatim.
     """
     audit = get_audit_log_service()
+    # VIS-06: scoping by actor is the right control for an unbounded scan, but
+    # it is the WRONG one for a single session — and it made this surface
+    # useless for the thing clinicians most need it for.
+    #
+    # Every event the pipeline writes from its background task
+    # (`recording_started`, `stage1_started`, `transcription_complete`,
+    # `video_import_complete`, `stage2_started`, `visual_enrichment_complete`)
+    # carries NO actor: there is no human in the loop to attribute. They are
+    # in DynamoDB, but the actor filter dropped every one of them, so a
+    # clinician looking at My Activity saw consent and nothing else. A session
+    # that captured 182 frames and discarded 180 was indistinguishable from
+    # one that captured none.
+    #
+    # For a session-scoped query we can do better safely: prove OWNERSHIP
+    # explicitly (404 for anyone else's session, leaking nothing about its
+    # existence) and then return the session's full trail. The actor filter
+    # was carrying the ownership guarantee implicitly; replacing it with a
+    # real check is both stricter and more useful.
+    #
+    # The unbounded scan keeps the actor filter unchanged — there is no
+    # session to prove ownership of, so actor identity remains the only
+    # sound scope.
     if session_id:
+        await get_owned_session_or_404(db, session_id, user)
         events = await audit.get_session_events(session_id)
+        clinician_scope = None
     else:
         events = await scan_audit_events(audit)
+        clinician_scope = str(user.user_id)
 
-    # The shared filter already accepts `clinician_id=...` and matches
-    # against both `clinician_id` and `actor_id` fields on each row —
-    # use the caller's own id as the filter so the result set is scoped
-    # to their own actions even when admin events for the same session
-    # are present.
     filtered = apply_audit_filters(
         events,
-        clinician_id=str(user.user_id),
+        clinician_id=clinician_scope,
         date_from=date_from,
         date_to=date_to,
         event_type=event_type,
