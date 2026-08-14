@@ -336,6 +336,11 @@ async def run_stage2_vision(
             captions,
             template_for_capture,
             {s.id: s.text for s in transcript.segments},
+            # VIS-03 — lets the merge tell a cadence caption from a trigger
+            # one and route the former by what it shows. The same pool the
+            # capture pass used, so classification cannot disagree across
+            # the two.
+            trigger_segments=trigger_segments,
         )
         enriched.session_id = str(session_id)
         enriched.stage = 2
