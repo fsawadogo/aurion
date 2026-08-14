@@ -23,8 +23,10 @@ from app.core.types import (
 # ── helpers ──────────────────────────────────────────────────────────────────
 
 
-def _claim(cid: str, text: str, source: str = "transcript") -> NoteClaim:
-    return NoteClaim(id=cid, text=text, source_type=source, source_id="seg_1")
+def _claim(
+    cid: str, text: str, source: str = "transcript", source_id: str = "seg_1"
+) -> NoteClaim:
+    return NoteClaim(id=cid, text=text, source_type=source, source_id=source_id)
 
 
 def _section(sid: str, *claims: NoteClaim, status: str = "populated") -> NoteSection:
@@ -55,7 +57,7 @@ def _caption(ts: int, desc: str, conf: str = "high") -> FrameCaption:
 
 def test_pseudo_transcript_one_segment_per_caption_ordered() -> None:
     caps = [_caption(3000, "third"), _caption(1000, "first"), _caption(2000, "second")]
-    t = fusion._pseudo_transcript_from_captions("s1", caps)
+    t, _anchors = fusion._pseudo_transcript_from_captions("s1", caps)
     assert [s.text for s in t.segments] == ["first", "second", "third"]
     assert [s.start_ms for s in t.segments] == [1000, 2000, 3000]
     assert t.provider_used == "vision"
@@ -63,7 +65,7 @@ def test_pseudo_transcript_one_segment_per_caption_ordered() -> None:
 
 def test_pseudo_transcript_skips_empty_descriptions() -> None:
     caps = [_caption(1000, "seen"), _caption(2000, "   "), _caption(3000, "")]
-    t = fusion._pseudo_transcript_from_captions("s1", caps)
+    t, _anchors = fusion._pseudo_transcript_from_captions("s1", caps)
     assert [s.text for s in t.segments] == ["seen"]
 
 
@@ -182,7 +184,10 @@ async def test_generate_video_note_retags_claims_as_visual() -> None:
     # The note engine returns claims tagged transcript (it can't know its input
     # was a pseudo-transcript); generate_video_note must re-tag them visual.
     engine_note = _note(
-        _section("physical_exam", _claim("c1", "reduced flexion", "transcript")),
+        _section(
+            "physical_exam",
+            _claim("c1", "reduced flexion", "transcript", source_id="vseg_000"),
+        ),
         provider="gemini",
     )
     provider = MagicMock()
@@ -203,6 +208,8 @@ async def test_generate_video_note_retags_claims_as_visual() -> None:
     assert note is not None
     claim = note.get_section("physical_exam").claims[0]
     assert claim.source_type == "visual"
+    # VIS-08: and re-anchored off the pseudo-segment onto the real frame.
+    assert claim.source_id == "frame_1000"
 
 
 @pytest.mark.asyncio
