@@ -80,28 +80,40 @@ _VISUAL_WEIGHTED_SECTIONS: frozenset[str] = frozenset(
 
 def _pseudo_transcript_from_captions(
     session_id: str, captions: list
-) -> Transcript:
+) -> tuple[Transcript, dict[str, str]]:
     """Turn frame/clip captions into a pseudo-transcript for the note engine.
 
     Each non-empty caption becomes one segment whose text is the visual
     description and whose timing is the caption timestamp, so the note-gen
     engine reads the visual record as its source material. Ordered by time.
+
+    Also returns ``{pseudo_segment_id: evidence_id}`` so the caller can
+    re-anchor the resulting claims to the REAL frame or clip they came from
+    (VIS-08). Returned rather than rebuilt by the caller because it has to
+    agree exactly with the sort-and-skip-empties logic above — recomputing it
+    separately is how the two silently drift apart.
     """
     segments: list[TranscriptSegment] = []
+    anchors: dict[str, str] = {}
     for i, cap in enumerate(sorted(captions, key=lambda c: c.timestamp_ms)):
         desc = (cap.visual_description or "").strip()
         if not desc:
             continue
+        pseudo_id = f"vseg_{i:03d}"
         segments.append(
             TranscriptSegment(
-                id=f"vseg_{i:03d}",
+                id=pseudo_id,
                 start_ms=cap.timestamp_ms,
                 end_ms=cap.timestamp_ms + (cap.duration_ms or 0),
                 text=desc,
             )
         )
-    return Transcript(
-        session_id=session_id, provider_used="vision", segments=segments
+        anchors[pseudo_id] = cap.frame_id
+    return (
+        Transcript(
+            session_id=session_id, provider_used="vision", segments=segments
+        ),
+        anchors,
     )
 
 
@@ -139,7 +151,7 @@ async def generate_video_note(
             grounded=grounded,
         )
     captions = [c for c in captions if c.confidence != "low"]
-    pseudo = _pseudo_transcript_from_captions(session_id, captions)
+    pseudo, frame_anchors = _pseudo_transcript_from_captions(session_id, captions)
     if not pseudo.segments:
         logger.info(
             "Fusion B: no usable visual captions for session=%s — no video note",
@@ -167,10 +179,53 @@ async def generate_video_note(
     # Re-tag the video note's claims as visual-sourced: the note engine labels
     # them source_type="transcript" (it can't know its input was a pseudo-
     # transcript), but every claim here rests on a visual observation.
+    #
+    # VIS-08 — and re-anchor them to the REAL evidence. The note engine cites
+    # the pseudo-segment it read (`vseg_003`), which does not exist: it is an
+    # artefact of this function. A claim citing it is untraceable — tap-to-
+    # source has nothing to open, and `citation_traceability_rate` counts it as
+    # valid when it is not. That matters most under Grounded Synthesis, where a
+    # synthesized statement is only permitted BECAUSE it cites its sources
+    # (CLAUDE.md); citing a fabricated id is precisely what that gate exists to
+    # prevent.
+    #
+    # A citation we cannot map is a claim resting on nothing, so it is DROPPED
+    # rather than shipped with a dangling anchor — the descriptive-mode-safe
+    # direction. In practice this only fires if the model invents a segment id.
+    unmapped = 0
     for section in note.sections:
+        kept = []
         for claim in section.claims:
             if claim.source_type == "transcript":
                 claim.source_type = "visual"
+            anchor = frame_anchors.get(claim.source_id)
+            if anchor is None:
+                unmapped += 1
+                continue
+            claim.source_id = anchor
+            claim.source_quote = f"[{anchor}]"
+            # Grounded claims rest on several anchors; every one must resolve.
+            resolved = []
+            for extra in claim.additional_sources:
+                mapped = frame_anchors.get(extra.source_id)
+                if mapped is None:
+                    unmapped += 1
+                    continue
+                extra.source_id = mapped
+                extra.source_quote = f"[{mapped}]"
+                resolved.append(extra)
+            claim.additional_sources = resolved
+            kept.append(claim)
+        section.claims = kept
+        if not section.claims and section.status == "populated":
+            # Don't leave a section claiming to be populated with nothing in it.
+            section.status = "not_captured"
+    if unmapped:
+        logger.warning(
+            "Video note: dropped %d citation(s) that resolved to no evidence "
+            "(session=%s)",
+            unmapped, str(session_id)[:8],
+        )
     return note
 
 
