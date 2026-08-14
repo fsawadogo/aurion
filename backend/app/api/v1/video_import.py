@@ -133,6 +133,17 @@ class CreateVideoImportResponse(BaseModel):
     clips: Optional[list[ClipUpload]] = None
 
 
+class CancelVideoImportResponse(BaseModel):
+    session_id: str
+    job_id: str
+    status: str
+    # Whether /process would actually succeed now, so the UI can choose
+    # between offering "Retry" and "Start over" instead of guessing.
+    retryable: bool
+    # Clinician-facing explanation when retryable is False. None otherwise.
+    retry_blocked_reason: Optional[str] = None
+
+
 class VideoImportStatusResponse(BaseModel):
     session_id: str
     job_id: str
@@ -455,6 +466,84 @@ async def get_video_import_status(
         raise HTTPException(status_code=404, detail="No import job for session.")
     await _reap_stale_job(db, job, session_id)
     return _status_response(session, job)
+
+
+CANCEL_REASON = "cancelled by clinician"
+
+
+@router.post("/{session_id}/cancel", response_model=CancelVideoImportResponse)
+async def cancel_video_import(
+    session_id: uuid.UUID,
+    _: None = Depends(_require_enabled),
+    user: CurrentUser = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Stop waiting on an import: fail the job so the UI can move on.
+
+    Without this the only exit from a wedged import was the 15-minute
+    watchdog — and that only fires while something is polling, so a clinician
+    who closed the tab had no way out at all.
+
+    This marks the JOB row failed. It cannot kill the orchestrator, which is a
+    detached task: if that task is still alive it may finish afterwards, so the
+    orchestrator re-reads its own row before recording a terminal state and
+    stands down if it finds this cancellation (see
+    ``_run_video_import_in_background``). Last writer does NOT win; the
+    clinician's explicit cancel does.
+
+    ``retryable`` says whether ``/process`` would actually succeed afterwards,
+    so the UI never offers a Retry that 409s. It is false once processing has
+    genuinely begun, because the orchestrator purges the raw clip fail-closed
+    on both success and failure — there is then nothing left to re-process and
+    the clip must be uploaded again.
+    """
+    session = await get_owned_session_or_404(db, session_id, user)
+    job = await jobs.get_job_for_session(db, session_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No import job for session.")
+    if job.status not in ("pending", "running"):
+        raise HTTPException(
+            status_code=409, detail=f"Job already {job.status} — nothing to cancel."
+        )
+
+    await jobs.mark_failed(db, job, CANCEL_REASON)
+    await write_audit(
+        session_id, AuditEventType.VIDEO_IMPORT_FAILED, reason=CANCEL_REASON
+    )
+
+    retryable, blocked_by = _retry_eligibility(session, job)
+    return CancelVideoImportResponse(
+        session_id=str(session_id),
+        job_id=str(job.id),
+        status=job.status,
+        retryable=retryable,
+        retry_blocked_reason=blocked_by,
+    )
+
+
+def _retry_eligibility(session, job) -> tuple[bool, Optional[str]]:
+    """Would ``/process`` succeed for this session now? Mirrors its guards.
+
+    Kept deliberately in lockstep with ``start_processing``; if that gains a
+    precondition this must too, or the UI will offer a Retry that 409s.
+    Reasons are PHI-free and written for a clinician, not an operator.
+    """
+    if session.state != SessionState.CONSENT_PENDING or not session.consent_confirmed:
+        return False, "Processing had already started on this recording."
+    if not job.raw_video_s3_key:
+        return False, "No uploaded recording is associated with this session."
+    if job.raw_video_purged_at is not None:
+        return False, "The uploaded recording has already been deleted."
+    # The purge stamp is best-effort, so confirm the object is really there
+    # rather than trusting the column — offering a Retry that 409s at the S3
+    # HEAD inside /process would be worse than saying "upload again" now.
+    try:
+        get_s3_client().head_object(
+            Bucket=VIDEO_IMPORTS_BUCKET, Key=job.raw_video_s3_key
+        )
+    except (BotoCoreError, ClientError):
+        return False, "The uploaded recording is no longer available."
+    return True, None
 
 
 async def _job_key_or_404(db: AsyncSession, session_id: uuid.UUID) -> tuple:
@@ -1023,6 +1112,22 @@ async def _run_video_import_in_background(
             #    otherwise sit at AWAITING_REVIEW with nothing to review). Final
             #    approval + conflict resolution still stay human (left in
             #    PROCESSING_STAGE2, never auto-approved to REVIEW_COMPLETE).
+            # Stand down if the clinician cancelled while we were working.
+            # /cancel can only mark the row — it cannot kill this detached
+            # task — so without this check a late-finishing orchestrator would
+            # flip a cancelled job back to `completed`, resurrecting an import
+            # the clinician explicitly abandoned (and, worse, doing so AFTER
+            # they had started a fresh upload). Re-read rather than trusting
+            # the instance we loaded before the long S3/ffmpeg/LLM work.
+            await db.refresh(job)
+            if job.status == "failed":
+                logger.info(
+                    "Video import cancelled mid-flight — standing down: "
+                    "session=%s job=%s reason=%s",
+                    session_id, job_id, job.error_message,
+                )
+                return
+
             new_version = None
             if job.auto_advance_stage2 or standalone:
                 new_version = await _auto_advance_stage2(db, session, session_id)

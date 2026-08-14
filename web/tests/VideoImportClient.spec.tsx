@@ -28,6 +28,8 @@ vi.mock("@/lib/portal-api", () => ({
   startVideoImportMultipart: vi.fn(),
   completeVideoImportMultipart: vi.fn(),
   abortVideoImportMultipart: vi.fn(),
+  cancelVideoImport: vi.fn(),
+  discardSession: vi.fn(),
 }));
 
 // Admin surface fns — imported by the component even on the clinician surface.
@@ -35,6 +37,7 @@ vi.mock("@/lib/api", () => ({
   createAdminVideoImport: vi.fn(),
   processAdminVideoImport: vi.fn(),
   getAdminVideoImportStatus: vi.fn(),
+  humanizeError: (_e: unknown, fallback: string) => fallback,
 }));
 
 import {
@@ -43,6 +46,9 @@ import {
   getMyProfile,
   listMyCustomTemplates,
   processVideoImport,
+  getVideoImportStatus,
+  cancelVideoImport,
+  discardSession,
 } from "@/lib/portal-api";
 
 // Capture every raw S3 PUT (presigned upload). XHR is stubbed so no real
@@ -311,5 +317,105 @@ describe("VideoImportClient — clinician visit-type → context flow (TE-4e)", 
       encounter_context: "Left foot bunion, 6 weeks post-op",
     });
     expect(body).not.toHaveProperty("custom_template_id");
+  });
+});
+
+
+describe("VideoImportClient — cancelling a wedged import", () => {
+  /** Drive the form through to the `processing` phase. */
+  async function reachProcessing(user: ReturnType<typeof userEvent.setup>) {
+    vi.mocked(getPortalFeatureFlags).mockResolvedValue({
+      video_import_enabled: true,
+      multi_clip_import_enabled: false,
+    });
+    vi.mocked(createVideoImport).mockResolvedValue({
+      session_id: "sess-1",
+      upload_url: "https://s3.example/put",
+    } as never);
+    // Keep the job "running" so the UI stays on the processing card.
+    vi.mocked(getVideoImportStatus).mockResolvedValue({
+      status: "running",
+      session_state: "CONSENT_PENDING",
+      frames_extracted: 0,
+      frames_dropped: 0,
+    } as never);
+
+    render(withIntl(<VideoImportClient />));
+    await waitFor(() =>
+      expect(vi.mocked(getPortalFeatureFlags)).toHaveBeenCalled(),
+    );
+    await user.upload(
+      screen.getByTestId("video-import-file-input") as HTMLInputElement,
+      [mkFile("clip.mp4")],
+    );
+    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("button", { name: /upload & process/i }));
+    await waitFor(() =>
+      expect(screen.getByTestId("cancel-processing")).toBeInTheDocument(),
+    );
+  }
+
+  it("offers Retry when the server says the clip is still available", async () => {
+    const user = userEvent.setup();
+    vi.mocked(cancelVideoImport).mockResolvedValue({
+      session_id: "sess-1",
+      job_id: "job-1",
+      status: "failed",
+      retryable: true,
+      retry_blocked_reason: null,
+    });
+    await reachProcessing(user);
+
+    await user.click(screen.getByTestId("cancel-processing"));
+
+    await waitFor(() =>
+      expect(vi.mocked(cancelVideoImport)).toHaveBeenCalledWith("sess-1"),
+    );
+    expect(await screen.findByTestId("retry-processing")).toBeInTheDocument();
+    expect(screen.getByTestId("start-over")).toBeInTheDocument();
+  });
+
+  it("hides Retry and shows the reason once the clip has been purged", async () => {
+    const user = userEvent.setup();
+    vi.mocked(cancelVideoImport).mockResolvedValue({
+      session_id: "sess-1",
+      job_id: "job-1",
+      status: "failed",
+      retryable: false,
+      retry_blocked_reason: "Processing had already started on this recording.",
+    });
+    await reachProcessing(user);
+
+    await user.click(screen.getByTestId("cancel-processing"));
+
+    expect(await screen.findByTestId("start-over")).toBeInTheDocument();
+    // A Retry here would 409 server-side, so it must not be offered.
+    expect(screen.queryByTestId("retry-processing")).toBeNull();
+    expect(
+      screen.getByText(/already started on this recording/i),
+    ).toBeInTheDocument();
+  });
+
+  it("Start over discards the session and returns to an empty form", async () => {
+    const user = userEvent.setup();
+    vi.mocked(cancelVideoImport).mockResolvedValue({
+      session_id: "sess-1",
+      job_id: "job-1",
+      status: "failed",
+      retryable: false,
+      retry_blocked_reason: "The uploaded recording has already been deleted.",
+    });
+    vi.mocked(discardSession).mockResolvedValue(undefined);
+    await reachProcessing(user);
+
+    await user.click(screen.getByTestId("cancel-processing"));
+    await user.click(await screen.findByTestId("start-over"));
+
+    await waitFor(() =>
+      expect(vi.mocked(discardSession)).toHaveBeenCalledWith("sess-1"),
+    );
+    expect(
+      screen.getByTestId("video-import-file-input"),
+    ).toBeInTheDocument();
   });
 });

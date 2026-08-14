@@ -1042,6 +1042,33 @@ export async function processVideoImport(
   return r.json();
 }
 
+/** Stop waiting on a wedged import. Fails the job so the UI can move on.
+ *
+ *  `retryable` says whether `/process` would actually succeed afterwards, so
+ *  the caller can offer "Retry" vs "Start over" rather than guessing. It is
+ *  false once processing has begun: the raw clip is purged fail-closed, so
+ *  there is nothing left to re-process and it must be uploaded again. */
+export async function cancelVideoImport(sessionId: string): Promise<{
+  session_id: string;
+  job_id: string;
+  status: string;
+  retryable: boolean;
+  retry_blocked_reason: string | null;
+}> {
+  const r = await fetchWithAuth(
+    `/api/v1/me/video-imports/${sessionId}/cancel`,
+    { method: "POST" },
+  );
+  return r.json();
+}
+
+/** Permanently delete a session and its data (append-only audit records the
+ *  discard). Used to clear a session wedged past the point where a retry is
+ *  possible, so the clinician can start a fresh upload. */
+export async function discardSession(sessionId: string): Promise<void> {
+  await fetchWithAuth(`/api/v1/sessions/${sessionId}`, { method: "DELETE" });
+}
+
 export async function getVideoImportStatus(
   sessionId: string,
 ): Promise<VideoImportStatus> {
