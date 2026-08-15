@@ -16,6 +16,7 @@ import json as _json
 import logging
 import re
 import time
+from functools import lru_cache
 from typing import Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
@@ -1088,6 +1089,19 @@ def merge_visual_citations(
     prediction — provided both calls pass the same ``template`` and
     ``anchor_texts``, which is the other half of the fix.
 
+    **Where placement now DIVERGES from the capture-time aim, deliberately.**
+    A trigger frame is still aimed by its audio anchor when captured (VIS-02
+    leaves that alone), but ``_route`` below files it by what the finished
+    caption describes. Those two can disagree, and the disagreement is not
+    reconcilable: content routing needs the caption, which does not exist yet
+    at capture time. We take the better-informed decision — the caption is
+    direct evidence of what the frame shows, the anchor is a proxy — and
+    accept that a frame can be aimed at one section and filed under another.
+    On the measured encounter that trade is strongly positive (11 misfilings
+    removed); the residue is that such a caption may carry a trailing clause
+    answering the aim it was given ("no discharge paperwork is visible"),
+    which is a prompt problem, tracked separately.
+
     **With the engine off the legacy in-loop routing is preserved**, because
     hoisting is itself an output change and OFF must stay byte-identical.
 
@@ -1101,19 +1115,36 @@ def merge_visual_citations(
     mergeable = [c for c in captions if c.integration_status != "REPEATS"]
 
     def _route(caption: FrameCaption) -> Optional[NoteSection]:
-        # VIS-03 — a cadence caption is filed by what it SHOWS.
+        # VIS-03 — a caption is filed by what it SHOWS, whatever its
+        # provenance. Content first, anchor as the fallback.
         #
-        # It was captioned with no section aim (VIS-02), so the audio anchor
-        # is exactly the signal we just decided not to trust: the surgeon can
-        # narrate history while holding up an X-ray. Routing it by that
-        # anchor would file a real imaging observation under HPI, which is
-        # worse than an empty section. Content first, anchor as the fallback.
+        # This originally applied to CADENCE captions only. Trigger frames were
+        # deliberately excluded on the reasoning that "the spoken phrase
+        # genuinely indicates what is on screen, so aiming does real work"
+        # (VIS-02). Measured on a full-length encounter, that assumption does
+        # not hold: session f3a8e35d (bunion post-op, ortho template, 2m25s,
+        # 123 frames, 30 visual claims) misfiled 11 of the 30 —
         #
-        # `trigger_segments is None` keeps every existing caller byte-
+        #     physical_exam  19 claims,  5 of them showing the MONITOR
+        #     imaging_review  8 claims,  3 of them showing the PATIENT
+        #     plan            3 claims,  3 of them showing an X-RAY
+        #
+        # — because the surgeon narrates exam findings while still looking at
+        # the radiograph, and discusses imaging before the monitor is on
+        # camera. Speech and camera are decoupled for most of a real visit, so
+        # the anchor aims at the wrong thing for trigger frames exactly as it
+        # did for cadence ones. 8 of those 11 captions already contain the
+        # target section's own trigger keywords, so content routing places
+        # them correctly with no other change.
+        #
+        # `plan` receiving image evidence is the same bug seen from the other
+        # end, and content routing cannot reproduce it:
+        # `_section_for_caption_text` only considers `_LEGACY_VISUAL_SECTIONS`,
+        # so a non-visual section can never be chosen by caption content.
+        #
+        # `trigger_segments is None` still keeps every existing caller byte-
         # identical — only Stage 2 passes it.
-        if trigger_segments is not None and (
-            frame_provenance(trigger_segments, caption.timestamp_ms) == "cadence"
-        ):
+        if trigger_segments is not None:
             by_content = _section_for_caption_text(
                 note, template, caption.visual_description
             )
@@ -1360,6 +1391,12 @@ def _section_focus_block(
     )
 
 
+#: Keywords this length or shorter must match as whole words. Above it, a
+#: keyword may prefix a longer word ("radiograph" → "radiographic"). Four keeps
+#: the clinical initialisms (AP, ROM, CT, MRI, MTP) strict without blocking the
+#: morphology of the full words.
+_SHORT_KEYWORD_LEN = 4
+
 #: Sections that are visual by nature, for notes built without a template.
 #: TE-4 prefers the template's own declaration and falls back to this.
 _LEGACY_VISUAL_SECTIONS = (
@@ -1420,21 +1457,68 @@ def _section_for_caption_text(
     allow-list tier 3 uses — so the model can influence WHICH visual section
     receives evidence, never whether a non-visual section does.
 
+    **The LONGEST matching keyword wins, not the first section declaring one.**
+    Template order is not a priority order, and taking the first match made
+    placement depend on how the clinician happened to sort their sections. On
+    the bunion template ``physical_exam`` (keyword ``"foot"``) precedes
+    ``imaging_review`` (keyword ``"radiograph"``), so every caption reading
+    "a radiograph of the foot" — which is how the model describes a foot
+    X-ray — was pulled into the exam section. Measured over 30 real captions,
+    first-match scored WORSE than the anchor routing it replaced (16 vs 19
+    correct); longest-match scores 27. Length is a crude specificity proxy,
+    but a caption matching both ``"foot"`` and ``"radiograph"`` is far more
+    likely to be about the radiograph, and it needs no extra template field.
+
     Returns ``None`` when there is no template, no caption, or no match; the
     caller then keeps today's anchor-based routing.
     """
     if template is None or not caption_text:
         return None
     haystack = caption_text.lower()
+    best: Optional[NoteSection] = None
+    best_len = 0
     for section in template.sections:
         if section.id not in _LEGACY_VISUAL_SECTIONS:
             continue
+        target = note.get_section(section.id)
+        if target is None:
+            continue
         for keyword in section.visual_trigger_keywords:
-            if keyword and keyword.lower() in haystack:
-                target = note.get_section(section.id)
-                if target is not None:
-                    return target
-    return None
+            # `>` not `>=`: on a tie the FIRST section in template order keeps
+            # it, which is the original behaviour.
+            if not keyword or len(keyword) <= best_len:
+                continue
+            if _keyword_matches(keyword, haystack):
+                best = target
+                best_len = len(keyword)
+    return best
+
+
+@lru_cache(maxsize=512)
+def _keyword_pattern(keyword: str) -> re.Pattern[str]:
+    """Boundary-aware matcher for one trigger keyword.
+
+    Plain substring matching is wrong in both directions here, and a caption is
+    long enough prose for both to fire:
+
+    * ``"AP"`` (the radiographic projection) matched inside **"appears"**. On
+      the measured session that hit 20 of 30 captions, dragging frames into
+      ``imaging_review`` because the model wrote "appears to be".
+    * A strict ``\\b…\\b`` then over-corrects: ``"radiograph"`` stops matching
+      **"radiographic"**, which is how the model actually writes it.
+
+    So: always require a boundary before the keyword, and require one after it
+    only for short keywords. Long keywords are allowed to match a longer word
+    they prefix, which is the morphological variant we want; short ones are the
+    initialisms (``AP``, ``ROM``, ``CT``, ``MTP``) where a loose tail is exactly
+    what produces the false positive.
+    """
+    tail = r"(?![a-z0-9])" if len(keyword) <= _SHORT_KEYWORD_LEN else ""
+    return re.compile(rf"(?<![a-z0-9]){re.escape(keyword.lower())}{tail}")
+
+
+def _keyword_matches(keyword: str, haystack_lower: str) -> bool:
+    return bool(_keyword_pattern(keyword).search(haystack_lower))
 
 
 def _find_target_section(

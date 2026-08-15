@@ -14,6 +14,15 @@ aiming those frames by the audio guaranteed the mismatch.
 
 These tests pin the three halves of the fix: deriving provenance, not aiming
 cadence frames, and routing their captions by content.
+
+**Widened after session f3a8e35d** (bunion post-op, ortho template, full 2m25s
+encounter, 123 frames, 30 visual claims). Content routing originally applied to
+cadence captions only; trigger captions were left on the anchor because "the
+spoken phrase genuinely indicates what is on screen". On a real full-length
+visit it does not — 11 of the 30 claims were misfiled, three radiographs among
+them landing in `plan`. Provenance still decides whether a frame is AIMED at
+capture time (VIS-02, unchanged); it no longer decides how the finished caption
+is FILED.
 """
 
 from __future__ import annotations
@@ -186,6 +195,120 @@ class TestContentRouting:
         assert _section_for_caption_text(_note(), None, "an X-ray") is None
 
 
+class TestKeywordSpecificity:
+    """Which keyword wins when a caption matches several sections.
+
+    Measured on session f3a8e35d: taking the FIRST section in template order
+    scored 16/30, WORSE than the anchor routing it replaced (19/30). Taking the
+    longest matching keyword scores 27/30. Template order is the clinician's
+    layout preference, not a priority ranking.
+    """
+
+    #: `physical_exam` first, as on the real bunion template, and its short
+    #: keyword `foot` competes with imaging's longer `radiograph`.
+    _ORDERED = Template(
+        key="bunion",
+        display_name="Bunion",
+        sections=[
+            TemplateSection(
+                id="physical_exam",
+                title="Physical exam",
+                visual_trigger_keywords=["foot", "MTP", "incision"],
+            ),
+            TemplateSection(
+                id="imaging_review",
+                title="Imaging review",
+                visual_trigger_keywords=["x-ray", "radiograph", "AP"],
+            ),
+        ],
+    )
+
+    def _route(self, text: str) -> Optional[str]:
+        section = _section_for_caption_text(_note(), self._ORDERED, text)
+        return section.id if section else None
+
+    def test_radiograph_of_a_foot_is_imaging_not_exam(self):
+        """The regression that made first-match worse than doing nothing.
+
+        This is how the model actually describes a foot X-ray, and `foot` is
+        declared by the earlier section.
+        """
+        assert (
+            self._route("The monitor shows a radiograph of the right foot.")
+            == "imaging_review"
+        )
+
+    def test_a_bare_foot_with_no_imaging_still_goes_to_exam(self):
+        assert (
+            self._route("A clinician's hands hold the patient's bare foot.")
+            == "physical_exam"
+        )
+
+    def test_a_tie_keeps_the_earlier_section(self):
+        """Equal-length keywords: template order still breaks the tie."""
+        tmpl = Template(
+            key="t",
+            display_name="T",
+            sections=[
+                TemplateSection(
+                    id="physical_exam", title="E", visual_trigger_keywords=["aaaa"]
+                ),
+                TemplateSection(
+                    id="imaging_review", title="I", visual_trigger_keywords=["bbbb"]
+                ),
+            ],
+        )
+        section = _section_for_caption_text(_note(), tmpl, "aaaa and bbbb")
+        assert section is not None and section.id == "physical_exam"
+
+
+class TestKeywordBoundaries:
+    """`in` matching is wrong in both directions on caption prose."""
+
+    _TMPL = Template(
+        key="t",
+        display_name="T",
+        sections=[
+            TemplateSection(
+                id="imaging_review",
+                title="I",
+                visual_trigger_keywords=["AP", "radiograph"],
+            ),
+            TemplateSection(
+                id="physical_exam", title="E", visual_trigger_keywords=["foot"]
+            ),
+        ],
+    )
+
+    def _route(self, text: str) -> Optional[str]:
+        section = _section_for_caption_text(_note(), self._TMPL, text)
+        return section.id if section else None
+
+    def test_short_keyword_does_not_match_inside_a_word(self):
+        """`AP` matched "appears" — on 20 of 30 real captions.
+
+        The model writes "appears to be" constantly, so this silently routed
+        most of the run's frames on a substring accident.
+        """
+        assert self._route("A patient appears to be seated in a chair.") is None
+
+    def test_long_keyword_still_matches_its_morphological_variant(self):
+        """`radiograph` must match "radiographic", which is what the model writes.
+
+        A strict word boundary on both ends fixes the `AP` bug and breaks this
+        one, so the rule is length-aware rather than uniform.
+        """
+        assert (
+            self._route("Two radiographic images are displayed.") == "imaging_review"
+        )
+
+    def test_short_keyword_still_matches_as_a_whole_word(self):
+        assert self._route("An AP view of the ankle.") == "imaging_review"
+
+    def test_keyword_is_matched_case_insensitively(self):
+        assert self._route("an ap view") == "imaging_review"
+
+
 class TestMergeRouting:
     """VIS-03 end-to-end through the merge / AC-4, AC-6."""
 
@@ -217,12 +340,51 @@ class TestMergeRouting:
         merged = self._merge(caption, [_trigger(50_000, 55_000)])
         assert self._section_with_frame_claim(merged) == "imaging_review"
 
-    def test_trigger_frame_still_routes_by_anchor(self):
-        """AC-6 — trigger frames are unchanged."""
+    def test_trigger_frame_also_routes_by_content(self):
+        """Supersedes the original AC-6 ("trigger frames are unchanged").
+
+        AC-6 rested on VIS-02's reasoning that for a trigger frame "the spoken
+        phrase genuinely indicates what is on screen". A full-length encounter
+        disproved it — session f3a8e35d misfiled 11 of 30 visual claims,
+        including three radiographs filed under `plan`, because the surgeon
+        narrates one thing while the camera shows another.
+
+        Same input as the old test; the expectation is inverted. The anchor
+        `seg_0` is cited in HPI, but the frame shows an X-ray, so it belongs in
+        imaging_review whether or not it sits inside a trigger window.
+        """
         caption = _caption("A computer screen displaying an X-ray.", 52_000)
         merged = self._merge(caption, [_trigger(50_000, 55_000)])
-        # Anchor `seg_0` is cited in HPI, so tier 1 keeps it there.
+        assert self._section_with_frame_claim(merged) == "imaging_review"
+
+    def test_trigger_frame_with_no_content_match_still_falls_back_to_anchor(self):
+        """Content routing only overrides when it actually recognises something.
+
+        A caption the keywords do not match must not be stranded — it keeps
+        the anchor's destination, exactly as before.
+        """
+        caption = _caption("A door and an empty chair.", 52_000)
+        merged = self._merge(caption, [_trigger(50_000, 55_000)])
         assert self._section_with_frame_claim(merged) == "hpi"
+
+    def test_a_trigger_frame_never_content_routes_into_a_non_visual_section(self):
+        """`plan` declares "x-ray" as a keyword; it must still never receive one.
+
+        This is the `plan` half of the production bug: three radiographs were
+        filed there. Content routing cannot reproduce it because
+        `_section_for_caption_text` only considers visual sinks — but the
+        guarantee is worth pinning at the merge level, not just the unit level.
+        """
+        note = _note()
+        note.sections = [s for s in note.sections if s.id != "imaging_review"]
+        merged = merge_visual_citations(
+            note,
+            [_caption("A computer screen displaying an X-ray.", 52_000)],
+            _TEMPLATE,
+            {"seg_0": "I've had pain for about a year."},
+            trigger_segments=[_trigger(50_000, 55_000)],
+        )
+        assert self._section_with_frame_claim(merged) != "plan"
 
     def test_without_trigger_segments_behaviour_is_unchanged(self):
         """Every non-Stage-2 caller passes None and must be byte-identical."""
