@@ -1088,6 +1088,19 @@ def merge_visual_citations(
     prediction — provided both calls pass the same ``template`` and
     ``anchor_texts``, which is the other half of the fix.
 
+    **Where placement now DIVERGES from the capture-time aim, deliberately.**
+    A trigger frame is still aimed by its audio anchor when captured (VIS-02
+    leaves that alone), but ``_route`` below files it by what the finished
+    caption describes. Those two can disagree, and the disagreement is not
+    reconcilable: content routing needs the caption, which does not exist yet
+    at capture time. We take the better-informed decision — the caption is
+    direct evidence of what the frame shows, the anchor is a proxy — and
+    accept that a frame can be aimed at one section and filed under another.
+    On the measured encounter that trade is strongly positive (11 misfilings
+    removed); the residue is that such a caption may carry a trailing clause
+    answering the aim it was given ("no discharge paperwork is visible"),
+    which is a prompt problem, tracked separately.
+
     **With the engine off the legacy in-loop routing is preserved**, because
     hoisting is itself an output change and OFF must stay byte-identical.
 
@@ -1101,19 +1114,36 @@ def merge_visual_citations(
     mergeable = [c for c in captions if c.integration_status != "REPEATS"]
 
     def _route(caption: FrameCaption) -> Optional[NoteSection]:
-        # VIS-03 — a cadence caption is filed by what it SHOWS.
+        # VIS-03 — a caption is filed by what it SHOWS, whatever its
+        # provenance. Content first, anchor as the fallback.
         #
-        # It was captioned with no section aim (VIS-02), so the audio anchor
-        # is exactly the signal we just decided not to trust: the surgeon can
-        # narrate history while holding up an X-ray. Routing it by that
-        # anchor would file a real imaging observation under HPI, which is
-        # worse than an empty section. Content first, anchor as the fallback.
+        # This originally applied to CADENCE captions only. Trigger frames were
+        # deliberately excluded on the reasoning that "the spoken phrase
+        # genuinely indicates what is on screen, so aiming does real work"
+        # (VIS-02). Measured on a full-length encounter, that assumption does
+        # not hold: session f3a8e35d (bunion post-op, ortho template, 2m25s,
+        # 123 frames, 30 visual claims) misfiled 11 of the 30 —
         #
-        # `trigger_segments is None` keeps every existing caller byte-
+        #     physical_exam  19 claims,  5 of them showing the MONITOR
+        #     imaging_review  8 claims,  3 of them showing the PATIENT
+        #     plan            3 claims,  3 of them showing an X-RAY
+        #
+        # — because the surgeon narrates exam findings while still looking at
+        # the radiograph, and discusses imaging before the monitor is on
+        # camera. Speech and camera are decoupled for most of a real visit, so
+        # the anchor aims at the wrong thing for trigger frames exactly as it
+        # did for cadence ones. 8 of those 11 captions already contain the
+        # target section's own trigger keywords, so content routing places
+        # them correctly with no other change.
+        #
+        # `plan` receiving image evidence is the same bug seen from the other
+        # end, and content routing cannot reproduce it:
+        # `_section_for_caption_text` only considers `_LEGACY_VISUAL_SECTIONS`,
+        # so a non-visual section can never be chosen by caption content.
+        #
+        # `trigger_segments is None` still keeps every existing caller byte-
         # identical — only Stage 2 passes it.
-        if trigger_segments is not None and (
-            frame_provenance(trigger_segments, caption.timestamp_ms) == "cadence"
-        ):
+        if trigger_segments is not None:
             by_content = _section_for_caption_text(
                 note, template, caption.visual_description
             )
