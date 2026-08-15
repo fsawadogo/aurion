@@ -670,7 +670,16 @@ async def _compute_fusion_compare(
     except Exception:  # noqa: BLE001 — reconcile is best-effort (as in Stage 2)
         logger.warning("Fusion-compare reconcile failed; merging unreconciled")
     note_a = merge_visual_citations(
-        audio_note.model_copy(deep=True), captions, template, anchor_texts
+        audio_note.model_copy(deep=True),
+        captions,
+        template,
+        anchor_texts,
+        # VIS-03/#761 — the merge routes a caption by what it SHOWS, and it can
+        # only do that when it is given the trigger pool. Without this the lab
+        # silently fell back to anchor routing while live Stage 2 routed by
+        # content, so the surface we validate placement ON disagreed with the
+        # pipeline it is meant to model. Same pool the capture pass used.
+        trigger_segments=trigger_segments,
     )
 
     # ── Fusion B: independent video note → parallel section-weighted merge.
@@ -938,7 +947,13 @@ async def _compute_modality_compare(
     except Exception:  # noqa: BLE001 — reconcile is best-effort
         logger.warning("Modality-compare reconcile failed; merging unreconciled")
     merged_note = merge_visual_citations(
-        audio_note.model_copy(deep=True), merged_captions, template, anchor_texts
+        audio_note.model_copy(deep=True),
+        merged_captions,
+        template,
+        anchor_texts,
+        # VIS-03/#761 — content routing, as live Stage 2 does. The comment above
+        # calls this "production Fusion A"; without the trigger pool it was not.
+        trigger_segments=trigger_segments,
     )
 
     return ModalityCompareResult(
