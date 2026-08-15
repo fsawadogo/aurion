@@ -1,6 +1,7 @@
 "use client";
 
 import { AlertTriangle } from "lucide-react";
+import { useEffect, useRef } from "react";
 import ProgressBanner from "@/components/ui/ProgressBanner";
 import { useStageTwoProgress } from "@/lib/portal-ws";
 
@@ -32,13 +33,39 @@ export default function StageTwoProgressBanner({
 }: StageTwoProgressBannerProps) {
   const progress = useStageTwoProgress(sessionId, enabled);
 
-  // Fire onCompleted exactly once per transition into the completed
-  // state — useEffect would be tempting but useStageTwoProgress
-  // already encapsulates the lifecycle; we just react to its result.
-  // Using a state machine + memoised key avoids double-fires.
-  if (progress.isCompleted && onCompleted) {
-    queueMicrotask(onCompleted);
-  }
+  // Fire onCompleted once per TRANSITION into the completed state.
+  //
+  // This used to be a bare `if (progress.isCompleted) queueMicrotask(...)` in
+  // the render body. `completed` is not a moment, it is a resting state: once
+  // Stage 2 finishes, the session sits in AWAITING_REVIEW (still `enabled`)
+  // with the job row `completed` forever. So the callback fired on EVERY
+  // render — and the parent's callback is `load()`, which calls setState
+  // synchronously before awaiting. Render → fire → setState → render →
+  // fire… an unthrottled loop, two fetches per turn, until Chrome ran out of
+  // sockets (`ERR_INSUFFICIENT_RESOURCES`) and the WAF rate-limited the
+  // clinician's IP. Opening any note whose Stage 2 had completed DoS'd the
+  // API.
+  //
+  // The key is the ARMING mechanism, not the effect: `firedFor` latches the
+  // session we already notified about and only re-arms when the completed
+  // state goes away (new session, or a regenerate that starts a fresh job),
+  // so a repeat completion still fires exactly once.
+  const onCompletedRef = useRef(onCompleted);
+  useEffect(() => {
+    onCompletedRef.current = onCompleted;
+  });
+
+  const completionKey = enabled && progress.isCompleted ? sessionId : null;
+  const firedFor = useRef<string | null>(null);
+  useEffect(() => {
+    if (completionKey === null) {
+      firedFor.current = null; // re-arm for the next completion
+      return;
+    }
+    if (firedFor.current === completionKey) return;
+    firedFor.current = completionKey;
+    onCompletedRef.current?.();
+  }, [completionKey]);
 
   if (!enabled) return null;
   if (progress.status === "no_job") return null;
