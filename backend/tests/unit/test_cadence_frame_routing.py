@@ -195,6 +195,120 @@ class TestContentRouting:
         assert _section_for_caption_text(_note(), None, "an X-ray") is None
 
 
+class TestKeywordSpecificity:
+    """Which keyword wins when a caption matches several sections.
+
+    Measured on session f3a8e35d: taking the FIRST section in template order
+    scored 16/30, WORSE than the anchor routing it replaced (19/30). Taking the
+    longest matching keyword scores 27/30. Template order is the clinician's
+    layout preference, not a priority ranking.
+    """
+
+    #: `physical_exam` first, as on the real bunion template, and its short
+    #: keyword `foot` competes with imaging's longer `radiograph`.
+    _ORDERED = Template(
+        key="bunion",
+        display_name="Bunion",
+        sections=[
+            TemplateSection(
+                id="physical_exam",
+                title="Physical exam",
+                visual_trigger_keywords=["foot", "MTP", "incision"],
+            ),
+            TemplateSection(
+                id="imaging_review",
+                title="Imaging review",
+                visual_trigger_keywords=["x-ray", "radiograph", "AP"],
+            ),
+        ],
+    )
+
+    def _route(self, text: str) -> Optional[str]:
+        section = _section_for_caption_text(_note(), self._ORDERED, text)
+        return section.id if section else None
+
+    def test_radiograph_of_a_foot_is_imaging_not_exam(self):
+        """The regression that made first-match worse than doing nothing.
+
+        This is how the model actually describes a foot X-ray, and `foot` is
+        declared by the earlier section.
+        """
+        assert (
+            self._route("The monitor shows a radiograph of the right foot.")
+            == "imaging_review"
+        )
+
+    def test_a_bare_foot_with_no_imaging_still_goes_to_exam(self):
+        assert (
+            self._route("A clinician's hands hold the patient's bare foot.")
+            == "physical_exam"
+        )
+
+    def test_a_tie_keeps_the_earlier_section(self):
+        """Equal-length keywords: template order still breaks the tie."""
+        tmpl = Template(
+            key="t",
+            display_name="T",
+            sections=[
+                TemplateSection(
+                    id="physical_exam", title="E", visual_trigger_keywords=["aaaa"]
+                ),
+                TemplateSection(
+                    id="imaging_review", title="I", visual_trigger_keywords=["bbbb"]
+                ),
+            ],
+        )
+        section = _section_for_caption_text(_note(), tmpl, "aaaa and bbbb")
+        assert section is not None and section.id == "physical_exam"
+
+
+class TestKeywordBoundaries:
+    """`in` matching is wrong in both directions on caption prose."""
+
+    _TMPL = Template(
+        key="t",
+        display_name="T",
+        sections=[
+            TemplateSection(
+                id="imaging_review",
+                title="I",
+                visual_trigger_keywords=["AP", "radiograph"],
+            ),
+            TemplateSection(
+                id="physical_exam", title="E", visual_trigger_keywords=["foot"]
+            ),
+        ],
+    )
+
+    def _route(self, text: str) -> Optional[str]:
+        section = _section_for_caption_text(_note(), self._TMPL, text)
+        return section.id if section else None
+
+    def test_short_keyword_does_not_match_inside_a_word(self):
+        """`AP` matched "appears" — on 20 of 30 real captions.
+
+        The model writes "appears to be" constantly, so this silently routed
+        most of the run's frames on a substring accident.
+        """
+        assert self._route("A patient appears to be seated in a chair.") is None
+
+    def test_long_keyword_still_matches_its_morphological_variant(self):
+        """`radiograph` must match "radiographic", which is what the model writes.
+
+        A strict word boundary on both ends fixes the `AP` bug and breaks this
+        one, so the rule is length-aware rather than uniform.
+        """
+        assert (
+            self._route("Two radiographic images are displayed.") == "imaging_review"
+        )
+
+    def test_short_keyword_still_matches_as_a_whole_word(self):
+        assert self._route("An AP view of the ankle.") == "imaging_review"
+
+    def test_keyword_is_matched_case_insensitively(self):
+        assert self._route("an ap view") == "imaging_review"
+
+
 class TestMergeRouting:
     """VIS-03 end-to-end through the merge / AC-4, AC-6."""
 
