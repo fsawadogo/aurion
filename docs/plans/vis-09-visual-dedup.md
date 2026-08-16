@@ -47,16 +47,46 @@ caption*?" — which is the redundancy we actually have.
 **Change.** Implement the classification in `classify_conflicts`, keyed on
 redundancy between sibling captions:
 
-- Group captions by the section they route to (reusing
-  `_section_for_caption_text`, the TE-4 router — no second routing rule).
-- Within a group, score similarity on **discriminative** tokens only. Terms
-  occurring in a majority of the run's captions ("monitor", "displays",
-  "visible", "no", "appears") carry no information and are dropped before
-  comparison; what remains distinguishes ("lateral", "sunrise", "Merchant",
-  "UPRIGHT", "patella", "prone").
+- Score similarity on content tokens (structural filler removed).
 - Above a threshold, keep one representative — highest confidence, then most
   specific — and mark the rest `REPEATS`.
 - A cluster of one always survives.
+
+### Revised during implementation
+
+Two things in this plan were wrong and were corrected against measurement.
+Recorded rather than quietly edited, because both were plausible and both
+were false.
+
+**1. Grouping by section — dropped.** `classify_conflicts` does not receive
+the `template`, so reusing `_section_for_caption_text` would mean either a
+signature change through every caller or a second copy of a routing decision
+that has already diverged once (#764). Duplication is a property of the
+captions, not of the section they land in, so dedup runs globally. If two
+captions carry the same content, dropping one is right wherever they route.
+
+**2. The similarity metric and threshold — both wrong as planned.**
+This plan asserted "0.72 Jaccard, duplicates score 0.75-0.95". That number
+was never measured; it was invented. Measured against the real captions:
+
+| | same view | different view |
+|---|---|---|
+| Jaccard, with document-frequency filter | 0.00 - 0.33 | 0.00 - 0.33 |
+| Jaccard, no filter | 0.10 - 0.45 | 0.00 - 0.18 |
+| **Overlap coefficient, no filter** | **0.20 - 0.67** | **0.00 - 0.33** |
+
+- The **document-frequency filter is actively harmful** and was removed. The
+  terms shared by most captions in a run are exactly the ones identifying the
+  subject — `upright`, `ap`, `marker`, `lateral`. Stripping them left only
+  incidental phrasing, and same-view captions became indistinguishable from
+  different-view ones. High document frequency here means "this run is mostly
+  about one thing", not "this word is noise".
+- **Jaccard** punishes the length gap between a terse duplicate and a verbose
+  one hard enough that the two bands overlap with no clean threshold.
+- **Overlap coefficient** separates cleanly. Every threshold from 0.34 up
+  yields zero cross-view merges; **0.40** is used, for margin over the worst
+  false pair (0.33). Single-linkage clustering recovers the weakest true pairs
+  by chaining.
 
 **Files**
 - `backend/app/modules/vision/service.py` — implement `classify_conflicts`;
