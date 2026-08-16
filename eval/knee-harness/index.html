@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Knee eval harness — vs Marie's answer key</title>
+<style>
+  :root{
+    --bg:#f7f7f8; --panel:#fff; --ink:#16171a; --muted:#6b6f76; --line:#e3e5e9;
+    --hit:#0f7b4f; --hit-bg:#e8f5ee; --miss:#b4232a; --miss-bg:#fdeceb;
+    --partial:#8a6100; --partial-bg:#fdf3e0; --accent:#3b4ce0;
+  }
+  @media (prefers-color-scheme:dark){:root:not([data-theme=light]){
+    --bg:#111214; --panel:#191b1f; --ink:#e9eaec; --muted:#9aa0a8; --line:#2b2e34;
+    --hit:#4ecb8f; --hit-bg:#122b20; --miss:#ff7b73; --miss-bg:#2c1615;
+    --partial:#e0b356; --partial-bg:#2b2312; --accent:#8f9bff;
+  }}
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+       font:15px/1.55 ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+  .wrap{max-width:1400px;margin:0 auto;padding:28px 20px 80px}
+  h1{font-size:22px;margin:0 0 4px}
+  .sub{color:var(--muted);font-size:13px;margin-bottom:22px}
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:18px;margin-bottom:18px}
+  h2{font-size:15px;margin:0 0 4px;letter-spacing:.02em;text-transform:uppercase;color:var(--muted)}
+  .why{font-size:13px;color:var(--muted);margin:0 0 14px;max-width:80ch}
+  table{width:100%;border-collapse:collapse;font-size:13.5px}
+  th,td{text-align:left;vertical-align:top;padding:9px 10px;border-bottom:1px solid var(--line)}
+  th{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600}
+  td.k{font-weight:600;white-space:nowrap}
+  .tag{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11.5px;font-weight:700}
+  .t-hit{background:var(--hit-bg);color:var(--hit)}
+  .t-miss{background:var(--miss-bg);color:var(--miss)}
+  .t-part{background:var(--partial-bg);color:var(--partial)}
+  .scroll{overflow-x:auto}
+  select,button{font:inherit;padding:6px 10px;border-radius:7px;border:1px solid var(--line);
+                background:var(--panel);color:var(--ink)}
+  .bar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;margin-bottom:18px}
+  .stat{display:flex;gap:20px;flex-wrap:wrap;margin:6px 0 0}
+  .stat div{font-size:13px;color:var(--muted)}
+  .stat b{display:block;font-size:22px;color:var(--ink)}
+  .cols{display:grid;grid-template-columns:1fr 1fr 1fr;gap:0}
+  .cols>div{padding:10px;border-left:1px solid var(--line);font-size:13px}
+  .cols>div:first-child{border-left:0}
+  .colhead{font-size:11.5px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);font-weight:600;padding:8px 10px;border-left:1px solid var(--line)}
+  .colhead:first-child{border-left:0}
+  .empty{padding:40px;text-align:center;color:var(--muted)}
+  code{background:var(--bg);padding:1px 5px;border-radius:4px;font-size:12.5px}
+  .trap{border-left:3px solid var(--miss);padding:6px 0 6px 12px;margin:10px 0;font-size:13px}
+  .trap b{color:var(--miss)}
+  @media (max-width:900px){.cols,.colhead{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Knee eval harness</h1>
+  <div class="sub" id="sub">Marie's answer key vs. what we generate — audio-only and vision-enriched, versioned per run.</div>
+
+  <div class="bar">
+    <label>Run: <select id="runsel"></select></label>
+    <span id="runmeta" class="sub" style="margin:0"></span>
+  </div>
+
+  <div class="panel">
+    <h2>Manoeuvre scorecard <span id="mscore" class="tag"></span></h2>
+    <p class="why" id="mwhy"></p>
+    <div class="scroll"><table id="mtab"></table></div>
+  </div>
+
+  <div class="panel">
+    <h2>Imaging views</h2>
+    <p class="why" id="iwhy"></p>
+    <div class="scroll"><table id="itab"></table></div>
+  </div>
+
+  <div class="panel">
+    <h2>Known traps</h2>
+    <div id="traps"></div>
+  </div>
+
+  <div class="panel">
+    <h2>Section by section</h2>
+    <div class="colhead cols"><div>Marie (answer key)</div><div>Audio-only (v1)</div><div>Vision-enriched (final)</div></div>
+    <div id="sections"></div>
+  </div>
+</div>
+
+<script src="runs.js" onerror="window.__norundata=true"></script>
+<script>
+const KEY = window.ANSWER_KEY || null;
+const RUNS = window.RUNS || [];
+
+const $ = s => document.querySelector(s);
+const esc = s => (s==null?'':String(s)).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+
+/* A manoeuvre counts as FOUND only if its name appears in the note text.
+   Deliberately literal: the whole question is whether the layer NAMES the test. */
+/* Scored PER CLAIM, not across the whole note. Checking the whole note for
+   "left"/"right" passes spuriously the moment any other section mentions a
+   side — e.g. the imaging review naming both knees would mark every exam
+   manoeuvre as correctly lateralised. The claim that names the manoeuvre is
+   the only text that can establish the side for that manoeuvre. */
+function findManoeuvre(note, m){
+  if(!note || !note.sections) return {state:'none'};
+  const needles = {
+    milking_sweep:['milking','sweep test'],
+    rom:['range of motion','end-range flexion','full flexion'],
+    joint_line_palpation:['joint line','joint-line'],
+    patellar_mobility:['patellar mobility','patellar glide'],
+    patellar_grind:['patellar grind','grind test'],
+    lachman:['lachman'],
+    mcmurray:['mcmurray']
+  }[m.id] || [m.name.toLowerCase()];
+
+  const claims = note.sections.flatMap(s=>(s.claims||[]).map(c=>String(c.text||'')));
+  const matching = claims.filter(t=>{
+    const lt = t.toLowerCase();
+    return needles.some(n=>lt.includes(n));
+  });
+  if(!matching.length) return {state:'miss'};
+
+  const joined = matching.join(' ').toLowerCase();
+  const sideOk = /\bleft\b/.test(joined) || /\bright\b/.test(joined);
+  return {state: sideOk ? 'hit' : 'partial', evidence: matching[0]};
+}
+
+function tag(state){
+  if(state==='hit')  return '<span class="tag t-hit">named</span>';
+  if(state==='partial') return '<span class="tag t-part">named, side unclear</span>';
+  if(state==='miss') return '<span class="tag t-miss">missing</span>';
+  return '<span class="tag t-part">no run</span>';
+}
+
+function render(run){
+  if(!KEY){ document.body.innerHTML='<div class="empty">No <code>answer-key.json</code> loaded. Run <code>capture.py</code> first.</div>'; return; }
+
+  $('#mwhy').textContent = KEY.scorecard.manoeuvres.why;
+  $('#iwhy').textContent = KEY.scorecard.imaging_views.why;
+
+  // manoeuvres
+  let found=0;
+  let rows = '<tr><th>Manoeuvre</th><th>Marie&rsquo;s result</th><th>Audio-only (v1)</th><th>Vision-enriched</th></tr>';
+  for(const m of KEY.scorecard.manoeuvres.expected){
+    const a = findManoeuvre(run && run.note_audio, m);
+    const v = findManoeuvre(run && run.note_vision, m);
+    if(v.state==='hit'||v.state==='partial') found++;
+    rows += `<tr><td class="k">${esc(m.name)}</td><td>${esc(m.result)}</td><td>${tag(a.state)}</td><td>${tag(v.state)}</td></tr>`;
+  }
+  $('#mtab').innerHTML = rows;
+  const total = KEY.scorecard.manoeuvres.expected.length;
+  const sc = $('#mscore');
+  sc.textContent = `${found} / ${total} named`;
+  sc.className = 'tag ' + (found===total?'t-hit':found===0?'t-miss':'t-part');
+
+  // imaging
+  let irows = '<tr><th>View</th><th>Marie&rsquo;s finding</th><th>Vision-enriched</th></tr>';
+  for(const v of KEY.scorecard.imaging_views.expected){
+    const text = run && run.note_vision ? JSON.stringify(run.note_vision).toLowerCase() : '';
+    const hit = v.view.toLowerCase().split(/[^a-z]+/).filter(w=>w.length>4).some(w=>text.includes(w));
+    irows += `<tr><td class="k">${esc(v.view)}</td><td>${esc(v.finding)}</td><td>${tag(hit?'hit':(run?'miss':'none'))}</td></tr>`;
+  }
+  $('#itab').innerHTML = irows;
+
+  // traps
+  $('#traps').innerHTML = KEY.scorecard.known_traps.map(t=>{
+    const text = run && run.note_vision ? JSON.stringify(run.note_vision).toLowerCase() : '';
+    let verdict = '<span class="tag t-part">no run</span>';
+    if(run){
+      if(t.id==='scar_fabrication') verdict = /scar|incision/.test(text) ? '<span class="tag t-miss">FABRICATION PRESENT</span>' : '<span class="tag t-hit">clean</span>';
+      else verdict = '<span class="tag t-part">manual check</span>';
+    }
+    return `<div class="trap"><b>${esc(t.id)}</b> ${verdict}<br>${esc(t.description)}<br><em>${esc(t.check)}</em></div>`;
+  }).join('');
+
+  // sections
+  const secs = Object.keys(KEY.sections);
+  $('#sections').innerHTML = secs.map(id=>{
+    const marie = KEY.sections[id];
+    const a = run && run.note_audio ? sectionText(run.note_audio, id) : '—';
+    const v = run && run.note_vision ? sectionText(run.note_vision, id) : '—';
+    return `<div style="border-top:1px solid var(--line)"><div style="padding:10px;font-weight:600;font-size:12px;text-transform:uppercase;color:var(--muted)">${esc(id)}</div>
+      <div class="cols"><div>${esc(marie)}</div><div>${esc(a)}</div><div>${esc(v)}</div></div></div>`;
+  }).join('');
+}
+
+function sectionText(note,id){
+  if(!note||!note.sections) return '—';
+  const s = note.sections.find(x=>x.id===id);
+  if(!s) return '— (section absent)';
+  if(!s.claims||!s.claims.length) return `— (${s.status||'empty'})`;
+  return s.claims.map(c=>c.text).join(' ');
+}
+
+// run selector
+const sel = $('#runsel');
+if(!RUNS.length){
+  sel.innerHTML = '<option>no runs captured yet</option>';
+  $('#runmeta').textContent = 'Run capture.py to add one.';
+  render(null);
+}else{
+  RUNS.forEach((r,i)=>sel.innerHTML += `<option value="${i}">${esc(r.label||r.captured_at)}</option>`);
+  sel.onchange = ()=>{ const r=RUNS[sel.value]; showMeta(r); render(r); };
+  showMeta(RUNS[0]); render(RUNS[0]);
+}
+function showMeta(r){
+  if(!r) return;
+  $('#runmeta').textContent = [r.session_id&&('session '+r.session_id.slice(0,8)),
+    r.provider_note&&('note: '+r.provider_note), r.provider_vision&&('vision: '+r.provider_vision),
+    r.template_key, r.captured_at].filter(Boolean).join(' · ');
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,64 @@
+{
+ "session_id": "30cccd75-d812-4729-9de0-c4556fcdd12c",
+ "label": "anthropic · bb7dabb1 exam clip · AUDIO-ONLY (pre-approve)",
+ "captured_at": "2026-08-16T16-40",
+ "provider_note": "anthropic",
+ "provider_vision": "anthropic",
+ "template_key": "msk_knee_consult (MSK — knee consultation)",
+ "source_media": "bb7dabb1-516e-4191-9d4e-85892b06875d.MP4 (180s — exam + X-ray review only)",
+ "capture_method": "pasted from the note-review screen before Stage 2 approval",
+ "scope_note": "PARTIAL CASE. This clip covers 04:34-07:36 of the visit only: the physical exam, the X-ray review and the verbal assessment. It contains no chief complaint, no history, no medications and no injection discussion, so those sections are expected to be empty. The manoeuvre and imaging scorecards are still fully valid — everything they measure happens inside this clip.",
+ "completeness_reported": "5 of 7 sections populated (71%)",
+ "note_audio": {
+  "provider_used": "anthropic",
+  "sections": [
+   { "id": "chief_complaint", "status": "pending_video", "claims": [] },
+   { "id": "hpi", "status": "populated", "claims": [
+     { "text": "The patient reports no pain or bother in the asymptomatic (non-painful) knee." },
+     { "text": "The patient reports pain in the symptomatic knee at end-range flexion." },
+     { "text": "The patient reports a little pain on one side of the symptomatic knee on palpation." },
+     { "text": "The patient reports pain with a maneuver performed on the symptomatic knee (consistent with McMurray or similar rotational/provocative test)." },
+     { "text": "The patient reports a little pain with straight leg raise on the symptomatic side." },
+     { "text": "The clinician notes the patient is in an 'in between age category,' suggesting an age range consistent with early-to-moderate degenerative joint disease." },
+     { "text": "The clinician considers the presentation may represent either a meniscal tear or the beginning of arthritis." }
+   ]},
+   { "id": "functional_assessment", "status": "not_captured", "claims": [] },
+   { "id": "physical_exam", "status": "populated", "claims": [
+     { "text": "Examination of the asymptomatic (non-painful) knee was performed first." },
+     { "text": "On the asymptomatic knee, full flexion was assessed; the patient reported no pain at end-range flexion." },
+     { "text": "Examination then proceeded to the symptomatic (painful) knee." },
+     { "text": "On the symptomatic knee, initial inspection/palpation did not provoke pain." },
+     { "text": "On the symptomatic knee, extension strength (push test against resistance) was assessed; result was satisfactory." },
+     { "text": "On the symptomatic knee, end-range flexion was painful — the patient confirmed pain at full flexion." },
+     { "text": "On the symptomatic knee, medial joint-line palpation elicited mild tenderness ('a little bit')." },
+     { "text": "On the symptomatic knee, a rotational/provocative maneuver (consistent with McMurray test) was performed and was positive — the patient reported pain." },
+     { "text": "On the symptomatic knee, a straight leg raise was performed and elicited mild pain." },
+     { "text": "Ligament stability was assessed on examination and found to be stable bilaterally." }
+   ]},
+   { "id": "imaging_review", "status": "populated", "claims": [
+     { "text": "X-rays of both knees were available and reviewed at this visit." },
+     { "text": "On the left knee, medial joint-line narrowing ('pinching') is present, consistent with early degenerative changes." },
+     { "text": "On the right knee, the medial compartment appears less affected than the left ('doesn't look so bad')." },
+     { "text": "On the left knee, a small osteophyte is identified under the patella (patellofemoral compartment), consistent with mild patellofemoral arthritis." },
+     { "text": "Mild patellofemoral arthritis (tiny osteophyte under the kneecap) is present on the left side; the right patellofemoral compartment shows less involvement." },
+     { "text": "Overall, the right knee X-ray appearance is better than the left." },
+     { "text": "The patellofemoral view of the right knee was reviewed and appeared satisfactory." },
+     { "text": "The clinician notes that the medial joint-line pinching seen on imaging could also be consistent with a medial meniscal tear rather than purely degenerative change." }
+   ]},
+   { "id": "assessment", "status": "populated", "claims": [
+     { "text": "The symptomatic knee demonstrates end-range flexion pain and a positive provocative rotational test (consistent with McMurray), with mild medial joint-line tenderness on palpation." },
+     { "text": "Ligament stability is intact bilaterally on clinical examination." },
+     { "text": "Imaging demonstrates medial joint-line narrowing ('pinching') on the left knee with a small patellar osteophyte, consistent with early degenerative changes; the right knee shows comparatively less involvement." },
+     { "text": "The clinician identifies the presentation as potentially representing a medial meniscal tear or early arthritis, noting the patient is in an 'in between age category.'" },
+     { "text": "No hip pain or other joint involvement was identified." }
+   ]},
+   { "id": "plan", "status": "populated", "claims": [
+     { "text": "Physiotherapy is recommended as the first-line treatment." },
+     { "text": "MRI of the knee is recommended to further evaluate the cartilage and meniscus." },
+     { "text": "Conservative treatment is the preferred initial approach." }
+   ]}
+  ]
+ },
+ "note_vision": null,
+ "detail": null
+}

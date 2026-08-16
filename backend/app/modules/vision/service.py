@@ -1123,11 +1123,17 @@ def _dedupe_captions(captions: list[FrameCaption]) -> int:
 
     tokens = {id(c): _discriminative_tokens(c.visual_description) for c in captions}
 
-    # Single-linkage clustering: a caption joins a cluster if it matches ANY
-    # member, not just the first. Duplicates of one subject are phrased with
-    # enough variety that the weakest pair can fall below threshold while both
-    # sit comfortably above it against a third — head-only comparison would
-    # split one radiograph into several clusters.
+    # A caption joins a cluster only if it matches that cluster's SEED — never
+    # merely some member of it.
+    #
+    # Single-linkage (match ANY member) was tried and reverted: it chains. On
+    # the real 68-caption Imaging Review set from session 30cccd75 it collapsed
+    # 68 captions to 5 and destroyed two of the three radiograph views — enough
+    # intermediate captions existed to link the AP standing view to the lateral
+    # and on to the sunrise/Merchant, so a whole imaging series became one
+    # claim. Seed-anchored comparison gives 11 clusters with all three views
+    # intact. An 11-caption unit test could not surface this; chaining needs a
+    # crowd.
     clusters: list[list[FrameCaption]] = []
     for caption in captions:
         mine = tokens[id(caption)]
@@ -1135,10 +1141,7 @@ def _dedupe_captions(captions: list[FrameCaption]) -> int:
             clusters.append([caption])  # unprovable -> its own cluster, survives
             continue
         for cluster in clusters:
-            if any(
-                _overlap(mine, tokens[id(member)]) >= _DEDUPE_SIMILARITY
-                for member in cluster
-            ):
+            if _overlap(mine, tokens[id(cluster[0])]) >= _DEDUPE_SIMILARITY:
                 cluster.append(caption)
                 break
         else:
