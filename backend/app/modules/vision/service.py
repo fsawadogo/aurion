@@ -17,7 +17,7 @@ import logging
 import re
 import time
 from functools import lru_cache
-from typing import Optional
+from typing import Final, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -1038,26 +1038,176 @@ def _find_anchor_segment(
 
 # ── Conflict Classification ──────────────────────────────────────────────
 
+#: Overlap coefficient — |A∩B| / min(|A|,|B|) — at or above which two captions
+#: are judged to describe the same thing.
+#:
+#: MEASURED against real captions from session 30cccd75 (AP standing vs lateral
+#: vs sunrise/Merchant descriptions of the same knee series):
+#:     same view : 0.20 - 0.67  (median 0.47)
+#:     different : 0.00 - 0.33  (median 0.18)
+#: Every threshold from 0.34 up produces ZERO cross-view merges. 0.40 is chosen
+#: for margin above the worst false pair (0.33) while still catching the bulk of
+#: true duplicates; single-linkage clustering picks up the rest by chaining.
+#:
+#: Overlap coefficient, NOT Jaccard: duplicates here differ wildly in length
+#: (a terse restatement vs a verbose one), and Jaccard punishes that difference
+#: so hard the bands overlap — measured 0.10-0.45 same-view against 0.00-0.18
+#: different-view, with no clean threshold between them.
+_DEDUPE_SIMILARITY: Final[float] = 0.40
+
+#: Structural filler that is never discriminative at any corpus size.
+_CAPTION_STOPWORDS: Final[frozenset[str]] = frozenset({
+    "the", "and", "with", "this", "that", "from", "for", "are", "is", "was",
+    "which", "while", "appears", "appear", "visible", "seen", "shows", "show",
+    "showing", "displays", "displayed", "there", "here", "any", "not", "no",
+    "frame", "image", "view", "viewer", "screen", "monitor", "patient",
+    "clinician", "aspect", "region", "position", "positioned", "resting",
+    "surface", "side", "both", "one", "two", "other", "also", "being",
+    "performed", "assessment", "examination", "exam", "visit",
+})
+
+_TOKEN_RE: Final = re.compile(r"[a-z]+")
+
+
+def _discriminative_tokens(text: str) -> frozenset[str]:
+    """Content words of ``text``, minus structural filler.
+
+    A corpus document-frequency filter was tried here and REMOVED: the terms
+    shared by most captions in a run are exactly the ones that identify the
+    subject ("upright", "ap", "marker", "lateral"), so dropping them left only
+    incidental phrasing and made same-view captions score 0.00-0.33 against
+    each other — indistinguishable from different views. High document
+    frequency means "this run is mostly about one thing", not "this word is
+    noise". The static stoplist alone does the job.
+    """
+    return frozenset(
+        t for t in _TOKEN_RE.findall((text or "").lower())
+        if len(t) > 3 and t not in _CAPTION_STOPWORDS
+    )
+
+
+def _overlap(a: frozenset[str], b: frozenset[str]) -> float:
+    """Overlap coefficient of two token sets; 0.0 when either is empty."""
+    if not a or not b:
+        return 0.0
+    return len(a & b) / min(len(a), len(b))
+
+
+def _dedupe_captions(captions: list[FrameCaption]) -> int:
+    """Mark near-identical sibling captions ``REPEATS``. Returns how many.
+
+    **Why this exists.** Frames are cadence-sampled (``video_import_cadence_
+    seconds``), so a surgeon holding one radiograph on screen for two minutes
+    yields dozens of frames — and, before this, dozens of claims. Measured on
+    session ``30cccd75``: ~65 Imaging Review claims describing ~5 distinct
+    things, against the three lines a physician writes for the same imaging.
+
+    **It only ever REMOVES a whole caption — never edits one.** So it cannot
+    introduce content that no frame supports.
+
+    **It keys on redundancy against siblings, never on wording.** A caption is
+    dropped only when ANOTHER caption carries the same discriminative content;
+    no phrase, pattern or negation makes a caption droppable on its own. That
+    distinction is what keeps
+    ``test_merge_never_deletes_a_caption_for_its_wording`` (TE-4 AC-3) true —
+    a lone caption is a cluster of one and always survives. The regex that test
+    exists to prevent deleted real findings ("Bone is not visible at the base
+    of the ulcer"); nothing here can, because a caption with no duplicate is
+    never a candidate.
+
+    Conservative by construction: a caption whose discriminative set is empty
+    is KEPT, because redundancy cannot be proven for it.
+    """
+    if len(captions) < 2:
+        return 0
+
+    tokens = {id(c): _discriminative_tokens(c.visual_description) for c in captions}
+
+    # A caption joins a cluster only if it matches that cluster's SEED — never
+    # merely some member of it.
+    #
+    # Single-linkage (match ANY member) was tried and reverted: it chains. On
+    # the real 68-caption Imaging Review set from session 30cccd75 it collapsed
+    # 68 captions to 5 and destroyed two of the three radiograph views — enough
+    # intermediate captions existed to link the AP standing view to the lateral
+    # and on to the sunrise/Merchant, so a whole imaging series became one
+    # claim. Seed-anchored comparison gives 11 clusters with all three views
+    # intact. An 11-caption unit test could not surface this; chaining needs a
+    # crowd.
+    clusters: list[list[FrameCaption]] = []
+    for caption in captions:
+        mine = tokens[id(caption)]
+        if not mine:
+            clusters.append([caption])  # unprovable -> its own cluster, survives
+            continue
+        for cluster in clusters:
+            if _overlap(mine, tokens[id(cluster[0])]) >= _DEDUPE_SIMILARITY:
+                cluster.append(caption)
+                break
+        else:
+            clusters.append([caption])
+
+    _RANK = {"high": 3, "medium": 2, "low": 1}
+    dropped = 0
+    for cluster in clusters:
+        if len(cluster) == 1:
+            continue
+        # Representative: best-evidenced, then most specific.
+        keep = max(
+            cluster,
+            key=lambda c: (
+                _RANK.get((c.confidence or "").lower(), 0),
+                len(c.visual_description or ""),
+            ),
+        )
+        for c in cluster:
+            if c is keep:
+                continue
+            c.integration_status = "REPEATS"
+            dropped += 1
+            # frame_id only — caption text may describe patient anatomy.
+            logger.info(
+                "Duplicate visual caption discarded: frame=%s represented_by=%s",
+                c.frame_id, keep.frame_id,
+            )
+    return dropped
+
+
 def classify_conflicts(
     captions: list[FrameCaption],
     note: Note,
 ) -> list[FrameCaption]:
     """Classify each caption as ENRICHES, REPEATS, or CONFLICTS.
 
-    For MVP, trusts the provider's classification. Production will use
-    an LLM comparison against audio-anchored note claims.
+    Two distinct redundancies share the ``REPEATS`` status:
+
+    * **visual vs visual** (VIS-09, implemented here) — N frames of the same
+      radiograph produce N claims. Collapsed by :func:`_dedupe_captions`.
+    * **visual vs audio** — a caption restating what the transcript already
+      says. Still unimplemented; needs the LLM comparison against
+      audio-anchored claims described in CLAUDE.md §Phase 4.
+
+    Either way the merge drops them: it filters ``integration_status !=
+    "REPEATS"``. That filter has existed since Phase 4 and, until VIS-09,
+    nothing ever produced a ``REPEATS`` for it to act on.
     """
     for caption in captions:
         if caption.integration_status == "CONFLICTS":
             caption.conflict_flag = True
+
+    # Conflicts are a physician-review gate — never dedupe one away.
+    deduped = _dedupe_captions(
+        [c for c in captions if c.integration_status == "ENRICHES"]
+    )
 
     enriches = sum(1 for c in captions if c.integration_status == "ENRICHES")
     repeats = sum(1 for c in captions if c.integration_status == "REPEATS")
     conflicts = sum(1 for c in captions if c.conflict_flag)
 
     logger.info(
-        "Conflict classification: enriches=%d repeats=%d conflicts=%d",
-        enriches, repeats, conflicts,
+        "Conflict classification: enriches=%d repeats=%d conflicts=%d "
+        "(deduped=%d)",
+        enriches, repeats, conflicts, deduped,
     )
     return captions
 

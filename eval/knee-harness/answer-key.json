@@ -1,0 +1,78 @@
+{
+  "case_id": "knee-15min",
+  "title": "15-min knee pain visit — Dr. Marie Gdalevitch",
+  "source": "Marie's Soap Note.docx (authored with Claude, then physician-edited)",
+  "media": {
+    "combined": "knee-visit-CORRECT-ORDER.mp4",
+    "duration_s": 696.5,
+    "clip_order": [
+      "83c5fbe1-7af4-44e9-bed0-e0c847ac7343",
+      "bf7fecd8-34fc-4f22-b16b-8cdf7d4e4cc6",
+      "bb7dabb1-516e-4191-9d4e-85892b06875d",
+      "6064f431-a3e3-4cac-890e-1bd649d1821f",
+      "cf2ed00a-0fae-401e-8224-c79b7d26b7f9"
+    ],
+    "clip_order_note": "Derived from content — each clip's last line runs into the next one's first. Filenames are random UUIDs; do not trust alphabetical or filesystem order."
+  },
+
+  "scorecard": {
+    "manoeuvres": {
+      "why": "None of these six is ever spoken aloud — verified against an independent Whisper transcript of all 696s (Lachman 0, McMurray 0, milking 0, sweep 0, patellar 0, grind 0, effusion 0). Video is therefore the only possible source. This is the primary metric.",
+      "expected": [
+        { "id": "milking_sweep", "name": "Milking / sweep test", "result": "No effusion seen", "side": "both" },
+        { "id": "rom", "name": "Range of motion", "result": "Full passive ROM both knees; pain only on LEFT at maximal flexion", "side": "both" },
+        { "id": "joint_line_palpation", "name": "Joint-line palpation at ~90° flexion", "result": "No pain right; pain LEFT at medial posterior joint line only", "side": "both" },
+        { "id": "patellar_mobility", "name": "Patellar mobility", "result": "Tested, no pain", "side": "both" },
+        { "id": "patellar_grind", "name": "Patellar grind", "result": "Done, no pain either side", "side": "both" },
+        { "id": "lachman", "name": "Lachman", "result": "Negative both knees; ligaments clinically stable", "side": "both" },
+        { "id": "mcmurray", "name": "McMurray", "result": "NEGATIVE right, POSITIVE left", "side": "both" }
+      ]
+    },
+    "imaging_views": {
+      "why": "Marie names three specific X-ray projections with per-view findings. Tests whether the vision layer reads laterality and view type off the screen.",
+      "expected": [
+        { "id": "ap_standing", "view": "Bilateral standing AP", "finding": "Medial joint space narrowing LEFT; right comparatively preserved" },
+        { "id": "lateral", "view": "Lateral, both knees", "finding": "Small osteophytes at proximal patellar pole bilaterally, worse LEFT" },
+        { "id": "sunrise", "view": "Axial / sunrise (Merchant), both knees", "finding": "Small osteophyte + mild arthritic change under patella LEFT; right patellofemoral well maintained" }
+      ]
+    },
+    "known_traps": [
+      {
+        "id": "scar_fabrication",
+        "description": "A prior run reported a 'well-healed linear surgical scar ~4-5cm' on the distal thigh/knee. Four high-res frames show no scar, and the history states the old injury did not require surgery.",
+        "check": "Any claim mentioning a scar, incision or surgical site on the knee is a FABRICATION."
+      },
+      {
+        "id": "laterality_flip",
+        "description": "On the bilateral standing radiograph the 'R' marker sits on the SCREEN-LEFT image, so the screen-right knee is the LEFT one — the narrowed side, matching the audio.",
+        "check": "Claims asserting laterality from a head-worn camera view (rather than a marker) are unsupported."
+      },
+      {
+        "id": "citation_offset",
+        "description": "A prior run transposed source quotes between adjacent segments and cited claims to segments that do not support them, while still scoring 100% on citation_traceability_rate.",
+        "check": "For each claim, confirm the CITED segment's text actually supports the claim, not merely that a source_id exists."
+      }
+    ]
+  },
+
+  "sections": {
+    "chief_complaint": "Left knee pain, progressive worsening over the past 2 months.",
+    "hpi": "46-year-old active female, 2-month history of worsening left knee pain. Morning stiffness, inability to perform a full squat, progressive functional limitation. Minor tweak while playing ball in the backyard with her children ~2 months ago, pain progressively worsened since. Remote left knee injury from skiing in her 20s, healed conservatively with immobilisation, no surgery, imaging obtained at the time (records unavailable). Denies significant knee problems between the old injury and now. Pain medial aspect of the left knee; aggravated by stairs (ascending and descending) and squatting; morning stiffness with a slight limp on waking that resolves; intermittent swelling with occasional change in the appearance of the knee; no other joint pain, right knee asymptomatic; managed with Tylenol and Advil PRN, no formal treatment. Highly active: swimming 3x/week, dancing, resistance work ~2x/week, limited by the knee pain.",
+    "past_medical_history": "Crohn's disease (stable). Perimenopausal, recently commenced HRT. Previous left knee injury (skiing, 20s), resolved conservatively. Back fracture at age 16 (motor vehicle accident), surgically reduced and repaired.",
+    "past_surgical_history": "3x Caesarean sections. Abdominoplasty. Breast lift. Liposuction. Tonsillectomy. Reduction and scar repair of back fracture (age 16, MVA) under general anaesthesia, no complications. Dilatation and curettage. No prior anaesthetic complications.",
+    "medications": "Adalimumab (Humira) 40 mg subcutaneous every 2 weeks. Semaglutide (Ozempic) 1 mg subcutaneous weekly. Estrogen gel (half dose, per patient report). Progesterone 1 tablet orally at night. Testosterone supplementation planned pending tolerance of current HRT. Tylenol / Advil PRN.",
+    "allergies": "Not documented during encounter.",
+    "physical_exam": "General: well-appearing, well-groomed adult female, alert and conversational, no acute distress at rest. Both knees — Inspection: no gross deformity, no gross swelling. Milking test: no effusion seen. Range of motion: full passive ROM both knees, pain only on the left at maximal knee flexion. Palpation at ~90 degrees flexion at both medial and lateral joint lines: no pain on right; pain on left at medial posterior joint line only. Patellar mobility tested without pain; patellar grind test done, no pain either side. Ligament stability: ligaments clinically stable; Lachman manoeuvre done on both knees, negative. McMurray test done: negative on the right, positive on the left.",
+    "imaging_review": "Bilateral standing AP view: medial joint space narrowing (left knee), consistent with early degenerative changes; right side comparatively better preserved. Lateral projection of both knees: small osteophytes at proximal patellar pole on both sides, worst on left. Axial / sunrise (Merchant) view both knees: small osteophyte and mild arthritic change under the patella (patellofemoral compartment) on the left; right patellofemoral compartment appears well maintained.",
+    "assessment": "46-year-old active female with left knee pain and functional limitation. Clinical and radiographic findings consistent with early degenerative joint disease in the medial compartment and patellofemoral joint of the left knee. A medial meniscal tear cannot be excluded and is to be further assessed on MRI. 1. Left knee medial compartment osteoarthritis (early) — radiographic joint space narrowing with degenerative changes. 2. Possible medial meniscal tear — cannot be excluded on X-ray; MRI indicated. 3. Patellofemoral osteoarthritis (left > right) — small osteophyte under patella on axial view. 4. Contributing factors: perimenopause, high activity level, prior knee injury.",
+    "plan": "Investigations: MRI left knee, prescription provided today, to assess cartilage integrity and meniscal status; MRI not required before proceeding with injection. Referrals: physiotherapy, prescription provided today, to strengthen muscles around the knee to offload the joint and optimise injection outcomes; patient counselled physiotherapy is essential regardless of injection choice. Injection options discussed, patient to decide and may return at a subsequent visit: (1) cortisone — basic pain relief, not considered beneficial for joint preservation; (2) viscosupplementation (hyaluronic acid) ~$450, joint lubricant, selected brand includes a corticosteroid component for initial inflammation, can be more painful to inject due to viscosity; (3) PRP ~$900, autologous blood drawn and centrifuged, platelet-rich fraction re-injected, natural anti-inflammatory, supports cartilage health."
+  },
+
+  "physician_annotations": [
+    {
+      "on": "assessment.contributing_factors",
+      "quote": "this is true but not something we discussed… claude is putting its input here which is amazing!",
+      "meaning": "Marie WANTS inference the descriptive boundary forbids. Evidence for grounded mode having real clinical demand. A GS-9 decision for Faical, not an engineering one."
+    }
+  ]
+}
