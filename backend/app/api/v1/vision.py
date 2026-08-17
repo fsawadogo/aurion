@@ -228,10 +228,31 @@ async def run_stage2_vision(
     # registry default otherwise (REPLACEMENT). Both kinds share the
     # same underlying default today but they're separate registry
     # entries — the physician can customise them independently. We
-    # resolve both so the dispatch loop never re-asks the DB.
+    # resolve only actual overrides so the dispatch loop never re-asks the DB.
+    # None tells the service to select its grounded or descriptive runtime
+    # default. A real personal/admin override remains authoritative even when
+    # its text happens to equal the registry default.
     clinician_id = session_row.clinician_id if session_row is not None else None
-    frame_system_prompt = await assemble_prompt("vision_frame", clinician_id, db) if clinician_id is not None else None
-    clip_system_prompt = await assemble_prompt("vision_clip", clinician_id, db) if clinician_id is not None else None
+    frame_system_prompt = (
+        await assemble_prompt(
+            "vision_frame",
+            clinician_id,
+            db,
+            include_registry_default=False,
+        )
+        if clinician_id is not None
+        else None
+    )
+    clip_system_prompt = (
+        await assemble_prompt(
+            "vision_clip",
+            clinician_id,
+            db,
+            include_registry_default=False,
+        )
+        if clinician_id is not None
+        else None
+    )
     # TE-3: the template + note let captioning aim at the section each frame
     # will feed, instead of describing generically. Resolved from the session's
     # stored PIN so Stage 2 uses the SAME template Stage 1 did.

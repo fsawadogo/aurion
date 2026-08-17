@@ -385,7 +385,9 @@ async def assemble_prompt(
     owner_id: uuid.UUID,
     db: AsyncSession,
     template_prompt: str | None = None,
-) -> str:
+    *,
+    include_registry_default: bool = True,
+) -> str | None:
     """Return the prompt text to send to the LLM for ``owner_id``.
 
     Resolution order (most specific first). In Grounded Synthesis Mode
@@ -402,7 +404,13 @@ async def assemble_prompt(
          clinician — ``SELF`` → ``ROLE`` → ``ALL`` (PS-02). This is how a
          prompt an admin authored + shared takes effect for clinicians who
          haven't overridden it.
-      4. The registry default ``PROMPTS[prompt_id].system_prompt``.
+      4. The registry default ``PROMPTS[prompt_id].system_prompt`` when
+         ``include_registry_default`` is true (the default).
+
+    Callers that perform their own runtime default selection may pass
+    ``include_registry_default=False``. They receive ``None`` only when no
+    personal, template, or published override exists; a real override remains
+    distinguishable even if its text is byte-identical to the registry base.
 
     A personal override (1) always outranks the picked template's instructions
     (2), which in turn outrank a clinic-wide publication (3): a physician who
@@ -434,6 +442,13 @@ async def assemble_prompt(
     published: Optional[str] = None
     if not user_prompt and not template_prompt:
         published = await _get_published_prompt(db, owner_id, prompt_id)
+    if (
+        not include_registry_default
+        and not user_prompt
+        and not template_prompt
+        and published is None
+    ):
+        return None
     return compose_system_prompt(prompt_id, user_prompt, template_prompt, published)
 
 
