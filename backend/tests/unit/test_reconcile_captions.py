@@ -22,8 +22,10 @@ from app.core.types import (
 )
 from app.modules.vision import reconcile as reconcile_mod
 from app.modules.vision.reconcile import (
+    _RECONCILE_SCHEMA,
     RECONCILE_SYSTEM_PROMPT,
     _build_user_prompt,
+    _note_ready_sentence,
     reconcile_captions,
 )
 
@@ -104,6 +106,16 @@ class TestReconciliationPrompt:
         assert "acquisition/view metadata without a clinical finding" in prompt
         assert "viewer thumbnails" in prompt
 
+    def test_enrichment_requires_frame_local_note_ready_text(self) -> None:
+        prompt = RECONCILE_SYSTEM_PROMPT.lower()
+        assert "exactly one concise, note-ready clinical sentence" in prompt
+        assert "derived solely from that frame's visual caption" in prompt
+        assert "do not add or strengthen a fact" in prompt
+        assert "import a fact from the audio" in prompt
+
+        decision_schema = _RECONCILE_SCHEMA["properties"]["decisions"]["items"]
+        assert "note_text" in decision_schema["required"]
+
     def test_user_prompt_exposes_cross_specialty_captions_for_comparison(self) -> None:
         prompt = _build_user_prompt(
             _note(),
@@ -161,17 +173,17 @@ class TestSuccessfulReconciliation:
     @pytest.mark.asyncio
     async def test_enriches_decision_updates_caption(self, monkeypatch) -> None:
         monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "key")
-        client = _stub_post({
-            "content": [{
-                "type": "tool_use",
-                "name": "emit_reconciliation",
-                "input": {
-                    "decisions": [
-                        {"frame_id": "frame_001", "status": "ENRICHES"}
-                    ]
-                },
-            }]
-        })
+        client = _stub_post(
+            {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "emit_reconciliation",
+                        "input": {"decisions": [{"frame_id": "frame_001", "status": "ENRICHES"}]},
+                    }
+                ]
+            }
+        )
         with patch("httpx.AsyncClient", return_value=client):
             caps = [_caption(initial_status="REPEATS")]
             out = await reconcile_captions(caps, _note())
@@ -179,21 +191,105 @@ class TestSuccessfulReconciliation:
         assert out[0].conflict_flag is False
 
     @pytest.mark.asyncio
+    async def test_enriches_uses_reconciled_note_ready_sentence(self, monkeypatch) -> None:
+        monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "key")
+        client = _stub_post(
+            {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "emit_reconciliation",
+                        "input": {
+                            "decisions": [
+                                {
+                                    "frame_id": "frame_001",
+                                    "status": "ENRICHES",
+                                    "note_text": "Left knee extension is near full at approximately 0-5 degrees.",
+                                }
+                            ]
+                        },
+                    }
+                ]
+            }
+        )
+        with patch("httpx.AsyncClient", return_value=client):
+            caps = [
+                _caption(
+                    description=(
+                        "Passive knee extension examination: The subject is supine. "
+                        "The knee appears near full extension. No swelling is visible."
+                    ),
+                    initial_status="REPEATS",
+                )
+            ]
+            out = await reconcile_captions(caps, _note())
+
+        assert out[0].integration_status == "ENRICHES"
+        assert out[0].visual_description == ("Left knee extension is near full at approximately 0-5 degrees.")
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize(
+        "note_text",
+        [
+            "The subject is supine with the knee extended.",
+            "Knee extension is near full. No swelling is visible.",
+        ],
+    )
+    async def test_non_note_ready_enrichment_fails_closed(self, monkeypatch, note_text) -> None:
+        monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "key")
+        client = _stub_post(
+            {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "emit_reconciliation",
+                        "input": {
+                            "decisions": [
+                                {
+                                    "frame_id": "frame_001",
+                                    "status": "ENRICHES",
+                                    "note_text": note_text,
+                                }
+                            ]
+                        },
+                    }
+                ]
+            }
+        )
+        with patch("httpx.AsyncClient", return_value=client):
+            caps = [
+                _caption(
+                    description="The frame shows the subject supine. The knee is extended.",
+                    initial_status="REPEATS",
+                )
+            ]
+            out = await reconcile_captions(caps, _note())
+
+        assert out[0].integration_status == "REPEATS"
+        assert out[0].conflict_flag is False
+
+    @pytest.mark.asyncio
     async def test_conflicts_decision_sets_flag_and_detail(self, monkeypatch) -> None:
         monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "key")
-        client = _stub_post({
-            "content": [{
-                "type": "tool_use",
-                "name": "emit_reconciliation",
-                "input": {
-                    "decisions": [{
-                        "frame_id": "frame_001",
-                        "status": "CONFLICTS",
-                        "conflict_detail": "audio said no swelling, frame shows visible swelling",
-                    }]
-                },
-            }]
-        })
+        client = _stub_post(
+            {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "emit_reconciliation",
+                        "input": {
+                            "decisions": [
+                                {
+                                    "frame_id": "frame_001",
+                                    "status": "CONFLICTS",
+                                    "conflict_detail": "audio said no swelling, frame shows visible swelling",
+                                }
+                            ]
+                        },
+                    }
+                ]
+            }
+        )
         with patch("httpx.AsyncClient", return_value=client):
             caps = [_caption(initial_status="REPEATS")]
             out = await reconcile_captions(caps, _note())
@@ -205,17 +301,17 @@ class TestSuccessfulReconciliation:
     async def test_missing_decision_leaves_caption_alone(self, monkeypatch) -> None:
         """A frame the LLM didn't return a decision for keeps its current status."""
         monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "key")
-        client = _stub_post({
-            "content": [{
-                "type": "tool_use",
-                "name": "emit_reconciliation",
-                "input": {
-                    "decisions": [
-                        {"frame_id": "frame_002", "status": "ENRICHES"}
-                    ]
-                },
-            }]
-        })
+        client = _stub_post(
+            {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "emit_reconciliation",
+                        "input": {"decisions": [{"frame_id": "frame_002", "status": "ENRICHES"}]},
+                    }
+                ]
+            }
+        )
         with patch("httpx.AsyncClient", return_value=client):
             caps = [
                 _caption(frame_id="frame_001", initial_status="REPEATS"),
@@ -232,17 +328,19 @@ class TestSuccessfulReconciliation:
         """The user prompt builder must surface the audio claims that share
         the caption's anchor so the model can actually compare."""
         monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "key")
-        client = _stub_post({
-            "content": [{
-                "type": "tool_use",
-                "name": "emit_reconciliation",
-                "input": {"decisions": []},
-            }]
-        })
+        client = _stub_post(
+            {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "emit_reconciliation",
+                        "input": {"decisions": []},
+                    }
+                ]
+            }
+        )
         with patch("httpx.AsyncClient", return_value=client):
-            await reconcile_captions(
-                [_caption(anchor_id="seg_001")], _note()
-            )
+            await reconcile_captions([_caption(anchor_id="seg_001")], _note())
         body = client.post.await_args.kwargs["json"]
         user_msg = body["messages"][0]["content"]
         assert "frame_001" in user_msg
@@ -251,3 +349,22 @@ class TestSuccessfulReconciliation:
         # Schema-enforced output configured
         assert body["tools"][0]["name"] == "emit_reconciliation"
         assert body["tool_choice"] == {"type": "tool", "name": "emit_reconciliation"}
+
+
+class TestNoteReadySentenceGate:
+    def test_accepts_single_clinical_sentence(self) -> None:
+        assert _note_ready_sentence("  Wound edges are well approximated.  ") == ("Wound edges are well approximated.")
+
+    @pytest.mark.parametrize(
+        "text",
+        [
+            "A monitor screen displays a knee radiograph.",
+            "The image shows a healing incision.",
+            "The subject is standing.",
+            "Knee extension is near full. No swelling is visible.",
+            "",
+            None,
+        ],
+    )
+    def test_rejects_scene_narration_or_multiple_sentences(self, text) -> None:
+        assert _note_ready_sentence(text) is None
