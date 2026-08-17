@@ -245,3 +245,48 @@ async def extract_frames_at_windows(
     results = await asyncio.gather(*(_extract(ts) for ts in unique_timestamps))
     out = [result for result in results if result is not None]
     return out
+
+
+async def encode_jpeg_frames_to_h264(
+    jpeg_frames: list[bytes],
+    *,
+    fps: int,
+) -> bytes:
+    """Encode an ordered sequence of already-masked JPEGs as silent H.264.
+
+    The caller is responsible for masking every input frame before invoking
+    this helper.  Only the re-encoded MP4 bytes are returned; raw source-video
+    bytes never flow through this path.  ``-an`` structurally removes audio so
+    a clip sent to a vision provider cannot carry encounter speech.
+
+    Raises:
+        VideoExtractionError: no frames were supplied, ffmpeg failed, or the
+            encoder produced an empty output.  Reasons are bounded and PHI-free.
+    """
+    if not jpeg_frames:
+        raise VideoExtractionError("no_masked_clip_frames")
+
+    fps = max(fps, 1)
+    with tempfile.TemporaryDirectory() as tmp:
+        for index, frame in enumerate(jpeg_frames):
+            frame_path = os.path.join(tmp, f"frame_{index:06d}.jpg")
+            with open(frame_path, "wb") as fh:
+                fh.write(frame)
+
+        out_path = os.path.join(tmp, "masked_clip.mp4")
+        await _run_ffmpeg(
+            [
+                "ffmpeg", "-nostdin", "-y",
+                "-framerate", str(fps),
+                "-i", os.path.join(tmp, "frame_%06d.jpg"),
+                "-an",
+                "-c:v", "libx264",
+                "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart",
+                out_path,
+            ]
+        )
+        if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
+            raise VideoExtractionError("empty_masked_clip_output")
+        with open(out_path, "rb") as fh:
+            return fh.read()

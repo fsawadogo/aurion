@@ -86,6 +86,11 @@ def _patches(job, session, *, extract=None, stage1=None, purge=None):
         patch.object(vi, "run_stage1", AsyncMock(side_effect=stage1)),
         patch.object(vi, "purge_raw_video", AsyncMock(side_effect=purge)),
         patch.object(vi, "_extract_and_mask_frames", AsyncMock(return_value=(0, 0, 0))),
+        patch.object(
+            vi,
+            "_extract_mask_and_store_trigger_clips",
+            AsyncMock(return_value=(0, 0, 0)),
+        ),
         patch.object(vi, "_auto_advance_stage2", AsyncMock(return_value=2)),
         patch.object(vi, "try_publish_alert", AsyncMock()),
     ]

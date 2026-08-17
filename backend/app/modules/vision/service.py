@@ -635,12 +635,27 @@ async def retrieve_clips_for_triggers(
         key = obj["Key"]
         parsed_ts = _parse_clip_timestamp_ms(key)
         ts_ms = parsed_ts if parsed_ts is not None else default_anchor_ts
+        if parsed_ts is not None and trigger_segments:
+            nearest_trigger = min(
+                trigger_segments,
+                key=lambda segment: abs(
+                    ((segment.start_ms + segment.end_ms) // 2) - ts_ms
+                ),
+            )
+            trigger_segment_id = nearest_trigger.id
+        elif parsed_ts is not None:
+            # Cadence/silent clips have no spoken trigger. Keep their evidence
+            # IDs distinct so separate motion observations cannot collapse onto
+            # one synthetic ``unknown_clip`` citation downstream.
+            trigger_segment_id = f"clip_at_{ts_ms}"
+        else:
+            trigger_segment_id = fallback_trigger_id
         clips.append(
             MaskedClip(
                 s3_key=key,
                 timestamp_ms=ts_ms,
                 duration_ms=clip_window_ms,
-                trigger_segment_id=fallback_trigger_id,
+                trigger_segment_id=trigger_segment_id,
                 masking_metadata=ClipMaskingMetadata(frames_total=0, frames_with_faces=0, faces_blurred=0),
             )
         )
