@@ -77,6 +77,17 @@ variable "ecs_memory" {
   default     = 1024
 }
 
+variable "api_alb_idle_timeout_seconds" {
+  description = "ALB connection idle timeout for the FastAPI API. Must remain above the maximum 300-second AppConfig Stage 1 hard deadline with operational headroom so the load balancer cannot terminate a still-valid doctor request first."
+  type        = number
+  default     = 360
+
+  validation {
+    condition     = var.api_alb_idle_timeout_seconds >= 330 && var.api_alb_idle_timeout_seconds <= 4000
+    error_message = "api_alb_idle_timeout_seconds must be between 330 and 4,000 seconds."
+  }
+}
+
 # -----------------------------------------------------------------------------
 # ECS — Whisper GPU Service
 # -----------------------------------------------------------------------------

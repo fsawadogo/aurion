@@ -71,6 +71,7 @@ CONFIG=$(cat <<'EOF'
   },
   "pipeline": {
     "stage1_skip_window_seconds": 60,
+    "stage1_hard_deadline_ms": 90000,
     "frame_window_clinic_ms": 3000,
     "frame_window_procedural_ms": 7000,
     "screen_capture_fps": 2,

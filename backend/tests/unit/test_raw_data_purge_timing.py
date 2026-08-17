@@ -209,7 +209,7 @@ class TestRunStage1Wiring:
         note_gen = AsyncMock()
         audits = AsyncMock()
         with (
-            patch.object(tx, "sla_stage1_ms", return_value=100),
+            patch.object(tx, "stage1_hard_deadline_ms", return_value=100),
             patch.object(
                 tx,
                 "transcribe_audio",
@@ -313,7 +313,7 @@ class TestRunStage1Wiring:
         notify = AsyncMock()
         purge = AsyncMock()
         with (
-            patch.object(tx, "sla_stage1_ms", return_value=100),
+            patch.object(tx, "stage1_hard_deadline_ms", return_value=100),
             patch.object(tx, "transcribe_audio", AsyncMock(return_value=transcript)),
             patch.object(tx, "classify_triggers", AsyncMock(return_value=transcript)),
             patch.object(
@@ -376,7 +376,7 @@ class TestRunStage1Wiring:
         audits = AsyncMock()
         transition = AsyncMock()
         with (
-            patch.object(tx, "sla_stage1_ms", return_value=300),
+            patch.object(tx, "stage1_hard_deadline_ms", return_value=300),
             patch.object(tx, "transcribe_audio", AsyncMock(return_value=transcript)),
             patch.object(tx, "classify_triggers", AsyncMock(return_value=transcript)),
             patch.object(
@@ -444,7 +444,7 @@ class TestRunStage1Wiring:
         audits = AsyncMock()
         transition = AsyncMock()
         with (
-            patch.object(tx, "sla_stage1_ms", return_value=80),
+            patch.object(tx, "stage1_hard_deadline_ms", return_value=80),
             patch.object(tx, "transcribe_audio", AsyncMock(return_value=transcript)),
             patch.object(tx, "classify_triggers", AsyncMock(return_value=transcript)),
             patch.object(
@@ -517,7 +517,7 @@ class TestRunStage1Wiring:
         audits = AsyncMock()
         transition = AsyncMock()
         with (
-            patch.object(tx, "sla_stage1_ms", return_value=80),
+            patch.object(tx, "stage1_hard_deadline_ms", return_value=80),
             patch.object(tx, "transcribe_audio", AsyncMock(return_value=transcript)),
             patch.object(tx, "classify_triggers", AsyncMock(return_value=transcript)),
             patch.object(

@@ -50,12 +50,27 @@ class TestPipelineConfig:
     def test_defaults(self):
         config = PipelineConfig()
         assert config.stage1_skip_window_seconds == 60
+        assert config.stage1_hard_deadline_ms == 90_000
         assert config.frame_window_clinic_ms == 3000
         assert config.frame_window_procedural_ms == 7000
 
     def test_out_of_range_rejected(self):
         with pytest.raises(ValidationError):
             PipelineConfig(stage1_skip_window_seconds=5)  # min is 10
+
+    def test_stage1_hard_deadline_bounds_are_separate_from_alert_sla(self):
+        assert (
+            PipelineConfig(stage1_hard_deadline_ms=30_000).stage1_hard_deadline_ms
+            == 30_000
+        )
+        assert (
+            PipelineConfig(stage1_hard_deadline_ms=300_000).stage1_hard_deadline_ms
+            == 300_000
+        )
+        with pytest.raises(ValidationError):
+            PipelineConfig(stage1_hard_deadline_ms=29_999)
+        with pytest.raises(ValidationError):
+            PipelineConfig(stage1_hard_deadline_ms=300_001)
 
     def test_media_review_retention_days_default(self):
         # #338 — windowed media retention. Default 7 days.
@@ -175,6 +190,7 @@ def test_alerting_absent_parses_to_defaults():
     with defaults matching the MVP SLA targets + 24h purge window."""
     cfg = AppConfigSchema.model_validate({"providers": {}, "model_params": {}, "pipeline": {}, "feature_flags": {}})
     assert cfg.alerting.sla_stage1_ms == 30_000
+    assert cfg.pipeline.stage1_hard_deadline_ms == 90_000
     assert cfg.alerting.sla_stage2_ms == 300_000
     assert cfg.alerting.purge_gap_hours == 24
 
