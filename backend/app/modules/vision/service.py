@@ -1367,13 +1367,17 @@ def merge_visual_citations(
         if target_section is None:
             continue
 
-        claim = _build_visual_claim(caption, formatted=template is not None)
+        claim = _build_visual_claim(
+            caption,
+            formatted=template is not None,
+            target_section_id=target_section.id,
+        )
         if claim is None:
             # A caption reporting nothing relevant is the absence of evidence,
             # not evidence. It must not become a claim — and must not flip the
             # section to `populated`, which would overstate completeness.
             logger.info(
-                "Dropped no-finding caption: frame=%s section=%s",
+                "Dropped non-actionable visual caption: frame=%s section=%s",
                 caption.frame_id,
                 target_section.id,
             )
@@ -1565,10 +1569,32 @@ def _section_focus_block(
     # "visual evidence", not "frame" — this block is applied to clips too, and
     # the vision prompts deliberately avoid image-specific wording because it
     # mislabelled video clips.
+    exam_evidence_rule = ""
+    if section.id == "physical_exam":
+        if evidence_kind == "frame":
+            exam_evidence_rule = (
+                "A still frame cannot establish the identity or result of a "
+                "dynamic examination manoeuvre. Never name or guess a test "
+                "from hand position, and never offer alternatives such as "
+                "'X or Y'. Report independently visible static findings "
+                "(position, swelling, deformity, or measurable range) only. "
+                "If the only relevant question is a dynamic test identity or "
+                "result, report confidence low.\n"
+            )
+        else:
+            exam_evidence_rule = (
+                "For a dynamic examination manoeuvre, name the test only when "
+                "the audio context uniquely names it and the clip shows the "
+                "complete motion and observable result. Otherwise describe "
+                "only the visible motion or response; never guess or offer "
+                "alternative test identities.\n"
+            )
+
     return (
         "\n\n--- SECTION FOCUS (subordinate to the rules above) ---\n"
         f'This {evidence_kind} is being captured for the note section "{title}".\n'
         f"That section records: {guidance}\n"
+        f"{exam_evidence_rule}"
         "Describe only what is literally visible that bears on it. Never "
         "infer, diagnose, or fill a gap.\n"
         "If nothing relevant to this section is visible, say so AND report "
@@ -1803,6 +1829,50 @@ _IMAGE_META_OPENER = re.compile(
     re.IGNORECASE,
 )
 
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+_DYNAMIC_EXAM_TERM = r"(?:tests?|manoeuvres?|maneuvers?|palpation|provocation|assessment|grind)"
+_UNRESOLVED_DYNAMIC_EXAM_PATTERNS = (
+    re.compile(
+        rf"\b(?:specific|exact|named)\s+{_DYNAMIC_EXAM_TERM}\b[^.!?]{{0,120}}"
+        r"\b(?:cannot|can't|could not|unable)\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:cannot|can't|could not|unable)\b[^.!?]{{0,120}}"
+        rf"\b(?:determine|identify|distinguish)\b[^.!?]{{0,120}}\b{_DYNAMIC_EXAM_TERM}\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:consistent with|suggestive of|appears? to be)\b[^.!?]{{0,160}}"
+        rf"\b{_DYNAMIC_EXAM_TERM}\b",
+        re.IGNORECASE,
+    ),
+    re.compile(
+        rf"\b(?:either\s+)?(?:[\w'-]+\s+){{0,3}}(?:or|and/or)\s+"
+        rf"(?:[\w'-]+\s+){{0,3}}{_DYNAMIC_EXAM_TERM}\b",
+        re.IGNORECASE,
+    ),
+)
+
+
+def _strip_unresolved_frame_manoeuvre_sentences(description: str) -> str:
+    """Remove only sentences that guess a dynamic test from one still frame.
+
+    The rest of a mixed caption remains intact: a frame may reliably show no
+    swelling or near-full extension even when it cannot identify the special
+    test being performed.  Sentence-level removal avoids throwing away those
+    useful static findings while preventing an unresolved hand position from
+    becoming a named clinical manoeuvre in the chart.
+    """
+
+    sentences = _SENTENCE_BOUNDARY.split(description.strip())
+    kept = [
+        sentence
+        for sentence in sentences
+        if sentence and not any(pattern.search(sentence) for pattern in _UNRESOLVED_DYNAMIC_EXAM_PATTERNS)
+    ]
+    return " ".join(kept).strip()
+
 
 def _format_visual_claim_text(description: str) -> str:
     """A caption rendered as a clinical observation (TE-4).
@@ -1851,7 +1921,12 @@ def _sentence_case(text: str) -> str:
     return text[0].upper() + text[1:]
 
 
-def _build_visual_claim(caption: FrameCaption, *, formatted: bool) -> Optional[NoteClaim]:
+def _build_visual_claim(
+    caption: FrameCaption,
+    *,
+    formatted: bool,
+    target_section_id: Optional[str] = None,
+) -> Optional[NoteClaim]:
     """The SINGLE place a visual ``NoteClaim`` is constructed (TE-4).
 
     ``None`` when the caption should not become a claim at all.
@@ -1876,7 +1951,12 @@ def _build_visual_claim(caption: FrameCaption, *, formatted: bool) -> Optional[N
     keys off. Neither depends on the wording, which is why reformatting is
     safe here.
     """
-    body = _format_visual_claim_text(caption.visual_description) if formatted else caption.visual_description
+    description = caption.visual_description
+    if formatted and target_section_id == "physical_exam" and caption.evidence_kind == "frame":
+        description = _strip_unresolved_frame_manoeuvre_sentences(description)
+        if not description:
+            return None
+    body = _format_visual_claim_text(description) if formatted else description
 
     if caption.integration_status == "CONFLICTS":
         return NoteClaim(

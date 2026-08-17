@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 
 from app.core.types import Note, NoteClaim, NoteSection, Template, Transcript
 from app.modules.config.appconfig_client import get_config
@@ -45,6 +46,77 @@ _DIRECTIVE_BRIEF = (
     "only incidental detail, small talk, and repetition. Never drop a finding, "
     "medication, plan item, or pertinent negative to save space."
 )
+
+
+_EXAM_MANOEUVRE_DIRECTIVE = (
+    "EXAM MANOEUVRE IDENTITY: Treat every named examination manoeuvre as an "
+    "atomic finding. Emit a separate claim for each manoeuvre, using only the "
+    "exact test name, side, and result stated in the transcript. Never merge "
+    "two tests, substitute a similar test, transfer a pain response from one "
+    "test to another, or guess with alternatives such as 'X or Y', 'X/Y', or "
+    "'X-type manoeuvre'. If the transcript does not uniquely establish the "
+    "manoeuvre identity or result, omit that identity/result rather than "
+    "guessing; retain any independently supported observation as its own claim."
+)
+
+
+_EXAM_TERM = r"(?:tests?|manoeuvres?|maneuvers?|provocation|grind|sign)"
+_ALTERNATIVE_EXAM_IDENTITY = re.compile(
+    rf"\b(?:either\s+)?(?:[\w'-]+\s+){{0,3}}(?:or|and/or)\s+"
+    rf"(?:[\w'-]+\s+){{0,3}}{_EXAM_TERM}\b",
+    re.IGNORECASE,
+)
+_SLASHED_EXAM_IDENTITY = re.compile(
+    rf"\b[\w'-]+\s*/\s*[\w'-]+\s+{_EXAM_TERM}\b",
+    re.IGNORECASE,
+)
+_TYPE_EXAM_IDENTITY = re.compile(
+    r"\b[\w'-]+(?:-|\s)type\s+(?:test|manoeuvre|maneuver)\b",
+    re.IGNORECASE,
+)
+_TENTATIVE_EXAM_IDENTITY = re.compile(
+    rf"\b(?:appears? to be|possibly|likely)\s+(?:an?\s+)?[^.;]{{0,60}}\b{_EXAM_TERM}\b",
+    re.IGNORECASE,
+)
+
+
+def _contains_ambiguous_exam_identity(text: str) -> bool:
+    """Whether ``text`` hedges between identities for an examination test.
+
+    This deliberately does not reject diagnostic uncertainty (for example,
+    ``"osteoarthritis or meniscal tear"``).  It is restricted to the identity
+    of the examination manoeuvre itself, the measured failure in which one
+    pain response was charted under two different special tests.
+    """
+
+    return any(
+        pattern.search(text)
+        for pattern in (
+            _ALTERNATIVE_EXAM_IDENTITY,
+            _SLASHED_EXAM_IDENTITY,
+            _TYPE_EXAM_IDENTITY,
+            _TENTATIVE_EXAM_IDENTITY,
+        )
+    )
+
+
+def _unsupported_ambiguous_exam_claim(
+    claim_text: str,
+    canonical_source_quotes: list[str],
+) -> bool:
+    """Fail closed when the model invented ambiguity about a test identity.
+
+    A clinician may explicitly dictate uncertain wording, in which case the
+    canonical transcript contains the same kind of uncertainty and the claim
+    is preserved verbatim.  What is rejected is model-added hedging such as
+    ``"McMurray or patellar grind"`` or ``"McMurray-type manoeuvre"`` that is
+    absent from every cited source.
+    """
+
+    if not _contains_ambiguous_exam_identity(claim_text):
+        return False
+    canonical_text = " ".join(canonical_source_quotes)
+    return not _contains_ambiguous_exam_identity(canonical_text)
 
 
 def _completeness_directive(template: Template) -> str:
@@ -346,6 +418,8 @@ def build_user_prompt(
 
 {completeness_directive}
 
+{_EXAM_MANOEUVRE_DIRECTIVE}
+
 COMPACT STAGE 1 RESPONSE CONTRACT:
 - The worked examples above teach clinical content, section placement, and attribution style only. Emit the compact JSON shape below, not their verbose wire shape.
 - Return every listed template section in template order.
@@ -381,6 +455,8 @@ Return JSON with this exact compact schema:
 {segments_text}
 
 {completeness_directive}
+
+{_EXAM_MANOEUVRE_DIRECTIVE}
 
 Return JSON with this schema:
 {{
@@ -487,12 +563,26 @@ def parse_note_response(
                     additional_valid,
                 )
                 continue
+            canonical_source_quotes = [canonical_quotes[primary_source_id]]
+            canonical_source_quotes.extend(canonical_quotes[source["source_id"]] for source in raw_additional)
+            claim_text = claim_payload.get("text", "")
+            if isinstance(claim_text, str) and _unsupported_ambiguous_exam_claim(
+                claim_text,
+                canonical_source_quotes,
+            ):
+                logger.warning(
+                    "Dropping note claim with model-added ambiguous exam identity (stage=%d provider=%s section=%s)",
+                    stage,
+                    provider_name,
+                    raw_section.get("id", ""),
+                )
+                continue
             claims.append(
                 NoteClaim(
                     id=claim_payload.get(
                         "id", f"claim_{raw_section.get('id', 'section')}_{i}"
                     ),
-                    text=claim_payload.get("text", ""),
+                    text=claim_text,
                     source_type=claim_payload.get("source_type", "transcript"),
                     source_id=primary_source_id,
                     source_quote=canonical_quotes[primary_source_id],
