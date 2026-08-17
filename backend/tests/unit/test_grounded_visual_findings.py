@@ -49,6 +49,20 @@ def test_grounded_prompt_permits_findings_but_bounds_them() -> None:
     assert "not directly visible" in p
 
 
+def test_grounded_prompt_requires_note_ready_output() -> None:
+    p = VISION_GROUNDED_SYSTEM_PROMPT.lower()
+    assert "one concise, note-ready clinical sentence" in p
+    assert 'do not narrate "a monitor screen displays"' in p
+    assert "inventory of visible anatomy" in p
+
+
+def test_grounded_prompt_discards_metadata_only_evidence() -> None:
+    p = VISION_GROUNDED_SYSTEM_PROMPT.lower()
+    assert "metadata alone is not clinical enrichment" in p
+    assert "confidence low" in p
+    assert "discarded rather than inserted" in p
+
+
 # ── The safety invariant: grounding is structural in BOTH modes ────────────
 
 

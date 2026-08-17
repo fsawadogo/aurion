@@ -21,7 +21,11 @@ from app.core.types import (
     NoteSection,
 )
 from app.modules.vision import reconcile as reconcile_mod
-from app.modules.vision.reconcile import reconcile_captions
+from app.modules.vision.reconcile import (
+    RECONCILE_SYSTEM_PROMPT,
+    _build_user_prompt,
+    reconcile_captions,
+)
 
 
 def _caption(
@@ -81,6 +85,46 @@ def _stub_post(json_payload: dict) -> AsyncMock:
     client.__aenter__ = AsyncMock(return_value=client)
     client.__aexit__ = AsyncMock(return_value=None)
     return client
+
+
+class TestReconciliationPrompt:
+    def test_compares_visual_captions_with_each_other(self) -> None:
+        prompt = RECONCILE_SYSTEM_PROMPT.lower()
+        assert "other captions" in prompt
+        assert "duplicate visual observations" in prompt
+        assert "single best-supported" in prompt
+
+    def test_marks_unresolved_visual_disagreement_as_conflict(self) -> None:
+        prompt = RECONCILE_SYSTEM_PROMPT.lower()
+        assert "contradicts an audio claim or another visual caption" in prompt
+        assert "visual-to-visual disagreement" in prompt
+
+    def test_metadata_only_caption_is_not_enrichment(self) -> None:
+        prompt = RECONCILE_SYSTEM_PROMPT.lower()
+        assert "acquisition/view metadata without a clinical finding" in prompt
+        assert "viewer thumbnails" in prompt
+
+    def test_user_prompt_exposes_cross_specialty_captions_for_comparison(self) -> None:
+        prompt = _build_user_prompt(
+            _note(),
+            [
+                _caption(frame_id="frame_imaging_ap", description="Mild narrowing."),
+                _caption(
+                    frame_id="frame_imaging_lateral",
+                    anchor_id="seg_002",
+                    description="No narrowing is visible.",
+                ),
+                _caption(
+                    frame_id="frame_wound",
+                    anchor_id="seg_003",
+                    description="Wound edges are approximated.",
+                ),
+            ],
+        )
+        assert "against the audio claims and all other visual captions" in prompt
+        assert "frame_imaging_ap" in prompt
+        assert "frame_imaging_lateral" in prompt
+        assert "frame_wound" in prompt
 
 
 class TestNoOpPaths:
