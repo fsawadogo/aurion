@@ -1,0 +1,41 @@
+{
+ "session_id": "f8d220b7-0f96-4dc1-b9b2-fcefbdaab9f1",
+ "label": "REVISED VISION PROMPT · exam clip 04:55-06:00 · findings register",
+ "captured_at": "2026-08-16T18-30",
+ "provider_note": "anthropic",
+ "provider_vision": "gemini",
+ "template_key": "musculoskeletal",
+ "source_media": "knee-exam-clip.mp4 (65s cut from knee-visit-CORRECT-ORDER.mp4 at 04:55, contains the whole physical exam)",
+ "capture_method": "pasted from /eval/{id} after Stage 2 completed",
+ "prompt_variant": "Prompt Studio 'Vision - findings register (test)' v1, job=vision_frame, published to ALL on dev 2026-08-16. REPLACES VISION_GROUNDED_SYSTEM_PROMPT at runtime.",
+
+ "experiment": {
+  "question": "Is the vision layer's literalism a prompt artefact or a modality limit?",
+  "control": "Same footage under the shipped prompt — see run 2026-08-16T17-05 (session 30cccd75, clip bb7dabb1 which contains this 65s window).",
+  "only_variable": "the vision system prompt",
+  "result": "BOTH. Register improved measurably; manoeuvre naming did not. The two hypotheses are independent and both were correct.",
+  "measured": {
+   "register_shift": "PASS — captions now name examination techniques (bimanual palpation, range-of-motion assessment), anatomical landmarks (joint line, popliteal fossa, peripatellar region) and give degree estimates. Zero degree estimates appeared under the old prompt.",
+   "named_manoeuvres": "0 of 7 — Lachman 0, McMurray 0, milking 0, sweep 0, patellar grind 0, patellar mobility 0. Unchanged.",
+   "scar_fabrication": "GONE. 'scar' occurs 0 times. It had reproduced on two prior sessions under the shipped prompt; the added grounding clause ('Every finding must be supported by what is actually visible in this frame') is the only change that could account for it.",
+   "term_counts": {"flexion": 39, "palpation": 39, "joint line": 12, "degrees": 6, "effusion": 6, "scar": 0}
+  },
+  "model_states_the_limit_itself": "The manoeuvre cannot be definitively classified from this frame.",
+  "caveat": "Degree estimates ('approximately 20-30 degrees') are judgements from a photograph. Ranges rather than false precision is the right behaviour, but whether the angles are ACCURATE needs a clinician's read, not mine."
+ },
+
+ "note_audio": null,
+ "note_vision": {
+  "provider_used": "gemini",
+  "sections": [
+   { "id": "physical_exam", "status": "populated", "claims": [
+     { "text": "Examiner's hands are applying bimanual palpation to the anterior aspect of the knee joint. The subject is supine on an examination surface with the knee in a position of slight flexion, estimated at approximately 20-30 degrees. One hand is visible gripping the medial and lateral aspects of the distal femur/proximal tibia region. No visible swelling, erythema, or deformity is discernible at this resolution and angle. No imaging screen or laterality markers are present in the frame.", "source_type": "visual" },
+     { "text": "Subject is supine on an examination table. An examiner's hands are visible supporting the subject's knee region - one hand appears to be placed posteriorly at the popliteal fossa and one anteriorly over the distal thigh/patella area. The knee appears to be held in a position of approximately 20-30 degrees of flexion. No visible swelling, erythema, or deformity is discernible at the knee in this frame. No imaging screen or laterality markers are present. The manoeuvre cannot be definitively classified from this frame.", "source_type": "visual" },
+     { "text": "Bimanual palpation of the knee joint is being performed. Both examiner hands are applied to the anterior and medial/lateral aspects of the knee, with thumbs and fingers positioned around the joint line and peripatellar region. The knee appears to be in near-full extension or slight flexion (estimated 0-15 degrees). No gross swelling, erythema, or visible deformity is discernible in this frame. No imaging or monitoring equipment is visible.", "source_type": "visual" },
+     { "text": "Knee flexion range-of-motion assessment. The lower limb is visible from mid-thigh to mid-calf, positioned on an examination surface. The knee is in a partially flexed position, estimated at approximately 40-50 degrees of flexion in response to the verbal instruction to bend the knee. The anterior aspect of the knee is visible; no gross swelling, erythema, or visible deformity is identified at this angle. Image quality and oblique viewing angle limit precise degree estimation.", "source_type": "visual" },
+     { "text": "Examiner's hand is applying direct palpation to the anterior aspect of the knee joint. The subject is in a supine position with the knee in a position of slight flexion. (5 further visual claims of the same character captured in this run; full text in the portal at /eval/f8d220b7-0f96-4dc1-b9b2-fcefbdaab9f1)", "source_type": "visual" }
+   ]}
+  ]
+ },
+ "detail": null
+}
