@@ -202,6 +202,10 @@ resource "aws_appconfig_configuration_profile" "main" {
             # it. Caps the Gemini fan-out so a large frame set drains under the
             # vision rate limit instead of 429-storming.
             vision_max_concurrency = { type = "integer", minimum = 1, maximum = 32 }
+            # MUST match PipelineConfig.video_import_preprocessing_concurrency
+            # (#770). Absent here, `additionalProperties = false` makes AWS
+            # reject EVERY deployment — including every Feature Flags save.
+            video_import_preprocessing_concurrency = { type = "integer", minimum = 1, maximum = 32 }
             # Process-wide Gemini quota controls. Optional for older profiles;
             # backend defaults are fail-safe for the development key.
             vision_gemini_max_concurrency         = { type = "integer", minimum = 1, maximum = 8 }
