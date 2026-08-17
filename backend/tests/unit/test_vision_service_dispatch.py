@@ -12,8 +12,8 @@ This suite locks the dispatch contract:
   method (no `caption_clip` called for a frame, no `caption_frame`
   called for a clip).
 - Low-confidence clips emit a `CLIP_DISCARDED` audit event carrying
-  the s3_key + confidence + confidence_reason; low-confidence frames
-  stay silent (existing behavior preserved).
+  the s3_key + confidence without free-form model rationale;
+  low-confidence frames stay silent (existing behavior preserved).
 - `registry.get_vision_provider_for_kind` returns the correct concrete
   provider class for the `"clip"` kind based on AppConfig
   `providers.vision_clip`.
@@ -37,6 +37,7 @@ from app.core.types import (
     MaskedFrame,
     TranscriptSegment,
 )
+from app.modules.config.schema import AppConfigSchema
 from app.modules.vision import service as vision_service
 
 # ── Fixtures ────────────────────────────────────────────────────────────────
@@ -220,11 +221,58 @@ async def test_stage2_dispatches_mixed_evidence(
 
 
 @pytest.mark.asyncio
+async def test_hybrid_dispatch_honors_distinct_frame_and_clip_overrides(
+    frame: MaskedFrame, clip: MaskedClip, trigger: TranscriptSegment
+) -> None:
+    """A mixed doctor run keeps its two level-3 provider pins distinct."""
+    frame_provider = MagicMock()
+    frame_provider.caption_frame = AsyncMock(
+        return_value=_frame_caption(evidence_kind="frame", provider="openai")
+    )
+    clip_provider = MagicMock()
+    clip_provider.caption_clip = AsyncMock(
+        return_value=_frame_caption(
+            evidence_kind="clip",
+            frame_id="seg_001_clip",
+            provider="gemini",
+        )
+    )
+    chain_resolver = MagicMock(
+        side_effect=lambda kind, *, override=None: [
+            frame_provider if kind == "frame" else clip_provider
+        ]
+    )
+    registry = MagicMock()
+    registry.get_vision_provider_chain_for_kind = chain_resolver
+
+    with (
+        patch.object(vision_service, "get_registry", return_value=registry),
+        patch.object(vision_service, "get_audit_log_service", return_value=AsyncMock()),
+        patch.object(vision_service, "try_record_provider_usage", AsyncMock()),
+        patch.object(vision_service, "get_config", return_value=AppConfigSchema()),
+    ):
+        captions = await vision_service.caption_visual_evidence(
+            evidence=[frame, clip],
+            trigger_segments=[trigger],
+            frame_provider_override="openai",
+            clip_provider_override="gemini",
+        )
+
+    assert {caption.provider_used for caption in captions} == {"openai", "gemini"}
+    assert chain_resolver.call_args_list == [
+        (("frame",), {"override": "openai"}),
+        (("clip",), {"override": "gemini"}),
+    ]
+    frame_provider.caption_frame.assert_awaited_once()
+    clip_provider.caption_clip.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_low_confidence_clip_emits_clip_discarded(
     clip: MaskedClip, trigger: TranscriptSegment
 ) -> None:
     """Low-confidence clip → CLIP_DISCARDED audit event with the
-    s3_key + confidence + confidence_reason."""
+    s3_key + confidence, without free-form model rationale."""
     provider = MagicMock()
     provider.caption_clip = AsyncMock(
         return_value=_frame_caption(
@@ -264,7 +312,7 @@ async def test_low_confidence_clip_emits_clip_discarded(
     payload = clip_discard_calls[0].kwargs
     assert payload["s3_key"] == clip.s3_key
     assert payload["confidence"] == "low"
-    assert payload["confidence_reason"] == "motion blur"
+    assert "confidence_reason" not in payload
 
 
 @pytest.mark.asyncio

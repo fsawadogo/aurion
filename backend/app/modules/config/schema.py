@@ -13,6 +13,7 @@ from pydantic import BaseModel, Field, model_validator
 
 # ── Provider Key Enums ─────────────────────────────────────────────────────
 
+
 class TranscriptionProviderKey(str, Enum):
     WHISPER = "whisper"
     ASSEMBLYAI = "assemblyai"
@@ -43,6 +44,7 @@ class VisualEvidenceMode(str, Enum):
 
 # ── Config Sub-Models ──────────────────────────────────────────────────────
 
+
 class ProvidersConfig(BaseModel):
     transcription: TranscriptionProviderKey = TranscriptionProviderKey.WHISPER
     note_generation: NoteGenerationProviderKey = NoteGenerationProviderKey.ANTHROPIC
@@ -60,6 +62,10 @@ class NoteGenerationModelParams(BaseModel):
     # ~16-min encounter yields ~2-3k output tokens). This is only the .env
     # fallback; the live value comes from AppConfig -- bump it there too.
     max_tokens: int = Field(default=4000, ge=100, le=16000)
+    # The post-generation critique is best-effort and must not consume the
+    # entire Stage-1 delivery SLA when its provider is slow or unavailable.
+    # ``critique_note`` enforces this as a hard wall-clock timeout.
+    stage1_critique_timeout_seconds: float = Field(default=5.0, ge=0.5, le=15.0)
 
 
 class VisionModelParams(BaseModel):
@@ -118,6 +124,31 @@ class PipelineConfig(BaseModel):
     # land. 4 is a safe default for the dev Gemini quota; raise once on a
     # higher tier. Combined with the provider's 429 backoff.
     vision_max_concurrency: int = Field(default=4, ge=1, le=32)
+    # A doctor run and Grounded Lab can share one worker, so Gemini also needs a
+    # process-wide quota gate. One in-flight request is conservative for dev.
+    vision_gemini_max_concurrency: int = Field(default=1, ge=1, le=8)
+    # Retry briefly before advancing through the real provider chain.
+    vision_gemini_max_retries: int = Field(default=2, ge=0, le=5)
+    # One unhealthy primary must not hold Gemini's process gate until the whole
+    # Stage-2 SLA is consumed. This bounds the complete guarded attempt
+    # (including retries/backoff); the provider chain then advances normally.
+    vision_gemini_primary_timeout_seconds: float = Field(
+        default=45.0, ge=5.0, le=120.0
+    )
+    # Queued calls fail fast during this cooldown after an exhausted retryable
+    # response or transient transport failure.
+    vision_gemini_circuit_breaker_seconds: int = Field(default=60, ge=1, le=600)
+    # Provider-usage telemetry is best-effort and must never delay provider
+    # fallback or Stage-2 cancellation. Writes run off the clinical path under
+    # this bounded wall-clock budget.
+    vision_provider_usage_timeout_seconds: float = Field(
+        default=1.0, ge=0.1, le=5.0
+    )
+    # Bound total model calls per Stage-2 run after preprocessing. Trigger
+    # evidence is prioritized and both pools are sampled across the encounter,
+    # preserving temporal coverage without captioning near-duplicate frames.
+    vision_max_evidence_items: int = Field(default=30, ge=1, le=200)
+    vision_trigger_evidence_fraction: float = Field(default=0.75, ge=0.5, le=1.0)
     # ── Dual-mode visual evidence ──────────────────────────────────────
     # Default `FRAMES_ONLY` so every existing call site is byte-identical
     # to today's pilot build. The eval team flips per-session via the
@@ -136,9 +167,7 @@ class PipelineConfig(BaseModel):
     # motion-heavy clinical use cases — ROM, gait, surgical/procedural
     # technique. Visual trigger classifier populates `kind` from the
     # transcript segment; see modules/note_gen/trigger_classifier.
-    clip_trigger_kinds: list[str] = Field(
-        default_factory=lambda: ["motion", "rom", "gait", "procedural"]
-    )
+    clip_trigger_kinds: list[str] = Field(default_factory=lambda: ["motion", "rom", "gait", "procedural"])
     # ── Clip cadence floor (#324) ──────────────────────────────────────
     # Interval, in seconds, at which iOS extracts at least one clip during
     # recording REGARDLESS of spoken triggers. 0 (the default) is off —
@@ -345,9 +374,7 @@ class FeatureFlagsConfig(BaseModel):
     # is the consequential action (it moves the global default a clinician's
     # note resolves to); authoring a draft is inert until published.
     prompt_studio_enabled: bool = False
-    prompt_studio_roles: list[str] = Field(
-        default_factory=lambda: ["ADMIN", "CLINICAL_ADMIN"]
-    )
+    prompt_studio_roles: list[str] = Field(default_factory=lambda: ["ADMIN", "CLINICAL_ADMIN"])
     # ── Clinician AI-Prompts scope (ps-fu5) ───────────────────────────────
     # When ON, the clinician AI Prompts page (GET /api/v1/me/prompts) shows
     # only the `note` category and hides vision / extraction / preview. Ships
@@ -369,11 +396,11 @@ class FeatureFlagsConfig(BaseModel):
     # findings: the model may state the finding the visible evidence supports
     # (e.g. "reduced knee flexion, reaches ~110°"), and the merge attaches
     # source_id=frame_id so every finding is cited to the frame it rests on —
-    # never an ungrounded diagnosis. Deliberately SEPARATE from
-    # grounded_synthesis_enabled (which governs Stage-1 A&P synthesis): the
-    # video-findings decision (Faical, 2026-07-30, recorded go) is validated
-    # and enabled independently of the contested A&P flag. Ships DARK; scoped
-    # to the visual sections only (History/Plan stay transcript-grounded).
+    # never an ungrounded diagnosis. This is a narrowing sub-flag of
+    # grounded_synthesis_enabled: doctor-pipeline interpretation is active only
+    # when BOTH flags are on, so visual findings cannot bypass the sanctioned
+    # Grounded Synthesis gate. Ships DARK; scoped to the visual sections only
+    # (History/Plan stay transcript-grounded).
     grounded_visual_findings_enabled: bool = False
     # ── Parallel fusion (Fusion B — parallel-then-merge) ──────────────────
     # The pipeline's default fusion is "A" (transcript-as-context): Stage 1
@@ -437,6 +464,7 @@ class FeatureFlagsConfig(BaseModel):
 
 
 # ── Root AppConfig Schema ──────────────────────────────────────────────────
+
 
 class AlertingConfig(BaseModel):
     """Synthesized-alert detector thresholds (#76, detectors in #408).
@@ -527,7 +555,5 @@ class AppConfigSchema(BaseModel):
     @model_validator(mode="after")
     def validate_frame_windows(self) -> "AppConfigSchema":
         if self.pipeline.frame_window_procedural_ms < self.pipeline.frame_window_clinic_ms:
-            raise ValueError(
-                "frame_window_procedural_ms must be >= frame_window_clinic_ms"
-            )
+            raise ValueError("frame_window_procedural_ms must be >= frame_window_clinic_ms")
         return self

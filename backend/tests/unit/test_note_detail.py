@@ -10,8 +10,10 @@ from app.api.v1.notes import (
     _is_unresolved_conflict,
     _parse_frame_timestamp,
     _summarize_conflicts,
+    _to_note_response,
 )
 from app.core.types import (
+    ClaimSource,
     Note,
     NoteClaim,
     NoteSection,
@@ -37,6 +39,12 @@ def _make_note() -> Note:
                         source_type="transcript",
                         source_id="seg_001",
                         source_quote="There is tenderness.",
+                        additional_sources=[
+                            ClaimSource(
+                                source_id="seg_002",
+                                source_quote="The joint line is also tender.",
+                            )
+                        ],
                     ),
                 ],
             ),
@@ -128,6 +136,30 @@ class TestIsUnresolvedConflict:
 
 
 class TestBuildCitations:
+    def test_note_response_preserves_all_grounding_anchors(self):
+        payload = _to_note_response(_make_note()).model_dump(mode="json")
+        claim = payload["sections"][0]["claims"][0]
+
+        assert claim["source_id"] == "seg_001"
+        assert claim["additional_sources"] == [
+            {
+                "source_id": "seg_002",
+                "source_quote": "The joint line is also tender.",
+            }
+        ]
+
+    def test_detail_citation_preserves_all_grounding_anchors(self):
+        citations = _build_citations(_make_note(), transcript=None, session_id="sess-1")
+
+        assert [
+            source.model_dump() for source in citations["c1"].additional_sources
+        ] == [
+            {
+                "source_id": "seg_002",
+                "source_quote": "The joint line is also tender.",
+            }
+        ]
+
     def test_transcript_claim_expands_from_transcript(self):
         note = _make_note()
         transcript = Transcript(

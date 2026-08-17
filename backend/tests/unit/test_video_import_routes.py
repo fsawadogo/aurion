@@ -178,3 +178,21 @@ def test_status_response_maps_job_fields() -> None:
     assert resp.session_state == SessionState.AWAITING_REVIEW.value
     assert resp.raw_video_purged is True
     assert resp.new_note_version == 1
+
+
+def test_status_response_hides_legacy_raw_failure_message() -> None:
+    session = SimpleNamespace(id=uuid.uuid4(), state=SessionState.AWAITING_REVIEW)
+    job = SimpleNamespace(
+        id=uuid.uuid4(),
+        status="failed",
+        frames_extracted=0,
+        frames_masked=0,
+        frames_dropped=0,
+        raw_video_purged_at=object(),
+        new_note_version=None,
+        error_message="ffmpeg/model output containing patient text",
+    )
+
+    resp = vi._status_response(session, job)
+
+    assert resp.error_message == vi.VIDEO_IMPORT_FAILURE_REASON

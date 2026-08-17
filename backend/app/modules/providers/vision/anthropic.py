@@ -9,6 +9,7 @@ Uses the shared system prompt and caption builder from shared.py.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import os
 from typing import Final
@@ -174,7 +175,27 @@ class AnthropicVisionProvider(VisionProvider):
         from Anthropic) propagate as-is so the registry's fallback chain
         can trip to the next provider.
         """
-        synthetic_frame = await extract_midpoint_still(clip)
+        try:
+            synthetic_frame = await extract_midpoint_still(clip)
+        except asyncio.CancelledError:
+            raise
+        except Exception as error:
+            logger.warning(
+                "Anthropic clip midpoint extraction failed: clip=%s error_type=%s",
+                clip.s3_key[:_LOG_KEY_PREFIX_LEN],
+                type(error).__name__,
+            )
+            reason = (
+                "Clip midpoint extraction failed because ffmpeg is unavailable; "
+                "fallback required"
+                if isinstance(error, FileNotFoundError)
+                else "Clip midpoint extraction failed; fallback required"
+            )
+            raise ProviderError(
+                "anthropic",
+                reason,
+                error,
+            ) from error
         logger.info(
             "anthropic degraded clip %s to midpoint still",
             clip.s3_key[:_LOG_KEY_PREFIX_LEN],

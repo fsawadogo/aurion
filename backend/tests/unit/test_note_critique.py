@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.core.types import (
+    ClaimSource,
     Note,
     NoteClaim,
     NoteSection,
@@ -142,6 +145,31 @@ class TestBuildPrompt:
         # Empty section is rendered
         assert "(no claims)" in prompt
 
+    def test_includes_canonical_quotes_for_every_additional_source(self) -> None:
+        note = _note()
+        claim = note.sections[0].claims[0]
+        claim.additional_sources = [
+            ClaimSource(
+                source_id="seg_002",
+                # The prompt must ignore this model/provider copy and hydrate
+                # from the canonical transcript instead.
+                source_quote="not canonical",
+            ),
+            ClaimSource(source_id="seg_999", source_quote="untrusted"),
+        ]
+
+        prompt = _build_critique_prompt(note, _transcript())
+
+        assert '"source_id": "seg_002"' in prompt
+        assert '"valid": true' in prompt
+        assert '"source_quote": "world"' in prompt
+        assert '"source_id": "seg_999"' in prompt
+        assert '"valid": false' in prompt
+        assert '(source_quote: "hello")' in prompt
+        assert "shoulder pain for 2 weeks" not in prompt
+        assert "not canonical" not in prompt
+        assert "untrusted" not in prompt
+
 
 class TestCritiqueNoOpPaths:
     @pytest.mark.asyncio
@@ -173,6 +201,41 @@ class TestCritiqueNoOpPaths:
             note = _note()
             await critique_note(note, _transcript())
         assert len(note.sections[0].claims) == 2  # nothing changed
+
+    @pytest.mark.asyncio
+    async def test_slow_critique_is_cancelled_at_configured_budget(
+        self, monkeypatch
+    ) -> None:
+        monkeypatch.setattr(critique_mod, "_ANTHROPIC_API_KEY", "key")
+        cancelled = asyncio.Event()
+
+        async def blocked_post(*_args, **_kwargs):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        client = AsyncMock()
+        client.post = AsyncMock(side_effect=blocked_post)
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=None)
+        config = SimpleNamespace(
+            model_params=SimpleNamespace(
+                note_generation=SimpleNamespace(
+                    stage1_critique_timeout_seconds=0.01
+                )
+            )
+        )
+
+        with (
+            patch("httpx.AsyncClient", return_value=client),
+            patch.object(critique_mod, "get_config", return_value=config),
+        ):
+            note = _note()
+            out = await critique_note(note, _transcript())
+
+        assert out is note
+        assert cancelled.is_set()
 
 
 class TestCritiqueSuccess:

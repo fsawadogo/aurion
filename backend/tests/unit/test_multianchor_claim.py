@@ -17,6 +17,7 @@ from app.core.types import ClaimSource, NoteClaim, Transcript, TranscriptSegment
 from app.modules.note_gen.service import get_template
 from app.modules.providers.note_gen.shared import (
     NOTE_RESPONSE_SCHEMA,
+    build_user_prompt,
     parse_note_response,
 )
 
@@ -69,9 +70,10 @@ def test_schema_lists_additional_sources_optional():
     assert "additional_sources" not in claim_props["required"]
 
 
-def test_parser_populates_additional_sources():
-    # AC-5: the LLM-output parser carries extra anchors through; malformed
-    # extra entries (no source_id) are dropped, not crashed on.
+def test_parser_rejects_claim_with_malformed_additional_source():
+    # A synthesized claim may depend on every declared supporting source. If
+    # one is malformed, the full claim is rejected rather than partially
+    # grounded after silently dropping that source.
     template = get_template("orthopedic_surgery")
     payload = {
         "sections": [
@@ -97,5 +99,138 @@ def test_parser_populates_additional_sources():
     note = parse_note_response(
         json.dumps(payload), _transcript(), template, stage=1, provider_name="test"
     )
+    assessment = next(s for s in note.sections if s.id == "assessment")
+    assert assessment.claims == []
+
+
+def test_parser_populates_all_valid_additional_sources():
+    template = get_template("orthopedic_surgery")
+    payload = {
+        "sections": [
+            {
+                "id": "assessment",
+                "status": "populated",
+                "claims": [
+                    {
+                        "id": "a1",
+                        "text": "Working assessment: partial ACL tear, left.",
+                        "source_type": "transcript",
+                        "source_id": "seg_002",
+                        "source_quote": "model-supplied primary quote",
+                        "additional_sources": [
+                            {
+                                "source_id": "seg_005",
+                                "source_quote": "model-supplied extra quote",
+                            }
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+    note = parse_note_response(
+        json.dumps(payload), _transcript(), template, stage=1, provider_name="test"
+    )
     claim = next(c for s in note.sections if s.id == "assessment" for c in s.claims)
     assert claim.all_source_ids == ["seg_002", "seg_005"]
+    assert claim.source_quote == "Lachman positive on the left."
+    assert claim.additional_sources[0].source_quote == "MRI left knee reviewed."
+
+
+def test_full_parser_rejects_fabricated_primary_source_id():
+    template = get_template("orthopedic_surgery")
+    payload = {
+        "sections": [
+            {
+                "id": "assessment",
+                "status": "populated",
+                "claims": [
+                    {
+                        "id": "a1",
+                        "text": "Working assessment: partial ACL tear, left.",
+                        "source_type": "transcript",
+                        "source_id": "seg_999",
+                        "source_quote": "fabricated quote",
+                        "additional_sources": [],
+                    }
+                ],
+            }
+        ]
+    }
+
+    note = parse_note_response(
+        json.dumps(payload), _transcript(), template, stage=1, provider_name="openai"
+    )
+
+    assessment = next(s for s in note.sections if s.id == "assessment")
+    assert assessment.claims == []
+
+
+def test_full_parser_rejects_whole_claim_when_one_extra_source_is_unknown():
+    template = get_template("orthopedic_surgery")
+    payload = {
+        "sections": [
+            {
+                "id": "assessment",
+                "status": "populated",
+                "claims": [
+                    {
+                        "id": "a1",
+                        "text": "Working assessment: partial ACL tear, left.",
+                        "source_type": "transcript",
+                        "source_id": "seg_002",
+                        "source_quote": "valid primary",
+                        "additional_sources": [
+                            {"source_id": "seg_005", "source_quote": "valid extra"},
+                            {"source_id": "seg_404", "source_quote": "fabricated extra"},
+                        ],
+                    }
+                ],
+            }
+        ]
+    }
+
+    note = parse_note_response(
+        json.dumps(payload), _transcript(), template, stage=1, provider_name="gemini"
+    )
+
+    assessment = next(s for s in note.sections if s.id == "assessment")
+    assert assessment.claims == []
+
+
+def test_prior_context_has_no_authorized_anchor_and_cannot_be_misanchored():
+    template = get_template("orthopedic_surgery")
+    prompt = build_user_prompt(
+        _transcript(),
+        template,
+        stage=1,
+        prior_context_text="Prior visit: the patient previously used a brace.",
+    )
+    assert "background only and has no authorized source IDs" in prompt
+    assert "do not attach a prior-context fact to a current transcript segment" in prompt
+
+    payload = {
+        "sections": [
+            {
+                "id": "hpi",
+                "status": "populated",
+                "claims": [
+                    {
+                        "id": "prior_only",
+                        "text": "The patient previously used a brace.",
+                        "source_type": "transcript",
+                        "source_id": "prior_visit_001",
+                        "source_quote": "The patient previously used a brace.",
+                        "additional_sources": [],
+                    }
+                ],
+            }
+        ]
+    }
+
+    note = parse_note_response(
+        json.dumps(payload), _transcript(), template, stage=1, provider_name="anthropic"
+    )
+
+    hpi = next(s for s in note.sections if s.id == "hpi")
+    assert hpi.claims == []

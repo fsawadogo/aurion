@@ -16,12 +16,14 @@ import json as _json
 import logging
 import re
 import time
+from dataclasses import dataclass
 from functools import lru_cache
-from typing import Optional
+from typing import Any, Optional
 
 from botocore.exceptions import BotoCoreError, ClientError
 
 from app.core.audit_events import AuditEventType
+from app.core.background import spawn_background_task
 from app.core.retry import with_retry
 from app.core.s3 import FRAMES_BUCKET, get_s3_client
 from app.core.types import (
@@ -40,7 +42,8 @@ from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
-from app.modules.config.schema import AppConfigSchema, VisualEvidenceMode
+from app.modules.config.schema import AppConfigSchema, PipelineConfig, VisualEvidenceMode
+from app.modules.providers.base import VisionProvider
 from app.modules.providers.usage_service import try_record_provider_usage
 from app.modules.providers.vision.shared import (
     VISION_GROUNDED_SYSTEM_PROMPT,
@@ -59,6 +62,19 @@ from app.modules.vision.clip_metrics import ClipTelemetry
 # normalizes the read.
 
 VisualEvidenceItem = MaskedFrame | MaskedClip
+
+
+@dataclass(frozen=True)
+class _CaptionFailure:
+    """A handled provider-chain exhaustion for one evidence item.
+
+    ``None`` already means an evidence item was intentionally discarded (no
+    usable anchor or low confidence).  Keeping provider exhaustion distinct is
+    what lets the reducer fail Stage 2 when every model was unavailable instead
+    of incorrectly reporting a successful, empty visual pass.
+    """
+
+    error: ProviderError
 
 
 # Provider → default model id mapping (P1-FU-METRICS).
@@ -93,6 +109,16 @@ def _provider_model_id(provider_used: str) -> str:
     return _PROVIDER_DEFAULT_MODELS.get(provider_used, provider_used)
 
 
+def _provider_key_from_instance(provider: VisionProvider) -> str:
+    """Return the configured short provider key for an active implementation."""
+
+    class_name = type(provider).__name__.lower()
+    for provider_key in _PROVIDER_DEFAULT_MODELS:
+        if provider_key in class_name:
+            return provider_key
+    return class_name
+
+
 def _evidence_kind_of(item: VisualEvidenceItem) -> str:
     """Return 'frame' or 'clip' for the dispatch switch.
 
@@ -114,7 +140,45 @@ def _evidence_id_of(item: VisualEvidenceItem) -> str:
         return item.s3_key
     return item.frame_id
 
+
 logger = logging.getLogger("aurion.vision")
+
+
+async def _record_provider_usage_bounded(**usage: Any) -> None:
+    """Persist best-effort usage without joining the clinical critical path."""
+
+    defaults = PipelineConfig()
+    pipeline = getattr(get_config(), "pipeline", defaults)
+    timeout_seconds = getattr(
+        pipeline,
+        "vision_provider_usage_timeout_seconds",
+        defaults.vision_provider_usage_timeout_seconds,
+    )
+    try:
+        async with asyncio.timeout(timeout_seconds):
+            await try_record_provider_usage(**usage)
+    except TimeoutError:
+        logger.warning(
+            "Vision provider usage telemetry timed out: provider=%s operation=%s",
+            usage.get("provider_name", "unknown"),
+            usage.get("operation", "unknown"),
+        )
+    except Exception:  # noqa: BLE001 - telemetry never alters clinical work
+        logger.warning(
+            "Vision provider usage telemetry failed: provider=%s operation=%s",
+            usage.get("provider_name", "unknown"),
+            usage.get("operation", "unknown"),
+            exc_info=True,
+        )
+
+
+def _schedule_provider_usage(**usage: Any) -> None:
+    """Schedule one bounded telemetry write and return immediately."""
+
+    spawn_background_task(
+        _record_provider_usage_bounded(**usage),
+        name="vision-provider-usage",
+    )
 
 
 # ── Per-session evidence-mode resolution (P1-7) ──────────────────────────
@@ -124,6 +188,46 @@ logger = logging.getLogger("aurion.vision")
 # DRY: ONE function reads `session.provider_overrides`; new override
 # keys (clip_window_ms, future evidence kinds) extend the SAME dict
 # without touching any downstream call site.
+
+
+def _session_provider_overrides(session) -> dict[str, object]:
+    """Decode a session's validated provider-override snapshot.
+
+    Current rows store JSON text. Returning an empty mapping for legacy or
+    malformed values preserves the pre-P1-7 fallback to admin/AppConfig rather
+    than breaking Stage 2 over a historical row.
+    """
+
+    overrides_raw = getattr(session, "provider_overrides", None)
+    if isinstance(overrides_raw, dict):
+        return overrides_raw
+    if not isinstance(overrides_raw, (str, bytes, bytearray)):
+        return {}
+    try:
+        overrides = _json.loads(overrides_raw)
+    except (ValueError, TypeError):
+        return {}
+    return overrides if isinstance(overrides, dict) else {}
+
+
+def resolve_vision_provider_overrides(
+    session,
+) -> tuple[Optional[str], Optional[str]]:
+    """Return distinct frame and clip provider pins for one session.
+
+    The create-session API validates both values against ``VisionProviderKey``
+    before persisting them. This resolver deliberately returns strings because
+    the provider registry owns provider-key validation and construction.
+    """
+
+    overrides = _session_provider_overrides(session)
+    frame_override = overrides.get("vision")
+    clip_override = overrides.get("vision_clip")
+    return (
+        frame_override if isinstance(frame_override, str) else None,
+        clip_override if isinstance(clip_override, str) else None,
+    )
+
 
 def resolve_evidence_mode(
     session,
@@ -196,14 +300,12 @@ def resolve_evidence_mode(
     if frame_on and not clip_on:
         return VisualEvidenceMode.FRAMES_ONLY
     if not clip_on and not frame_on:
-        logger.warning(
-            "both video-evidence paths disabled via feature flags; "
-            "falling back to base mode"
-        )
+        logger.warning("both video-evidence paths disabled via feature flags; falling back to base mode")
     return base_mode
 
 
 # ── Frame Extraction ─────────────────────────────────────────────────────
+
 
 def get_frame_window_ms(trigger_type: Optional[str] = None) -> int:
     """Get the frame extraction window from AppConfig — never hardcoded."""
@@ -243,6 +345,73 @@ def frame_provenance(
     return "cadence"
 
 
+def _evenly_sample_evidence(items: list[VisualEvidenceItem], count: int) -> list[VisualEvidenceItem]:
+    """Select ``count`` items across the full timestamp span deterministically."""
+
+    ordered = sorted(items, key=lambda item: item.timestamp_ms)
+    if count <= 0:
+        return []
+    if count >= len(ordered):
+        return ordered
+    if count == 1:
+        return [ordered[len(ordered) // 2]]
+
+    last = len(ordered) - 1
+    indices = [round(slot * last / (count - 1)) for slot in range(count)]
+    return [ordered[index] for index in indices]
+
+
+def select_visual_evidence(
+    evidence: list[VisualEvidenceItem],
+    trigger_segments: list[TranscriptSegment],
+    *,
+    max_items: int,
+    trigger_fraction: float,
+) -> list[VisualEvidenceItem]:
+    """Bound Stage-2 calls while preserving triggers and timeline coverage.
+
+    Trigger-window evidence receives the configured majority of the budget;
+    cadence evidence keeps the remainder so silent exam/imaging moments are not
+    lost. Each pool is sampled evenly across the visit, which removes dense
+    near-duplicate bursts without reducing the whole encounter to its first few
+    frames. Unused capacity from either pool is given to the other.
+    """
+
+    if len(evidence) <= max_items:
+        return sorted(evidence, key=lambda item: item.timestamp_ms)
+
+    triggered: list[VisualEvidenceItem] = []
+    cadence: list[VisualEvidenceItem] = []
+    for item in evidence:
+        target = triggered if frame_provenance(trigger_segments, item.timestamp_ms) == "trigger" else cadence
+        target.append(item)
+
+    if not triggered:
+        return _evenly_sample_evidence(cadence, max_items)
+    if not cadence:
+        return _evenly_sample_evidence(triggered, max_items)
+
+    trigger_slots = min(
+        len(triggered),
+        max(1, round(max_items * trigger_fraction)),
+    )
+    cadence_slots = min(len(cadence), max_items - trigger_slots)
+    unused = max_items - trigger_slots - cadence_slots
+    if unused:
+        trigger_room = len(triggered) - trigger_slots
+        add_trigger = min(unused, trigger_room)
+        trigger_slots += add_trigger
+        unused -= add_trigger
+    if unused:
+        cadence_slots += min(unused, len(cadence) - cadence_slots)
+
+    selected = [
+        *_evenly_sample_evidence(triggered, trigger_slots),
+        *_evenly_sample_evidence(cadence, cadence_slots),
+    ]
+    return sorted(selected, key=lambda item: item.timestamp_ms)
+
+
 async def retrieve_frames_for_triggers(
     session_id: str,
     trigger_segments: list[TranscriptSegment],
@@ -272,7 +441,8 @@ async def retrieve_frames_for_triggers(
     except (BotoCoreError, ClientError) as e:
         logger.error(
             "Frame retrieval failed: session=%s error=%s",
-            str(session_id)[:8], str(e),
+            str(session_id)[:8],
+            str(e),
         )
         return []
 
@@ -312,7 +482,9 @@ async def retrieve_frames_for_triggers(
 
     logger.info(
         "Frames retrieved: session=%s triggers=%d frames=%d",
-        str(session_id)[:8], len(trigger_segments), len(unique),
+        str(session_id)[:8],
+        len(trigger_segments),
+        len(unique),
     )
     return unique
 
@@ -366,12 +538,11 @@ async def retrieve_all_masked_frames(session_id: str) -> list[MaskedFrame]:
     except (BotoCoreError, ClientError) as e:
         logger.error(
             "All-frame retrieval failed: session=%s error=%s",
-            str(session_id)[:8], str(e),
+            str(session_id)[:8],
+            str(e),
         )
     frames.sort(key=lambda f: f.timestamp_ms)
-    logger.info(
-        "All frames retrieved: session=%s frames=%d", str(session_id)[:8], len(frames)
-    )
+    logger.info("All frames retrieved: session=%s frames=%d", str(session_id)[:8], len(frames))
     return frames
 
 
@@ -383,6 +554,7 @@ async def retrieve_all_masked_frames(session_id: str) -> list[MaskedFrame]:
 # under the session prefix and parse each clip's real timestamp from its
 # key, so a clip is anchored to the transcript segment nearest its OWN
 # extraction time — not blanket-anchored to the first trigger.
+
 
 def _parse_clip_timestamp_ms(key: str) -> Optional[int]:
     """Parse the trigger-anchor ``timestamp_ms`` embedded in a clip key.
@@ -446,7 +618,8 @@ async def retrieve_clips_for_triggers(
     except Exception as e:  # noqa: BLE001 — list failure is non-fatal
         logger.error(
             "Clip retrieval failed: session=%s error=%s",
-            str(session_id)[:8], str(e),
+            str(session_id)[:8],
+            str(e),
         )
         return clips
 
@@ -454,12 +627,8 @@ async def retrieve_clips_for_triggers(
     # triggers at all (silent exam, cadence-only) this is 0; the
     # captioning loop then anchors against the FULL transcript by the
     # clip's parsed timestamp, so the fallback only matters for old keys.
-    default_anchor_ts = (
-        trigger_segments[0].start_ms if trigger_segments else 0
-    )
-    fallback_trigger_id = (
-        trigger_segments[0].id if trigger_segments else "unknown"
-    )
+    default_anchor_ts = trigger_segments[0].start_ms if trigger_segments else 0
+    fallback_trigger_id = trigger_segments[0].id if trigger_segments else "unknown"
     clip_window_ms = get_config().pipeline.clip_window_ms
 
     for obj in response.get("Contents", []):
@@ -472,20 +641,21 @@ async def retrieve_clips_for_triggers(
                 timestamp_ms=ts_ms,
                 duration_ms=clip_window_ms,
                 trigger_segment_id=fallback_trigger_id,
-                masking_metadata=ClipMaskingMetadata(
-                    frames_total=0, frames_with_faces=0, faces_blurred=0
-                ),
+                masking_metadata=ClipMaskingMetadata(frames_total=0, frames_with_faces=0, faces_blurred=0),
             )
         )
 
     logger.info(
         "Clips retrieved: session=%s triggers=%d clips=%d",
-        str(session_id)[:8], len(trigger_segments), len(clips),
+        str(session_id)[:8],
+        len(trigger_segments),
+        len(clips),
     )
     return clips
 
 
 # ── Vision Captioning ────────────────────────────────────────────────────
+
 
 async def caption_frames(
     frames: list[MaskedFrame],
@@ -525,11 +695,14 @@ async def caption_visual_evidence(
     note: Optional[Note] = None,
     grounded: bool = False,
     synthesize_frame_anchors: bool = False,
+    frame_provider_override: Optional[str] = None,
+    clip_provider_override: Optional[str] = None,
 ) -> list[FrameCaption]:
     """Caption a mixed list of frames + clips using kind-routed providers.
 
-    ``grounded`` (grounded_visual_findings_enabled, resolved ONCE per Stage-2
-    run in ``run_stage2_vision``) selects the base vision system prompt: the
+    ``grounded`` (the governing Grounded Synthesis flag AND its visual
+    sub-flag, resolved once per run in ``run_stage2_vision``) selects the
+    base vision system prompt: the
     grounded clinical-findings prompt when True, the strict-descriptive
     constant when False. Only takes effect where the caller did NOT supply a
     per-physician prompt override (those still win). Grounding stays structural
@@ -584,18 +757,21 @@ async def caption_visual_evidence(
     upsert. ``None`` is the existing behaviour — telemetries are
     silently dropped, byte-identical to the pre-PR call. Frame-kind
     items never produce telemetries on this list (clip-specific).
+
+    ``frame_provider_override`` and ``clip_provider_override`` preserve the two
+    independent level-3 session pins in a HYBRID run. The older singular
+    ``provider_override`` remains supported and supplies either kind only when
+    its kind-specific argument is absent.
     """
     registry = get_registry()
     audit = get_audit_log_service()
-    session_id = evidence[0].session_id if evidence and isinstance(
-        evidence[0], MaskedFrame
-    ) else (
+    session_id = (
+        evidence[0].session_id
+        if evidence and isinstance(evidence[0], MaskedFrame)
         # Clips don't carry session_id on the model — derive from s3_key
         # `clips/{session_id}/{clip_id}.mp4`. Safe because the upload
         # endpoint built the key that way.
-        evidence[0].s3_key.split("/")[1]
-        if evidence and isinstance(evidence[0], MaskedClip)
-        else ""
+        else (evidence[0].s3_key.split("/")[1] if evidence and isinstance(evidence[0], MaskedClip) else "")
     )
 
     # P1-FU-METRICS: best-effort byte size lookup for clip telemetry.
@@ -639,16 +815,52 @@ async def caption_visual_evidence(
     # OFF = today). Resolved once per run (get_config is a 30s poller).
     _keep_low_confidence = get_config().feature_flags.keep_low_confidence_visual_findings
 
+    # Resolve each kind's complete provider chain once per captioning run. This
+    # keeps an admin/AppConfig snapshot internally consistent and, critically,
+    # means a runtime failure advances to a different provider rather than
+    # asking the registry for the same primary again.
+    _provider_chains: dict[str, tuple[list[VisionProvider], bool]] = {}
+
+    def _providers_for_kind(kind: str) -> tuple[list[VisionProvider], bool]:
+        cached = _provider_chains.get(kind)
+        if cached is not None:
+            return cached
+
+        chain_resolver = getattr(registry, "get_vision_provider_chain_for_kind", None)
+        resolved = None
+        if callable(chain_resolver):
+            kind_override = (
+                clip_provider_override
+                if kind == "clip"
+                else frame_provider_override
+            )
+            if kind_override is None:
+                kind_override = provider_override
+            resolved = chain_resolver(kind, override=kind_override)
+        if isinstance(resolved, (list, tuple)) and resolved:
+            chain = (list(resolved), False)
+        else:
+            # Compatibility for registry test doubles written before the chain
+            # API. On primary failure this path asks once more, matching the
+            # historical two-attempt contract without affecting production.
+            chain = (
+                [registry.get_vision_provider_for_kind_with_fallback(kind)],
+                True,
+            )
+        _provider_chains[kind] = chain
+        return chain
+
     async def _emit_initial_progress() -> None:
         if total_evidence > 0 and session_id:
             from app.api.v1.websocket import notify_stage2_progress
+
             await notify_stage2_progress(session_id, 0, total_evidence)
 
     await _emit_initial_progress()
 
     async def _caption_single(
         item: VisualEvidenceItem,
-    ) -> Optional[FrameCaption]:
+    ) -> Optional[FrameCaption] | _CaptionFailure:
         """Caption a single evidence item — frame or clip.
 
         Single dispatch switch on evidence_kind. The fallback chain
@@ -669,10 +881,7 @@ async def caption_visual_evidence(
         # exactly what VIS-02/03 exist to stop, and a cadence frame no longer
         # NEEDS speech: it is captioned un-aimed and routed on its own
         # content. So it earns a synthesized anchor like a clip does.
-        is_cadence = (
-            kind != "clip"
-            and frame_provenance(trigger_segments, item.timestamp_ms) == "cadence"
-        )
+        is_cadence = kind != "clip" and frame_provenance(trigger_segments, item.timestamp_ms) == "cadence"
         if anchor is None:
             if kind != "clip" and not synthesize_frame_anchors and not is_cadence:
                 # Frame path unchanged — a frame with no anchor is dropped.
@@ -691,12 +900,9 @@ async def caption_visual_evidence(
                 text="",
             )
 
-        provider = registry.get_vision_provider_for_kind_with_fallback(kind)
         operation_name = "caption_clip" if kind == "clip" else "caption_frame"
         # AI-PROMPTS-B — kind-routed system prompt override.
-        system_for_kind = (
-            clip_system_prompt if kind == "clip" else frame_system_prompt
-        )
+        system_for_kind = clip_system_prompt if kind == "clip" else frame_system_prompt
         # TE-3 — aim the capture at the note section this frame will feed.
         # APPENDED after the kind-routed prompt so the descriptive boundary
         # (base constant or the physician's override) always comes first and
@@ -732,9 +938,7 @@ async def caption_visual_evidence(
         # Base prompt selection: grounded clinical findings vs strict
         # descriptive. A per-physician override (`system_for_kind` non-None)
         # always wins over both; the base is only the fallback.
-        base_prompt = (
-            VISION_GROUNDED_SYSTEM_PROMPT if grounded else VISION_SYSTEM_PROMPT
-        )
+        base_prompt = VISION_GROUNDED_SYSTEM_PROMPT if grounded else VISION_SYSTEM_PROMPT
         if focus is not None:
             system_for_kind = (system_for_kind or base_prompt) + focus
         elif grounded and system_for_kind is None:
@@ -742,46 +946,146 @@ async def caption_visual_evidence(
             # grounded is on and no physician override: still swap the base so
             # the grounded floor applies uniformly across the run.
             system_for_kind = base_prompt
-        _started = time.monotonic()
-        try:
-            caption = await _dispatch_caption(
-                provider, item, anchor, system_for_kind
+        providers, legacy_dynamic_fallback = _providers_for_kind(kind)
+        providers = list(providers)
+        first_error: ProviderError | None = None
+        attempt_index = 0
+
+        while attempt_index < len(providers):
+            provider = providers[attempt_index]
+            instance_provider_name = _provider_key_from_instance(provider)
+            fallback_used = attempt_index > 0
+            started = time.monotonic()
+            try:
+                caption = await _dispatch_caption(provider, item, anchor, system_for_kind)
+            except asyncio.CancelledError:
+                _schedule_provider_usage(
+                    provider_type="vision",
+                    provider_name=instance_provider_name,
+                    model_name=_provider_model_id(instance_provider_name),
+                    operation=operation_name,
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                    success=False,
+                    fallback_used=fallback_used,
+                    session_id=session_id,
+                )
+                raise
+            except Exception as raw_error:
+                error = (
+                    raw_error
+                    if isinstance(raw_error, ProviderError)
+                    else ProviderError(
+                        instance_provider_name,
+                        "Vision provider attempt failed; fallback required",
+                        raw_error,
+                    )
+                )
+                failure_provider_name = (
+                    instance_provider_name
+                    if instance_provider_name in _PROVIDER_DEFAULT_MODELS
+                    else error.provider
+                )
+                _schedule_provider_usage(
+                    provider_type="vision",
+                    provider_name=failure_provider_name,
+                    model_name=_provider_model_id(failure_provider_name),
+                    operation=operation_name,
+                    latency_ms=int((time.monotonic() - started) * 1000),
+                    success=False,
+                    fallback_used=fallback_used,
+                    session_id=session_id,
+                )
+                if first_error is None:
+                    first_error = error
+
+                if legacy_dynamic_fallback and attempt_index == 0 and len(providers) == 1:
+                    providers.append(registry.get_vision_provider_for_kind_with_fallback(kind))
+
+                attempt_index += 1
+                if attempt_index < len(providers):
+                    logger.warning(
+                        "Vision provider failed on %s=%s provider=%s; trying next provider",
+                        kind,
+                        evidence_id[:32],
+                        error.provider,
+                    )
+                    continue
+
+                logger.error(
+                    "Vision captioning failed (all providers): kind=%s id=%s provider=%s",
+                    kind,
+                    evidence_id[:32],
+                    error.provider,
+                )
+                await audit.write_event(
+                    session_id=session_id,
+                    event_type=AuditEventType.VISION_FRAME_FAILED,
+                    frame_id=evidence_id,
+                    error_message=f"{error.provider}:provider_attempt_failed",
+                )
+                await try_publish_alert(
+                    alert_type=AuditEventType.VISION_FRAME_FAILED.value,
+                    severity=AlertSeverity.WARNING,
+                    source="vision_service",
+                    message=(f"Vision captioning failed on a {kind} after provider-chain exhaustion"),
+                    metadata={
+                        "session_id": str(session_id),
+                        "evidence_kind": kind,
+                    },
+                )
+                return _CaptionFailure(error)
+
+            latency_ms = int((time.monotonic() - started) * 1000)
+            success_provider_name = (
+                instance_provider_name
+                if instance_provider_name in _PROVIDER_DEFAULT_MODELS
+                else caption.provider_used
             )
-            _latency_ms = int((time.monotonic() - _started) * 1000)
-            await try_record_provider_usage(
+            _schedule_provider_usage(
                 provider_type="vision",
-                provider_name=caption.provider_used,
+                provider_name=success_provider_name,
+                model_name=_provider_model_id(success_provider_name),
                 operation=operation_name,
-                latency_ms=_latency_ms,
+                latency_ms=latency_ms,
                 success=True,
+                fallback_used=fallback_used,
                 session_id=session_id,
             )
+            if fallback_used:
+                await audit.write_event(
+                    session_id=session_id,
+                    event_type=AuditEventType.PROVIDER_FALLBACK,
+                    frame_id=evidence_id,
+                    original_error=(
+                        f"{first_error.provider}:provider_attempt_failed"
+                        if first_error is not None
+                        else "vision:provider_attempt_failed"
+                    ),
+                    fallback_provider=caption.provider_used,
+                )
+
             if caption.confidence == "low" and not _keep_low_confidence:
                 logger.info(
-                    "Low confidence evidence discarded: kind=%s id=%s reason=%s",
-                    kind, evidence_id[:32], caption.confidence_reason,
+                    "Low confidence evidence discarded: kind=%s id=%s confidence=%s",
+                    kind,
+                    evidence_id[:32],
+                    caption.confidence,
                 )
-                # Clips get an explicit CLIP_DISCARDED audit row so the
-                # eval team can post-hoc analyze what dropped out. The
-                # frame path stays silent (existing behavior).
                 if kind == "clip":
                     await audit.write_event(
                         session_id=session_id,
                         event_type=AuditEventType.CLIP_DISCARDED,
                         s3_key=item.s3_key,
                         confidence=caption.confidence,
-                        confidence_reason=caption.confidence_reason,
                     )
                 return None
-            # P1-FU-METRICS: record per-clip telemetry only for clip-kind
-            # items, after we know the caption was retained. Frame-kind
-            # items never produce ClipTelemetry rows.
+
             if kind == "clip" and clip_telemetry_sink is not None and isinstance(item, MaskedClip):
                 clip_telemetry_sink.append(
                     ClipTelemetry(
                         provider=caption.provider_used,
                         model=_provider_model_id(caption.provider_used),
-                        latency_ms=_latency_ms,
+                        latency_ms=latency_ms,
                         input_tokens=0,
                         output_tokens=0,
                         degraded_to_frame=caption.degraded_to_frame,
@@ -789,114 +1093,13 @@ async def caption_visual_evidence(
                     )
                 )
             return caption
-        except ProviderError as e:
-            await try_record_provider_usage(
-                provider_type="vision",
-                provider_name=type(provider).__name__,
-                operation=operation_name,
-                latency_ms=int((time.monotonic() - _started) * 1000),
-                success=False,
-                session_id=session_id,
-            )
-            logger.warning(
-                "Primary vision provider failed on %s=%s: %s — trying fallback",
-                kind, evidence_id[:32], str(e),
-            )
-            _fb_started = time.monotonic()
-            try:
-                fallback_provider = (
-                    registry.get_vision_provider_for_kind_with_fallback(kind)
-                )
-                # AI-PROMPTS-B — same kind-routed system prompt for
-                # fallback so the synthetic still / native clip uses the
-                # physician's customised instruction on the fallback path
-                # too. No re-assembly needed; we already resolved above.
-                caption = await _dispatch_caption(
-                    fallback_provider, item, anchor, system_for_kind
-                )
-                _fb_latency_ms = int((time.monotonic() - _fb_started) * 1000)
-                await try_record_provider_usage(
-                    provider_type="vision",
-                    provider_name=caption.provider_used,
-                    operation=operation_name,
-                    latency_ms=_fb_latency_ms,
-                    success=True,
-                    fallback_used=True,
-                    session_id=session_id,
-                )
-                await audit.write_event(
-                    session_id=session_id,
-                    event_type=AuditEventType.PROVIDER_FALLBACK,
-                    frame_id=evidence_id,
-                    original_error=str(e),
-                    fallback_provider=caption.provider_used,
-                )
-                if caption.confidence == "low":
-                    if kind == "clip":
-                        await audit.write_event(
-                            session_id=session_id,
-                            event_type=AuditEventType.CLIP_DISCARDED,
-                            s3_key=item.s3_key,
-                            confidence=caption.confidence,
-                            confidence_reason=caption.confidence_reason,
-                        )
-                    return None
-                # P1-FU-METRICS: record telemetry on the fallback-success
-                # path too. ``provider_used`` reflects the fallback
-                # provider so the cost lookup honours the actual call.
-                if kind == "clip" and clip_telemetry_sink is not None and isinstance(item, MaskedClip):
-                    clip_telemetry_sink.append(
-                        ClipTelemetry(
-                            provider=caption.provider_used,
-                            model=_provider_model_id(caption.provider_used),
-                            latency_ms=_fb_latency_ms,
-                            input_tokens=0,
-                            output_tokens=0,
-                            degraded_to_frame=caption.degraded_to_frame,
-                            bytes_uploaded=await _clip_byte_size(item),
-                        )
-                    )
-                return caption
-            except ProviderError as fallback_err:
-                logger.error(
-                    "Vision captioning failed (all providers): kind=%s id=%s error=%s",
-                    kind, evidence_id[:32], str(fallback_err),
-                )
-                await try_record_provider_usage(
-                    provider_type="vision",
-                    provider_name=type(fallback_provider).__name__,
-                    operation=operation_name,
-                    latency_ms=int((time.monotonic() - _fb_started) * 1000),
-                    success=False,
-                    fallback_used=True,
-                    session_id=session_id,
-                )
-                await audit.write_event(
-                    session_id=session_id,
-                    event_type=AuditEventType.VISION_FRAME_FAILED,
-                    frame_id=evidence_id,
-                    error_message=str(fallback_err),
-                )
-                # A single failed evidence item is a WARNING — pipeline
-                # discards and continues. Issue #76.
-                await try_publish_alert(
-                    alert_type=AuditEventType.VISION_FRAME_FAILED.value,
-                    severity=AlertSeverity.WARNING,
-                    source="vision_service",
-                    message=(
-                        "Vision captioning failed on a "
-                        f"{kind} after fallback"
-                    ),
-                    metadata={
-                        "session_id": str(session_id),
-                        "evidence_kind": kind,
-                    },
-                )
-                return None
+
+        error = ProviderError("vision", "No vision providers available")
+        return _CaptionFailure(error)
 
     async def _caption_and_report(
         item: VisualEvidenceItem,
-    ) -> Optional[FrameCaption]:
+    ) -> Optional[FrameCaption] | _CaptionFailure:
         """Wrap _caption_single with a progress counter so the WebSocket
         sees incremental progress instead of just the final delivery."""
         nonlocal processed_counter
@@ -905,14 +1108,10 @@ async def caption_visual_evidence(
         processed_counter += 1
         # Emit on every Nth item OR at the very end so the final
         # state always shows "N / N" before stage2_delivered fires.
-        if (
-            processed_counter % progress_step == 0
-            or processed_counter == total_evidence
-        ):
+        if processed_counter % progress_step == 0 or processed_counter == total_evidence:
             from app.api.v1.websocket import notify_stage2_progress
-            await notify_stage2_progress(
-                session_id, processed_counter, total_evidence
-            )
+
+            await notify_stage2_progress(session_id, processed_counter, total_evidence)
         return result
 
     # Caption all evidence concurrently.
@@ -926,38 +1125,34 @@ async def caption_visual_evidence(
     discarded_count = 0
 
     for result in results:
-        if isinstance(result, Exception):
+        if isinstance(result, asyncio.CancelledError):
+            raise result
+        if isinstance(result, (Exception, _CaptionFailure)):
             failed_count += 1
-            logger.error("Unexpected error captioning evidence: %s", result)
+            if isinstance(result, Exception):
+                logger.error(
+                    "Unexpected error captioning evidence: error_type=%s",
+                    type(result).__name__,
+                )
         elif result is None:
             discarded_count += 1
         else:
             captions.append(result)
 
-    # If every evidence item failed, log a stage2 failure event.
+    # If every evidence item exhausted its provider chain, fail Stage 2 rather
+    # than delivering a misleading successful-but-audio-only visual pass.
     if evidence and failed_count == len(evidence):
-        await audit.write_event(
-            session_id=session_id,
-            event_type=AuditEventType.STAGE2_FAILED,
-            total_frames=len(evidence),
-            failed_frames=failed_count,
-        )
-        await try_publish_alert(
-            alert_type=AuditEventType.STAGE2_FAILED.value,
-            severity=AlertSeverity.CRITICAL,
-            source="vision_service",
-            message=(
-                f"Stage 2 vision failed: all {len(evidence)} items failed"
-            ),
-            metadata={
-                "session_id": str(session_id),
-                "total_evidence": len(evidence),
-            },
+        raise ProviderError(
+            "vision",
+            f"All {len(evidence)} visual evidence items failed captioning",
         )
 
     logger.info(
         "Captioning complete: total=%d captioned=%d discarded=%d failed=%d",
-        len(evidence), len(captions), discarded_count, failed_count,
+        len(evidence),
+        len(captions),
+        discarded_count,
+        failed_count,
     )
     return captions
 
@@ -982,12 +1177,8 @@ async def _dispatch_caption(
     to the provider's bare ``VISION_SYSTEM_PROMPT``.
     """
     if isinstance(item, MaskedClip):
-        return await provider.caption_clip(
-            item, anchor, system_prompt=system_prompt
-        )
-    return await provider.caption_frame(
-        item, anchor, system_prompt=system_prompt
-    )
+        return await provider.caption_clip(item, anchor, system_prompt=system_prompt)
+    return await provider.caption_frame(item, anchor, system_prompt=system_prompt)
 
 
 #: How far a frame may sit from a segment's midpoint and still be anchored to
@@ -1030,13 +1221,12 @@ def _find_anchor_segment(
     # Sized off the clinic window; a procedural-window frame is bounded by the
     # same figure, which is the conservative direction (a wider real window
     # only means we reject fewer anchors, never more).
-    max_distance = (
-        get_frame_window_ms() * _ANCHOR_MAX_DISTANCE_MULTIPLE
-    )
+    max_distance = get_frame_window_ms() * _ANCHOR_MAX_DISTANCE_MULTIPLE
     return best if best_dist <= max_distance else None
 
 
 # ── Conflict Classification ──────────────────────────────────────────────
+
 
 def classify_conflicts(
     captions: list[FrameCaption],
@@ -1057,12 +1247,15 @@ def classify_conflicts(
 
     logger.info(
         "Conflict classification: enriches=%d repeats=%d conflicts=%d",
-        enriches, repeats, conflicts,
+        enriches,
+        repeats,
+        conflicts,
     )
     return captions
 
 
 # ── Note Merger — Stage 2 ────────────────────────────────────────────────
+
 
 def merge_visual_citations(
     note: Note,
@@ -1145,9 +1338,7 @@ def merge_visual_citations(
         # `trigger_segments is None` still keeps every existing caller byte-
         # identical — only Stage 2 passes it.
         if trigger_segments is not None:
-            by_content = _section_for_caption_text(
-                note, template, caption.visual_description
-            )
+            by_content = _section_for_caption_text(note, template, caption.visual_description)
             if by_content is not None:
                 return by_content
         return _find_target_section(
@@ -1183,7 +1374,8 @@ def merge_visual_citations(
             # section to `populated`, which would overstate completeness.
             logger.info(
                 "Dropped no-finding caption: frame=%s section=%s",
-                caption.frame_id, target_section.id,
+                caption.frame_id,
+                target_section.id,
             )
             continue
 
@@ -1192,10 +1384,7 @@ def merge_visual_citations(
         # Only ENRICHES marks a pending section satisfied. A CONFLICTS claim
         # is an open question, not a populated section — preserved from the
         # pre-TE-4 behaviour.
-        if (
-            caption.integration_status == "ENRICHES"
-            and target_section.status == "pending_video"
-        ):
+        if caption.integration_status == "ENRICHES" and target_section.status == "pending_video":
             target_section.status = "populated"
 
     # Update remaining pending_video sections to processing_failed if no captions matched
@@ -1205,7 +1394,9 @@ def merge_visual_citations(
 
     logger.info(
         "Note merge complete: session=%s stage=%d sections=%d",
-        str(note.session_id)[:8], note.stage, len(note.sections),
+        str(note.session_id)[:8],
+        note.stage,
+        len(note.sections),
     )
     return note
 
@@ -1360,8 +1551,7 @@ def _section_focus_block(
         # text and is never logged — nor is the matched phrase, which is a
         # substring of it.
         logger.warning(
-            "Template section guidance rejected for vision capture "
-            "(section=%s); captioning with the base prompt",
+            "Template section guidance rejected for vision capture (section=%s); captioning with the base prompt",
             section.id,
         )
         return None
@@ -1370,11 +1560,7 @@ def _section_focus_block(
     # `section.id` is NOT trustworthy: it is a bare `str` on TemplateSection
     # and the custom-template update path skips per-section validation, so it
     # carries neither charset nor length bound. The constant is the floor.
-    title = (
-        _screened_fragment(spec.title, 120)
-        or _screened_fragment(section.id, 120)
-        or "the target section"
-    )
+    title = _screened_fragment(spec.title, 120) or _screened_fragment(section.id, 120) or "the target section"
 
     # "visual evidence", not "frame" — this block is applied to clips too, and
     # the vision prompts deliberately avoid image-specific wording because it
@@ -1407,9 +1593,7 @@ _LEGACY_VISUAL_SECTIONS = (
 )
 
 
-def _template_section_for_anchor_text(
-    template: Optional[Template], anchor_text: Optional[str]
-) -> Optional[str]:
+def _template_section_for_anchor_text(template: Optional[Template], anchor_text: Optional[str]) -> Optional[str]:
     """The template section whose trigger keywords the anchor text matches.
 
     ``visual_trigger_keywords`` maps a SPOKEN PHRASE to the section that
@@ -1619,6 +1803,7 @@ _IMAGE_META_OPENER = re.compile(
     re.IGNORECASE,
 )
 
+
 def _format_visual_claim_text(description: str) -> str:
     """A caption rendered as a clinical observation (TE-4).
 
@@ -1666,9 +1851,7 @@ def _sentence_case(text: str) -> str:
     return text[0].upper() + text[1:]
 
 
-def _build_visual_claim(
-    caption: FrameCaption, *, formatted: bool
-) -> Optional[NoteClaim]:
+def _build_visual_claim(caption: FrameCaption, *, formatted: bool) -> Optional[NoteClaim]:
     """The SINGLE place a visual ``NoteClaim`` is constructed (TE-4).
 
     ``None`` when the caption should not become a claim at all.
@@ -1693,11 +1876,7 @@ def _build_visual_claim(
     keys off. Neither depends on the wording, which is why reformatting is
     safe here.
     """
-    body = (
-        _format_visual_claim_text(caption.visual_description)
-        if formatted
-        else caption.visual_description
-    )
+    body = _format_visual_claim_text(caption.visual_description) if formatted else caption.visual_description
 
     if caption.integration_status == "CONFLICTS":
         return NoteClaim(
@@ -1705,10 +1884,7 @@ def _build_visual_claim(
             text=f"CONFLICT: Visual observation differs from audio — {body}",
             source_type="visual",
             source_id=caption.frame_id,
-            source_quote=(
-                f"[Frame {caption.frame_id} at {caption.timestamp_ms}ms] "
-                f"{caption.conflict_detail or ''}"
-            ),
+            source_quote=(f"[Frame {caption.frame_id} at {caption.timestamp_ms}ms] {caption.conflict_detail or ''}"),
         )
 
     return NoteClaim(

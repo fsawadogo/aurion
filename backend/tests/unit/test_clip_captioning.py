@@ -19,6 +19,7 @@ Plan: docs/plans/p1-2-gemini-clip-captioning.md
 
 from __future__ import annotations
 
+import asyncio
 import importlib
 import inspect
 import re
@@ -606,6 +607,67 @@ class TestClipCaptioningErrorPropagation:
 
             with pytest.raises(ProviderError, match="anthropic"):
                 await AnthropicVisionProvider().caption_clip(clip, anchor)
+
+    @pytest.mark.parametrize(
+        ("provider", "extract_target", "provider_name"),
+        [
+            (
+                OpenAIVisionProvider(),
+                "app.modules.providers.vision.openai.extract_midpoint_still",
+                "openai",
+            ),
+            (
+                AnthropicVisionProvider(),
+                "app.modules.providers.vision.anthropic.extract_midpoint_still",
+                "anthropic",
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_midpoint_extraction_error_is_normalized_for_provider_chain(
+        self,
+        provider,
+        extract_target: str,
+        provider_name: str,
+        clip: MaskedClip,
+        anchor: TranscriptSegment,
+    ) -> None:
+        with patch(
+            extract_target,
+            new=AsyncMock(side_effect=RuntimeError("corrupt clip body")),
+        ):
+            with pytest.raises(ProviderError, match="midpoint extraction") as exc:
+                await provider.caption_clip(clip, anchor)
+
+        assert exc.value.provider == provider_name
+
+    @pytest.mark.parametrize(
+        ("provider", "extract_target"),
+        [
+            (
+                OpenAIVisionProvider(),
+                "app.modules.providers.vision.openai.extract_midpoint_still",
+            ),
+            (
+                AnthropicVisionProvider(),
+                "app.modules.providers.vision.anthropic.extract_midpoint_still",
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_midpoint_extraction_cancellation_propagates(
+        self,
+        provider,
+        extract_target: str,
+        clip: MaskedClip,
+        anchor: TranscriptSegment,
+    ) -> None:
+        with patch(
+            extract_target,
+            new=AsyncMock(side_effect=asyncio.CancelledError()),
+        ):
+            with pytest.raises(asyncio.CancelledError):
+                await provider.caption_clip(clip, anchor)
 
 
 # ── AC-6: ffmpeg-missing actionable error ───────────────────────────────

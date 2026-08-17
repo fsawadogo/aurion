@@ -32,6 +32,7 @@ from app.modules.providers.transcription.assemblyai import (
 from app.modules.providers.transcription.whisper import WhisperTranscriptionProvider
 from app.modules.providers.vision.anthropic import AnthropicVisionProvider
 from app.modules.providers.vision.gemini import GeminiVisionProvider
+from app.modules.providers.vision.openai import OpenAIVisionProvider
 
 
 def _mock_config(**overrides) -> AppConfigSchema:
@@ -145,6 +146,39 @@ class TestRegistryPrecedence:
             provider = registry.get_vision_provider_for_kind_with_fallback("frame")
         assert isinstance(provider, GeminiVisionProvider)
 
+    def test_frame_chain_orders_unique_admin_gemini_primary(self) -> None:
+        """An admin Gemini pin leads once, then advances to real alternates."""
+        registry = ProviderRegistry()
+        store.set_cached("vision", "gemini")
+        with patch(
+            "app.modules.config.provider_registry.get_config",
+            return_value=_mock_config(vision="anthropic"),
+        ):
+            chain = registry.get_vision_provider_chain_for_kind("frame")
+
+        assert [type(provider) for provider in chain] == [
+            GeminiVisionProvider,
+            OpenAIVisionProvider,
+            AnthropicVisionProvider,
+        ]
+        assert len({type(provider) for provider in chain}) == len(chain)
+
+    def test_explicit_override_precedes_admin_store_and_appconfig(self) -> None:
+        registry = ProviderRegistry()
+        store.set_cached("vision", "gemini")
+        with patch(
+            "app.modules.config.provider_registry.get_config",
+            return_value=_mock_config(vision="openai"),
+        ):
+            chain = registry.get_vision_provider_chain_for_kind("frame", override="anthropic")
+
+        assert [type(provider) for provider in chain] == [
+            AnthropicVisionProvider,
+            OpenAIVisionProvider,
+            GeminiVisionProvider,
+        ]
+        assert len({type(provider) for provider in chain}) == len(chain)
+
     def test_fallback_primary_respects_store_override(self) -> None:
         registry = ProviderRegistry()
         store.set_cached("note_generation", "openai")
@@ -233,12 +267,8 @@ class TestEndpointBehavior:
         user = _admin_user()
 
         with (
-            patch(
-                "app.api.v1.admin.config.get_config", return_value=_mock_config()
-            ),
-            patch(
-                "app.api.v1.admin.config.write_audit", new=AsyncMock()
-            ) as audit_mock,
+            patch("app.api.v1.admin.config.get_config", return_value=_mock_config()),
+            patch("app.api.v1.admin.config.write_audit", new=AsyncMock()) as audit_mock,
         ):
             resp = await set_provider_override(
                 provider_type="transcription",
@@ -372,9 +402,9 @@ class TestRoleGate:
             sig = inspect.signature(fn)
             user_param = sig.parameters["user"]
             assert user_param.default is not None
-            assert user_param.default.dependency.__qualname__.startswith(
-                "require_role"
-            ), f"{fn.__name__} is missing the require_role gate"
+            assert user_param.default.dependency.__qualname__.startswith("require_role"), (
+                f"{fn.__name__} is missing the require_role gate"
+            )
 
     @pytest.mark.asyncio
     async def test_clinician_denied(self) -> None:
@@ -385,9 +415,7 @@ class TestRoleGate:
         from app.modules.auth.service import CurrentUser, require_role
 
         checker = require_role(UserRole.ADMIN, UserRole.COMPLIANCE_OFFICER)
-        clinician = CurrentUser(
-            user_id=uuid.uuid4(), role=UserRole.CLINICIAN, email="doc@aurion.local"
-        )
+        clinician = CurrentUser(user_id=uuid.uuid4(), role=UserRole.CLINICIAN, email="doc@aurion.local")
         with pytest.raises(HTTPException) as exc:
             await checker(user=clinician)
         assert exc.value.status_code == 403

@@ -9,11 +9,13 @@ No business logic here — routes call module service functions only.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
 import uuid
-from typing import Literal
+from dataclasses import dataclass
+from typing import Literal, NoReturn
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel, Field
@@ -23,15 +25,18 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.api.v1._helpers import get_owned_session_or_404, require_state, write_audit
 from app.api.v1.websocket import notify_stage1_delivered
 from app.core.audit_events import AuditEventType
+from app.core.background import spawn_background_task
 from app.core.database import get_db
 from app.core.models import PilotMetricsModel, TranscriptModel
-from app.core.types import SessionState, Transcript
+from app.core.types import Note, SessionState, Transcript
+from app.modules.alerts.detectors import sla_stage1_ms
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.cleanup.service import purge_audio_for_session
 from app.modules.config.appconfig_client import get_config
 from app.modules.note_gen.service import (
     EmptyTranscriptError,
+    Stage1DeadlineExceededError,
     _resolve_stage1_template,
     build_and_persist_minimal_note,
     generate_stage1_note,
@@ -46,6 +51,124 @@ from app.modules.transcription.service import merge_transcripts, transcribe_audi
 from app.modules.transcription.trigger_classifier import classify_triggers
 
 logger = logging.getLogger("aurion.api.transcription")
+
+_STAGE1_FAILURE_REASON = "stage1_generation_failed"
+_STAGE1_FAILURE_MESSAGE = "Stage 1 note generation failed."
+_STAGE1_DEADLINE_MESSAGE = "Stage 1 processing timed out."
+_TRANSCRIPTION_FAILURE_REASON = "transcription_failed"
+_TRANSCRIPTION_FAILURE_MESSAGE = "Transcription failed; the session could not be processed."
+
+
+@dataclass
+class _Stage1Progress:
+    """In-memory handoff used to resolve commit-vs-timeout ambiguity."""
+
+    transcript: Transcript | None = None
+    note: Note | None = None
+    latency_ms: int | None = None
+
+
+async def _raise_stage1_failure(
+    db: AsyncSession,
+    session,
+    *,
+    reason: str,
+    public_message: str,
+) -> NoReturn:
+    """Durably fail Stage 1 using bounded, PHI-free public/audit fields."""
+
+    try:
+        await transition_session(db, session, SessionState.STAGE1_FAILED)
+    except InvalidTransitionError:
+        logger.warning(
+            "Stage 1 failed but session=%s could not transition from state=%s",
+            session.id,
+            session.state.value,
+        )
+    else:
+        # ``get_db`` rolls back when the HTTPException below leaves the route.
+        # Commit the terminal state first so PROCESSING_STAGE1 cannot survive a
+        # handled provider/deadline failure.
+        await db.commit()
+
+    await write_audit(session.id, AuditEventType.STAGE1_FAILED, reason=reason)
+    await try_publish_alert(
+        alert_type=AuditEventType.STAGE1_FAILED.value,
+        severity=AlertSeverity.CRITICAL,
+        source="transcription_service",
+        message=public_message,
+        metadata={"session_id": str(session.id), "reason": reason},
+    )
+    raise HTTPException(status_code=500, detail=public_message) from None
+
+
+async def _handle_stage1_owner_timeout(
+    db: AsyncSession,
+    session,
+) -> bool:
+    """Resolve the durable winner after cancellation at the commit boundary.
+
+    Returns ``True`` when the success commit reached the database before the
+    timeout cancellation. Otherwise records one durable Stage 1 failure and
+    raises the stable public error.
+    """
+
+    # Owner expiry may interrupt execute/flush/commit. SQLAlchemy requires a
+    # rollback before the session can safely be reused; refresh reloads the
+    # pre-run PROCESSING_STAGE1 row after rollback expires ORM attributes.
+    await db.rollback()
+    await db.refresh(session)
+    if session.state == SessionState.AWAITING_REVIEW:
+        logger.info(
+            "Stage 1 success commit won the owner-timeout race: session=%s",
+            str(session.id)[:8],
+        )
+        return True
+    await _raise_stage1_failure(
+        db,
+        session,
+        reason=Stage1DeadlineExceededError.reason,
+        public_message=_STAGE1_DEADLINE_MESSAGE,
+    )
+
+
+async def _finish_stage1_after_commit(
+    session_id: uuid.UUID,
+    stage1_note,
+    stage1_latency_ms: int,
+) -> None:
+    """Run non-transactional delivery effects after durable Stage 1 success.
+
+    The database commit is the Stage 1 ownership boundary. These effects must
+    never turn an already-delivered note into a failure, and raw audio must
+    never be purged before that commit. The retained background task lets the
+    HTTP response respect the owner SLA if DynamoDB, WebSocket delivery, or S3
+    cleanup is slow, while the normal fast path is still awaited below.
+    """
+
+    try:
+        await write_audit(
+            session_id,
+            AuditEventType.STAGE1_DELIVERED,
+            stage1_latency_ms=stage1_latency_ms,
+        )
+    except Exception as exc:  # noqa: BLE001 - committed success is immutable
+        logger.error(
+            "Post-commit Stage 1 audit failed: session=%s error_type=%s",
+            str(session_id)[:8],
+            type(exc).__name__,
+        )
+
+    try:
+        await notify_stage1_delivered(str(session_id), stage1_note)
+    except Exception as exc:  # noqa: BLE001 - notification is best-effort
+        logger.warning(
+            "Post-commit Stage 1 notification failed: session=%s error_type=%s",
+            str(session_id)[:8],
+            type(exc).__name__,
+        )
+
+    await _purge_raw_audio_if_not_retained(session_id)
 
 router = APIRouter(prefix="/transcription", tags=["transcription"])
 
@@ -155,6 +278,80 @@ async def run_stage1(
     *,
     allow_visual_only: bool = False,
 ):
+    """Run the complete Stage 1 owner under its configured wall clock."""
+
+    stage1_start = time.monotonic()
+    stage1_deadline_at = (
+        asyncio.get_running_loop().time() + (sla_stage1_ms() / 1000.0)
+    )
+    progress = _Stage1Progress()
+    timeout = asyncio.timeout_at(stage1_deadline_at)
+    try:
+        async with timeout:
+            await _run_stage1_within_owner(
+                db,
+                session,
+                audio_bytes,
+                allow_visual_only=allow_visual_only,
+                stage1_start=stage1_start,
+                stage1_deadline_at=stage1_deadline_at,
+                progress=progress,
+            )
+    except TimeoutError:
+        if not timeout.expired():
+            raise
+        success_committed = await _handle_stage1_owner_timeout(db, session)
+        if not success_committed:
+            raise AssertionError("unreachable Stage 1 timeout outcome")
+
+    # A committed success always populates this handoff before commit begins.
+    # If that invariant breaks, fail closed without scheduling an audio purge.
+    if (
+        progress.transcript is None
+        or progress.note is None
+        or progress.latency_ms is None
+    ):
+        raise RuntimeError("Stage 1 committed without a complete success handoff")
+
+    # The note/session transaction is committed inside the owner deadline.
+    # From this point onward it is a durable success and must never be rewritten
+    # as failed. Give the normal fast post-commit path the remaining SLA budget;
+    # shield it so a slow external dependency continues in the retained task
+    # after the doctor response returns at the deadline.
+    post_commit_task = spawn_background_task(
+        _finish_stage1_after_commit(
+            session.id,
+            progress.note,
+            progress.latency_ms,
+        ),
+        name="stage1-post-commit",
+    )
+    remaining_seconds = stage1_deadline_at - asyncio.get_running_loop().time()
+    if remaining_seconds > 0:
+        try:
+            await asyncio.wait_for(
+                asyncio.shield(post_commit_task),
+                timeout=remaining_seconds,
+            )
+        except TimeoutError:
+            logger.warning(
+                "Stage 1 post-commit effects exceeded the owner budget and "
+                "will finish in background: session=%s",
+                str(session.id)[:8],
+            )
+    return progress.transcript
+
+
+async def _run_stage1_within_owner(
+    db: AsyncSession,
+    session,
+    audio_bytes: bytes,
+    *,
+    allow_visual_only: bool,
+    stage1_start: float,
+    stage1_deadline_at: float,
+    progress: _Stage1Progress,
+) -> None:
     """Run the Stage 1 pipeline for a session and return the transcript.
 
     Extracted verbatim from the transcription route so BOTH the HTTP path
@@ -169,16 +366,20 @@ async def run_stage1(
     note-gen failure, 409 bad transition); the orchestrator catches them and
     fails the job, the route re-raises them to the client.
 
-    Returns the (trigger-classified) ``Transcript`` so the route can build
-    its ``TranscriptResponse``.
+    Populates ``progress`` before the durable commit so the outer owner can
+    resolve a commit-versus-timeout race without inventing a second outcome.
     """
     session_id = session.id
 
-    # M-06: end-to-end Stage 1 latency. Measured from pipeline-entry so we
-    # capture the full backend processing window.
-    stage1_start = time.monotonic()
-
-    transcript = await transcribe_audio(audio_bytes, str(session_id))
+    try:
+        transcript = await transcribe_audio(audio_bytes, str(session_id))
+    except Exception:
+        await _raise_stage1_failure(
+            db,
+            session,
+            reason=_TRANSCRIPTION_FAILURE_REASON,
+            public_message=_TRANSCRIPTION_FAILURE_MESSAGE,
+        )
 
     await write_audit(
         session_id,
@@ -258,6 +459,8 @@ async def run_stage1(
             custom_template_id=pinned_custom_id,
             participants=participants,
             encounter_context=session.encounter_context,
+            deadline_at=stage1_deadline_at,
+            deadline_owned_externally=True,
         )
     except EmptyTranscriptError as exc:
         # Standalone-visual path: the audio is empty/thin, but this is a video
@@ -297,6 +500,10 @@ async def run_stage1(
                     session_id,
                     session.state.value,
                 )
+            else:
+                # The request raises 422 below, so get_db would otherwise roll
+                # this flush back and leave the session processing forever.
+                await db.commit()
             await write_audit(
                 session_id, AuditEventType.STAGE1_FAILED, reason=exc.reason
             )
@@ -308,33 +515,28 @@ async def run_stage1(
                 },
             )
     except Exception as exc:
-        reason = str(exc)[:200]
+        deadline_exceeded = isinstance(exc, Stage1DeadlineExceededError)
+        reason = (
+            Stage1DeadlineExceededError.reason
+            if deadline_exceeded
+            else _STAGE1_FAILURE_REASON
+        )
+        public_message = (
+            _STAGE1_DEADLINE_MESSAGE
+            if deadline_exceeded
+            else _STAGE1_FAILURE_MESSAGE
+        )
         # Move the session to the terminal STAGE1_FAILED state. Without this
         # the session was left in PROCESSING_STAGE1 forever — a provider parse
         # error / rate-limit / timeout stranded it as perpetually "processing"
         # with no recovery once the iOS app's in-memory recording was gone.
         # Mirrors the empty-transcript path's transition to its own terminal
         # failed state.
-        try:
-            await transition_session(db, session, SessionState.STAGE1_FAILED)
-        except InvalidTransitionError:
-            logger.warning(
-                "Stage 1 generation failed but session=%s could not transition "
-                "to STAGE1_FAILED from state=%s",
-                session_id,
-                session.state.value,
-            )
-        await write_audit(session_id, AuditEventType.STAGE1_FAILED, reason=reason)
-        await try_publish_alert(
-            alert_type=AuditEventType.STAGE1_FAILED.value,
-            severity=AlertSeverity.CRITICAL,
-            source="transcription_service",
-            message="Stage 1 note generation failed",
-            metadata={"session_id": str(session_id), "reason": reason},
-        )
-        raise HTTPException(
-            status_code=500,
-            detail=f"Stage 1 note generation failed: {exc}",
+        await _raise_stage1_failure(
+            db,
+            session,
+            reason=reason,
+            public_message=public_message,
         )
 
     # Empty-note guardrail (#280): structurally-valid but zero populated
@@ -356,23 +558,16 @@ async def run_stage1(
     stage1_latency_ms = int((time.monotonic() - stage1_start) * 1000)
     await _record_stage1_latency(db, session, stage1_latency_ms)
 
-    await write_audit(
-        session_id,
-        AuditEventType.STAGE1_DELIVERED,
-        stage1_latency_ms=stage1_latency_ms,
-    )
+    # Populate the recovery handoff before commit starts. If cancellation lands
+    # after PostgreSQL accepts the commit but before the await returns, the
+    # owner can re-read AWAITING_REVIEW and continue the success path safely.
+    progress.transcript = transcript
+    progress.note = stage1_note
+    progress.latency_ms = stage1_latency_ms
 
-    # Push the note to any connected WebSocket client. Self-swallows so a
-    # WS hiccup can never turn a delivered note into a failed request.
-    await notify_stage1_delivered(str(session_id), stage1_note)
-
-    # #605 — raw audio has served its purpose once the transcript + note are
-    # delivered; purge it in-band (<1hr) unless the replay window is on. Placed
-    # here (after full Stage-1 success) so a transcription/note-gen failure —
-    # which raises above and rolls the request back — keeps the audio for retry.
-    await _purge_raw_audio_if_not_retained(session_id)
-
-    return transcript
+    # The DB commit is the terminal success ownership decision. The outer
+    # wrapper performs external audit, notification, and cleanup post-commit.
+    await db.commit()
 
 
 class TranscriptSegmentResponse(BaseModel):

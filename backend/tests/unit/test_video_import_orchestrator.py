@@ -11,15 +11,17 @@ Locks the invariants that matter for safety + correctness:
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.api.v1 import video_import as vi
 from app.core.audit_events import AuditEventType
 from app.core.types import SessionState
+from app.modules.vision.jobs import STAGE2_FAILURE_REASON
 
 
 class _FakeSessionCtx:
@@ -160,9 +162,7 @@ async def test_stage1_failure_still_purged_once_and_marked_failed() -> None:
 def _db_with_transcript(sid, *, trigger=True):
     from app.core.types import Transcript, TranscriptSegment
 
-    seg = TranscriptSegment(
-        id="seg_001", start_ms=1000, end_ms=2000, text="rom", is_visual_trigger=trigger
-    )
+    seg = TranscriptSegment(id="seg_001", start_ms=1000, end_ms=2000, text="rom", is_visual_trigger=trigger)
     transcript = Transcript(session_id=str(sid), provider_used="whisper", segments=[seg])
     row = SimpleNamespace(transcript_json=transcript.model_dump_json())
     result_obj = MagicMock()
@@ -179,19 +179,21 @@ async def test_extract_and_mask_frames_drops_audit_failures() -> None:
     db = _db_with_transcript(sid)
     s3 = MagicMock()
     fake_frames = [(1000, b"x"), (1500, b"y"), (2000, b"z")]
-    with patch.object(
-        vi, "extract_frames_at_windows", AsyncMock(return_value=fake_frames)
-    ), patch.object(vi, "get_s3_client", MagicMock(return_value=s3)), \
-        patch.object(vi, "write_audit", AsyncMock()) as audit, \
+    with (
+        patch.object(vi, "extract_frames_at_windows", AsyncMock(return_value=fake_frames)),
+        patch.object(vi, "get_s3_client", MagicMock(return_value=s3)),
+        patch.object(vi, "write_audit", AsyncMock()) as audit,
         patch.object(
-            vi, "mask_frame",
-            MagicMock(return_value=SimpleNamespace(
-                status="failed", image_bytes=None, faces_detected=0,
-                faces_blurred=0, reason="no_face_detected")),
-        ):
-        extracted, masked, dropped = await vi._extract_and_mask_frames(
-            db, sid, [("/tmp/v.mp4", 0)]
-        )
+            vi,
+            "mask_frame",
+            MagicMock(
+                return_value=SimpleNamespace(
+                    status="failed", image_bytes=None, faces_detected=0, faces_blurred=0, reason="no_face_detected"
+                )
+            ),
+        ),
+    ):
+        extracted, masked, dropped = await vi._extract_and_mask_frames(db, sid, [("/tmp/v.mp4", 0)])
 
     assert (extracted, masked, dropped) == (3, 0, 3)
     s3.put_object.assert_not_called()  # nothing stored
@@ -206,19 +208,21 @@ async def test_extract_and_mask_frames_stores_successes() -> None:
     sid = uuid.uuid4()
     db = _db_with_transcript(sid)
     s3 = MagicMock()
-    with patch.object(
-        vi, "extract_frames_at_windows", AsyncMock(return_value=[(1500, b"raw")])
-    ), patch.object(vi, "get_s3_client", MagicMock(return_value=s3)), \
-        patch.object(vi, "write_audit", AsyncMock()) as audit, \
+    with (
+        patch.object(vi, "extract_frames_at_windows", AsyncMock(return_value=[(1500, b"raw")])),
+        patch.object(vi, "get_s3_client", MagicMock(return_value=s3)),
+        patch.object(vi, "write_audit", AsyncMock()) as audit,
         patch.object(
-            vi, "mask_frame",
-            MagicMock(return_value=SimpleNamespace(
-                status="success", image_bytes=b"masked-jpeg", faces_detected=1,
-                faces_blurred=1, reason=None)),
-        ):
-        extracted, masked, dropped = await vi._extract_and_mask_frames(
-            db, sid, [("/tmp/v.mp4", 0)]
-        )
+            vi,
+            "mask_frame",
+            MagicMock(
+                return_value=SimpleNamespace(
+                    status="success", image_bytes=b"masked-jpeg", faces_detected=1, faces_blurred=1, reason=None
+                )
+            ),
+        ),
+    ):
+        extracted, masked, dropped = await vi._extract_and_mask_frames(db, sid, [("/tmp/v.mp4", 0)])
 
     assert (extracted, masked, dropped) == (1, 1, 0)
     _, kwargs = s3.put_object.call_args
@@ -233,9 +237,7 @@ async def test_trigger_sampling_uses_one_midpoint_per_trigger() -> None:
     db = _db_with_transcript(sid)
     extract = AsyncMock(return_value=[])
     with patch.object(vi, "extract_frames_at_windows", extract):
-        assert await vi._extract_and_mask_frames(
-            db, sid, [("/tmp/v.mp4", 0)]
-        ) == (0, 0, 0)
+        assert await vi._extract_and_mask_frames(db, sid, [("/tmp/v.mp4", 0)]) == (0, 0, 0)
 
     assert extract.await_args.args[1] == [(1500, 1500)]
     assert extract.await_args.kwargs["max_concurrency"] == 8
@@ -247,9 +249,7 @@ async def test_extract_and_mask_frames_no_triggers_is_noop() -> None:
     from app.core.types import Transcript, TranscriptSegment
 
     sid = uuid.uuid4()
-    seg = TranscriptSegment(
-        id="seg_001", start_ms=0, end_ms=500, text="hi", is_visual_trigger=False
-    )
+    seg = TranscriptSegment(id="seg_001", start_ms=0, end_ms=500, text="hi", is_visual_trigger=False)
     transcript = Transcript(session_id=str(sid), provider_used="whisper", segments=[seg])
     row = SimpleNamespace(transcript_json=transcript.model_dump_json())
     result_obj = MagicMock()
@@ -278,6 +278,7 @@ async def test_extraction_failure_triggers_best_effort_purge() -> None:
         assert vi.purge_raw_video.await_count == 1
         vi.run_stage1.assert_not_awaited()
         vi.jobs.mark_failed.assert_awaited_once()
+        assert vi.jobs.mark_failed.await_args.args[2] == vi.VIDEO_IMPORT_FAILURE_REASON
     finally:
         _stop(started)
 
@@ -292,9 +293,7 @@ async def test_extraction_failure_triggers_best_effort_purge() -> None:
 
 def _auto_advance_patches(*, stage2_raises: bool = False):
     job = SimpleNamespace(id=uuid.uuid4())
-    approved = SimpleNamespace(
-        version=1, provider_used="gemini", completeness_score=0.83
-    )
+    approved = SimpleNamespace(version=1, provider_used="gemini", completeness_score=0.83)
     latest = SimpleNamespace(version=2)
     result = SimpleNamespace(frames_processed=7)
     run_stage2 = AsyncMock(
@@ -304,9 +303,12 @@ def _auto_advance_patches(*, stage2_raises: bool = False):
     mocks = {
         "create_job": AsyncMock(return_value=job),
         "mark_running": AsyncMock(),
-        "mark_completed": AsyncMock(),
-        "mark_failed": AsyncMock(),
+        "mark_completed": AsyncMock(return_value=True),
+        "mark_failed": AsyncMock(return_value=True),
         "run_stage2_vision": run_stage2,
+        "completion_audit": AsyncMock(),
+        "try_publish_alert": AsyncMock(),
+        "write_audit": AsyncMock(),
         "approve_note": AsyncMock(return_value=approved),
         "get_latest_note": AsyncMock(return_value=latest),
         "job": job,
@@ -317,13 +319,18 @@ def _auto_advance_patches(*, stage2_raises: bool = False):
         patch("app.modules.vision.jobs.mark_completed", mocks["mark_completed"]),
         patch("app.modules.vision.jobs.mark_failed", mocks["mark_failed"]),
         patch("app.api.v1.vision.run_stage2_vision", mocks["run_stage2_vision"]),
+        patch(
+            "app.api.v1.vision.write_stage2_completion_audit",
+            mocks["completion_audit"],
+        ),
         patch("app.modules.note_gen.service.approve_note", mocks["approve_note"]),
         patch(
             "app.modules.note_gen.service.get_latest_note",
             mocks["get_latest_note"],
         ),
         patch.object(vi, "transition_session", AsyncMock()),
-        patch.object(vi, "write_audit", AsyncMock()),
+        patch.object(vi, "write_audit", mocks["write_audit"]),
+        patch.object(vi, "try_publish_alert", mocks["try_publish_alert"]),
     ]
     for p in started:
         p.start()
@@ -350,6 +357,7 @@ async def test_auto_advance_creates_and_completes_stage2_job() -> None:
     assert kwargs["new_note_version"] == 2
     assert kwargs["frames_processed"] == 7
     mocks["mark_failed"].assert_not_awaited()
+    mocks["completion_audit"].assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -365,5 +373,105 @@ async def test_auto_advance_failure_preserves_audio_only_review_path() -> None:
     # Failure is recorded on Stage 2 but does not fail successful ingestion;
     # the doctor can reach review and explicitly approve the audio-only note.
     assert version is None
+    db.rollback.assert_awaited_once()
+    mocks["mark_failed"].assert_awaited_once()
+    assert mocks["mark_failed"].await_args.args[1] == STAGE2_FAILURE_REASON
+    mocks["mark_completed"].assert_not_awaited()
+    mocks["completion_audit"].assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auto_advance_rolls_back_note_and_skips_audit_when_completion_loses() -> None:
+    mocks, started = _auto_advance_patches()
+    mocks["mark_completed"].return_value = False
+    db = AsyncMock()
+    try:
+        version = await vi._auto_advance_stage2(db, _session(), uuid.uuid4())
+    finally:
+        for patcher in started:
+            patcher.stop()
+
+    assert version is None
+    db.rollback.assert_awaited_once()
+    mocks["completion_audit"].assert_not_awaited()
+    mocks["mark_failed"].assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_auto_advance_failure_loser_emits_no_terminal_audit() -> None:
+    mocks, started = _auto_advance_patches(stage2_raises=True)
+    mocks["mark_failed"].return_value = False
+    try:
+        version = await vi._auto_advance_stage2(AsyncMock(), _session(), uuid.uuid4())
+    finally:
+        for patcher in started:
+            patcher.stop()
+
+    assert version is None
+    mocks["write_audit"].assert_any_await(
+        ANY,
+        AuditEventType.STAGE1_APPROVED,
+        version=1,
+        provider_used="gemini",
+        completeness_score=0.83,
+    )
+    terminal_events = [
+        call.args[1]
+        for call in mocks["write_audit"].await_args_list
+        if len(call.args) > 1 and call.args[1] == AuditEventType.STAGE2_FAILED
+    ]
+    assert terminal_events == []
+    mocks["completion_audit"].assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_completion_audit_failure_does_not_rewrite_completed_job() -> None:
+    mocks, started = _auto_advance_patches()
+    mocks["completion_audit"].side_effect = RuntimeError("audit unavailable")
+    try:
+        version = await vi._auto_advance_stage2(
+            AsyncMock(), _session(), uuid.uuid4()
+        )
+    finally:
+        for patcher in started:
+            patcher.stop()
+
+    assert version == 2
+    mocks["mark_completed"].assert_awaited_once()
+    mocks["mark_failed"].assert_not_awaited()
+    mocks["try_publish_alert"].assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_auto_advance_deadline_cancels_vision_and_preserves_audio_note() -> None:
+    """The video-import owner uses the same cancelling Stage 2 deadline."""
+    mocks, started = _auto_advance_patches()
+    cancelled = asyncio.Event()
+
+    async def never_finishes(*_args) -> None:
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    mocks["run_stage2_vision"].side_effect = never_finishes
+    config = SimpleNamespace(
+        alerting=SimpleNamespace(sla_stage2_ms=10),
+    )
+    db, session, sid = AsyncMock(), _session(), uuid.uuid4()
+    try:
+        with patch(
+            "app.modules.vision.jobs.get_config",
+            return_value=config,
+        ):
+            version = await vi._auto_advance_stage2(db, session, sid)
+    finally:
+        for p in started:
+            p.stop()
+
+    assert version is None
+    assert cancelled.is_set()
+    db.rollback.assert_awaited_once()
     mocks["mark_failed"].assert_awaited_once()
     mocks["mark_completed"].assert_not_awaited()
+    mocks["completion_audit"].assert_not_awaited()

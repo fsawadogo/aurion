@@ -10,6 +10,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from app.modules.providers.note_gen.compact_stage1 import compact_response_schema
 from app.modules.providers.note_gen.shared import NOTE_RESPONSE_SCHEMA
 from app.modules.providers.vision.shared import VISION_RESPONSE_SCHEMA
 
@@ -36,24 +37,38 @@ async def test_anthropic_note_uses_tool_use(monkeypatch) -> None:
     monkeypatch.setattr(a, "_ANTHROPIC_API_KEY", "key")
 
     # Tool-use response (the path we expect Anthropic to take).
-    client, _ = _stub_post({
-        "content": [
-            {
-                "type": "tool_use",
-                "name": "emit_clinical_note",
-                "input": {"sections": []},
-            }
-        ]
-    })
-    with patch("httpx.AsyncClient", return_value=client), \
-         patch("app.modules.providers.note_gen.anthropic.parse_note_response",
-               return_value="ok"):
+    client, _ = _stub_post(
+        {
+            "content": [
+                {
+                    "type": "tool_use",
+                    "name": "emit_clinical_note",
+                    "input": {
+                        "sections": [
+                            {
+                                "id": "cc",
+                                "status": "populated",
+                                "claims": [
+                                    {
+                                        "text": "Patient said hi.",
+                                        "source_ids": ["seg_001"],
+                                    }
+                                ],
+                            }
+                        ]
+                    },
+                }
+            ]
+        }
+    )
+    with patch("httpx.AsyncClient", return_value=client):
         await a.AnthropicNoteGenerationProvider().generate_note(
-            transcript=Transcript(session_id="s", provider_used="t", segments=[
-                TranscriptSegment(id="seg_001", start_ms=0, end_ms=1000, text="hi")
-            ]),
-            template=Template(key="general", display_name="General",
-                              sections=[TemplateSection(id="cc", title="CC")]),
+            transcript=Transcript(
+                session_id="s",
+                provider_used="t",
+                segments=[TranscriptSegment(id="seg_001", start_ms=0, end_ms=1000, text="hi")],
+            ),
+            template=Template(key="general", display_name="General", sections=[TemplateSection(id="cc", title="CC")]),
             stage=1,
         )
 
@@ -61,7 +76,7 @@ async def test_anthropic_note_uses_tool_use(monkeypatch) -> None:
     # Tool definition is present + pinned via tool_choice.
     assert "tools" in body
     assert body["tools"][0]["name"] == "emit_clinical_note"
-    assert body["tools"][0]["input_schema"] == NOTE_RESPONSE_SCHEMA
+    assert body["tools"][0]["input_schema"] == compact_response_schema(("cc",))
     assert body["tool_choice"] == {"type": "tool", "name": "emit_clinical_note"}
 
 
@@ -76,24 +91,24 @@ async def test_anthropic_vision_uses_tool_use(monkeypatch) -> None:
         AsyncMock(return_value="aGVsbG8="),
     )
 
-    client, _ = _stub_post({
-        "content": [
-            {
-                "type": "tool_use",
-                "name": "emit_frame_caption",
-                "input": {
-                    "description": "ok",
-                    "confidence": "high",
-                    "confidence_reason": "clear",
-                },
-            }
-        ]
-    })
+    client, _ = _stub_post(
+        {
+            "content": [
+                {
+                    "type": "tool_use",
+                    "name": "emit_frame_caption",
+                    "input": {
+                        "description": "ok",
+                        "confidence": "high",
+                        "confidence_reason": "clear",
+                    },
+                }
+            ]
+        }
+    )
     with patch("httpx.AsyncClient", return_value=client):
         await av.AnthropicVisionProvider().caption_frame(
-            frame=MaskedFrame(frame_id="f", session_id="s",
-                              timestamp_ms=0, s3_key="k",
-                              masking_confirmed=True),
+            frame=MaskedFrame(frame_id="f", session_id="s", timestamp_ms=0, s3_key="k", masking_confirmed=True),
             anchor=TranscriptSegment(id="seg", start_ms=0, end_ms=10, text="t"),
         )
 
@@ -113,18 +128,18 @@ async def test_gemini_note_sets_response_schema(monkeypatch) -> None:
 
     monkeypatch.setattr(g, "_GOOGLE_AI_API_KEY", "key")
 
-    client, _ = _stub_post({
-        "candidates": [{"content": {"parts": [{"text": '{"sections": []}'}]}}]
-    })
-    with patch("httpx.AsyncClient", return_value=client), \
-         patch("app.modules.providers.note_gen.gemini.parse_note_response",
-               return_value="ok"):
+    client, _ = _stub_post({"candidates": [{"content": {"parts": [{"text": '{"sections": []}'}]}}]})
+    with (
+        patch("httpx.AsyncClient", return_value=client),
+        patch("app.modules.providers.note_gen.gemini.parse_note_response", return_value="ok"),
+    ):
         await g.GeminiNoteGenerationProvider().generate_note(
-            transcript=Transcript(session_id="s", provider_used="t", segments=[
-                TranscriptSegment(id="seg_001", start_ms=0, end_ms=1000, text="hi")
-            ]),
-            template=Template(key="general", display_name="General",
-                              sections=[TemplateSection(id="cc", title="CC")]),
+            transcript=Transcript(
+                session_id="s",
+                provider_used="t",
+                segments=[TranscriptSegment(id="seg_001", start_ms=0, end_ms=1000, text="hi")],
+            ),
+            template=Template(key="general", display_name="General", sections=[TemplateSection(id="cc", title="CC")]),
             stage=1,
         )
 
@@ -144,21 +159,20 @@ async def test_gemini_vision_sets_response_schema(monkeypatch) -> None:
         AsyncMock(return_value="aGVsbG8="),
     )
 
-    client, _ = _stub_post({
-        "candidates": [{
-            "content": {
-                "parts": [{
-                    "text": '{"description": "ok", "confidence": "high",'
-                            ' "confidence_reason": "clear"}'
-                }]
-            }
-        }]
-    })
+    client, _ = _stub_post(
+        {
+            "candidates": [
+                {
+                    "content": {
+                        "parts": [{"text": '{"description": "ok", "confidence": "high", "confidence_reason": "clear"}'}]
+                    }
+                }
+            ]
+        }
+    )
     with patch("httpx.AsyncClient", return_value=client):
         await gv.GeminiVisionProvider().caption_frame(
-            frame=MaskedFrame(frame_id="f", session_id="s",
-                              timestamp_ms=0, s3_key="k",
-                              masking_confirmed=True),
+            frame=MaskedFrame(frame_id="f", session_id="s", timestamp_ms=0, s3_key="k", masking_confirmed=True),
             anchor=TranscriptSegment(id="seg", start_ms=0, end_ms=10, text="t"),
         )
 

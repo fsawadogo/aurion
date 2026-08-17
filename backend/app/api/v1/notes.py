@@ -50,13 +50,17 @@ from app.modules.session.service import (
     transition_session,
 )
 from app.modules.vision.jobs import (
+    STAGE2_ORPHAN_REAP_REASON,
     create_job,
     fail_if_stale,
     get_latest_job,
     mark_completed,
     mark_failed,
     mark_running,
+    public_stage2_failure_reason,
     recover_orphaned_jobs,
+    run_with_stage2_deadline,
+    stage2_failure_reason,
 )
 
 logger = logging.getLogger("aurion.api.notes")
@@ -66,12 +70,25 @@ router = APIRouter(prefix="/notes", tags=["notes"])
 
 # ── Response Schemas ─────────────────────────────────────────────────────
 
+
+class ClaimSourceResponse(BaseModel):
+    """One additional canonical grounding anchor for a note claim."""
+
+    source_id: str
+    source_quote: str = ""
+
+
 class NoteClaimResponse(BaseModel):
     id: str
     text: str
     source_type: str
     source_id: str
     source_quote: str = ""
+    # Grounded synthesis may rest on more than one source. Preserve every
+    # canonical anchor on all doctor-facing note responses; omitting these
+    # would make a synthesized claim appear grounded only to its primary
+    # source even though the domain model retained the full citation set.
+    additional_sources: list[ClaimSourceResponse] = Field(default_factory=list)
     physician_edited: bool = False
     original_text: Optional[str] = None
     # ── Dual-mode visual evidence (P1-6-FU + P1-FU-FRAME-URLS) ────────
@@ -111,12 +128,17 @@ class NoteResponse(BaseModel):
 
 # ── Detail response (citation expansion + conflict + export state) ───────
 
+
 class CitationExpansion(BaseModel):
     """Per-claim source detail for the review UI. The shape depends on
     `source_type`; only the fields relevant to that source are populated."""
 
     source_type: str
     source_id: str
+    # The detail endpoint carries the same complete grounding set as the note
+    # response. Quotes are already canonicalized server-side before the Note is
+    # persisted, so expose them unchanged rather than re-asking the model.
+    additional_sources: list[ClaimSourceResponse] = Field(default_factory=list)
     # transcript anchor
     transcript_text: Optional[str] = None
     transcript_speaker: Optional[str] = None
@@ -229,6 +251,7 @@ class NoteEditRequest(BaseModel):
     edits: dict mapping section_id to new claim text.
     Example: {"physical_exam": "Updated claim text...", "assessment": "..."}
     """
+
     edits: dict[str, str]
 
 
@@ -254,6 +277,7 @@ _NOTE_MUTABLE_STATES: set[SessionState] = {
 
 
 # ── Routes ───────────────────────────────────────────────────────────────
+
 
 @router.get("/{session_id}/stage1", response_model=NoteResponse)
 async def get_stage1_note(
@@ -309,10 +333,7 @@ async def approve_stage1_note(
     if session.state != SessionState.AWAITING_REVIEW:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"Cannot approve Stage 1: session is in {session.state.value}, "
-                f"must be in AWAITING_REVIEW."
-            ),
+            detail=(f"Cannot approve Stage 1: session is in {session.state.value}, must be in AWAITING_REVIEW."),
         )
 
     note = await get_note_by_stage(str(session_id), stage=1, db=db)
@@ -386,32 +407,74 @@ async def _run_stage2_in_background(session_id: uuid.UUID, job_id: uuid.UUID) ->
     event — they do NOT bubble: Stage 1 is approved and iOS can fall back
     to the Stage 1 note while compliance triages the failure.
     """
-    from app.api.v1.vision import run_stage2_vision  # avoid circular import
+    from app.api.v1.vision import (  # avoid circular import
+        run_stage2_vision,
+        write_stage2_completion_audit,
+    )
 
     async with async_session_factory() as db:
         try:
             await mark_running(job_id, db)
-            result = await run_stage2_vision(session_id, db)
+            result = await run_with_stage2_deadline(run_stage2_vision(session_id, db))
             latest = await get_latest_note(str(session_id), db)
             new_version = latest.version if latest is not None else 0
-            await mark_completed(
+            completion_won = await mark_completed(
                 job_id,
                 new_note_version=new_version,
                 frames_processed=result.frames_processed,
                 db=db,
             )
+            if not completion_won:
+                # The reaper/failure owner committed first. Stage 2 note
+                # creation only flushed, so this removes the losing note row
+                # and leaves the canonical terminal result untouched.
+                await db.rollback()
+                logger.info(
+                    "Stage 2 completion stood down after terminal owner won: session=%s job=%s",
+                    session_id,
+                    job_id,
+                )
+                return
         except Exception as exc:  # noqa: BLE001 — we deliberately catch all
-            logger.exception("Stage 2 background job failed: session=%s job=%s", session_id, job_id)
+            reason = stage2_failure_reason(exc)
+            error_type = type(exc).__name__
+            logger.error(
+                "Stage 2 background job failed: session=%s job=%s reason=%s error_type=%s",
+                session_id,
+                job_id,
+                reason,
+                error_type,
+            )
+            # A timeout cancels the entire awaited Stage 2 chain. Roll back any
+            # interrupted DB operation before attempting the terminal status
+            # write on this long-lived background session.
             try:
-                await mark_failed(job_id, str(exc), db)
-            except Exception:
+                await db.rollback()
+            except Exception as rollback_exc:  # noqa: BLE001 - still attempt failure handling
+                logger.error(
+                    "Failed to roll back Stage 2 job session: job=%s error_type=%s",
+                    job_id,
+                    type(rollback_exc).__name__,
+                )
+            failure_won = False
+            try:
+                failure_won = await mark_failed(job_id, reason, db)
+            except Exception as persist_exc:  # noqa: BLE001
                 # Last-ditch logging; nothing else useful we can do here.
-                logger.exception("Failed to mark Stage 2 job failed: %s", job_id)
+                logger.error(
+                    "Failed to mark Stage 2 job failed: job=%s error_type=%s",
+                    job_id,
+                    type(persist_exc).__name__,
+                )
+            if not failure_won:
+                # Another owner already made the terminal transition. It alone
+                # owns the matching audit/alert, avoiding contradictory events.
+                return
             await write_audit(
                 session_id,
                 AuditEventType.STAGE2_FAILED,
                 job_id=str(job_id),
-                reason=str(exc)[:200],
+                reason=reason,
             )
             # Issue #76 — Stage 2 background-job failure is CRITICAL.
             await try_publish_alert(
@@ -422,7 +485,32 @@ async def _run_stage2_in_background(session_id: uuid.UUID, job_id: uuid.UUID) ->
                 metadata={
                     "session_id": str(session_id),
                     "job_id": str(job_id),
-                    "reason": str(exc)[:200],
+                    "reason": reason,
+                    "error_type": error_type,
+                },
+            )
+            return
+
+        # The note + terminal job row are now committed. Keep this outside the
+        # cancellable Stage-2 deadline and outside the failure handler so an
+        # audit transport error cannot append a contradictory STAGE2_FAILED.
+        try:
+            await write_stage2_completion_audit(session_id, result)
+        except Exception as audit_exc:  # noqa: BLE001 - durable result remains completed
+            logger.error(
+                "Stage 2 completed but completion audit failed: session=%s job=%s error_type=%s",
+                session_id,
+                job_id,
+                type(audit_exc).__name__,
+            )
+            await try_publish_alert(
+                alert_type="stage2_completion_audit_failed",
+                severity=AlertSeverity.CRITICAL,
+                source="stage2_job",
+                message="Stage 2 completion audit write failed",
+                metadata={
+                    "session_id": str(session_id),
+                    "job_id": str(job_id),
                 },
             )
 
@@ -505,15 +593,10 @@ async def approve_final_note(
                 status_code=status.HTTP_409_CONFLICT,
                 detail="Stage 2 must finish before final approval.",
             )
-        if stage2_status == "failed" and not (
-            body is not None and body.allow_stage2_failure
-        ):
+        if stage2_status == "failed" and not (body is not None and body.allow_stage2_failure):
             raise HTTPException(
                 status_code=status.HTTP_409_CONFLICT,
-                detail=(
-                    "Stage 2 failed. Explicitly acknowledge the audio-only "
-                    "fallback before final approval."
-                ),
+                detail=("Stage 2 failed. Explicitly acknowledge the audio-only fallback before final approval."),
             )
 
     _check_unresolved_conflicts(note)
@@ -587,9 +670,7 @@ _AUDIO_RETAINED_STATES: set[SessionState] = {
 }
 
 
-@router.get(
-    "/{session_id}/audio-replay-url", response_model=AudioReplayUrlResponse
-)
+@router.get("/{session_id}/audio-replay-url", response_model=AudioReplayUrlResponse)
 async def get_audio_replay_url(
     session_id: uuid.UUID,
     user: CurrentUser = Depends(get_current_user),
@@ -665,11 +746,7 @@ def _resolve_audio_replay_url(session_id: str) -> Optional[str]:
             exc,
         )
         return None
-    keys = [
-        obj["Key"]
-        for obj in response.get("Contents", [])
-        if isinstance(obj.get("Key"), str)
-    ]
+    keys = [obj["Key"] for obj in response.get("Contents", []) if isinstance(obj.get("Key"), str)]
     if not keys:
         return None
     try:
@@ -786,7 +863,7 @@ async def get_stage2_status(
             session_id,
             AuditEventType.STAGE2_FAILED,
             job_id=str(job.id),
-            reason="watchdog: visual enrichment exceeded the processing budget",
+            reason=STAGE2_ORPHAN_REAP_REASON,
             total_frames=job.frames_processed,
             failed_frames=0,
         )
@@ -798,7 +875,7 @@ async def get_stage2_status(
         completed_at=job.completed_at.isoformat() if job.completed_at else None,
         new_note_version=job.new_note_version,
         frames_processed=job.frames_processed,
-        error_message=job.error_message,
+        error_message=public_stage2_failure_reason(job.error_message),
     )
 
 
@@ -843,12 +920,7 @@ async def resolve_conflict_endpoint(
     _pre = await get_latest_note(str(session_id), db)
     if _pre is not None:
         conflict_section_id = next(
-            (
-                section.id
-                for section in _pre.sections
-                for claim in section.claims
-                if claim.id == claim_id
-            ),
+            (section.id for section in _pre.sections for claim in section.claims if claim.id == claim_id),
             None,
         )
 
@@ -898,8 +970,7 @@ async def edit_note_endpoint(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"Cannot edit note: session is in {session.state.value}. "
-                f"Must be in AWAITING_REVIEW or REVIEW_COMPLETE."
+                f"Cannot edit note: session is in {session.state.value}. Must be in AWAITING_REVIEW or REVIEW_COMPLETE."
             ),
         )
 
@@ -930,13 +1001,9 @@ async def edit_note_endpoint(
     # fail the edit on a capture hiccup — the note edit is what matters.
     if get_config().feature_flags.correction_memory_enabled:
         try:
-            await record_corrections(
-                user.user_id, session_id, updated_note, body.edits.keys(), db
-            )
+            await record_corrections(user.user_id, session_id, updated_note, body.edits.keys(), db)
         except Exception:  # noqa: BLE001 — capture is best-effort
-            logger.warning(
-                "Correction capture failed for session=%s", session_id, exc_info=True
-            )
+            logger.warning("Correction capture failed for session=%s", session_id, exc_info=True)
 
     return _to_note_response(updated_note)
 
@@ -962,7 +1029,7 @@ async def assist_note_endpoint(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> NoteAssistResponse:
-    """"Fix this note" chat: apply the physician's plain-language request to the
+    """ "Fix this note" chat: apply the physician's plain-language request to the
     latest note as grounded, auto-versioned edits.
 
     Ships DARK behind ``note_review_chat_enabled``. A conversational reply (e.g.
@@ -979,25 +1046,18 @@ async def assist_note_endpoint(
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
-                f"Cannot edit note: session is in {session.state.value}. "
-                f"Must be in AWAITING_REVIEW or REVIEW_COMPLETE."
+                f"Cannot edit note: session is in {session.state.value}. Must be in AWAITING_REVIEW or REVIEW_COMPLETE."
             ),
         )
     if not body.message.strip():
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST, detail="Message cannot be blank."
-        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Message cannot be blank.")
 
     try:
-        result = await note_review_service.assist_note(
-            str(session_id), body.message, db
-        )
+        result = await note_review_service.assist_note(str(session_id), body.message, db)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
     except ProviderError as exc:
-        logger.warning(
-            "note-review assist: provider failed session=%s: %s", session_id, exc
-        )
+        logger.warning("note-review assist: provider failed session=%s: %s", session_id, exc)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail=f"AI provider error: {exc}",
@@ -1019,6 +1079,7 @@ async def assist_note_endpoint(
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
+
 
 def _check_unresolved_conflicts(note) -> None:
     """Raise 409 if the note has any unresolved CONFLICTS from vision."""
@@ -1061,9 +1122,7 @@ async def _load_transcript(db: AsyncSession, session_id: uuid.UUID) -> Optional[
     """Best-effort transcript fetch for citation expansion. Returns None if
     the transcript hasn't been persisted yet (e.g. note exists but Stage 1
     raced ahead of transcript storage in tests)."""
-    result = await db.execute(
-        select(TranscriptModel).where(TranscriptModel.session_id == session_id)
-    )
+    result = await db.execute(select(TranscriptModel).where(TranscriptModel.session_id == session_id))
     row = result.scalar_one_or_none()
     if row is None:
         return None
@@ -1107,12 +1166,20 @@ def _expand_claim(
     session_id: str,
     clip_url_resolver: Optional["ClipUrlResolver"] = None,
 ) -> CitationExpansion:
+    additional_sources = [
+        ClaimSourceResponse(
+            source_id=source.source_id,
+            source_quote=source.source_quote,
+        )
+        for source in claim.additional_sources
+    ]
     if claim.source_type == "transcript":
         seg = segment_index.get(claim.source_id)
         if seg is not None:
             return CitationExpansion(
                 source_type="transcript",
                 source_id=claim.source_id,
+                additional_sources=additional_sources,
                 transcript_text=seg.text,
                 transcript_speaker=seg.speaker,
                 transcript_start_ms=seg.start_ms,
@@ -1123,6 +1190,7 @@ def _expand_claim(
         return CitationExpansion(
             source_type="transcript",
             source_id=claim.source_id,
+            additional_sources=additional_sources,
             transcript_text=claim.source_quote or None,
             original_text=claim.original_text,
         )
@@ -1132,9 +1200,7 @@ def _expand_claim(
         # S3 key reconstruction matches the upload-side layout.
         prefix = "frames" if claim.source_type == "visual" else "screen_frames"
         timestamp = _parse_frame_timestamp(claim.source_id)
-        s3_key = (
-            f"{prefix}/{session_id}/{timestamp}.jpg" if timestamp is not None else None
-        )
+        s3_key = f"{prefix}/{session_id}/{timestamp}.jpg" if timestamp is not None else None
         # P1-6-FU + P1-FU-FRAME-URLS: resolve evidence_kind + clip_url +
         # frame_url for visual claims so the web detail view carries the
         # same metadata the wire `NoteClaimResponse` does. Screen claims
@@ -1150,12 +1216,11 @@ def _expand_claim(
         clip_url: Optional[str] = None
         frame_url: Optional[str] = None
         if claim.source_type == "visual" and clip_url_resolver is not None:
-            evidence_kind, duration_ms, clip_url, frame_url = clip_url_resolver(
-                claim.source_id
-            )
+            evidence_kind, duration_ms, clip_url, frame_url = clip_url_resolver(claim.source_id)
         return CitationExpansion(
             source_type=claim.source_type,
             source_id=claim.source_id,
+            additional_sources=additional_sources,
             frame_timestamp_ms=timestamp,
             frame_s3_key=s3_key,
             original_text=claim.original_text,
@@ -1169,6 +1234,7 @@ def _expand_claim(
     return CitationExpansion(
         source_type=claim.source_type,
         source_id=claim.source_id,
+        additional_sources=additional_sources,
         original_text=claim.original_text,
     )
 
@@ -1315,9 +1381,7 @@ def _build_evidence_url_resolver(
         if session_id in cache:
             return cache[session_id]
         try:
-            response = client.list_objects_v2(
-                Bucket=FRAMES_BUCKET, Prefix=prefix
-            )
+            response = client.list_objects_v2(Bucket=FRAMES_BUCKET, Prefix=prefix)
         except (BotoCoreError, ClientError) as exc:
             # Truncate the session UUID in logs (PHI-adjacent identifier).
             # Never log the key prefix beyond the bucket-kind.
@@ -1329,11 +1393,7 @@ def _build_evidence_url_resolver(
             )
             cache[session_id] = []
             return cache[session_id]
-        keys = [
-            obj["Key"]
-            for obj in response.get("Contents", [])
-            if isinstance(obj.get("Key"), str)
-        ]
+        keys = [obj["Key"] for obj in response.get("Contents", []) if isinstance(obj.get("Key"), str)]
         cache[session_id] = keys
         return keys
 
@@ -1358,7 +1418,9 @@ def _build_evidence_url_resolver(
             )
             return None
 
-    def _resolve(source_id: str) -> tuple[
+    def _resolve(
+        source_id: str,
+    ) -> tuple[
         Optional[Literal["frame", "clip"]],
         Optional[int],
         Optional[str],
@@ -1434,10 +1496,7 @@ def _to_note_response(
                 id=s.id,
                 title=s.title,
                 status=s.status,
-                claims=[
-                    _claim_to_response(c, clip_url_resolver)
-                    for c in s.claims
-                ],
+                claims=[_claim_to_response(c, clip_url_resolver) for c in s.claims],
             )
             for s in note.sections
         ],
@@ -1459,15 +1518,20 @@ def _claim_to_response(
     clip_url: Optional[str] = None
     frame_url: Optional[str] = None
     if claim.source_type == "visual" and clip_url_resolver is not None:
-        evidence_kind, duration_ms, clip_url, frame_url = clip_url_resolver(
-            claim.source_id
-        )
+        evidence_kind, duration_ms, clip_url, frame_url = clip_url_resolver(claim.source_id)
     return NoteClaimResponse(
         id=claim.id,
         text=claim.text,
         source_type=claim.source_type,
         source_id=claim.source_id,
         source_quote=claim.source_quote,
+        additional_sources=[
+            ClaimSourceResponse(
+                source_id=source.source_id,
+                source_quote=source.source_quote,
+            )
+            for source in claim.additional_sources
+        ],
         physician_edited=claim.physician_edited,
         original_text=claim.original_text,
         evidence_kind=evidence_kind,
@@ -1505,18 +1569,16 @@ async def recover_stuck_stage2_on_startup() -> int:
                     session_id,
                     AuditEventType.STAGE2_FAILED,
                     job_id="",
-                    reason=(
-                        "startup recovery: visual enrichment did not complete "
-                        "before a worker restart"
-                    ),
+                    reason=STAGE2_ORPHAN_REAP_REASON,
                     total_frames=0,
                     failed_frames=0,
                 )
         if reaped:
-            logger.warning(
-                "Startup recovery failed %d orphaned Stage 2 job(s)", len(reaped)
-            )
+            logger.warning("Startup recovery failed %d orphaned Stage 2 job(s)", len(reaped))
         return len(reaped)
-    except Exception:  # noqa: BLE001 — recovery must never block startup
-        logger.exception("Stage 2 startup recovery failed")
+    except Exception as recovery_exc:  # noqa: BLE001 — recovery must never block startup
+        logger.error(
+            "Stage 2 startup recovery failed: error_type=%s",
+            type(recovery_exc).__name__,
+        )
         return 0

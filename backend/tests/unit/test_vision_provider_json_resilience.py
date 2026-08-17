@@ -20,9 +20,8 @@ The fix wraps every ``json.loads`` site behind
 ``vision/shared.py::parse_caption_json``, which:
 
 * catches ``json.JSONDecodeError``,
-* logs the provider name + first 120 chars of the failing response
-  at WARNING level (no PHI / API keys; the response is the model's
-  own descriptive-text output),
+* logs only the provider name and parse-error type at WARNING level (model
+  output can repeat clinical context and is never safe to log),
 * raises ``ProviderError(provider_name, ...)``.
 
 These tests lock that contract for every provider's clip / frame path,
@@ -269,12 +268,10 @@ class TestGeminiClipJsonResilience:
         assert "JSONDecodeError" in str(exc_info.value)
 
     @pytest.mark.asyncio
-    async def test_caption_clip_warning_log_contains_provider_and_excerpt(
+    async def test_caption_clip_warning_log_contains_provider_but_no_response(
         self, clip: MaskedClip, anchor: TranscriptSegment, caplog
     ) -> None:
-        """AC-6: WARNING log on JSON parse failure carries
-        provider=gemini AND a 120-char excerpt of the failing response.
-        No PHI / no API key in the log line."""
+        """WARNING identifies the provider without logging model output."""
         fake_s3 = MagicMock()
         fake_s3.get_object.return_value = {
             "Body": MagicMock(read=MagicMock(return_value=b"fake"))
@@ -310,12 +307,7 @@ class TestGeminiClipJsonResilience:
         assert warnings, "No WARNING log emitted on JSON parse failure"
         msg = warnings[-1].getMessage()
         assert "provider=gemini" in msg, f"Provider tag missing: {msg!r}"
-        # Defensive truncation — 120-char cap means the excerpt cannot
-        # be the full untruncated source; verify the message length is
-        # bounded.
-        assert len(msg) < 400, (
-            f"Log message {len(msg)} chars — excerpt cap not enforced"
-        )
+        assert _TRUNCATED_GEMINI_BODY not in msg
 
     @pytest.mark.asyncio
     async def test_caption_clip_log_does_not_leak_phi_or_api_key(
@@ -366,11 +358,11 @@ class TestGeminiClipJsonResilience:
             assert anchor.text not in msg, (
                 f"Audio anchor text leaked into log line: {msg!r}"
             )
-            # Full S3 key carries the session id segment — only the
-            # provider's own response text should appear in the excerpt.
+            # Full S3 key and provider output can both carry clinical context.
             assert clip.s3_key not in msg, (
                 f"S3 key leaked into log line: {msg!r}"
             )
+            assert _TRUNCATED_GEMINI_BODY not in msg
 
 
 # ── Gemini — caption_frame JSON parse failure ─────────────────────────────

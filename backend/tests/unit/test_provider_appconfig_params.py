@@ -119,6 +119,7 @@ async def test_anthropic_note_reads_appconfig_params(monkeypatch) -> None:
             template=Template(key="general", display_name="General",
                               sections=[TemplateSection(id="cc", title="CC")]),
             stage=1,
+            prior_context_text="Prior visit context uses the full schema.",
         )
 
     body = client.post.await_args.kwargs["json"]

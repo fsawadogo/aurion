@@ -9,12 +9,13 @@ No business logic in API route handlers -- routes call these functions only.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
 import uuid
 from pathlib import Path
-from typing import Final, Optional
+from typing import Awaitable, Final, Optional, TypeVar
 
 from pydantic import ValidationError
 from sqlalchemy import func, select
@@ -22,7 +23,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.audit_events import AuditEventType
 from app.core.cost_rates import USD_MICROS_PER_DOLLAR, estimate_cost_usd_micros
-from app.core.models import NoteVersionModel, PromptOverrideModel, SessionModel
+from app.core.models import (
+    NoteVersionModel,
+    PromptOverrideModel,
+    ProviderUsageModel,
+    SessionModel,
+)
 from app.core.types import (
     Note,
     NoteClaim,
@@ -31,9 +37,11 @@ from app.core.types import (
     Template,
     Transcript,
 )
+from app.modules.alerts.detectors import sla_stage1_ms
 from app.modules.audit_log.service import get_audit_log_service
 from app.modules.config.appconfig_client import get_config
 from app.modules.config.provider_registry import get_registry
+from app.modules.config.schema import NoteGenerationModelParams
 from app.modules.longitudinal_context import (
     PriorContextBlock,
     get_prior_context,
@@ -46,9 +54,10 @@ from app.modules.note_gen.specialty_style import get_specialty_style
 from app.modules.prompts import assemble_prompt_for_session
 from app.modules.providers.note_gen.shared import render_participants_block
 from app.modules.providers.usage_context import consume_call_usage
-from app.modules.providers.usage_service import get_provider_usage_service
 
 logger = logging.getLogger("aurion.note_gen")
+
+_T = TypeVar("_T")
 
 # ── System Prompt -- exact text from CLAUDE.md, no variations ─────────────
 
@@ -90,10 +99,12 @@ NOTE_GENERATION_SYSTEM_PROMPT = (
 #     the prompt minimal for the cold-start case.
 _PRIOR_CONTEXT_SYSTEM_SUFFIX = (
     "\n\n"
-    "When prior visits are listed, you may reference them factually "
-    "(for example 'patient reports continued pain since prior visit "
-    "on YYYY-MM-DD'). Do not infer trends or trajectories — only "
-    "state what the prior note recorded."
+    "Prior-visit material is background only because this note has no "
+    "authorized citation type for prior-note facts. Do not create or support "
+    "a claim from prior context alone, and never attach a prior-context fact "
+    "to a current transcript segment. A prior fact may appear only when the "
+    "current encounter restates it, cited to that current segment; otherwise "
+    "omit it. Do not infer trends or trajectories."
 )
 
 # ── Template Loading ──────────────────────────────────────────────────────
@@ -562,11 +573,12 @@ async def _record_provider_usage(
     success: bool,
     session_id: str | None,
 ) -> None:
-    """Best-effort write to ``provider_usage`` (issue #73).
+    """Best-effort stage of one ``provider_usage`` row (issue #73).
 
-    Swallows any DB error so a telemetry hiccup never alters the
-    surrounding code path. Mirrors the wrapping pattern used at the
-    alerts trigger sites (#76).
+    This deliberately does not flush: provider telemetry is passive and must
+    never introduce an extra unbounded DB await between the primary model and
+    its shared Stage 1 deadline. The next required note/session flush persists
+    this row in the same transaction.
 
     OV-2 (#73): consumes the provider's ContextVar usage (read-once —
     consumed even on failure so stale tokens can never attach to a later
@@ -583,18 +595,20 @@ async def _record_provider_usage(
         )
         cost_usd = micros / USD_MICROS_PER_DOLLAR
     try:
-        await get_provider_usage_service().record(
-            db,
-            provider_type=provider_type,
-            provider_name=provider_name,
-            operation=operation,
-            latency_ms=latency_ms,
-            success=success,
-            session_id=uuid.UUID(session_id) if session_id else None,
-            input_tokens=input_tokens,
-            output_tokens=output_tokens,
-            model_name=model_name,
-            cost_usd=cost_usd,
+        db.add(
+            ProviderUsageModel(
+                id=uuid.uuid4(),
+                provider_type=provider_type,
+                provider_name=provider_name,
+                operation=operation,
+                latency_ms=latency_ms,
+                success=success,
+                session_id=uuid.UUID(session_id) if session_id else None,
+                input_tokens=input_tokens,
+                output_tokens=output_tokens,
+                model_name=model_name,
+                cost_usd=cost_usd,
+            )
         )
     except Exception:  # noqa: BLE001 — telemetry is best-effort
         logger.warning(
@@ -603,6 +617,45 @@ async def _record_provider_usage(
             operation,
             session_id,
             exc_info=True,
+        )
+
+
+async def _record_provider_usage_before_deadline(
+    *,
+    deadline_at: float,
+    db: AsyncSession,
+    provider_type: str,
+    provider_name: str,
+    operation: str,
+    latency_ms: int,
+    success: bool,
+    session_id: str | None,
+) -> None:
+    """Keep passive usage telemetry inside the Stage 1 owner's budget."""
+
+    timeout = asyncio.timeout_at(deadline_at)
+    try:
+        async with timeout:
+            await _record_provider_usage(
+                db=db,
+                provider_type=provider_type,
+                provider_name=provider_name,
+                operation=operation,
+                latency_ms=latency_ms,
+                success=success,
+                session_id=session_id,
+            )
+    except TimeoutError:
+        if not timeout.expired():
+            raise
+        # A patched/alternate telemetry implementation may still perform I/O.
+        # It is passive: cancel it at the owner boundary and deliver the note.
+        consume_call_usage()
+        logger.warning(
+            "provider_usage skipped at Stage 1 deadline: type=%s op=%s session=%s",
+            provider_type,
+            operation,
+            session_id,
         )
 
 
@@ -665,6 +718,44 @@ class EmptyTranscriptError(Exception):
         self.human_message = human_message
         self.transcript_char_count = transcript_char_count
         super().__init__(f"[empty-transcript-guard] {reason}")
+
+
+class Stage1DeadlineExceededError(Exception):
+    """Stable, PHI-free failure raised when Aurion's Stage 1 owner expires.
+
+    Provider exceptions may contain response fragments.  The orchestration
+    layer can safely persist and return ``reason`` without ever serialising the
+    underlying model/transport exception.
+    """
+
+    reason: Final[str] = "stage1_deadline_exceeded"
+
+    def __init__(self) -> None:
+        super().__init__("Stage 1 exceeded its configured processing deadline.")
+
+
+async def _await_with_stage1_deadline(
+    operation: Awaitable[_T],
+    *,
+    deadline_at: float,
+) -> _T:
+    """Await owned Stage 1 work until one absolute event-loop deadline.
+
+    ``asyncio.timeout_at`` cancels the awaited provider chain on expiry.  That
+    cancellation reaches Anthropic's compact gather, whose cancellation path
+    cancels and joins every shard.  Only this context's own expiry is converted
+    to the stable public exception; an ECS/task cancellation remains
+    ``CancelledError`` and propagates unchanged.
+    """
+
+    timeout = asyncio.timeout_at(deadline_at)
+    try:
+        async with timeout:
+            return await operation
+    except TimeoutError as exc:
+        if not timeout.expired():
+            raise
+        raise Stage1DeadlineExceededError() from exc
 
 
 def _resolve_min_transcript_char_threshold() -> int:
@@ -861,6 +952,8 @@ async def generate_stage1_note(
     participants: Optional[list[dict]] = None,
     encounter_context: Optional[str] = None,
     stats_trigger: str = "create_note_version",
+    deadline_at: Optional[float] = None,
+    deadline_owned_externally: bool = False,
 ) -> Note:
     """Generate a Stage 1 note from a transcript.
 
@@ -884,6 +977,12 @@ async def generate_stage1_note(
     regenerate path passes ``"regenerate"`` so a deliberate note replacement
     is distinguishable from a first build in the audit trail (mirrors
     ``"vision_merge"`` / ``"screen_inject"`` / ``"note_review_assist"``).
+
+    ``deadline_at`` is the absolute event-loop deadline established by the
+    Stage 1 pipeline owner before transcription. Direct callers may omit it;
+    they receive a fresh budget from the same env-over-AppConfig SLA helper.
+    ``deadline_owned_externally`` is set only by ``run_stage1``: its outer
+    timeout owns translation and spans persistence/delivery after this service.
 
     Pipeline:
     1. Load the template (custom snapshot → ``template_key`` snapshot →
@@ -909,6 +1008,15 @@ async def generate_stage1_note(
             raised; the route handler catches it and transitions the
             session to ``STAGE1_FAILED_NO_AUDIO``.
     """
+    # One owner budget spans all Stage 1 preparation plus the primary model
+    # call and optional critique. The alerting helper is the existing runtime
+    # authority (AURION_SLA_STAGE1_MS > AppConfig > schema default).
+    stage1_deadline_at = deadline_at
+    if stage1_deadline_at is None:
+        stage1_deadline_at = (
+            asyncio.get_running_loop().time() + (sla_stage1_ms() / 1000.0)
+        )
+
     # ── Stage 1 entry guard (lane-backend/empty-transcript-guard) ────
     # Fires BEFORE template loading + registry lookup so we don't pay
     # those costs for a session we already know we won't process.
@@ -1020,7 +1128,7 @@ async def generate_stage1_note(
     # a writer hiccup never alters the surrounding code path.
     _usage_started = time.monotonic()
     try:
-        note = await provider.generate_note(
+        provider_operation = provider.generate_note(
             transcript,
             template,
             stage=1,
@@ -1031,25 +1139,51 @@ async def generate_stage1_note(
             specialty_prefix=specialty_prefix,
             encounter_context=encounter_context or None,
         )
-        await _record_provider_usage(
-            db=db,
-            provider_type="note_generation",
-            provider_name=getattr(note, "provider_used", "unknown"),
-            operation="generate_note",
-            latency_ms=int((time.monotonic() - _usage_started) * 1000),
-            success=True,
-            session_id=session_id,
-        )
+        if deadline_owned_externally:
+            note = await provider_operation
+        else:
+            note = await _await_with_stage1_deadline(
+                provider_operation,
+                deadline_at=stage1_deadline_at,
+            )
+        usage_kwargs = {
+            "db": db,
+            "provider_type": "note_generation",
+            "provider_name": getattr(note, "provider_used", "unknown"),
+            "operation": "generate_note",
+            "latency_ms": int((time.monotonic() - _usage_started) * 1000),
+            "success": True,
+            "session_id": session_id,
+        }
+        if deadline_owned_externally:
+            await _record_provider_usage(**usage_kwargs)
+        else:
+            await _record_provider_usage_before_deadline(
+                deadline_at=stage1_deadline_at,
+                **usage_kwargs,
+            )
+    except Stage1DeadlineExceededError:
+        # No budget remains for an awaited telemetry write. Preserve the
+        # stable exception so the owner can fail the session without exposing
+        # a provider/model error body.
+        raise
     except Exception:
-        await _record_provider_usage(
-            db=db,
-            provider_type="note_generation",
-            provider_name=type(provider).__name__,
-            operation="generate_note",
-            latency_ms=int((time.monotonic() - _usage_started) * 1000),
-            success=False,
-            session_id=session_id,
-        )
+        usage_kwargs = {
+            "db": db,
+            "provider_type": "note_generation",
+            "provider_name": type(provider).__name__,
+            "operation": "generate_note",
+            "latency_ms": int((time.monotonic() - _usage_started) * 1000),
+            "success": False,
+            "session_id": session_id,
+        }
+        if deadline_owned_externally:
+            await _record_provider_usage(**usage_kwargs)
+        else:
+            await _record_provider_usage_before_deadline(
+                deadline_at=stage1_deadline_at,
+                **usage_kwargs,
+            )
         raise
 
     note.session_id = session_id
@@ -1067,9 +1201,45 @@ async def generate_stage1_note(
     # Gemini/OpenAI (registry-respect), and passes db/session_id so the call's
     # tokens/cost are recorded to provider_usage (telemetry completeness).
     if (getattr(note, "provider_used", "") or "").lower() == "anthropic":
-        await critique_note(
-            note, transcript, db=db, session_id=session_id
+        model_params = getattr(get_config(), "model_params", None)
+        note_params = getattr(
+            model_params,
+            "note_generation",
+            NoteGenerationModelParams(),
         )
+        critique_timeout_seconds = getattr(
+            note_params,
+            "stage1_critique_timeout_seconds",
+            NoteGenerationModelParams().stage1_critique_timeout_seconds,
+        )
+        remaining_seconds = (
+            stage1_deadline_at - asyncio.get_running_loop().time()
+        )
+        if remaining_seconds <= 0:
+            logger.warning(
+                "Stage 1 critique skipped; owner budget exhausted: session=%s",
+                session_id,
+            )
+        else:
+            critique_budget_seconds = (
+                float(critique_timeout_seconds)
+                if deadline_owned_externally
+                else min(float(critique_timeout_seconds), remaining_seconds)
+            )
+            try:
+                async with asyncio.timeout(critique_budget_seconds):
+                    await critique_note(
+                        note, transcript, db=db, session_id=session_id
+                    )
+            except TimeoutError:
+                # Critique is conservative cleanup, never a prerequisite for
+                # delivery. Source-id validators still run; the optional
+                # second call gets only the primary owner's remaining budget.
+                logger.warning(
+                    "Stage 1 critique exceeded %.1fs; preserving generated note: session=%s",
+                    critique_budget_seconds,
+                    session_id,
+                )
 
     # Re-score after critique — dropping unanchored claims or flipping
     # populated -> not_captured changes the completeness denominator.

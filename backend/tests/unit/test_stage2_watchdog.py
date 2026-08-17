@@ -26,6 +26,7 @@ from app.modules.vision.jobs import (
     JOB_COMPLETED,
     JOB_PENDING,
     JOB_RUNNING,
+    STAGE2_ORPHAN_REAP_REASON,
     STALE_RUNNING_BUDGET_S,
     fail_if_stale,
     recover_orphaned_jobs,
@@ -35,14 +36,23 @@ from app.modules.vision.jobs import (
 class _DB:
     """Minimal AsyncSession stand-in: records commits, returns canned rows."""
 
-    def __init__(self, rows=None):
+    def __init__(self, rows=None, *, transition_wins=True):
         self.commits = 0
         self._rows = rows or []
+        self._transition_wins = transition_wins
 
     async def commit(self):
         self.commits += 1
 
-    async def execute(self, *_a, **_kw):
+    async def execute(self, statement, *_a, **_kw):
+        if statement.__class__.__name__ == "Update":
+            transition_wins = self._transition_wins
+
+            class _UpdateResult:
+                def scalar_one_or_none(self):
+                    return uuid.uuid4() if transition_wins else None
+
+            return _UpdateResult()
         rows = self._rows
 
         class _Result:
@@ -50,6 +60,11 @@ class _DB:
                 return SimpleNamespace(all=lambda: rows)
 
         return _Result()
+
+    async def refresh(self, job):
+        job.status = "failed"
+        job.completed_at = datetime.now(timezone.utc)
+        job.error_message = STAGE2_ORPHAN_REAP_REASON
 
 
 def _job(status=JOB_RUNNING, age_s=None, started=True):
@@ -78,7 +93,7 @@ class TestFailIfStale:
         assert await fail_if_stale(db, job) is True
         assert job.status == "failed"
         assert job.completed_at is not None
-        assert "did not complete" in job.error_message
+        assert job.error_message == STAGE2_ORPHAN_REAP_REASON
         assert db.commits == 1
 
     @pytest.mark.asyncio
@@ -122,6 +137,15 @@ class TestFailIfStale:
         assert await fail_if_stale(db, job) is True
         assert await fail_if_stale(db, job) is False
         assert db.commits == 1
+
+    @pytest.mark.asyncio
+    async def test_reaper_loses_if_another_owner_committed_terminal_state(self):
+        job = _job(age_s=STALE_RUNNING_BUDGET_S + 60)
+        db = _DB(transition_wins=False)
+
+        assert await fail_if_stale(db, job) is False
+        assert job.status == JOB_RUNNING
+        assert db.commits == 0
 
 
 class TestStartupSweep:

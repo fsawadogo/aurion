@@ -25,9 +25,9 @@ def test_flag_defaults_off() -> None:
     assert FeatureFlagsConfig().grounded_visual_findings_enabled is False
 
 
-def test_flag_is_independent_of_grounded_synthesis() -> None:
-    # The two are separate levers on purpose: the video-findings decision is
-    # validated/enabled apart from the contested A&P-synthesis flag.
+def test_visual_subflag_does_not_enable_grounded_synthesis_master() -> None:
+    # The sub-flag remains independently configurable, but the Stage-2 route
+    # requires both it and the governing master before selecting grounded mode.
     cfg = FeatureFlagsConfig(grounded_visual_findings_enabled=True)
     assert cfg.grounded_visual_findings_enabled is True
     assert cfg.grounded_synthesis_enabled is False

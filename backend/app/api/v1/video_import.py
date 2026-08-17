@@ -45,6 +45,7 @@ from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.cleanup.service import purge_raw_video
 from app.modules.config.appconfig_client import get_config
+from app.modules.config.schema import PipelineConfig
 from app.modules.session.service import (
     confirm_consent,
     create_session,
@@ -70,6 +71,26 @@ router = APIRouter(prefix="/me/video-imports", tags=["video-import"])
 # expires quickly. The web slice (VID-05) swaps this single-PUT presign for
 # S3 multipart; the single PUT is sufficient for the backend + tests now.
 _UPLOAD_URL_TTL_SECONDS = 3600
+
+# Persisted/API-visible failure details are reason codes only. ffmpeg, model,
+# and provider exception messages can contain source material and must never be
+# copied into job rows, audit data, alerts, or clinician-facing status JSON.
+VIDEO_IMPORT_FAILURE_REASON = "video_import_processing_failed"
+VIDEO_IMPORT_ORPHAN_REAP_REASON = "video_import_orphan_reaped"
+CANCEL_REASON = "cancelled by clinician"
+
+
+def _public_video_import_failure_reason(reason: Optional[str]) -> Optional[str]:
+    """Hide legacy raw job errors while preserving current public codes."""
+    if reason is None:
+        return None
+    if reason in {
+        CANCEL_REASON,
+        VIDEO_IMPORT_FAILURE_REASON,
+        VIDEO_IMPORT_ORPHAN_REAP_REASON,
+    }:
+        return reason
+    return VIDEO_IMPORT_FAILURE_REASON
 
 
 def _require_enabled() -> None:
@@ -298,16 +319,12 @@ async def create_import_session(
         raise HTTPException(status_code=400, detail="Multi-clip import is not enabled.")
 
     if body.clip_count > 1:
-        keys = [
-            f"video-imports/{session.id}/{i:02d}-{uuid.uuid4()}.mp4"
-            for i in range(body.clip_count)
-        ]
-        clips = [
-            ClipUpload(index=i, s3_key=k, upload_url=_presign(k))
-            for i, k in enumerate(keys)
-        ]
+        keys = [f"video-imports/{session.id}/{i:02d}-{uuid.uuid4()}.mp4" for i in range(body.clip_count)]
+        clips = [ClipUpload(index=i, s3_key=k, upload_url=_presign(k)) for i, k in enumerate(keys)]
         job = await jobs.create_job(
-            db, session.id, raw_video_s3_key=keys[0],
+            db,
+            session.id,
+            raw_video_s3_key=keys[0],
             raw_video_s3_keys=keys,
             auto_advance_stage2=auto_advance_stage2,
         )
@@ -321,7 +338,9 @@ async def create_import_session(
 
     s3_key = f"video-imports/{session.id}/{uuid.uuid4()}.mp4"
     job = await jobs.create_job(
-        db, session.id, raw_video_s3_key=s3_key,
+        db,
+        session.id,
+        raw_video_s3_key=s3_key,
         auto_advance_stage2=auto_advance_stage2,
     )
 
@@ -381,9 +400,7 @@ async def process_video_import(
     return await start_processing(db, session, actor_id=user.user_id)
 
 
-async def start_processing(
-    db: AsyncSession, session, *, actor_id: uuid.UUID
-) -> VideoImportStatusResponse:
+async def start_processing(db: AsyncSession, session, *, actor_id: uuid.UUID) -> VideoImportStatusResponse:
     """Shared processing kickoff (clinician + admin surfaces).
 
     Fail-closed: the session must be CONSENT_PENDING with consent confirmed,
@@ -394,8 +411,7 @@ async def start_processing(
         raise HTTPException(
             status_code=409,
             detail=(
-                "Import not in a processable state "
-                f"(state={session.state.value}, consent={session.consent_confirmed})."
+                f"Import not in a processable state (state={session.state.value}, consent={session.consent_confirmed})."
             ),
         )
 
@@ -428,9 +444,7 @@ async def start_processing(
     # Retain a strong reference so the GC can't collect the task before it runs.
     # A bare ``asyncio.create_task`` is only weakly referenced by the loop and
     # can be garbage-collected mid-flight → the import never executes.
-    spawn_background_task(
-        _run_video_import_in_background(session.id, job.id), name="video-import"
-    )
+    spawn_background_task(_run_video_import_in_background(session.id, job.id), name="video-import")
     return _status_response(session, job)
 
 
@@ -448,7 +462,7 @@ async def _reap_stale_job(db: AsyncSession, job, session_id: uuid.UUID) -> None:
         await write_audit(
             session_id,
             AuditEventType.VIDEO_IMPORT_FAILED,
-            reason="watchdog: import exceeded the processing time budget",
+            reason=VIDEO_IMPORT_ORPHAN_REAP_REASON,
         )
 
 
@@ -466,9 +480,6 @@ async def get_video_import_status(
         raise HTTPException(status_code=404, detail="No import job for session.")
     await _reap_stale_job(db, job, session_id)
     return _status_response(session, job)
-
-
-CANCEL_REASON = "cancelled by clinician"
 
 
 @router.post("/{session_id}/cancel", response_model=CancelVideoImportResponse)
@@ -502,14 +513,10 @@ async def cancel_video_import(
     if job is None:
         raise HTTPException(status_code=404, detail="No import job for session.")
     if job.status not in ("pending", "running"):
-        raise HTTPException(
-            status_code=409, detail=f"Job already {job.status} — nothing to cancel."
-        )
+        raise HTTPException(status_code=409, detail=f"Job already {job.status} — nothing to cancel.")
 
     await jobs.mark_failed(db, job, CANCEL_REASON)
-    await write_audit(
-        session_id, AuditEventType.VIDEO_IMPORT_FAILED, reason=CANCEL_REASON
-    )
+    await write_audit(session_id, AuditEventType.VIDEO_IMPORT_FAILED, reason=CANCEL_REASON)
 
     retryable, blocked_by = _retry_eligibility(session, job)
     return CancelVideoImportResponse(
@@ -538,9 +545,7 @@ def _retry_eligibility(session, job) -> tuple[bool, Optional[str]]:
     # rather than trusting the column — offering a Retry that 409s at the S3
     # HEAD inside /process would be worse than saying "upload again" now.
     try:
-        get_s3_client().head_object(
-            Bucket=VIDEO_IMPORTS_BUCKET, Key=job.raw_video_s3_key
-        )
+        get_s3_client().head_object(Bucket=VIDEO_IMPORTS_BUCKET, Key=job.raw_video_s3_key)
     except (BotoCoreError, ClientError):
         return False, "The uploaded recording is no longer available."
     return True, None
@@ -573,17 +578,10 @@ def start_multipart(s3_key: str, size_bytes: int) -> StartMultipartResponse:
     if num_parts > _S3_MAX_PARTS:
         raise HTTPException(status_code=400, detail="File too large for upload.")
     client = get_s3_client()
-    created = client.create_multipart_upload(
-        Bucket=VIDEO_IMPORTS_BUCKET, Key=s3_key, ContentType="video/mp4"
-    )
+    created = client.create_multipart_upload(Bucket=VIDEO_IMPORTS_BUCKET, Key=s3_key, ContentType="video/mp4")
     upload_id = created["UploadId"]
-    parts = [
-        MultipartPart(part_number=n, url=_presign_part(s3_key, upload_id, n))
-        for n in range(1, num_parts + 1)
-    ]
-    return StartMultipartResponse(
-        upload_id=upload_id, key=s3_key, part_size=_MULTIPART_PART_SIZE, parts=parts
-    )
+    parts = [MultipartPart(part_number=n, url=_presign_part(s3_key, upload_id, n)) for n in range(1, num_parts + 1)]
+    return StartMultipartResponse(upload_id=upload_id, key=s3_key, part_size=_MULTIPART_PART_SIZE, parts=parts)
 
 
 @router.post("/{session_id}/multipart/start", response_model=StartMultipartResponse)
@@ -600,9 +598,7 @@ async def start_multipart_upload(
     return start_multipart(s3_key, body.size_bytes)
 
 
-@router.post(
-    "/{session_id}/multipart/{part_number}/presign", response_model=MultipartPart
-)
+@router.post("/{session_id}/multipart/{part_number}/presign", response_model=MultipartPart)
 async def presign_multipart_part(
     session_id: uuid.UUID,
     part_number: int,
@@ -637,8 +633,7 @@ async def complete_multipart_upload(
         UploadId=body.upload_id,
         MultipartUpload={
             "Parts": [
-                {"ETag": p.etag, "PartNumber": p.part_number}
-                for p in sorted(body.parts, key=lambda p: p.part_number)
+                {"ETag": p.etag, "PartNumber": p.part_number} for p in sorted(body.parts, key=lambda p: p.part_number)
             ]
         },
     )
@@ -656,9 +651,7 @@ async def abort_multipart_upload(
     """Abort an in-progress multipart upload (cancel/cleanup)."""
     await get_owned_session_or_404(db, session_id, user)
     _, s3_key = await _job_key_or_404(db, session_id)
-    get_s3_client().abort_multipart_upload(
-        Bucket=VIDEO_IMPORTS_BUCKET, Key=s3_key, UploadId=body.upload_id
-    )
+    get_s3_client().abort_multipart_upload(Bucket=VIDEO_IMPORTS_BUCKET, Key=s3_key, UploadId=body.upload_id)
     return {"status": "aborted"}
 
 
@@ -673,7 +666,7 @@ def _status_response(session, job) -> VideoImportStatusResponse:
         frames_dropped=job.frames_dropped,
         raw_video_purged=job.raw_video_purged_at is not None,
         new_note_version=job.new_note_version,
-        error_message=job.error_message,
+        error_message=_public_video_import_failure_reason(job.error_message),
     )
 
 
@@ -724,9 +717,7 @@ def _mask_and_store_frame(
     keeps a zero-face frame after a fail-closed text-redaction pass instead of
     dropping it.
     """
-    result = mask_frame(
-        jpg_bytes, drop_zero_face=drop_zero_face, redact_faceless=redact_faceless
-    )
+    result = mask_frame(jpg_bytes, drop_zero_face=drop_zero_face, redact_faceless=redact_faceless)
     if result.status == "success" and result.image_bytes is not None:
         # Server-issued masking proof — asserts the success invariant before the
         # masked frame is stored (P0-02), same contract as the iOS frame path.
@@ -755,9 +746,7 @@ def _mask_and_store_frame(
 _STANDALONE_CADENCE_SECONDS = 3
 
 
-def _cadence_windows(
-    total_ms: int, cadence_seconds: int, max_frames: int
-) -> list[tuple[int, int]]:
+def _cadence_windows(total_ms: int, cadence_seconds: int, max_frames: int) -> list[tuple[int, int]]:
     """Zero-length sampling windows every ``cadence_seconds`` across ``total_ms``.
 
     Each cadence point is a ``(t, t)`` window so it reuses the existing
@@ -782,6 +771,55 @@ def _cadence_windows(
         points.append((t, t))
         t += step_ms
     return points
+
+
+def _evenly_sample_windows(windows: list[tuple[int, int]], count: int) -> list[tuple[int, int]]:
+    ordered = sorted(windows)
+    if count <= 0:
+        return []
+    if count >= len(ordered):
+        return ordered
+    if count == 1:
+        return [ordered[len(ordered) // 2]]
+    last = len(ordered) - 1
+    return [ordered[round(slot * last / (count - 1))] for slot in range(count)]
+
+
+def _select_import_windows(
+    trigger_windows: list[tuple[int, int]],
+    cadence_windows: list[tuple[int, int]],
+    *,
+    max_items: int,
+    trigger_fraction: float,
+) -> list[tuple[int, int]]:
+    """Apply the Stage-2 evidence budget before expensive extraction/masking."""
+
+    if len(trigger_windows) + len(cadence_windows) <= max_items:
+        return sorted({*trigger_windows, *cadence_windows})
+    if not trigger_windows:
+        return _evenly_sample_windows(cadence_windows, max_items)
+    if not cadence_windows:
+        return _evenly_sample_windows(trigger_windows, max_items)
+
+    trigger_slots = min(
+        len(trigger_windows),
+        max(1, round(max_items * trigger_fraction)),
+    )
+    cadence_slots = min(len(cadence_windows), max_items - trigger_slots)
+    unused = max_items - trigger_slots - cadence_slots
+    if unused:
+        added = min(unused, len(trigger_windows) - trigger_slots)
+        trigger_slots += added
+        unused -= added
+    if unused:
+        cadence_slots += min(unused, len(cadence_windows) - cadence_slots)
+
+    return sorted(
+        {
+            *_evenly_sample_windows(trigger_windows, trigger_slots),
+            *_evenly_sample_windows(cadence_windows, cadence_slots),
+        }
+    )
 
 
 async def _extract_and_mask_frames(
@@ -810,9 +848,7 @@ async def _extract_and_mask_frames(
     if not clips:
         return (0, 0, 0)
     row = (
-        await db.execute(
-            select(TranscriptModel).where(TranscriptModel.session_id == session_id)
-        )
+        await db.execute(select(TranscriptModel).where(TranscriptModel.session_id == session_id))
     ).scalar_one_or_none()
     if row is None:
         return (0, 0, 0)
@@ -839,10 +875,7 @@ async def _extract_and_mask_frames(
     # trigger is sufficient; Stage 2 still associates it through the configured
     # retrieval window. Sweeping every +/- window at 1 fps created hundreds of
     # near-duplicate preprocessing and vision operations on a normal encounter.
-    windows = [
-        ((s.start_ms + s.end_ms) // 2, (s.start_ms + s.end_ms) // 2)
-        for s in triggers
-    ]
+    trigger_windows = [((s.start_ms + s.end_ms) // 2, (s.start_ms + s.end_ms) // 2) for s in triggers]
 
     # Cadence windows (time-anchored): sample the whole timeline so a SILENT
     # exam still yields frames even with zero spoken triggers. Prefer the last
@@ -852,16 +885,39 @@ async def _extract_and_mask_frames(
     total_ms = max((s.end_ms for s in transcript.segments), default=0)
     if total_ms <= 0:
         total_ms = total_duration_ms
-    cadence = _cadence_windows(
-        total_ms, cadence_seconds, cfg.video_import_max_cadence_frames
-    )
+    cadence = _cadence_windows(total_ms, cadence_seconds, cfg.video_import_max_cadence_frames)
     if cadence:
         logger.info(
-            "Video-import cadence sampling: session=%s points=%d "
-            "cadence_s=%d duration_ms=%d triggers=%d",
-            session_id, len(cadence), cadence_seconds, total_ms, len(triggers),
+            "Video-import cadence sampling: session=%s points=%d cadence_s=%d duration_ms=%d triggers=%d",
+            session_id,
+            len(cadence),
+            cadence_seconds,
+            total_ms,
+            len(triggers),
         )
-    windows = windows + cadence
+    pipeline_defaults = PipelineConfig()
+    windows = _select_import_windows(
+        trigger_windows,
+        cadence,
+        max_items=getattr(
+            cfg,
+            "vision_max_evidence_items",
+            pipeline_defaults.vision_max_evidence_items,
+        ),
+        trigger_fraction=getattr(
+            cfg,
+            "vision_trigger_evidence_fraction",
+            pipeline_defaults.vision_trigger_evidence_fraction,
+        ),
+    )
+    unbounded_window_count = len(trigger_windows) + len(cadence)
+    if len(windows) < unbounded_window_count:
+        logger.info(
+            "Video-import evidence budget applied: session=%s candidate_windows=%d selected_windows=%d",
+            session_id,
+            unbounded_window_count,
+            len(windows),
+        )
 
     # Nothing to extract: no spoken triggers AND cadence off/empty. Preserves
     # the pre-cadence fast-skip (byte-identical when cadence_seconds == 0).
@@ -882,9 +938,7 @@ async def _extract_and_mask_frames(
             else:
                 break
         offset = sorted_clips[owner][1]
-        per_clip.setdefault(owner, []).append(
-            (max(start - offset, 0), max(end - offset, 0))
-        )
+        per_clip.setdefault(owner, []).append((max(start - offset, 0), max(end - offset, 0)))
 
     frames: list[tuple[int, bytes]] = []
     for owner, local_windows in per_clip.items():
@@ -940,9 +994,7 @@ async def _extract_and_mask_frames(
     return (len(frames), masked, dropped)
 
 
-async def _auto_advance_stage2(
-    db: AsyncSession, session, session_id: uuid.UUID
-) -> Optional[int]:
+async def _auto_advance_stage2(db: AsyncSession, session, session_id: uuid.UUID) -> Optional[int]:
     """Approve Stage 1 + run Stage 2 vision inline (admin/eval bulk imports).
 
     Mirrors the approve-stage1 route's dispatch, but runs Stage 2 inline
@@ -959,13 +1011,18 @@ async def _auto_advance_stage2(
     for the human's final review.
     """
     # Lazy imports — avoid a circular import with the notes/vision routers.
-    from app.api.v1.vision import run_stage2_vision
+    from app.api.v1.vision import (
+        run_stage2_vision,
+        write_stage2_completion_audit,
+    )
     from app.modules.note_gen.service import approve_note, get_latest_note
     from app.modules.vision.jobs import (
         create_job,
         mark_completed,
         mark_failed,
         mark_running,
+        run_with_stage2_deadline,
+        stage2_failure_reason,
     )
 
     approved = await approve_note(str(session_id), db)
@@ -979,38 +1036,90 @@ async def _auto_advance_stage2(
     )
 
     job = await create_job(session_id, db)
-    await write_audit(
-        session_id, AuditEventType.STAGE2_STARTED, job_id=str(job.id)
-    )
+    stage2_job_id = job.id
+    await write_audit(session_id, AuditEventType.STAGE2_STARTED, job_id=str(stage2_job_id))
     try:
-        await mark_running(job.id, db)
-        result = await run_stage2_vision(session_id, db)
+        await mark_running(stage2_job_id, db)
+        result = await run_with_stage2_deadline(run_stage2_vision(session_id, db))
         latest = await get_latest_note(str(session_id), db)
         new_version = latest.version if latest is not None else 0
-        await mark_completed(
-            job.id,
+        completion_won = await mark_completed(
+            stage2_job_id,
             new_note_version=new_version,
             frames_processed=result.frames_processed,
             db=db,
         )
-        return new_version
+        if not completion_won:
+            # The reaper/failure owner committed first. The Stage 2 note was
+            # only flushed, so roll it back and emit no contradictory terminal
+            # completion audit.
+            await db.rollback()
+            logger.info(
+                "Stage 2 auto-advance stood down after terminal owner won: session=%s job=%s",
+                session_id,
+                stage2_job_id,
+            )
+            return None
     except Exception as exc:  # noqa: BLE001 — record and preserve fallback
         # Ingestion and Stage 1 succeeded. Record Stage 2 as failed, but do not
         # fail the whole import: the review page must remain reachable so the
         # clinician can explicitly approve the audio-only fallback.
-        await mark_failed(job.id, str(exc), db)
+        # A hard deadline cancels all queued/active caption work. Restore this
+        # long-lived orchestrator session before persisting terminal status.
+        reason = stage2_failure_reason(exc)
+        error_type = type(exc).__name__
+        logger.error(
+            "Stage 2 auto-advance failed: session=%s job=%s reason=%s error_type=%s",
+            session_id,
+            stage2_job_id,
+            reason,
+            error_type,
+        )
+        try:
+            await db.rollback()
+        except Exception as rollback_exc:  # noqa: BLE001 - still attempt failure handling
+            logger.error(
+                "Failed to roll back Stage 2 auto-advance: session=%s error_type=%s",
+                session_id,
+                type(rollback_exc).__name__,
+            )
+        failure_won = await mark_failed(stage2_job_id, reason, db)
+        if not failure_won:
+            return None
         await write_audit(
             session_id,
             AuditEventType.STAGE2_FAILED,
-            job_id=str(job.id),
-            reason=str(exc)[:200],
+            job_id=str(stage2_job_id),
+            reason=reason,
         )
         return None
 
+    # Completion is durable before the append-only audit is emitted. An audit
+    # transport failure must alert, but must never rewrite the completed job as
+    # failed or append a contradictory terminal event.
+    try:
+        await write_stage2_completion_audit(session_id, result)
+    except Exception as audit_exc:  # noqa: BLE001 - completed note remains reviewable
+        logger.error(
+            "Stage 2 completed but completion audit failed: session=%s job=%s error_type=%s",
+            session_id,
+            stage2_job_id,
+            type(audit_exc).__name__,
+        )
+        await try_publish_alert(
+            alert_type="stage2_completion_audit_failed",
+            severity=AlertSeverity.CRITICAL,
+            source="video_import",
+            message="Stage 2 completion audit write failed",
+            metadata={
+                "session_id": str(session_id),
+                "job_id": str(stage2_job_id),
+            },
+        )
+    return new_version
 
-async def _run_video_import_in_background(
-    session_id: uuid.UUID, job_id: uuid.UUID
-) -> None:
+
+async def _run_video_import_in_background(session_id: uuid.UUID, job_id: uuid.UUID) -> None:
     """Detached task: extract audio → Stage 1 → purge raw video.
 
     Owns its own DB session (the request that scheduled it has returned).
@@ -1071,9 +1180,7 @@ async def _run_video_import_in_background(
                 # Drive the state machine through the normal consent hard-gate:
                 # CONSENT_PENDING(consent_confirmed) → RECORDING → PROCESSING_STAGE1.
                 await transition_session(db, session, SessionState.RECORDING)
-                await write_audit(
-                    session_id, get_audit_event_for_state(SessionState.RECORDING)
-                )
+                await write_audit(session_id, get_audit_event_for_state(SessionState.RECORDING))
                 await transition_session(db, session, SessionState.PROCESSING_STAGE1)
                 await write_audit(session_id, AuditEventType.STAGE1_STARTED)
 
@@ -1081,12 +1188,8 @@ async def _run_video_import_in_background(
                 # hard-fails the import — run_stage1 lays down a minimal empty
                 # note so the pipeline proceeds to frames + Stage-2 vision, which
                 # populate it from the video. OFF → byte-identical (422 on empty).
-                standalone = (
-                    get_config().feature_flags.visual_evidence_standalone_enabled
-                )
-                await run_stage1(
-                    db, session, audio_bytes, allow_visual_only=standalone
-                )  # → AWAITING_REVIEW
+                standalone = get_config().feature_flags.visual_evidence_standalone_enabled
+                await run_stage1(db, session, audio_bytes, allow_visual_only=standalone)  # → AWAITING_REVIEW
                 # Persist the transcript + Stage 1 note + state transition now.
                 # The orchestrator owns a manual session (async_session_factory
                 # does NOT auto-commit — unlike the request-scoped get_db), so
@@ -1125,13 +1228,19 @@ async def _run_video_import_in_background(
             await db.refresh(job)
             if job.status == "failed":
                 logger.info(
-                    "Video import cancelled mid-flight — standing down: "
-                    "session=%s job=%s reason=%s",
-                    session_id, job_id, job.error_message,
+                    "Video import cancelled mid-flight — standing down: session=%s job=%s reason=%s",
+                    session_id,
+                    job_id,
+                    _public_video_import_failure_reason(job.error_message),
                 )
                 return
 
             new_version = await _auto_advance_stage2(db, session, session_id)
+
+            # `_auto_advance_stage2` rolls back its shared session on failure;
+            # rollback expires ORM rows even with expire_on_commit=False. Reload
+            # the import job before its own completion write.
+            await db.refresh(job)
 
             await jobs.mark_completed(
                 db,
@@ -1149,10 +1258,15 @@ async def _run_video_import_in_background(
                 frames_dropped=dropped,
             )
         except Exception as exc:  # noqa: BLE001 — deliberately catch all
-            logger.exception(
-                "Video import failed: session=%s job=%s", session_id, job_id
+            reason = VIDEO_IMPORT_FAILURE_REASON
+            error_type = type(exc).__name__
+            logger.error(
+                "Video import failed: session=%s job=%s reason=%s error_type=%s",
+                session_id,
+                job_id,
+                reason,
+                error_type,
             )
-            reason = str(exc)[:200]
             # Best-effort: never leave an unmasked raw clip behind on failure —
             # purge EVERY clip of a multi-clip import.
             if job.raw_video_purged_at is None and clip_keys:
@@ -1160,24 +1274,31 @@ async def _run_video_import_in_background(
                     for key in clip_keys:
                         await purge_raw_video(str(session_id), key)
                     await jobs.mark_raw_video_purged(db, job)
-                except Exception:
-                    logger.exception(
-                        "Failed to purge raw video(s) after import failure: session=%s",
+                except Exception as purge_exc:  # noqa: BLE001
+                    logger.error(
+                        "Failed to purge raw video(s) after import failure: session=%s error_type=%s",
                         session_id,
+                        type(purge_exc).__name__,
                     )
             try:
                 await jobs.mark_failed(db, job, reason)
-            except Exception:
-                logger.exception("Failed to mark import job failed: %s", job_id)
-            await write_audit(
-                session_id, AuditEventType.VIDEO_IMPORT_FAILED, reason=reason
-            )
+            except Exception as persist_exc:  # noqa: BLE001
+                logger.error(
+                    "Failed to mark import job failed: job=%s error_type=%s",
+                    job_id,
+                    type(persist_exc).__name__,
+                )
+            await write_audit(session_id, AuditEventType.VIDEO_IMPORT_FAILED, reason=reason)
             await try_publish_alert(
                 alert_type=AuditEventType.VIDEO_IMPORT_FAILED.value,
                 severity=AlertSeverity.CRITICAL,
                 source="video_import_job",
                 message="Video import job failed",
-                metadata={"session_id": str(session_id), "reason": reason},
+                metadata={
+                    "session_id": str(session_id),
+                    "reason": reason,
+                    "error_type": error_type,
+                },
             )
 
 
@@ -1201,13 +1322,14 @@ async def recover_stuck_imports_on_startup() -> int:
                 await write_audit(
                     session_id,
                     AuditEventType.VIDEO_IMPORT_FAILED,
-                    reason="startup recovery: import did not complete before a worker restart",
+                    reason=VIDEO_IMPORT_ORPHAN_REAP_REASON,
                 )
         if reaped:
-            logger.warning(
-                "Startup recovery failed %d orphaned video-import job(s)", len(reaped)
-            )
+            logger.warning("Startup recovery failed %d orphaned video-import job(s)", len(reaped))
         return len(reaped)
-    except Exception:  # noqa: BLE001 — recovery must never block startup
-        logger.exception("Video-import startup recovery failed")
+    except Exception as recovery_exc:  # noqa: BLE001 — recovery must never block startup
+        logger.error(
+            "Video-import startup recovery failed: error_type=%s",
+            type(recovery_exc).__name__,
+        )
         return 0

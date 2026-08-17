@@ -206,14 +206,21 @@ async def generate_video_note(
             claim.source_quote = f"[{anchor}]"
             # Grounded claims rest on several anchors; every one must resolve.
             resolved = []
+            unresolved_additional = False
             for extra in claim.additional_sources:
                 mapped = frame_anchors.get(extra.source_id)
                 if mapped is None:
                     unmapped += 1
-                    continue
+                    unresolved_additional = True
+                    break
                 extra.source_id = mapped
                 extra.source_quote = f"[{mapped}]"
                 resolved.append(extra)
+            if unresolved_additional:
+                # The model declared every extra anchor as support for this
+                # claim. If any one is untraceable, reject the entire claim
+                # rather than shipping a conclusion with partial grounding.
+                continue
             claim.additional_sources = resolved
             kept.append(claim)
         section.claims = kept
