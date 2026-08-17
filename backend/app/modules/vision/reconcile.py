@@ -31,6 +31,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.types import FrameCaption, Note
+from app.modules.config.appconfig_client import get_config
 
 logger = logging.getLogger("aurion.vision.reconcile")
 
@@ -144,6 +145,22 @@ def _note_ready_sentence(value: object) -> str | None:
     return text if len(sentences) == 1 else None
 
 
+def _fail_closed_enrichments(captions: list[FrameCaption]) -> list[FrameCaption]:
+    """Prevent unsafe provider prose from entering a note on fallback paths."""
+
+    for cap in captions:
+        if cap.integration_status != "ENRICHES":
+            continue
+        note_text = _note_ready_sentence(cap.visual_description)
+        if note_text is not None:
+            cap.visual_description = note_text
+            continue
+        cap.integration_status = "REPEATS"
+        cap.conflict_flag = False
+        cap.conflict_detail = None
+    return captions
+
+
 async def reconcile_captions(
     captions: list[FrameCaption],
     note: Note,
@@ -158,8 +175,8 @@ async def reconcile_captions(
     comparison.
 
     Best-effort: any failure (no API key, HTTP error, malformed
-    response) logs a warning and returns the captions unchanged so
-    Stage 2 still produces a usable note.
+    response) logs a warning and preserves safe captions. Paragraph-shaped
+    or scene-narration ENRICHES captions fail closed as REPEATS.
 
     ``system_prompt`` (AI-PROMPTS-B) — when set, used as the system
     instruction instead of the bare ``RECONCILE_SYSTEM_PROMPT``
@@ -172,10 +189,8 @@ async def reconcile_captions(
         return captions
 
     if not _ANTHROPIC_API_KEY:
-        logger.warning(
-            "reconcile: ANTHROPIC_API_KEY not configured — leaving provider-reported integration_status unchanged"
-        )
-        return captions
+        logger.warning("reconcile: ANTHROPIC_API_KEY not configured — applying note-ready fallback gate")
+        return _fail_closed_enrichments(captions)
 
     user_prompt = _build_user_prompt(note, captions)
     # AI-PROMPTS-B — assembled prompt or base constant.
@@ -193,7 +208,11 @@ async def reconcile_captions(
                 },
                 json={
                     "model": _MODEL,
-                    "max_tokens": 2000,
+                    # Reconciliation must return one decision per retained
+                    # caption. Use the existing AppConfig-governed clinical
+                    # output budget so long encounters do not truncate the
+                    # tool call and bypass reconciliation.
+                    "max_tokens": get_config().model_params.note_generation.max_tokens,
                     "temperature": 0.1,
                     "system": effective_system,
                     "messages": [{"role": "user", "content": user_prompt}],
@@ -246,11 +265,11 @@ async def reconcile_captions(
                     decisions_payload = json.loads(block["text"])
                     break
         if decisions_payload is None:
-            logger.warning("reconcile: no tool_use or text in response — preserving original integration_status")
-            return captions
+            logger.warning("reconcile: no tool_use or text in response — applying note-ready fallback gate")
+            return _fail_closed_enrichments(captions)
     except Exception:  # noqa: BLE001 — best-effort by design
-        logger.warning("reconcile: LLM call failed — preserving original integration_status", exc_info=True)
-        return captions
+        logger.warning("reconcile: LLM call failed — applying note-ready fallback gate", exc_info=True)
+        return _fail_closed_enrichments(captions)
 
     decision_by_frame: dict[str, dict] = {
         d["frame_id"]: d for d in decisions_payload.get("decisions", []) if "frame_id" in d
@@ -285,6 +304,7 @@ async def reconcile_captions(
             cap.conflict_flag = False
             cap.conflict_detail = None
 
+    captions = _fail_closed_enrichments(captions)
     enriches = sum(1 for c in captions if c.integration_status == "ENRICHES")
     repeats = sum(1 for c in captions if c.integration_status == "REPEATS")
     conflicts = sum(1 for c in captions if c.conflict_flag)

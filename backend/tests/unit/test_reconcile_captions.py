@@ -1,8 +1,8 @@
 """Unit tests for the Stage 2 reconciliation LLM call (Tier 1 / item C).
 
 Verifies:
-- No API key → no-op (preserves existing integration_status)
-- LLM failure → no-op (best-effort)
+- No API key → note-ready fail-closed fallback
+- LLM failure → note-ready fail-closed fallback
 - Successful tool_use response → captions updated per the decisions
 - Conflict detail propagates onto the caption
 - Empty captions → fast return
@@ -10,6 +10,7 @@ Verifies:
 
 from __future__ import annotations
 
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -146,11 +147,22 @@ class TestNoOpPaths:
         assert result == []
 
     @pytest.mark.asyncio
-    async def test_missing_api_key_preserves_status(self, monkeypatch) -> None:
+    async def test_missing_api_key_rejects_unsafe_enrichment(self, monkeypatch) -> None:
         monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "")
-        caps = [_caption(initial_status="ENRICHES")]
+        caps = [
+            _caption(
+                description="The subject is supine. The knee appears near full extension.",
+                initial_status="ENRICHES",
+            )
+        ]
         out = await reconcile_captions(caps, _note())
-        # Untouched
+        assert out[0].integration_status == "REPEATS"
+
+    @pytest.mark.asyncio
+    async def test_missing_api_key_preserves_safe_enrichment(self, monkeypatch) -> None:
+        monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "")
+        caps = [_caption(description="Left knee extension is near full.", initial_status="ENRICHES")]
+        out = await reconcile_captions(caps, _note())
         assert out[0].integration_status == "ENRICHES"
 
     @pytest.mark.asyncio
@@ -164,6 +176,26 @@ class TestNoOpPaths:
 
         with patch("httpx.AsyncClient", return_value=client):
             caps = [_caption(initial_status="REPEATS")]
+            out = await reconcile_captions(caps, _note())
+        assert out[0].integration_status == "REPEATS"
+        assert out[0].conflict_flag is False
+
+    @pytest.mark.asyncio
+    async def test_llm_error_rejects_unsafe_enrichment(self, monkeypatch) -> None:
+        monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "key")
+
+        client = AsyncMock()
+        client.post = AsyncMock(side_effect=RuntimeError("network down"))
+        client.__aenter__ = AsyncMock(return_value=client)
+        client.__aexit__ = AsyncMock(return_value=None)
+
+        with patch("httpx.AsyncClient", return_value=client):
+            caps = [
+                _caption(
+                    description="A frame shows the patient supine. The knee is extended.",
+                    initial_status="ENRICHES",
+                )
+            ]
             out = await reconcile_captions(caps, _note())
         assert out[0].integration_status == "REPEATS"
         assert out[0].conflict_flag is False
@@ -299,7 +331,7 @@ class TestSuccessfulReconciliation:
 
     @pytest.mark.asyncio
     async def test_missing_decision_leaves_caption_alone(self, monkeypatch) -> None:
-        """A frame the LLM didn't return a decision for keeps its current status."""
+        """A safe frame without a returned decision keeps its current status."""
         monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "key")
         client = _stub_post(
             {
@@ -322,6 +354,31 @@ class TestSuccessfulReconciliation:
         assert out[0].integration_status == "REPEATS"
         # frame_002 updated
         assert out[1].integration_status == "ENRICHES"
+
+    @pytest.mark.asyncio
+    async def test_missing_decision_rejects_unsafe_existing_enrichment(self, monkeypatch) -> None:
+        monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "key")
+        client = _stub_post(
+            {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "emit_reconciliation",
+                        "input": {"decisions": []},
+                    }
+                ]
+            }
+        )
+        with patch("httpx.AsyncClient", return_value=client):
+            caps = [
+                _caption(
+                    description="A frame shows the patient supine. The knee is extended.",
+                    initial_status="ENRICHES",
+                )
+            ]
+            out = await reconcile_captions(caps, _note())
+
+        assert out[0].integration_status == "REPEATS"
 
     @pytest.mark.asyncio
     async def test_prompt_includes_note_claims_per_anchor(self, monkeypatch) -> None:
@@ -349,6 +406,31 @@ class TestSuccessfulReconciliation:
         # Schema-enforced output configured
         assert body["tools"][0]["name"] == "emit_reconciliation"
         assert body["tool_choice"] == {"type": "tool", "name": "emit_reconciliation"}
+
+    @pytest.mark.asyncio
+    async def test_uses_appconfig_output_budget_for_large_reconciliation(self, monkeypatch) -> None:
+        monkeypatch.setattr(reconcile_mod, "_ANTHROPIC_API_KEY", "key")
+        monkeypatch.setattr(
+            reconcile_mod,
+            "get_config",
+            lambda: SimpleNamespace(model_params=SimpleNamespace(note_generation=SimpleNamespace(max_tokens=6400))),
+        )
+        client = _stub_post(
+            {
+                "content": [
+                    {
+                        "type": "tool_use",
+                        "name": "emit_reconciliation",
+                        "input": {"decisions": []},
+                    }
+                ]
+            }
+        )
+
+        with patch("httpx.AsyncClient", return_value=client):
+            await reconcile_captions([_caption()], _note())
+
+        assert client.post.await_args.kwargs["json"]["max_tokens"] == 6400
 
 
 class TestNoteReadySentenceGate:
