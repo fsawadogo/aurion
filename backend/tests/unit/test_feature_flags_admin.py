@@ -133,6 +133,65 @@ class TestPureHelpers:
             FeatureFlagsConfig.model_fields
         )
 
+    def test_appconfig_validator_covers_every_config_section(self) -> None:
+        """Drift guard for EVERY block, not just feature_flags.
+
+        `additionalProperties: false` applies to each nested object, so a field
+        added to ANY config model without the matching validator property makes
+        AWS reject the whole deployment — and because the Feature Flags save
+        publishes the entire document, one orphan field anywhere silently turns
+        the whole page read-only (every save 502s).
+
+        Not hypothetical: `pipeline.video_import_preprocessing_concurrency`
+        (#770) shipped without its property and broke every AppConfig deployment
+        for hours. The guard below only inspected FeatureFlagsConfig, so it
+        passed the entire time.
+        """
+        import re
+
+        tf_path = (
+            Path(__file__).resolve().parents[3] / "infrastructure" / "appconfig.tf"
+        )
+        if not tf_path.exists():
+            pytest.skip("infrastructure/appconfig.tf not in this checkout")
+        tf = tf_path.read_text(encoding="utf-8")
+
+        from app.modules.config import schema as config_schema
+
+        sections = {
+            "PipelineConfig": "pipeline",
+            "FeatureFlagsConfig": "feature_flags",
+            "ProvidersConfig": "providers",
+            "AlertingConfig": "alerting",
+        }
+        missing: dict[str, list[str]] = {}
+        for cls_name, block_name in sections.items():
+            model = getattr(config_schema, cls_name, None)
+            if model is None:
+                continue
+            m = re.search(rf"{block_name}\s*=\s*\{{", tf)
+            assert m is not None, f"{block_name} block not found in appconfig.tf"
+            depth = 0
+            block = ""
+            for i in range(m.end() - 1, len(tf)):
+                if tf[i] == "{":
+                    depth += 1
+                elif tf[i] == "}":
+                    depth -= 1
+                    if depth == 0:
+                        block = tf[m.end() - 1 : i + 1]
+                        break
+            absent = [f for f in model.model_fields if f not in block]
+            if absent:
+                missing[block_name] = absent
+
+        assert not missing, (
+            f"appconfig.tf validator is missing {missing} — with "
+            "additionalProperties:false AWS rejects EVERY deployment carrying "
+            "these fields, which makes the admin Feature Flags page fail to save "
+            "(502). Add them as properties (NOT in `required`)."
+        )
+
     def test_appconfig_validator_covers_all_feature_flags(self) -> None:
         """Drift guard: the Terraform AppConfig JSON-Schema validator has
         additionalProperties:false on feature_flags, so any FeatureFlagsConfig
