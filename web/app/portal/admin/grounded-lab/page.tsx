@@ -62,6 +62,19 @@ import { useCallback, useEffect, useRef, useState } from "react";
 // The run is async: a large frame set is captioned over minutes (past the ALB
 // idle timeout), so we poll the job until it completes.
 const POLL_INTERVAL_MS = 3000;
+// How long to wait, after an import reports done, for its masked frames to
+// become listable in S3. The note flips the session to AWAITING_REVIEW before
+// the frames finish landing, and a large clip can take minutes — the old 60s
+// ceiling expired on exactly those, which is what made an upload fall back to
+// "pick a session and run it yourself".
+const MEDIA_READY_ATTEMPTS = 100; // ~5 min at POLL_INTERVAL_MS
+// A run started the moment media appears can still race the last writes; retry
+// a no-media result a few times before surfacing it as a real failure.
+const NO_MEDIA_RETRIES = 4;
+const NO_MEDIA_RETRY_MS = 15000;
+
+/** Why a comparison run ended — drives the upload flow's retry decision. */
+type RunOutcome = "ok" | "no_media" | "error" | "superseded";
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -306,10 +319,13 @@ export default function GroundedLabPage() {
     runSeqRef.current += 1;
   }, []);
 
+  // Resolves with the outcome so the upload flow can distinguish "the clip's
+  // frames were not listable yet" (retryable) from a real failure. Callers that
+  // don't care can ignore it.
   const onRun = useCallback(
-    async (overrideSessionId?: string) => {
+    async (overrideSessionId?: string): Promise<RunOutcome> => {
       const sid = overrideSessionId ?? selected;
-      if (!sid) return;
+      if (!sid) return "error";
       const seq = (runSeqRef.current += 1);
       const isCurrent = () => runSeqRef.current === seq;
       setRunning(true);
@@ -321,6 +337,8 @@ export default function GroundedLabPage() {
       // Start one comparison and poll its job until done, writing its result as
       // soon as it lands. Self-contained (catches its own errors) so several can
       // run concurrently under Promise.all without one failure aborting another.
+      let sawNoMedia = false;
+      let producedAny = false;
       const runOne = async (m: "grounded" | "fusion" | "modality") => {
         try {
           const started =
@@ -339,6 +357,7 @@ export default function GroundedLabPage() {
                   : await getGroundedLabRun(started.job_id);
             if (!isCurrent()) return;
             if (status.status === "completed" && status.result) {
+              producedAny = true;
               if (m === "fusion") {
                 setFusionResult(status.result as FusionCompareResult);
               } else if (m === "modality") {
@@ -349,6 +368,7 @@ export default function GroundedLabPage() {
               return;
             }
             if (status.status === "failed") {
+              if (status.error === "no_media") sawNoMedia = true;
               setRunError(
                 status.error === "no_media" ? t("noMedia") : t("runError"),
               );
@@ -360,6 +380,7 @@ export default function GroundedLabPage() {
           if (!isCurrent()) return;
           // 409 = the session's media was purged / never captured.
           if (e instanceof ApiError && e.status === 409) {
+            sawNoMedia = true;
             setRunError(t("noMedia"));
           } else {
             setRunError(humanizeError(e, t("runError")));
@@ -374,6 +395,12 @@ export default function GroundedLabPage() {
       } finally {
         if (isCurrent()) setRunning(false);
       }
+      if (!isCurrent()) return "superseded";
+      // `producedAny` is tracked locally, not read off state: the state setters
+      // above do not update this closure's `result`/`fusionResult`/... bindings,
+      // so reading them here would always see the pre-run values.
+      if (sawNoMedia && !producedAny) return "no_media";
+      return "ok";
     },
     [selected, mode, t],
   );
@@ -458,7 +485,7 @@ export default function GroundedLabPage() {
       // "frames are now listable" signal. Bounded so a genuinely empty import
       // still falls through and surfaces the proper "no media" message.
       let ready: GroundedLabSessionItem | null = null;
-      for (let attempt = 0; attempt < 20; attempt++) {
+      for (let attempt = 0; attempt < MEDIA_READY_ATTEMPTS; attempt++) {
         if (!isCurrent()) return;
         try {
           const list = await getGroundedLabSessions();
@@ -495,10 +522,22 @@ export default function GroundedLabPage() {
       setSelected(created.session_id);
       setUploadPhase("idle");
       setUploadPct(0);
-      // Run on the freshly-prepared clip. If media never showed up within the
-      // wait window, run anyway so the proper "no media" message surfaces
-      // instead of silently doing nothing.
-      void onRun(created.session_id);
+      // Run on the freshly-prepared clip. A run can still land a beat before
+      // the final frames are listable, so a no-media result is retried rather
+      // than surfaced — otherwise the upload dead-ends and the only way to get
+      // a report is to pick the session from the list and run it by hand, which
+      // is exactly the failure this flow exists to avoid. A genuinely empty
+      // import still ends up showing the real "no media" message, just later.
+      void (async () => {
+        for (let attempt = 0; ; attempt++) {
+          if (!isCurrent()) return;
+          const outcome = await onRun(created.session_id);
+          if (outcome !== "no_media" || attempt >= NO_MEDIA_RETRIES) return;
+          if (!isCurrent()) return;
+          setRunError(null);
+          await sleep(NO_MEDIA_RETRY_MS);
+        }
+      })();
     } catch (e) {
       if (!isCurrent()) return;
       setUploadError(humanizeError(e, t("uploadError")));
