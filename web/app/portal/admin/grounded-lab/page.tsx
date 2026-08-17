@@ -72,6 +72,12 @@ const MEDIA_READY_ATTEMPTS = 100; // ~5 min at POLL_INTERVAL_MS
 // a no-media result a few times before surfacing it as a real failure.
 const NO_MEDIA_RETRIES = 4;
 const NO_MEDIA_RETRY_MS = 15000;
+// Masked frames are written to S3 PROGRESSIVELY, so "frame_count > 0" only
+// means the first frame landed — running then captions a fraction of the clip
+// and reports on it (observed: a run read 2 frames while ingest went on to
+// write 28). Wait until the count stops growing for this many consecutive
+// polls before running, so the comparison sees the whole clip.
+const MEDIA_SETTLE_POLLS = 3;
 
 /** Why a comparison run ended — drives the upload flow's retry decision. */
 type RunOutcome = "ok" | "no_media" | "error" | "superseded";
@@ -485,6 +491,8 @@ export default function GroundedLabPage() {
       // "frames are now listable" signal. Bounded so a genuinely empty import
       // still falls through and surfaces the proper "no media" message.
       let ready: GroundedLabSessionItem | null = null;
+      let lastMedia = -1;
+      let stablePolls = 0;
       for (let attempt = 0; attempt < MEDIA_READY_ATTEMPTS; attempt++) {
         if (!isCurrent()) return;
         try {
@@ -492,9 +500,17 @@ export default function GroundedLabPage() {
           const found = list.items.find(
             (s) => s.session_id === created.session_id,
           );
-          if (found && (found.frame_count > 0 || found.clip_count > 0)) {
-            ready = found;
-            break;
+          if (found) {
+            const media = found.frame_count + found.clip_count;
+            // Settle, don't just appear: a count that is still climbing means
+            // masking is mid-write, and running now would caption only the
+            // frames that happen to exist yet.
+            stablePolls = media === lastMedia ? stablePolls + 1 : 0;
+            lastMedia = media;
+            if (media > 0 && stablePolls >= MEDIA_SETTLE_POLLS) {
+              ready = found;
+              break;
+            }
           }
         } catch {
           // Transient list failure — keep waiting; the run below still guards.
