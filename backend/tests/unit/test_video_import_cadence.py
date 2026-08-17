@@ -17,6 +17,7 @@ from app.modules.config.schema import PipelineConfig
 
 def test_cadence_off_by_default() -> None:
     assert PipelineConfig().video_import_cadence_seconds == 0
+    assert PipelineConfig().video_import_preprocessing_concurrency == 8
 
 
 def test_cadence_zero_yields_nothing() -> None:

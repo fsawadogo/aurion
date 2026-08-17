@@ -151,6 +151,7 @@ def _cfg(*, standalone: bool, cadence_seconds: int = 0):
             video_import_fps=1,
             video_import_cadence_seconds=cadence_seconds,
             video_import_max_cadence_frames=60,
+            video_import_preprocessing_concurrency=8,
         ),
         feature_flags=SimpleNamespace(
             video_import_drop_zero_face_frames=True,
@@ -172,7 +173,6 @@ async def test_standalone_forces_cadence_on_silent_transcript() -> None:
         faces_blurred=0, reason=None, text_regions_redacted=1,
     )
     with patch.object(vi, "get_config", return_value=_cfg(standalone=True)), \
-        patch.object(vi, "get_frame_window_ms", return_value=0), \
         patch.object(vi, "extract_frames_at_windows", extract), \
         patch.object(vi, "get_s3_client", return_value=MagicMock()), \
         patch.object(vi, "write_audit", AsyncMock()), \
@@ -197,7 +197,6 @@ async def test_flag_off_silent_transcript_yields_no_frames() -> None:
     db = _db_with_transcript(sid, trigger=False)
     extract = AsyncMock(return_value=[(1500, b"jpg")])
     with patch.object(vi, "get_config", return_value=_cfg(standalone=False)), \
-        patch.object(vi, "get_frame_window_ms", return_value=0), \
         patch.object(vi, "extract_frames_at_windows", extract), \
         patch.object(vi, "get_s3_client", return_value=MagicMock()), \
         patch.object(vi, "write_audit", AsyncMock()):

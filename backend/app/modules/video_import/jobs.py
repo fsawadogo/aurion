@@ -118,6 +118,15 @@ async def mark_raw_video_purged(
     return job
 
 
+async def mark_progress(
+    db: AsyncSession, job: VideoImportJobModel
+) -> VideoImportJobModel:
+    """Heartbeat a live import between long pipeline phases."""
+    job.updated_at = utcnow()
+    await db.commit()
+    return job
+
+
 # Lazy-watchdog budget. The orchestrator is a fire-and-forget
 # ``asyncio.create_task`` — if its worker recycles or a step (e.g. ffmpeg)
 # hangs, the task dies before its ``except → mark_failed`` and the row is
@@ -141,10 +150,15 @@ async def fail_if_stale(db: AsyncSession, job: VideoImportJobModel) -> bool:
         return False
     now = utcnow()
     started = job.started_at
+    updated = getattr(job, "updated_at", None)
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
     if started.tzinfo is None:
         started = started.replace(tzinfo=timezone.utc)
+    if updated is not None:
+        if updated.tzinfo is None:
+            updated = updated.replace(tzinfo=timezone.utc)
+        started = max(started, updated)
     if (now - started).total_seconds() < STALE_RUNNING_BUDGET_S:
         return False
     await mark_failed(
