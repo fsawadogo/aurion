@@ -105,6 +105,7 @@ async def test_extract_and_mask_frames_offloads_per_frame() -> None:
             # Cadence off — this test exercises the trigger-only path.
             video_import_cadence_seconds=0,
             video_import_max_cadence_frames=60,
+            video_import_preprocessing_concurrency=8,
         ),
         feature_flags=SimpleNamespace(
             video_import_drop_zero_face_frames=True,
@@ -113,8 +114,6 @@ async def test_extract_and_mask_frames_offloads_per_frame() -> None:
         ),
     )
     with patch.object(vi, "get_config", return_value=cfg), patch.object(
-        vi, "get_frame_window_ms", return_value=0
-    ), patch.object(
         vi, "extract_frames_at_windows", AsyncMock(return_value=[(1000, b"jpg")])
     ), patch.object(vi, "get_s3_client", return_value=Mock()), patch.object(
         vi.asyncio, "to_thread", AsyncMock(return_value=masked_result)

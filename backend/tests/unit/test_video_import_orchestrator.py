@@ -73,6 +73,7 @@ def _patches(job, session, *, extract=None, stage1=None, purge=None):
         patch.object(vi.jobs, "mark_completed", AsyncMock()),
         patch.object(vi.jobs, "mark_failed", AsyncMock()),
         patch.object(vi.jobs, "mark_raw_video_purged", AsyncMock(side_effect=_mark_purged)),
+        patch.object(vi.jobs, "mark_progress", AsyncMock()),
         patch.object(vi, "get_s3_client", MagicMock(return_value=client)),
         patch.object(vi, "extract_audio", AsyncMock(side_effect=extract or _fake_extract)),
         patch.object(vi, "transition_session", AsyncMock()),
@@ -102,6 +103,7 @@ async def test_happy_path_purges_and_completes() -> None:
         assert vi.purge_raw_video.await_count == 1
         vi.purge_raw_video.assert_awaited_with(str(session.id), job.raw_video_s3_key)
         vi.run_stage1.assert_awaited_once()
+        assert vi.jobs.mark_progress.await_count == 2
         vi.jobs.mark_completed.assert_awaited_once()
         # Drove RECORDING then PROCESSING_STAGE1.
         states = [c.args[2] for c in vi.transition_session.await_args_list]
@@ -179,8 +181,7 @@ async def test_extract_and_mask_frames_drops_audit_failures() -> None:
     fake_frames = [(1000, b"x"), (1500, b"y"), (2000, b"z")]
     with patch.object(
         vi, "extract_frames_at_windows", AsyncMock(return_value=fake_frames)
-    ), patch.object(vi, "get_frame_window_ms", MagicMock(return_value=3000)), \
-        patch.object(vi, "get_s3_client", MagicMock(return_value=s3)), \
+    ), patch.object(vi, "get_s3_client", MagicMock(return_value=s3)), \
         patch.object(vi, "write_audit", AsyncMock()) as audit, \
         patch.object(
             vi, "mask_frame",
@@ -207,8 +208,7 @@ async def test_extract_and_mask_frames_stores_successes() -> None:
     s3 = MagicMock()
     with patch.object(
         vi, "extract_frames_at_windows", AsyncMock(return_value=[(1500, b"raw")])
-    ), patch.object(vi, "get_frame_window_ms", MagicMock(return_value=3000)), \
-        patch.object(vi, "get_s3_client", MagicMock(return_value=s3)), \
+    ), patch.object(vi, "get_s3_client", MagicMock(return_value=s3)), \
         patch.object(vi, "write_audit", AsyncMock()) as audit, \
         patch.object(
             vi, "mask_frame",
@@ -225,6 +225,20 @@ async def test_extract_and_mask_frames_stores_successes() -> None:
     assert kwargs["Key"] == f"frames/{sid}/1500.jpg"
     assert kwargs["Body"] == b"masked-jpeg"
     assert audit.await_args.args[1] == AuditEventType.SERVER_MASKING_APPLIED
+
+
+@pytest.mark.asyncio
+async def test_trigger_sampling_uses_one_midpoint_per_trigger() -> None:
+    sid = uuid.uuid4()
+    db = _db_with_transcript(sid)
+    extract = AsyncMock(return_value=[])
+    with patch.object(vi, "extract_frames_at_windows", extract):
+        assert await vi._extract_and_mask_frames(
+            db, sid, [("/tmp/v.mp4", 0)]
+        ) == (0, 0, 0)
+
+    assert extract.await_args.args[1] == [(1500, 1500)]
+    assert extract.await_args.kwargs["max_concurrency"] == 8
 
 
 @pytest.mark.asyncio

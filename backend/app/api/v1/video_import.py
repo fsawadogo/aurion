@@ -60,7 +60,6 @@ from app.modules.video_import.extraction import (
     wav_duration_ms,
 )
 from app.modules.video_import.masking import mask_frame
-from app.modules.vision.service import get_frame_window_ms
 
 logger = logging.getLogger("aurion.api.video_import")
 
@@ -836,12 +835,12 @@ async def _extract_and_mask_frames(
     if standalone and cadence_seconds <= 0:
         cadence_seconds = _STANDALONE_CADENCE_SECONDS
 
-    # Trigger windows (keyword-anchored). Empty when nothing was flagged.
+    # Trigger points (keyword-anchored). One representative frame per spoken
+    # trigger is sufficient; Stage 2 still associates it through the configured
+    # retrieval window. Sweeping every +/- window at 1 fps created hundreds of
+    # near-duplicate preprocessing and vision operations on a normal encounter.
     windows = [
-        (
-            s.start_ms - get_frame_window_ms(s.trigger_type),
-            s.end_ms + get_frame_window_ms(s.trigger_type),
-        )
+        ((s.start_ms + s.end_ms) // 2, (s.start_ms + s.end_ms) // 2)
         for s in triggers
     ]
 
@@ -890,7 +889,12 @@ async def _extract_and_mask_frames(
     frames: list[tuple[int, bytes]] = []
     for owner, local_windows in per_clip.items():
         path, offset = sorted_clips[owner]
-        local_frames = await extract_frames_at_windows(path, local_windows, fps)
+        local_frames = await extract_frames_at_windows(
+            path,
+            local_windows,
+            fps,
+            max_concurrency=cfg.video_import_preprocessing_concurrency,
+        )
         frames.extend((local_ts + offset, jpg) for local_ts, jpg in local_frames)
 
     drop_zero = get_config().feature_flags.video_import_drop_zero_face_frames
@@ -899,20 +903,23 @@ async def _extract_and_mask_frames(
     # PHI). Precedence over drop_zero is handled inside mask_frame.
     redact_faceless = standalone
     s3 = get_s3_client()
-    masked = 0
-    dropped = 0
-    for ts_ms, jpg_bytes in frames:
-        # Mask + store off the event loop (OpenCV is CPU-bound, put_object is
-        # sync boto3); the audit stays async on the loop.
-        result = await asyncio.to_thread(
-            _mask_and_store_frame,
-            s3,
-            session_id,
-            ts_ms,
-            jpg_bytes,
-            drop_zero,
-            redact_faceless,
-        )
+    preprocessing_sem = asyncio.Semaphore(
+        cfg.video_import_preprocessing_concurrency
+    )
+
+    async def _mask_store_and_audit(ts_ms: int, jpg_bytes: bytes) -> bool:
+        async with preprocessing_sem:
+            # Mask + store off the event loop (OpenCV is CPU-bound, put_object
+            # is sync boto3); the audit stays async on the loop.
+            result = await asyncio.to_thread(
+                _mask_and_store_frame,
+                s3,
+                session_id,
+                ts_ms,
+                jpg_bytes,
+                drop_zero,
+                redact_faceless,
+            )
         if result.status == "success" and result.image_bytes is not None:
             await write_audit(
                 session_id,
@@ -921,15 +928,20 @@ async def _extract_and_mask_frames(
                 faces_detected=result.faces_detected,
                 faces_blurred=result.faces_blurred,
             )
-            masked += 1
-        else:
-            await write_audit(
-                session_id,
-                AuditEventType.SERVER_MASKING_FAILED,
-                timestamp_ms=ts_ms,
-                reason=result.reason or "unknown",
-            )
-            dropped += 1
+            return True
+        await write_audit(
+            session_id,
+            AuditEventType.SERVER_MASKING_FAILED,
+            timestamp_ms=ts_ms,
+            reason=result.reason or "unknown",
+        )
+        return False
+
+    mask_results = await asyncio.gather(
+        *(_mask_store_and_audit(ts_ms, jpg_bytes) for ts_ms, jpg_bytes in frames)
+    )
+    masked = sum(mask_results)
+    dropped = len(mask_results) - masked
     return (len(frames), masked, dropped)
 
 
@@ -1086,6 +1098,7 @@ async def _run_video_import_in_background(
                 # without this the whole RDS transaction rolls back when the
                 # task ends and the note is silently lost.
                 await db.commit()
+                await jobs.mark_progress(db, job)
 
                 # 2. Extract + mask frames at the transcript's trigger windows,
                 #    mapping each window onto the clip that owns it by offset.
@@ -1095,6 +1108,7 @@ async def _run_video_import_in_background(
                 extracted, masked, dropped = await _extract_and_mask_frames(
                     db, session_id, clips_with_offset, total_duration_ms=cumulative_ms
                 )
+                await jobs.mark_progress(db, job)
 
             # 3. Purge every raw clip (fail-closed: a purge failure aborts the
             #    job rather than leaving unmasked video in S3).

@@ -105,6 +105,9 @@ class PipelineConfig(BaseModel):
     # the cadence would exceed this, the sampling is thinned to fit and the drop
     # is logged (never silent). Trigger frames are NOT counted against this cap.
     video_import_max_cadence_frames: int = Field(default=60, ge=1, le=500)
+    # Bound local ffmpeg/OpenCV/S3 preprocessing independently from external
+    # vision-provider concurrency.
+    video_import_preprocessing_concurrency: int = Field(default=8, ge=1, le=32)
     # Max number of evidence items (frames/clips) captioned CONCURRENTLY in
     # Stage 2. The captioning fan-out (``caption_visual_evidence``) previously
     # fired one Gemini request per frame with no bound, so a large frame set

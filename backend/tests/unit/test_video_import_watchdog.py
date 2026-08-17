@@ -30,6 +30,7 @@ def _job(**over):
         session_id=uuid.uuid4(),
         status="running",
         started_at=utcnow() - timedelta(seconds=_STALE),
+        updated_at=utcnow() - timedelta(seconds=_STALE),
         completed_at=None,
         error_message=None,
         frames_extracted=0,
@@ -60,6 +61,15 @@ async def test_fail_if_stale_fails_stuck_running_job() -> None:
 async def test_fail_if_stale_leaves_fresh_running_job() -> None:
     db = AsyncMock()
     job = _job(started_at=utcnow() - timedelta(seconds=10))
+    assert await jobs.fail_if_stale(db, job) is False
+    assert job.status == "running"
+    db.commit.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_fail_if_stale_uses_recent_progress_heartbeat() -> None:
+    db = AsyncMock()
+    job = _job(updated_at=utcnow() - timedelta(seconds=10))
     assert await jobs.fail_if_stale(db, job) is False
     assert job.status == "running"
     db.commit.assert_not_awaited()

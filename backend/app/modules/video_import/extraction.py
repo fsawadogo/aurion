@@ -206,6 +206,7 @@ async def extract_frames_at_windows(
     video_path: str,
     windows: list[tuple[int, int]],
     fps: int,
+    max_concurrency: int = 4,
 ) -> list[tuple[int, bytes]]:
     """Sample frames from ``video_path`` inside each ``(start_ms, end_ms)``
     window at ``fps``.
@@ -230,16 +231,17 @@ async def extract_frames_at_windows(
             timestamps.append(t)
             t += step_ms
 
-    seen: set[int] = set()
-    out: list[tuple[int, bytes]] = []
-    for ts in sorted(timestamps):
-        if ts in seen:
-            continue
-        seen.add(ts)
-        try:
-            jpg = await extract_frame_at_ms(video_path, ts)
-        except VideoExtractionError:
-            logger.info("Skipping unextractable frame at ts=%dms", ts)
-            continue
-        out.append((ts, jpg))
+    unique_timestamps = sorted(set(timestamps))
+    semaphore = asyncio.Semaphore(max(1, max_concurrency))
+
+    async def _extract(ts: int) -> tuple[int, bytes] | None:
+        async with semaphore:
+            try:
+                return ts, await extract_frame_at_ms(video_path, ts)
+            except VideoExtractionError:
+                logger.info("Skipping unextractable frame at ts=%dms", ts)
+                return None
+
+    results = await asyncio.gather(*(_extract(ts) for ts in unique_timestamps))
+    out = [result for result in results if result is not None]
     return out
