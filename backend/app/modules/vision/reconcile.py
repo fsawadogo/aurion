@@ -44,15 +44,15 @@ _ENDPOINT = "https://api.anthropic.com/v1/messages"
 # registry — the registry imports this exact string. Phase A read-only;
 # Phase B replaces with per-physician text when the calling clinician
 # has saved a user prompt (replacement semantics).
-RECONCILE_SYSTEM_PROMPT = """You reconcile clinical visual observations with what was said during the same encounter moment.
+RECONCILE_SYSTEM_PROMPT = """You reconcile clinical visual observations with what was said and with the other visual observations from the same encounter.
 
-For each frame caption, decide its relationship to the audio-derived clinical claims:
-- ENRICHES — the visual shows something the audio did not describe, or adds specificity (location, size, laterality) the audio omitted.
-- REPEATS — the visual confirms exactly what the audio described, no new information.
-- CONFLICTS — the visual contradicts an audio claim (e.g. audio said "no swelling", frame shows visible swelling; audio said right side, frame shows left).
+Compare every caption with both the audio-derived claims and the other captions, including captions at nearby or different anchors that concern the same clinical finding:
+- ENRICHES — the visual adds supported, clinically useful information not already captured by the audio or by another retained visual caption.
+- REPEATS — the visual confirms the audio with no added finding, duplicates or closely restates another caption, or contains only acquisition/view metadata without a clinical finding. For duplicate visual observations, retain at most the single best-supported, most specific concise caption as ENRICHES and mark the others REPEATS.
+- CONFLICTS — the visual contradicts an audio claim or another visual caption (e.g. disagreement about presence, severity, location, or laterality). If the evidence does not clearly resolve a visual-to-visual disagreement, mark the conflicting captions CONFLICTS and briefly identify the disagreement.
 
 Compare LITERALLY. Do not infer clinical meaning. If the audio is silent on something the frame shows, that is ENRICHES.
-If the frame is too generic to compare (low signal, equipment-only), classify as REPEATS so it doesn't pollute the note.
+If the frame is too generic to compare (low signal, equipment-only, anatomy inventory, viewer thumbnails, or image-quality commentary), classify as REPEATS so it doesn't pollute the note.
 
 Return only the requested tool call."""
 
@@ -110,7 +110,8 @@ def _build_user_prompt(note: Note, captions: list[FrameCaption]) -> str:
         )
 
     return (
-        "Classify each frame's relationship to the audio claims at its anchor.\n\n"
+        "Classify each frame against the audio claims and all other visual captions. "
+        "Keep only non-duplicative, supported clinical enrichment.\n\n"
         + "\n".join(captions_block)
     )
 
