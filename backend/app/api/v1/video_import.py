@@ -903,23 +903,23 @@ async def _extract_and_mask_frames(
     # PHI). Precedence over drop_zero is handled inside mask_frame.
     redact_faceless = standalone
     s3 = get_s3_client()
-    preprocessing_sem = asyncio.Semaphore(
-        cfg.video_import_preprocessing_concurrency
-    )
-
-    async def _mask_store_and_audit(ts_ms: int, jpg_bytes: bytes) -> bool:
-        async with preprocessing_sem:
-            # Mask + store off the event loop (OpenCV is CPU-bound, put_object
-            # is sync boto3); the audit stays async on the loop.
-            result = await asyncio.to_thread(
-                _mask_and_store_frame,
-                s3,
-                session_id,
-                ts_ms,
-                jpg_bytes,
-                drop_zero,
-                redact_faceless,
-            )
+    masked = 0
+    dropped = 0
+    # OpenCV masking remains deliberately serial. Running several native
+    # mask_frame calls concurrently caused the 1-GiB ECS container to exit
+    # with SIGSEGV (139) during production evaluation. ffmpeg extraction above
+    # stays bounded-parallel; serial masking preserves the fail-closed path and
+    # native-library stability while the reduced frame set bounds total work.
+    for ts_ms, jpg_bytes in frames:
+        result = await asyncio.to_thread(
+            _mask_and_store_frame,
+            s3,
+            session_id,
+            ts_ms,
+            jpg_bytes,
+            drop_zero,
+            redact_faceless,
+        )
         if result.status == "success" and result.image_bytes is not None:
             await write_audit(
                 session_id,
@@ -928,20 +928,15 @@ async def _extract_and_mask_frames(
                 faces_detected=result.faces_detected,
                 faces_blurred=result.faces_blurred,
             )
-            return True
-        await write_audit(
-            session_id,
-            AuditEventType.SERVER_MASKING_FAILED,
-            timestamp_ms=ts_ms,
-            reason=result.reason or "unknown",
-        )
-        return False
-
-    mask_results = await asyncio.gather(
-        *(_mask_store_and_audit(ts_ms, jpg_bytes) for ts_ms, jpg_bytes in frames)
-    )
-    masked = sum(mask_results)
-    dropped = len(mask_results) - masked
+            masked += 1
+        else:
+            await write_audit(
+                session_id,
+                AuditEventType.SERVER_MASKING_FAILED,
+                timestamp_ms=ts_ms,
+                reason=result.reason or "unknown",
+            )
+            dropped += 1
     return (len(frames), masked, dropped)
 
 

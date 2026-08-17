@@ -9,6 +9,7 @@ These tests pin that the blocking work now runs via ``asyncio.to_thread``.
 
 from __future__ import annotations
 
+import asyncio
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock, patch
@@ -113,16 +114,30 @@ async def test_extract_and_mask_frames_offloads_per_frame() -> None:
             visual_evidence_standalone_enabled=False,
         ),
     )
+    active = 0
+    peak = 0
+
+    async def serial_native_mask(*_args):
+        nonlocal active, peak
+        active += 1
+        peak = max(peak, active)
+        await asyncio.sleep(0)
+        active -= 1
+        return masked_result
+
     with patch.object(vi, "get_config", return_value=cfg), patch.object(
-        vi, "extract_frames_at_windows", AsyncMock(return_value=[(1000, b"jpg")])
+        vi,
+        "extract_frames_at_windows",
+        AsyncMock(return_value=[(1000, b"jpg"), (2000, b"jpg")]),
     ), patch.object(vi, "get_s3_client", return_value=Mock()), patch.object(
-        vi.asyncio, "to_thread", AsyncMock(return_value=masked_result)
+        vi.asyncio, "to_thread", AsyncMock(side_effect=serial_native_mask)
     ) as to_thread, patch.object(vi, "write_audit", AsyncMock()) as audit:
         extracted, masked, dropped = await vi._extract_and_mask_frames(
             db, sid, [("/tmp/x.mp4", 0)]
         )
 
-    assert (extracted, masked, dropped) == (1, 1, 0)
-    to_thread.assert_awaited_once()
+    assert (extracted, masked, dropped) == (2, 2, 0)
+    assert to_thread.await_count == 2
+    assert peak == 1
     assert to_thread.await_args.args[0] is vi._mask_and_store_frame
     assert audit.await_args.args[1] == AuditEventType.SERVER_MASKING_APPLIED
