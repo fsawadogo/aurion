@@ -10,6 +10,7 @@ import tempfile
 import pytest
 
 from app.modules.video_import.extraction import (
+    encode_jpeg_frames_to_h264,
     extract_frame_at_ms,
     extract_frames_at_windows,
 )
@@ -68,3 +69,20 @@ async def test_empty_windows_yield_no_frames() -> None:
         if not _make_video(video):
             pytest.skip("ffmpeg cannot build fixture")
         assert await extract_frames_at_windows(video, [], fps=1) == []
+
+
+@pytest.mark.asyncio
+async def test_masked_jpeg_sequence_encodes_as_mp4() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        video = os.path.join(tmp, "v.mp4")
+        if not _make_video(video):
+            pytest.skip("ffmpeg cannot build fixture")
+        frames = await extract_frames_at_windows(video, [(0, 1000)], fps=2)
+
+        encoded = await encode_jpeg_frames_to_h264(
+            [jpg for _, jpg in frames],
+            fps=2,
+        )
+
+        assert len(encoded) > 0
+        assert b"ftyp" in encoded[:32]

@@ -54,6 +54,7 @@ from app.modules.session.service import (
     transition_session,
 )
 from app.modules.video_import import jobs
+from app.modules.video_import.clips import generate_masked_trigger_clips
 from app.modules.video_import.extraction import (
     concat_audio,
     extract_audio,
@@ -822,6 +823,57 @@ def _select_import_windows(
     )
 
 
+async def _extract_mask_and_store_trigger_clips(
+    db: AsyncSession,
+    session_id: uuid.UUID,
+    clips: list[tuple[str, int]],
+    *,
+    total_duration_ms: int,
+) -> tuple[int, int, int]:
+    """Create silent masked H.264 clips for recorded doctor imports.
+
+    Every encoded frame passes through the same fail-closed face/text masking
+    used for imported stills.  If any sampled frame fails masking, the entire
+    candidate clip is dropped and no bytes are stored.  Failures are local to
+    the clip so the audio note and still-frame enrichment remain available.
+
+    Returns ``(clips_attempted, clips_stored, clips_dropped)``.
+    """
+    app_config = get_config()
+    if not app_config.feature_flags.clip_video_interpretation_enabled:
+        return (0, 0, 0)
+
+    row = (
+        await db.execute(select(TranscriptModel).where(TranscriptModel.session_id == session_id))
+    ).scalar_one_or_none()
+    if row is None:
+        return (0, 0, 0)
+    try:
+        transcript = Transcript.model_validate_json(row.transcript_json)
+    except Exception:  # noqa: BLE001 - corrupt transcript safely skips clips
+        logger.warning("Unparseable transcript for session=%s - no clips", session_id)
+        return (0, 0, 0)
+
+    pipeline = app_config.pipeline
+    flags = app_config.feature_flags
+    return await generate_masked_trigger_clips(
+        session_id=session_id,
+        trigger_segments=[
+            segment for segment in transcript.segments if segment.is_visual_trigger
+        ],
+        source_clips=clips,
+        total_duration_ms=total_duration_ms,
+        clip_window_ms=pipeline.clip_window_ms,
+        max_clips=pipeline.vision_max_evidence_items,
+        fps=pipeline.video_import_fps,
+        preprocessing_concurrency=pipeline.video_import_preprocessing_concurrency,
+        drop_zero_face=flags.video_import_drop_zero_face_frames,
+        redact_faceless=flags.visual_evidence_standalone_enabled,
+        s3=get_s3_client(),
+        audit_writer=write_audit,
+    )
+
+
 async def _extract_and_mask_frames(
     db: AsyncSession,
     session_id: uuid.UUID,
@@ -1209,6 +1261,12 @@ async def _run_video_import_in_background(session_id: uuid.UUID, job_id: uuid.UU
                 #    + S3 storage behind the same call.
                 extracted, masked, dropped = await _extract_and_mask_frames(
                     db, session_id, clips_with_offset, total_duration_ms=cumulative_ms
+                )
+                await _extract_mask_and_store_trigger_clips(
+                    db,
+                    session_id,
+                    clips_with_offset,
+                    total_duration_ms=cumulative_ms,
                 )
                 await jobs.mark_progress(db, job)
 

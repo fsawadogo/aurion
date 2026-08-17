@@ -121,6 +121,43 @@ async def test_retrieve_clips_parses_embedded_timestamp(monkeypatch) -> None:
     assert by_key[keys[1]] == 30000
 
 
+async def test_retrieved_trigger_clips_keep_distinct_nearest_trigger_ids(
+    monkeypatch,
+) -> None:
+    keys = [
+        f"clips/{SESSION_ID}/000014500_aabbccdd.mp4",
+        f"clips/{SESSION_ID}/000030000_eeff0011.mp4",
+    ]
+    s3 = MagicMock()
+    s3.list_objects_v2.return_value = {
+        "Contents": [{"Key": key} for key in keys]
+    }
+    monkeypatch.setattr(vision_service, "get_s3_client", lambda: s3)
+    monkeypatch.setattr(vision_service, "get_config", AppConfigSchema)
+    triggers = [
+        TranscriptSegment(
+            id="seg_early",
+            start_ms=14_000,
+            end_ms=15_000,
+            text="first manoeuvre",
+            is_visual_trigger=True,
+            trigger_type="motion",
+        ),
+        TranscriptSegment(
+            id="seg_late",
+            start_ms=29_500,
+            end_ms=30_500,
+            text="second manoeuvre",
+            is_visual_trigger=True,
+            trigger_type="motion",
+        ),
+    ]
+
+    clips = await vision_service.retrieve_clips_for_triggers(SESSION_ID, triggers)
+
+    assert [clip.trigger_segment_id for clip in clips] == ["seg_early", "seg_late"]
+
+
 async def test_retrieve_clips_legacy_key_falls_back(monkeypatch) -> None:
     """A legacy key with no embedded timestamp falls back to the first
     trigger's start_ms (pre-#324 behavior preserved)."""
