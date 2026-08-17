@@ -37,9 +37,8 @@ from app.core.types import (
     Template,
     Transcript,
 )
-from app.modules.alerts.detectors import sla_stage1_ms
 from app.modules.audit_log.service import get_audit_log_service
-from app.modules.config.appconfig_client import get_config
+from app.modules.config.appconfig_client import get_config, stage1_hard_deadline_ms
 from app.modules.config.provider_registry import get_registry
 from app.modules.config.schema import NoteGenerationModelParams
 from app.modules.longitudinal_context import (
@@ -980,7 +979,8 @@ async def generate_stage1_note(
 
     ``deadline_at`` is the absolute event-loop deadline established by the
     Stage 1 pipeline owner before transcription. Direct callers may omit it;
-    they receive a fresh budget from the same env-over-AppConfig SLA helper.
+    they receive a fresh budget from the validated pipeline hard-deadline
+    helper. The alerting SLA remains detector-only.
     ``deadline_owned_externally`` is set only by ``run_stage1``: its outer
     timeout owns translation and spans persistence/delivery after this service.
 
@@ -1008,13 +1008,14 @@ async def generate_stage1_note(
             raised; the route handler catches it and transitions the
             session to ``STAGE1_FAILED_NO_AUDIO``.
     """
-    # One owner budget spans all Stage 1 preparation plus the primary model
-    # call and optional critique. The alerting helper is the existing runtime
-    # authority (AURION_SLA_STAGE1_MS > AppConfig > schema default).
+    # One availability budget spans all Stage 1 preparation plus the primary
+    # model call and optional critique. This hard cancellation boundary is
+    # intentionally separate from the 30-second performance alert target.
     stage1_deadline_at = deadline_at
     if stage1_deadline_at is None:
         stage1_deadline_at = (
-            asyncio.get_running_loop().time() + (sla_stage1_ms() / 1000.0)
+            asyncio.get_running_loop().time()
+            + (stage1_hard_deadline_ms() / 1000.0)
         )
 
     # ── Stage 1 entry guard (lane-backend/empty-transcript-guard) ────

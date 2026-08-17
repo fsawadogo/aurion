@@ -1183,6 +1183,10 @@ async def _run_video_import_in_background(session_id: uuid.UUID, job_id: uuid.UU
                 await write_audit(session_id, get_audit_event_for_state(SessionState.RECORDING))
                 await transition_session(db, session, SessionState.PROCESSING_STAGE1)
                 await write_audit(session_id, AuditEventType.STAGE1_STARTED)
+                # Persist the state-machine handoff before Stage 1 takes
+                # ownership of its timeout. Its timeout recovery must roll back
+                # only Stage 1 work, not restore this import to CONSENT_PENDING.
+                await db.commit()
 
                 # Standalone-visual (flag): an empty/thin transcript no longer
                 # hard-fails the import — run_stage1 lays down a minimal empty
@@ -1267,27 +1271,50 @@ async def _run_video_import_in_background(session_id: uuid.UUID, job_id: uuid.UU
                 reason,
                 error_type,
             )
+            # Stage 1 timeout recovery rolls back its shared AsyncSession,
+            # expiring every loaded ORM row. Start failure cleanup from a clean
+            # transaction and reload both rows before reading their attributes.
+            await db.rollback()
+            await db.refresh(session)
+            reloaded_job = await jobs.get_job(db, job_id)
+
+            # Most handled Stage 1 failures already transition themselves. A
+            # provider/runtime error that escaped before doing so must not leave
+            # the doctor session durably stuck in PROCESSING_STAGE1.
+            if session.state == SessionState.PROCESSING_STAGE1:
+                await transition_session(db, session, SessionState.STAGE1_FAILED)
+                await db.commit()
+                await write_audit(
+                    session_id,
+                    AuditEventType.STAGE1_FAILED,
+                    reason=reason,
+                )
+
             # Best-effort: never leave an unmasked raw clip behind on failure —
             # purge EVERY clip of a multi-clip import.
-            if job.raw_video_purged_at is None and clip_keys:
+            if (
+                reloaded_job is None or reloaded_job.raw_video_purged_at is None
+            ) and clip_keys:
                 try:
                     for key in clip_keys:
                         await purge_raw_video(str(session_id), key)
-                    await jobs.mark_raw_video_purged(db, job)
+                    if reloaded_job is not None:
+                        await jobs.mark_raw_video_purged(db, reloaded_job)
                 except Exception as purge_exc:  # noqa: BLE001
                     logger.error(
                         "Failed to purge raw video(s) after import failure: session=%s error_type=%s",
                         session_id,
                         type(purge_exc).__name__,
                     )
-            try:
-                await jobs.mark_failed(db, job, reason)
-            except Exception as persist_exc:  # noqa: BLE001
-                logger.error(
-                    "Failed to mark import job failed: job=%s error_type=%s",
-                    job_id,
-                    type(persist_exc).__name__,
-                )
+            if reloaded_job is not None:
+                try:
+                    await jobs.mark_failed(db, reloaded_job, reason)
+                except Exception as persist_exc:  # noqa: BLE001
+                    logger.error(
+                        "Failed to mark import job failed: job=%s error_type=%s",
+                        job_id,
+                        type(persist_exc).__name__,
+                    )
             await write_audit(session_id, AuditEventType.VIDEO_IMPORT_FAILED, reason=reason)
             await try_publish_alert(
                 alert_type=AuditEventType.VIDEO_IMPORT_FAILED.value,

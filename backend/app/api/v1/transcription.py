@@ -29,11 +29,10 @@ from app.core.background import spawn_background_task
 from app.core.database import get_db
 from app.core.models import PilotMetricsModel, TranscriptModel
 from app.core.types import Note, SessionState, Transcript
-from app.modules.alerts.detectors import sla_stage1_ms
 from app.modules.alerts.service import AlertSeverity, try_publish_alert
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.cleanup.service import purge_audio_for_session
-from app.modules.config.appconfig_client import get_config
+from app.modules.config.appconfig_client import get_config, stage1_hard_deadline_ms
 from app.modules.note_gen.service import (
     EmptyTranscriptError,
     Stage1DeadlineExceededError,
@@ -282,7 +281,7 @@ async def run_stage1(
 
     stage1_start = time.monotonic()
     stage1_deadline_at = (
-        asyncio.get_running_loop().time() + (sla_stage1_ms() / 1000.0)
+        asyncio.get_running_loop().time() + (stage1_hard_deadline_ms() / 1000.0)
     )
     progress = _Stage1Progress()
     timeout = asyncio.timeout_at(stage1_deadline_at)

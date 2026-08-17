@@ -84,6 +84,14 @@ class ModelParamsConfig(BaseModel):
 
 class PipelineConfig(BaseModel):
     stage1_skip_window_seconds: int = Field(default=60, ge=10, le=600)
+    # Availability ceiling for the complete Stage 1 owner. This is deliberately
+    # distinct from alerting.sla_stage1_ms: 30s remains the performance target,
+    # while useful work may continue up to this hard cancellation boundary.
+    stage1_hard_deadline_ms: int = Field(
+        default=90_000,
+        ge=30_000,
+        le=300_000,
+    )
     frame_window_clinic_ms: int = Field(default=3000, ge=500, le=30000)
     frame_window_procedural_ms: int = Field(default=7000, ge=1000, le=60000)
     screen_capture_fps: int = Field(default=2, ge=1, le=10)

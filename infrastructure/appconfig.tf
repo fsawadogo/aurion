@@ -114,6 +114,15 @@ resource "aws_appconfig_configuration_profile" "main" {
           additionalProperties = false
           properties = {
             stage1_skip_window_seconds = { type = "integer", minimum = 10, maximum = 600 }
+            # Availability ceiling, distinct from alerting.sla_stage1_ms (the
+            # 30-second performance target). Optional for older hosted docs;
+            # Pydantic and this schema annotation default it to 90 seconds.
+            stage1_hard_deadline_ms = {
+              type    = "integer"
+              minimum = 30000
+              maximum = 300000
+              default = 90000
+            }
             frame_window_clinic_ms     = { type = "integer", minimum = 500, maximum = 30000 }
             frame_window_procedural_ms = { type = "integer", minimum = 1000, maximum = 60000 }
             screen_capture_fps         = { type = "integer", minimum = 1, maximum = 10 }

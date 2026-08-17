@@ -63,6 +63,9 @@ def _patches(job, session, *, extract=None, stage1=None, purge=None):
         j.raw_video_purged_at = object()
         return j
 
+    async def _transition(_db, target_session, state):
+        target_session.state = state
+
     db = AsyncMock()
     client = MagicMock()
     client.download_file = MagicMock(return_value=None)
@@ -78,7 +81,7 @@ def _patches(job, session, *, extract=None, stage1=None, purge=None):
         patch.object(vi.jobs, "mark_progress", AsyncMock()),
         patch.object(vi, "get_s3_client", MagicMock(return_value=client)),
         patch.object(vi, "extract_audio", AsyncMock(side_effect=extract or _fake_extract)),
-        patch.object(vi, "transition_session", AsyncMock()),
+        patch.object(vi, "transition_session", AsyncMock(side_effect=_transition)),
         patch.object(vi, "write_audit", AsyncMock()),
         patch.object(vi, "run_stage1", AsyncMock(side_effect=stage1)),
         patch.object(vi, "purge_raw_video", AsyncMock(side_effect=purge)),
@@ -99,7 +102,13 @@ def _stop(started):
 @pytest.mark.asyncio
 async def test_happy_path_purges_and_completes() -> None:
     job, session = _job(), _session()
-    started = _patches(job, session)
+
+    async def _stage1(*_args, **_kwargs):
+        db = vi.async_session_factory()._db
+        assert db.commit.await_count == 1
+        session.state = SessionState.AWAITING_REVIEW
+
+    started = _patches(job, session, stage1=_stage1)
     try:
         await vi._run_video_import_in_background(session.id, job.id)
         assert vi.purge_raw_video.await_count == 1
@@ -112,6 +121,8 @@ async def test_happy_path_purges_and_completes() -> None:
         assert states == [SessionState.RECORDING, SessionState.PROCESSING_STAGE1]
         events = [c.args[1] for c in vi.write_audit.await_args_list]
         assert AuditEventType.VIDEO_IMPORT_COMPLETE in events
+        db = vi.async_session_factory()._db
+        assert db.commit.await_count == 2
     finally:
         _stop(started)
 
@@ -143,18 +154,63 @@ async def test_stage1_failure_still_purged_once_and_marked_failed() -> None:
     job, session = _job(), _session()
 
     async def _boom(*_a, **_k):
+        db = vi.async_session_factory()._db
+        assert db.commit.await_count == 1
         raise RuntimeError("stage1 blew up")
 
     started = _patches(job, session, stage1=_boom)
     try:
         await vi._run_video_import_in_background(session.id, job.id)
-        # Purge happened in the main path (step 2) and is NOT repeated
-        # (raw_video_purged_at was stamped) — exactly once.
+        # The failure handler purges the uploaded clip exactly once.
         assert vi.purge_raw_video.await_count == 1
         vi.jobs.mark_failed.assert_awaited_once()
+        assert vi.jobs.get_job.await_count == 2
+        db = vi.async_session_factory()._db
+        db.rollback.assert_awaited_once()
+        assert session.state == SessionState.STAGE1_FAILED
         events = [c.args[1] for c in vi.write_audit.await_args_list]
+        assert events.count(AuditEventType.STAGE1_FAILED) == 1
         assert AuditEventType.VIDEO_IMPORT_FAILED in events
         vi.try_publish_alert.assert_awaited_once()
+    finally:
+        _stop(started)
+
+
+@pytest.mark.asyncio
+async def test_stage1_rollback_reloads_expired_import_job_before_cleanup() -> None:
+    """Failure cleanup never reads the job instance expired by Stage 1 rollback."""
+
+    class _ExpiredJob:
+        def __init__(self) -> None:
+            self.id = uuid.uuid4()
+            self.raw_video_s3_key = f"video-imports/{uuid.uuid4()}/v.mp4"
+            self.raw_video_s3_keys = None
+            self.status = "running"
+            self.auto_advance_stage2 = False
+
+        @property
+        def raw_video_purged_at(self):
+            raise AssertionError("expired import job was read without reloading")
+
+    stale_job = _ExpiredJob()
+    fresh_job = _job()
+    fresh_job.id = stale_job.id
+    fresh_job.raw_video_s3_key = stale_job.raw_video_s3_key
+    session = _session()
+
+    async def _boom(*_args, **_kwargs):
+        raise RuntimeError("simulated Stage 1 owner failure")
+
+    started = _patches(stale_job, session, stage1=_boom)
+    vi.jobs.get_job.side_effect = [stale_job, fresh_job]
+    try:
+        await vi._run_video_import_in_background(session.id, stale_job.id)
+
+        assert vi.jobs.get_job.await_count == 2
+        vi.jobs.mark_failed.assert_awaited_once_with(
+            ANY, fresh_job, vi.VIDEO_IMPORT_FAILURE_REASON
+        )
+        vi.jobs.mark_raw_video_purged.assert_awaited_once_with(ANY, fresh_job)
     finally:
         _stop(started)
 

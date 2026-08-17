@@ -438,6 +438,7 @@ resource "aws_lb" "api" {
   name               = "aurion-api-${var.environment}"
   internal           = false
   load_balancer_type = "application"
+  idle_timeout       = var.api_alb_idle_timeout_seconds
   security_groups    = [aws_security_group.alb.id]
   subnets            = aws_subnet.public[*].id
 

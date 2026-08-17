@@ -236,3 +236,15 @@ def get_appconfig_client() -> AppConfigClient:
 def get_config() -> AppConfigSchema:
     """Convenience: return the current validated config."""
     return get_appconfig_client().config
+
+
+def stage1_hard_deadline_ms() -> int:
+    """Return Stage 1's validated availability ceiling.
+
+    This is not the 30-second performance target in ``alerting``. The latter
+    remains detector-only; this pipeline value is the owner cancellation
+    boundary and can be locally overridden through the existing
+    ``AURION_PIPELINE_STAGE1_HARD_DEADLINE_MS`` mechanism.
+    """
+
+    return get_config().pipeline.stage1_hard_deadline_ms
