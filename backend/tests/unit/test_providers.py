@@ -314,7 +314,12 @@ class TestNoteGenProviders:
             inst.__aenter__ = AsyncMock(return_value=inst)
             inst.__aexit__ = AsyncMock(return_value=False)
             mc.return_value = inst
-            result = await provider.generate_note(MOCK_TRANSCRIPT, ORTHO_TEMPLATE, stage=1)
+            result = await provider.generate_note(
+                MOCK_TRANSCRIPT,
+                ORTHO_TEMPLATE,
+                stage=1,
+                prior_context_text="Prior visit context uses the full schema.",
+            )
         assert result.provider_used == "anthropic"
         assert len(result.sections) == len(ORTHO_TEMPLATE.sections)
 
@@ -358,7 +363,12 @@ class TestNoteGenProviders:
             inst.__aenter__ = AsyncMock(return_value=inst)
             inst.__aexit__ = AsyncMock(return_value=False)
             mc.return_value = inst
-            result = await provider.generate_note(MOCK_TRANSCRIPT, ORTHO_TEMPLATE, stage=1)
+            result = await provider.generate_note(
+                MOCK_TRANSCRIPT,
+                ORTHO_TEMPLATE,
+                stage=1,
+                prior_context_text="Prior visit context uses the full schema.",
+            )
         imaging = result.get_section("imaging_review")
         assert imaging is not None
         assert imaging.status == "pending_video"

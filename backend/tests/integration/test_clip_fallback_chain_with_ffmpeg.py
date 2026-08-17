@@ -377,6 +377,6 @@ async def test_probe_anthropic_fallback_surfaces_ffmpeg_missing_as_diagnostic(
     assert response.status_code == 200, response.text
     payload = response.json()
     assert payload["success"] is False
-    assert payload["error_type"] in {"Exception", "FileNotFoundError"}
+    assert payload["error_type"] == "ProviderError"
     assert "ffmpeg" in payload["error_message"].lower()
     assert payload["provider_used"] == "anthropic"

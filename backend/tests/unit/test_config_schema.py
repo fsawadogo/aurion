@@ -139,23 +139,29 @@ class TestAppConfigSchema:
 
     def test_invalid_provider_key_rejected(self):
         with pytest.raises(ValidationError):
-            AppConfigSchema.model_validate({
-                "providers": {"transcription": "deepgram"},
-            })
+            AppConfigSchema.model_validate(
+                {
+                    "providers": {"transcription": "deepgram"},
+                }
+            )
 
     def test_procedural_less_than_clinic_rejected(self):
         with pytest.raises(ValidationError):
-            AppConfigSchema.model_validate({
-                "pipeline": {
-                    "frame_window_clinic_ms": 5000,
-                    "frame_window_procedural_ms": 2000,
-                },
-            })
+            AppConfigSchema.model_validate(
+                {
+                    "pipeline": {
+                        "frame_window_clinic_ms": 5000,
+                        "frame_window_procedural_ms": 2000,
+                    },
+                }
+            )
 
     def test_partial_update_preserves_defaults(self):
-        config = AppConfigSchema.model_validate({
-            "providers": {"note_generation": "gemini"},
-        })
+        config = AppConfigSchema.model_validate(
+            {
+                "providers": {"note_generation": "gemini"},
+            }
+        )
         assert config.providers.note_generation == NoteGenerationProviderKey.GEMINI
         assert config.providers.transcription == TranscriptionProviderKey.WHISPER  # default
         assert config.providers.vision == VisionProviderKey.OPENAI  # default
@@ -167,9 +173,7 @@ class TestAppConfigSchema:
 def test_alerting_absent_parses_to_defaults():
     """AC-1: hosted content predating the `alerting` block still parses,
     with defaults matching the MVP SLA targets + 24h purge window."""
-    cfg = AppConfigSchema.model_validate(
-        {"providers": {}, "model_params": {}, "pipeline": {}, "feature_flags": {}}
-    )
+    cfg = AppConfigSchema.model_validate({"providers": {}, "model_params": {}, "pipeline": {}, "feature_flags": {}})
     assert cfg.alerting.sla_stage1_ms == 30_000
     assert cfg.alerting.sla_stage2_ms == 300_000
     assert cfg.alerting.purge_gap_hours == 24
@@ -227,27 +231,47 @@ class TestModelVersionsConfig:
                 "note_generation": {"temperature": 0.1, "max_tokens": 2000},
                 "vision": {"temperature": 0.1, "max_tokens": 500, "confidence_threshold": "medium"},
             },
-            "pipeline": {"stage1_skip_window_seconds": 60, "frame_window_clinic_ms": 3000,
-                         "frame_window_procedural_ms": 7000, "screen_capture_fps": 2, "video_capture_fps": 1},
-            "feature_flags": {"screen_capture_enabled": True, "note_versioning_enabled": True,
-                              "session_pause_resume_enabled": True, "per_session_provider_override": True},
+            "pipeline": {
+                "stage1_skip_window_seconds": 60,
+                "frame_window_clinic_ms": 3000,
+                "frame_window_procedural_ms": 7000,
+                "screen_capture_fps": 2,
+                "video_capture_fps": 1,
+            },
+            "feature_flags": {
+                "screen_capture_enabled": True,
+                "note_versioning_enabled": True,
+                "session_pause_resume_enabled": True,
+                "per_session_provider_override": True,
+            },
         }
         config = AppConfigSchema.model_validate(raw)
         assert config.model_versions.gemini is None
 
     def test_override_round_trips(self):
-        config = AppConfigSchema.model_validate({
-            "providers": {"transcription": "whisper", "note_generation": "anthropic", "vision": "openai"},
-            "model_params": {
-                "note_generation": {"temperature": 0.1, "max_tokens": 2000},
-                "vision": {"temperature": 0.1, "max_tokens": 1500, "confidence_threshold": "medium"},
-            },
-            "pipeline": {"stage1_skip_window_seconds": 60, "frame_window_clinic_ms": 3000,
-                         "frame_window_procedural_ms": 7000, "screen_capture_fps": 2, "video_capture_fps": 1},
-            "feature_flags": {"screen_capture_enabled": True, "note_versioning_enabled": True,
-                              "session_pause_resume_enabled": True, "per_session_provider_override": True},
-            "model_versions": {"gemini": "gemini-3.1-pro-preview"},
-        })
+        config = AppConfigSchema.model_validate(
+            {
+                "providers": {"transcription": "whisper", "note_generation": "anthropic", "vision": "openai"},
+                "model_params": {
+                    "note_generation": {"temperature": 0.1, "max_tokens": 2000},
+                    "vision": {"temperature": 0.1, "max_tokens": 1500, "confidence_threshold": "medium"},
+                },
+                "pipeline": {
+                    "stage1_skip_window_seconds": 60,
+                    "frame_window_clinic_ms": 3000,
+                    "frame_window_procedural_ms": 7000,
+                    "screen_capture_fps": 2,
+                    "video_capture_fps": 1,
+                },
+                "feature_flags": {
+                    "screen_capture_enabled": True,
+                    "note_versioning_enabled": True,
+                    "session_pause_resume_enabled": True,
+                    "per_session_provider_override": True,
+                },
+                "model_versions": {"gemini": "gemini-3.1-pro-preview"},
+            }
+        )
         assert config.model_versions.gemini == "gemini-3.1-pro-preview"
         assert config.model_versions.openai is None
 
@@ -271,3 +295,19 @@ class TestVisionMaxTokensBounds:
     def test_below_floor_rejected(self):
         with pytest.raises(ValidationError):
             VisionModelParams(max_tokens=50)
+
+
+def test_stage2_provider_backpressure_defaults_are_bounded():
+    config = AppConfigSchema()
+    pipeline = config.pipeline
+    assert (
+        config.model_params.note_generation.stage1_critique_timeout_seconds
+        == 5.0
+    )
+    assert pipeline.vision_gemini_max_concurrency == 1
+    assert pipeline.vision_gemini_max_retries == 2
+    assert pipeline.vision_gemini_primary_timeout_seconds == 45.0
+    assert pipeline.vision_gemini_circuit_breaker_seconds == 60
+    assert pipeline.vision_provider_usage_timeout_seconds == 1.0
+    assert pipeline.vision_max_evidence_items == 30
+    assert pipeline.vision_trigger_evidence_fraction == 0.75

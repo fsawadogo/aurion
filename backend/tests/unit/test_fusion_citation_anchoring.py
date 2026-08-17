@@ -195,6 +195,36 @@ class TestReAnchoring:
         assert [s.source_id for s in claim.additional_sources] == ["frame_00200"]
 
     @pytest.mark.asyncio
+    async def test_unmapped_additional_source_drops_entire_claim(self, _patched):
+        """Partial grounding is not enough for a synthesized visual claim."""
+        engine_note = Note(
+            session_id="s1", stage=1, version=1, provider_used="anthropic",
+            specialty="ortho", completeness_score=1.0,
+            sections=[
+                NoteSection(
+                    id="physical_exam", status="populated",
+                    claims=[
+                        NoteClaim(
+                            id="c1", text="Synthesized visual finding.",
+                            source_type="transcript", source_id="vseg_000",
+                            source_quote="",
+                            additional_sources=[ClaimSource(source_id="vseg_999")],
+                        )
+                    ],
+                )
+            ],
+        )
+        _patched(engine_note)
+
+        note = await generate_video_note(
+            "s1", [], _TEMPLATE, grounded=True,
+            captions=[_caption("frame_00100", 100, "A foot.")],
+        )
+
+        assert note.sections[0].claims == []
+        assert note.sections[0].status == "not_captured"
+
+    @pytest.mark.asyncio
     async def test_an_invented_citation_drops_the_claim(self, _patched):
         """A claim resting on nothing must not ship with a dangling anchor.
 

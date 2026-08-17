@@ -64,6 +64,7 @@ def _completeness_directive(template: Template) -> str:
         return _DIRECTIVE_STANDARD
     return _DIRECTIVE_DETAILED
 
+
 logger = logging.getLogger("aurion.note_gen.parse")
 
 # JSON Schema for the Note response. Used by providers that support
@@ -219,6 +220,7 @@ def build_user_prompt(
     participants: list[dict] | None = None,
     specialty_prefix: str | None = None,
     encounter_context: str | None = None,
+    compact_stage1: bool = False,
 ) -> str:
     """Build the user prompt with transcript and template context.
 
@@ -248,6 +250,12 @@ def build_user_prompt(
     ``feature_flags.specialty_style_in_prompt_enabled`` — ``None`` (the
     default, and the only value passed while the flag is OFF) yields a
     byte-identical prompt to the pre-feature build.
+
+    ``compact_stage1`` is an Anthropic Stage-1-only internal wire contract.
+    It keeps all clinical content and source ids while omitting metadata the
+    server can hydrate exactly from ``template`` and ``transcript``. ``False``
+    preserves the existing prompt byte-for-byte for every other provider and
+    for Stage 2.
     """
     # Include the section `description` so the model receives the per-section
     # field-level capture guidance (ROM in degrees, named special tests + side,
@@ -265,21 +273,33 @@ def build_user_prompt(
         ],
         indent=2,
     )
-    segments_text = "\n".join(
-        f"[{s.id}] ({s.start_ms}ms-{s.end_ms}ms): {s.text}"
-        for s in transcript.segments
-    )
+    segments_text = "\n".join(f"[{s.id}] ({s.start_ms}ms-{s.end_ms}ms): {s.text}" for s in transcript.segments)
     language_instruction = ""
     if output_language != "en":
         lang = _LANGUAGE_NAMES.get(output_language, output_language)
         language_instruction = (
             f"\nWrite ALL note content — claim text and section titles — in {lang}. "
-            "Keep the JSON structure, section \"id\" values, and status values "
+            'Keep the JSON structure, section "id" values, and status values '
             "exactly as specified in English (do not translate keys or ids).\n"
         )
     prior_block = ""
     if prior_context_text:
-        prior_block = f"{prior_context_text}\n\n"
+        # Prior-context prose currently has no first-class citation type in the
+        # public Note contract.  It may help the model understand continuity,
+        # but it cannot authorize a claim by itself: every persisted claim must
+        # still cite a segment from THIS encounter.  The parser below enforces
+        # that structurally; this instruction prevents the model from trying to
+        # disguise a prior-only fact behind a current segment id.
+        prior_block = (
+            "PRIOR-CONTEXT PROVENANCE RULE: the prior-visit material below is "
+            "background only and has no authorized source IDs in this note. Do "
+            "not create or support a claim from prior context alone, and do not "
+            "attach a prior-context fact to a current transcript segment. A "
+            "fact from a prior visit may appear only when it is restated in the "
+            "current transcript, cited to the current segment that restates it. "
+            "Otherwise omit it.\n"
+            f"{prior_context_text}\n\n"
+        )
     # Encounter context — clinician-provided framing for THIS encounter (e.g.
     # "breast augmentation consult; patient also raised liposuction"). It tells
     # the model which topics/sections to focus on so an under-narrated or
@@ -300,6 +320,58 @@ def build_user_prompt(
     # following sections read cleanly; empty/None contributes nothing.
     specialty_block = f"{specialty_prefix.rstrip()}\n\n" if specialty_prefix else ""
     completeness_directive = _completeness_directive(template)
+    if compact_stage1 and completeness_directive == _DIRECTIVE_DETAILED:
+        # Stage 1's compact Anthropic wire contract removes repeated metadata
+        # (claim ids, source quotes, source types) that the server can derive
+        # exactly.  It must NOT make the clinical note itself thin.  Grouping
+        # closely-related facts that share the same source anchor preserves
+        # every finding while avoiding one large JSON object per sentence.
+        completeness_directive = (
+            "Capture EVERY clinically material point in the transcript: each "
+            "history detail, exam finding, discussed option, risk, medication, "
+            "instruction, cost, and next step. Within the same section, combine "
+            "closely related facts that are supported by the same source segment "
+            "or same set of source segments into one claim. Never omit a finding, "
+            "laterality, test result, dose, cost, risk, or plan item for brevity."
+        )
+
+    if compact_stage1:
+        return f"""Generate a Stage {stage} clinical note for specialty: {template.key}
+{language_instruction}
+{specialty_block}Template sections (generate each):
+{sections_spec}
+
+{context_block}{participants_block}{prior_block}Transcript segments:
+{segments_text}
+
+{completeness_directive}
+
+COMPACT STAGE 1 RESPONSE CONTRACT:
+- The worked examples above teach clinical content, section placement, and attribution style only. Emit the compact JSON shape below, not their verbose wire shape.
+- Return every listed template section in template order.
+- A claim contains only its finished clinical text and the exact transcript segment ID(s) that support it.
+- Every source_ids value MUST exactly match an ID shown in Transcript segments. Never invent an ID and never cite encounter context or prior-context prose as a source.
+- Use one source ID for a descriptive claim. ONLY when the active SYSTEM prompt explicitly authorizes Grounded Synthesis Mode may Assessment or Plan synthesize across findings; then include every supporting segment ID in source_ids, primary first. Otherwise do not synthesize or interpret.
+- Preserve every clinically material fact. Combine only closely related facts in the same section that share the same source anchor(s); do not merge unrelated findings.
+- Do not emit claim ids, section titles, source_type, source_quote, or additional_sources. The server derives those fields deterministically from the template and canonical transcript.
+- For Stage 1, use "pending_video" for a visual section with no transcript evidence. Use "not_captured" only when the section has no transcript evidence and does not await video.
+
+Return JSON with this exact compact schema:
+{{
+  "sections": [
+    {{
+      "id": "<section_id>",
+      "status": "populated" | "pending_video" | "not_captured",
+      "claims": [
+        {{
+          "text": "<complete clinical claim>",
+          "source_ids": ["<segment_id>"]
+        }}
+      ]
+    }}
+  ]
+}}"""
+
     return f"""Generate a Stage {stage} clinical note for specialty: {template.key}
 {language_instruction}
 {specialty_block}Template sections (generate each):
@@ -358,6 +430,7 @@ def parse_note_response(
     text = strip_markdown_fences(content)
     raw = json.loads(text)
     sections: list[NoteSection] = []
+    canonical_quotes = {segment.id: segment.text for segment in transcript.segments}
 
     raw_sections = raw.get("sections", []) if isinstance(raw, dict) else []
     for raw_section in raw_sections:
@@ -373,28 +446,65 @@ def parse_note_response(
                 type(raw_section).__name__,
             )
             continue
-        claims = [
-            NoteClaim(
-                id=c.get("id", f"claim_{raw_section.get('id', 'section')}_{i}"),
-                text=c.get("text", ""),
-                source_type=c.get("source_type", "transcript"),
-                source_id=c.get("source_id", ""),
-                source_quote=c.get("source_quote", ""),
-                # GS-6: extra anchors for a synthesized claim. Tolerant of
-                # missing/empty entries (a model that omits source_id in an
-                # extra anchor shouldn't crash parsing — drop those).
-                additional_sources=[
-                    {
-                        "source_id": s.get("source_id", ""),
-                        "source_quote": s.get("source_quote", ""),
-                    }
-                    for s in c.get("additional_sources", [])
-                    if isinstance(s, dict) and s.get("source_id")
-                ],
+        claims: list[NoteClaim] = []
+        for i, claim_payload in enumerate(raw_section.get("claims", [])):
+            if not isinstance(claim_payload, dict):
+                continue
+
+            # The full provider wire contract lets the model emit ids + quotes,
+            # but the model is never the provenance authority.  This parser has
+            # exactly one authorized source catalog: the Transcript supplied to
+            # the provider call (a real encounter transcript, or Fusion B's
+            # server-built visual pseudo-transcript).  Resolve every declared
+            # anchor against that catalog and replace every quote with the
+            # canonical server-side text.  If even one anchor is malformed or
+            # unknown, reject the whole claim: a synthesized conclusion may
+            # depend on the missing source, so retaining a valid subset would
+            # create false grounding.
+            primary_source_id = claim_payload.get("source_id")
+            primary_valid = (
+                isinstance(primary_source_id, str)
+                and bool(primary_source_id.strip())
+                and primary_source_id in canonical_quotes
             )
-            for i, c in enumerate(raw_section.get("claims", []))
-            if isinstance(c, dict)  # skip a claim the model returned as a string
-        ]
+            raw_additional = claim_payload.get("additional_sources", [])
+            additional_valid = isinstance(raw_additional, list) and all(
+                isinstance(source, dict)
+                and isinstance(source.get("source_id"), str)
+                and bool(source["source_id"].strip())
+                and source["source_id"] in canonical_quotes
+                for source in raw_additional
+            )
+            if not primary_valid or not additional_valid:
+                logger.warning(
+                    "Dropping note claim with unresolved canonical source "
+                    "(stage=%d provider=%s section=%s primary_valid=%s "
+                    "additional_valid=%s)",
+                    stage,
+                    provider_name,
+                    raw_section.get("id", ""),
+                    primary_valid,
+                    additional_valid,
+                )
+                continue
+            claims.append(
+                NoteClaim(
+                    id=claim_payload.get(
+                        "id", f"claim_{raw_section.get('id', 'section')}_{i}"
+                    ),
+                    text=claim_payload.get("text", ""),
+                    source_type=claim_payload.get("source_type", "transcript"),
+                    source_id=primary_source_id,
+                    source_quote=canonical_quotes[primary_source_id],
+                    additional_sources=[
+                        {
+                            "source_id": source["source_id"],
+                            "source_quote": canonical_quotes[source["source_id"]],
+                        }
+                        for source in raw_additional
+                    ],
+                )
+            )
         sections.append(
             NoteSection(
                 id=raw_section.get("id", ""),
@@ -410,9 +520,7 @@ def parse_note_response(
     backfilled = 0
     for ts in template.sections:
         if ts.id not in existing_ids:
-            sections.append(
-                NoteSection(id=ts.id, title=ts.title, status="not_captured", claims=[])
-            )
+            sections.append(NoteSection(id=ts.id, title=ts.title, status="not_captured", claims=[]))
             backfilled += 1
 
     # Surface silent degradations (#280). A model response that omits
@@ -422,8 +530,7 @@ def parse_note_response(
     if backfilled:
         out_of_template = model_section_ids - {ts.id for ts in template.sections}
         logger.warning(
-            "note parse backfilled %d/%d template section(s) "
-            "(stage=%d provider=%s template=%s out_of_template_ids=%d)",
+            "note parse backfilled %d/%d template section(s) (stage=%d provider=%s template=%s out_of_template_ids=%d)",
             backfilled,
             len(template.sections),
             stage,
@@ -435,16 +542,17 @@ def parse_note_response(
     # Calculate completeness score
     required = [s for s in template.sections if s.required]
     populated = [
-        s for s in sections
-        if s.status == "populated" and len(s.claims) > 0
+        s
+        for s in sections
+        if s.status == "populated"
+        and len(s.claims) > 0
         and any(ts.id == s.id and ts.required for ts in template.sections)
     ]
     completeness = len(populated) / len(required) if required else 0.0
 
     if required and not populated:
         logger.warning(
-            "note parse produced 0 populated required sections "
-            "(stage=%d provider=%s template=%s) — empty note",
+            "note parse produced 0 populated required sections (stage=%d provider=%s template=%s) — empty note",
             stage,
             provider_name,
             template.key,

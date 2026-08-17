@@ -73,8 +73,9 @@ def test_critique_flags_fabricated_additional_source():
         )
     ])
     prompt = _build_critique_prompt(note, _transcript())
-    assert "valid=True" in prompt          # primary is real
-    assert "extra_valid=False" in prompt   # but the extra is fabricated
+    assert "valid=True" in prompt  # primary is real
+    assert '"source_id": "seg_404", "valid": false' in prompt
+    assert '"source_quote": ""' in prompt
 
 
 def test_fully_grounded_multi_anchor_is_valid():
@@ -90,7 +91,8 @@ def test_fully_grounded_multi_anchor_is_valid():
     ])
     prompt = _build_critique_prompt(note, _transcript())
     assert "src=seg_001 valid=True" in prompt
-    assert "extra_valid=True" in prompt
+    assert '"source_id": "seg_002", "valid": true' in prompt
+    assert '"source_quote": "MRI shows ACL tear."' in prompt
 
 
 def test_apply_actions_drops_unanchored_claim():

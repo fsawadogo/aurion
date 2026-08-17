@@ -1,10 +1,8 @@
 """Vision API routes — Stage 2 frame processing.
 
-POST /api/v1/vision/{session_id} — process frames for a session.
-
-The route is also called internally from /notes/{id}/approve-stage1 via
-`run_stage2_vision`, so iOS doesn't need to invoke it explicitly. The two
-entry points share the same pipeline body.
+Stage 2 is owned by the approve-Stage-1 or video-import job. The legacy direct
+route remains as an explicit conflict response so older clients cannot start an
+untracked duplicate run.
 """
 
 from __future__ import annotations
@@ -13,7 +11,7 @@ import logging
 import uuid
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,10 +20,10 @@ from app.api.v1._helpers import get_owned_session_or_404, require_state, write_a
 from app.core.audit_events import AuditEventType
 from app.core.database import get_db
 from app.core.models import SessionModel, TranscriptModel
-from app.core.types import Note, SessionState, Template, Transcript
+from app.core.types import MaskedClip, MaskedFrame, Note, SessionState, Template, Transcript
 from app.modules.auth.service import CurrentUser, get_current_user
 from app.modules.config.appconfig_client import get_config
-from app.modules.config.schema import VisualEvidenceMode
+from app.modules.config.schema import PipelineConfig, VisualEvidenceMode
 from app.modules.note_gen.service import (
     create_note_version,
     get_latest_note,
@@ -37,11 +35,13 @@ from app.modules.vision.reconcile import reconcile_captions
 from app.modules.vision.service import (
     caption_visual_evidence,
     classify_conflicts,  # noqa: F401 — kept for backward-compat; new code uses reconcile_captions
-    has_unresolved_conflicts,
+    has_unresolved_conflicts,  # noqa: F401 — retained for legacy route test doubles
     merge_visual_citations,
     resolve_evidence_mode,
+    resolve_vision_provider_overrides,
     retrieve_all_masked_frames,
     retrieve_clips_for_triggers,
+    select_visual_evidence,
 )
 
 logger = logging.getLogger("aurion.api.vision")
@@ -73,6 +73,33 @@ class VisionProcessingResponse(BaseModel):
     captions: list[FrameCaptionResponse]
 
 
+async def write_stage2_completion_audit(
+    session_id: uuid.UUID,
+    result: VisionProcessingResponse,
+) -> None:
+    """Write the terminal audit only after the owner commits job + note state.
+
+    ``run_stage2_vision`` is executed inside a cancellable hard deadline. A
+    completion event emitted from inside that deadline can outlive a rolled
+    back note and permanently contradict the later failure event. Owners call
+    this helper after ``mark_completed`` commits the durable transaction.
+    """
+
+    fields: dict[str, object] = {
+        "frames_processed": result.frames_processed,
+        "frames_discarded": result.frames_discarded,
+        "enriches": result.enriches_count,
+        "repeats": result.repeats_count,
+        "conflicts": result.conflicts_count,
+        "unresolved_conflicts": any(
+            caption.conflict_flag for caption in result.captions
+        ),
+    }
+    if result.frames_processed == 0 and not result.captions:
+        fields["reason"] = "no_visual_evidence"
+    await write_audit(session_id, AuditEventType.STAGE2_COMPLETE, **fields)
+
+
 async def run_stage2_vision(
     session_id: uuid.UUID,
     db: AsyncSession,
@@ -87,13 +114,11 @@ async def run_stage2_vision(
       5. Merge captions into a new Stage 2 note version
       6. Write audit events
 
-    Returns a per-call summary. Called from both the public route and from
-    /notes/{id}/approve-stage1 so the wiring is identical in both paths.
+    Returns a per-call summary. Called only by the durable approve-Stage-1 and
+    video-import owners; the legacy public runner is intentionally disabled.
     """
     # 1. Transcript
-    result = await db.execute(
-        select(TranscriptModel).where(TranscriptModel.session_id == session_id)
-    )
+    result = await db.execute(select(TranscriptModel).where(TranscriptModel.session_id == session_id))
     row = result.scalar_one_or_none()
     if row is None:
         # No transcript persisted — likely no audio was uploaded. Vision can't
@@ -102,8 +127,11 @@ async def run_stage2_vision(
         await write_audit(session_id, AuditEventType.STAGE2_SKIPPED, reason="no_transcript")
         return VisionProcessingResponse(
             session_id=str(session_id),
-            frames_processed=0, frames_discarded=0,
-            enriches_count=0, repeats_count=0, conflicts_count=0,
+            frames_processed=0,
+            frames_discarded=0,
+            enriches_count=0,
+            repeats_count=0,
+            conflicts_count=0,
             captions=[],
         )
     transcript = Transcript.model_validate_json(row.transcript_json)
@@ -124,14 +152,12 @@ async def run_stage2_vision(
     # Stage 2 dispatch + telemetry. Frame retrieval stays unchanged so
     # frames-only sessions (the pilot default) are byte-identical to
     # the pre-PR path.
-    session_row = (
-        await db.execute(
-            select(SessionModel).where(SessionModel.id == session_id)
-        )
-    ).scalar_one_or_none()
-    evidence_mode = (
-        resolve_evidence_mode(session_row) if session_row is not None
-        else VisualEvidenceMode.FRAMES_ONLY
+    session_row = (await db.execute(select(SessionModel).where(SessionModel.id == session_id))).scalar_one_or_none()
+    evidence_mode = resolve_evidence_mode(session_row) if session_row is not None else VisualEvidenceMode.FRAMES_ONLY
+    frame_provider_override, clip_provider_override = (
+        resolve_vision_provider_overrides(session_row)
+        if session_row is not None
+        else (None, None)
     )
 
     # Retrieve frames and/or clips per the resolved mode. Frames use the
@@ -140,11 +166,7 @@ async def run_stage2_vision(
     # on server import), and re-filtering by trigger at retrieval time both is
     # redundant for trigger sessions (S3 holds only trigger frames → identical
     # set) and drops cadence frames for a SILENT exam (zero spoken triggers).
-    frames = (
-        await retrieve_all_masked_frames(str(session_id))
-        if evidence_mode != VisualEvidenceMode.CLIPS_ONLY
-        else []
-    )
+    frames = await retrieve_all_masked_frames(str(session_id)) if evidence_mode != VisualEvidenceMode.CLIPS_ONLY else []
     clips = (
         await retrieve_clips_for_triggers(str(session_id), trigger_segments)
         if evidence_mode != VisualEvidenceMode.FRAMES_ONLY
@@ -152,20 +174,47 @@ async def run_stage2_vision(
     )
     evidence_items = [*frames, *clips]
 
+    # Stage 2 has a model-call budget independent of preprocessing. Keep the
+    # clinically aimed trigger evidence plus timeline-spanning cadence evidence,
+    # but do not send every near-duplicate frame to a quota-limited provider.
+    pipeline_defaults = PipelineConfig()
+    pipeline_config = getattr(get_config(), "pipeline", pipeline_defaults)
+    unbounded_evidence_count = len(evidence_items)
+    evidence_items = select_visual_evidence(
+        evidence_items,
+        trigger_segments,
+        max_items=getattr(
+            pipeline_config,
+            "vision_max_evidence_items",
+            pipeline_defaults.vision_max_evidence_items,
+        ),
+        trigger_fraction=getattr(
+            pipeline_config,
+            "vision_trigger_evidence_fraction",
+            pipeline_defaults.vision_trigger_evidence_fraction,
+        ),
+    )
+    if len(evidence_items) < unbounded_evidence_count:
+        logger.info(
+            "Stage 2 evidence budget applied: session=%s retrieved=%d selected=%d",
+            session_id,
+            unbounded_evidence_count,
+            len(evidence_items),
+        )
+    selected_frame_count = sum(isinstance(item, MaskedFrame) for item in evidence_items)
+    selected_clip_count = sum(isinstance(item, MaskedClip) for item in evidence_items)
+
     # Nothing to caption — a truly silent session with no stored frames and no
     # cadence clips. Fast-skip (replaces the old no-trigger short-circuit, which
     # keyed off triggers and so wrongly skipped cadence frames).
     if not evidence_items:
-        await write_audit(
-            session_id,
-            AuditEventType.STAGE2_COMPLETE,
-            frames=0, conflicts=0,
-            reason="no_visual_evidence",
-        )
         return VisionProcessingResponse(
             session_id=str(session_id),
-            frames_processed=0, frames_discarded=0,
-            enriches_count=0, repeats_count=0, conflicts_count=0,
+            frames_processed=0,
+            frames_discarded=0,
+            enriches_count=0,
+            repeats_count=0,
+            conflicts_count=0,
             captions=[],
         )
 
@@ -181,16 +230,8 @@ async def run_stage2_vision(
     # entries — the physician can customise them independently. We
     # resolve both so the dispatch loop never re-asks the DB.
     clinician_id = session_row.clinician_id if session_row is not None else None
-    frame_system_prompt = (
-        await assemble_prompt("vision_frame", clinician_id, db)
-        if clinician_id is not None
-        else None
-    )
-    clip_system_prompt = (
-        await assemble_prompt("vision_clip", clinician_id, db)
-        if clinician_id is not None
-        else None
-    )
+    frame_system_prompt = await assemble_prompt("vision_frame", clinician_id, db) if clinician_id is not None else None
+    clip_system_prompt = await assemble_prompt("vision_clip", clinician_id, db) if clinician_id is not None else None
     # TE-3: the template + note let captioning aim at the section each frame
     # will feed, instead of describing generically. Resolved from the session's
     # stored PIN so Stage 2 uses the SAME template Stage 1 did.
@@ -215,32 +256,33 @@ async def run_stage2_vision(
         except Exception:
             # PHI-safe: session id only, no template content.
             logger.warning(
-                "Template resolution failed for session=%s; captioning with "
-                "the base prompt", session_id, exc_info=True,
+                "Template resolution failed for session=%s; captioning with the base prompt",
+                session_id,
+                exc_info=True,
             )
             template_for_capture = None
 
     # Grounded visual findings — resolve ONCE per run (same one-snapshot
-    # discipline as template_engine above): the flag lets the vision layer
-    # state cited clinical findings instead of literal descriptions. Reading
-    # it per frame could mix grounded and descriptive captions in one note.
-    grounded_visual = get_config().feature_flags.grounded_visual_findings_enabled
+    # discipline as template_engine above). The visual sub-flag may only
+    # narrow the governing Grounded Synthesis mode; it cannot authorize
+    # interpretive findings while that sanctioned mode is disabled.
+    feature_flags = get_config().feature_flags
+    grounded_visual = (
+        feature_flags.grounded_synthesis_enabled
+        and feature_flags.grounded_visual_findings_enabled
+    )
 
     # Standalone-visual: resolve ONCE per run (same one-snapshot discipline).
     # When the audio note is the minimal empty note (provider "none"), the video
     # carries the note — frames get synthesized silent anchors so a silent EXAM
     # (frames, no clips) is captioned instead of dropped, and the note is built
     # from the captions directly rather than merged into an anchorless note.
-    standalone_visual = (
-        get_config().feature_flags.visual_evidence_standalone_enabled
-    )
+    standalone_visual = feature_flags.visual_evidence_standalone_enabled
     # The video carries the note when the AUDIO produced nothing usable: the
     # minimal empty note (provider "none"), OR a sparse-audio note that came back
     # with zero claims in every section (merging into it can't flip a
     # not_captured section to populated, so the exam findings would be lost).
-    audio_note_empty = note.provider_used == "none" or all(
-        not s.claims for s in note.sections
-    )
+    audio_note_empty = note.provider_used == "none" or all(not s.claims for s in note.sections)
     visual_only_note = standalone_visual and audio_note_empty
 
     clip_telemetry: list[ClipTelemetry] = []
@@ -256,6 +298,8 @@ async def run_stage2_vision(
         template=template_for_capture,
         note=note,
         grounded=grounded_visual,
+        frame_provider_override=frame_provider_override,
+        clip_provider_override=clip_provider_override,
         # Silent EXAM (frames, empty transcript): give frames the same
         # synthesized silent anchor clips already get, so they're captioned.
         synthesize_frame_anchors=visual_only_note,
@@ -274,9 +318,7 @@ async def run_stage2_vision(
     # (replacement) or registry default for the calling clinician.
     # Same DB session, same clinician_id — cheap lookup, single SELECT.
     reconcile_system_prompt = (
-        await assemble_prompt("conflict_reconciliation", clinician_id, db)
-        if clinician_id is not None
-        else None
+        await assemble_prompt("conflict_reconciliation", clinician_id, db) if clinician_id is not None else None
     )
     captions = await reconcile_captions(
         captions_filtered,
@@ -313,9 +355,7 @@ async def run_stage2_vision(
             evidence_items,
             note_template,
             grounded=grounded_visual,
-            output_language=(
-                session_row.output_language if session_row is not None else "en"
-            ),
+            output_language=(session_row.output_language if session_row is not None else "en"),
             captions=captions,
         )
         if video_note is not None:
@@ -323,9 +363,7 @@ async def run_stage2_vision(
             video_note.stage = 2
             video_note.specialty = note.specialty
             enriched = video_note
-            await create_note_version(
-                str(session_id), enriched, db, stats_trigger="visual_only_note"
-            )
+            await create_note_version(str(session_id), enriched, db, stats_trigger="visual_only_note")
         else:
             # Video produced no usable captions — keep the honest empty note.
             enriched = note
@@ -344,24 +382,11 @@ async def run_stage2_vision(
         )
         enriched.session_id = str(session_id)
         enriched.stage = 2
-        await create_note_version(
-            str(session_id), enriched, db, stats_trigger="vision_merge"
-        )
+        await create_note_version(str(session_id), enriched, db, stats_trigger="vision_merge")
 
     enriches = sum(1 for c in captions if c.integration_status == "ENRICHES")
     repeats = sum(1 for c in captions if c.integration_status == "REPEATS")
     conflicts = sum(1 for c in captions if c.integration_status == "CONFLICTS")
-
-    await write_audit(
-        session_id,
-        AuditEventType.STAGE2_COMPLETE,
-        frames_processed=len(frames),
-        frames_discarded=discarded,
-        enriches=enriches,
-        repeats=repeats,
-        conflicts=conflicts,
-        unresolved_conflicts=has_unresolved_conflicts(captions),
-    )
 
     # P1-FU-METRICS: persist per-session clip cost/latency/byte
     # aggregates to pilot_metrics. No-op when no clips were processed
@@ -371,12 +396,16 @@ async def run_stage2_vision(
 
     logger.info(
         "Stage 2 complete: session=%s frames=%d clips=%d enriches=%d conflicts=%d",
-        session_id, len(frames), len(clips), enriches, conflicts,
+        session_id,
+        selected_frame_count,
+        selected_clip_count,
+        enriches,
+        conflicts,
     )
 
     return VisionProcessingResponse(
         session_id=str(session_id),
-        frames_processed=len(frames),
+        frames_processed=selected_frame_count,
         frames_discarded=discarded,
         enriches_count=enriches,
         repeats_count=repeats,
@@ -406,7 +435,19 @@ async def process_vision_frames(
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    """Process masked frames for a session through the vision pipeline."""
+    """Retired direct runner; Stage 2 must be owned by a durable job.
+
+    The approve-Stage-1 and video-import owners create the job, enforce the
+    deadline, and commit the terminal state. Running the pipeline directly here
+    could race that owner or create a note with no job row, permanently
+    blocking final approval.
+    """
     session = await get_owned_session_or_404(db, session_id, user)
     require_state(session, SessionState.PROCESSING_STAGE2)
-    return await run_stage2_vision(session_id, db)
+    raise HTTPException(
+        status_code=status.HTTP_409_CONFLICT,
+        detail=(
+            "Stage 2 is managed by the approve-Stage-1 workflow; "
+            "direct processing is disabled."
+        ),
+    )

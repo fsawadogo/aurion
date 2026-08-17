@@ -85,6 +85,7 @@ _VISION_FALLBACK_ORDER: list[VisionProviderKey] = [
 
 # ── Registry ───────────────────────────────────────────────────────────────
 
+
 class ProviderRegistry:
     """Maps AppConfig provider keys to implementations.
 
@@ -92,18 +93,14 @@ class ProviderRegistry:
     without restart.
     """
 
-    def get_transcription_provider(
-        self, override: Optional[str] = None
-    ) -> TranscriptionProvider:
+    def get_transcription_provider(self, override: Optional[str] = None) -> TranscriptionProvider:
         config = get_config()
         # Precedence: per-call override > DB override store > AppConfig.
         if override:
             key = TranscriptionProviderKey(override)
         elif (store := get_override("transcription")) is not None:
             key = TranscriptionProviderKey(store)
-            logger.info(
-                "transcription provider overridden via admin store: %s", key.value
-            )
+            logger.info("transcription provider overridden via admin store: %s", key.value)
         else:
             key = config.providers.transcription
         cls = _TRANSCRIPTION_PROVIDERS.get(key)
@@ -112,18 +109,14 @@ class ProviderRegistry:
         logger.info("Resolved transcription provider: %s", key.value)
         return cls()
 
-    def get_note_provider(
-        self, override: Optional[str] = None
-    ) -> NoteGenerationProvider:
+    def get_note_provider(self, override: Optional[str] = None) -> NoteGenerationProvider:
         config = get_config()
         # Precedence: per-call override > DB override store > AppConfig.
         if override:
             key = NoteGenerationProviderKey(override)
         elif (store := get_override("note_generation")) is not None:
             key = NoteGenerationProviderKey(store)
-            logger.info(
-                "note_generation provider overridden via admin store: %s", key.value
-            )
+            logger.info("note_generation provider overridden via admin store: %s", key.value)
         else:
             key = config.providers.note_generation
         cls = _NOTE_GEN_PROVIDERS.get(key)
@@ -132,18 +125,14 @@ class ProviderRegistry:
         logger.info("Resolved note generation provider: %s", key.value)
         return cls()
 
-    def get_vision_provider(
-        self, override: Optional[str] = None
-    ) -> VisionProvider:
+    def get_vision_provider(self, override: Optional[str] = None) -> VisionProvider:
         config = get_config()
         # Precedence: per-call override > DB override store > AppConfig.
         if override:
             key = VisionProviderKey(override)
         elif (store := get_override("vision")) is not None:
             key = VisionProviderKey(store)
-            logger.info(
-                "vision provider overridden via admin store: %s", key.value
-            )
+            logger.info("vision provider overridden via admin store: %s", key.value)
         else:
             key = config.providers.vision
         cls = _VISION_PROVIDERS.get(key)
@@ -180,19 +169,14 @@ class ProviderRegistry:
         raise ProviderError("note_generation", "All note generation providers unavailable")
 
     def get_vision_provider_with_fallback(self) -> VisionProvider:
-        """Try the configured provider first, then fall back through the ordered list."""
-        config = get_config()
-        primary = config.providers.vision
-        order = [primary] + [k for k in _VISION_FALLBACK_ORDER if k != primary]
+        """Return the first provider in the ordered frame-provider chain.
 
-        for key in order:
-            cls = _VISION_PROVIDERS.get(key)
-            if cls:
-                if key != primary:
-                    logger.warning("Falling back to vision provider: %s", key.value)
-                return cls()
-
-        raise ProviderError("vision", "All vision providers unavailable")
+        Kept for backward compatibility with frame-only call sites. Runtime
+        fallback belongs to the caller: use
+        :meth:`get_vision_provider_chain_for_kind` when provider errors need to
+        advance to the next distinct implementation.
+        """
+        return self.get_vision_provider_chain_for_kind("frame")[0]
 
     # ── Dual-mode visual evidence (P1-3) ──────────────────────────────────
     #
@@ -210,9 +194,7 @@ class ProviderRegistry:
     # new kind to the right config attribute. The dispatch in
     # `vision/service.py` keeps a single switch on `evidence_kind`.
 
-    def get_vision_provider_for_kind(
-        self, kind: str, override: Optional[str] = None
-    ) -> VisionProvider:
+    def get_vision_provider_for_kind(self, kind: str, override: Optional[str] = None) -> VisionProvider:
         """Resolve the active vision provider for an evidence kind.
 
         `kind="frame"` reads `config.providers.vision`; `kind="clip"`
@@ -240,28 +222,30 @@ class ProviderRegistry:
                 )
             logger.info("Resolved vision_clip provider: %s", key.value)
             return cls()
-        raise ProviderError(
-            "vision_kind", f"Unknown visual evidence kind: {kind!r}"
-        )
+        raise ProviderError("vision_kind", f"Unknown visual evidence kind: {kind!r}")
 
-    def get_vision_provider_for_kind_with_fallback(self, kind: str) -> VisionProvider:
-        """Try the kind-specific primary first, then fall back through
-        the ordered list.
+    def get_vision_provider_chain_for_kind(self, kind: str, override: Optional[str] = None) -> list[VisionProvider]:
+        """Return the ordered, duplicate-free provider chain for ``kind``.
 
-        Same fallback chain as `get_vision_provider_with_fallback` for
-        either kind — OpenAI/Anthropic implement `caption_clip` via the
-        midpoint-still extraction so the chain stays evidence-kind-
-        agnostic at the abstract-method level (LSP).
+        Primary precedence is explicit per-call override, then the admin
+        override store for frame evidence, then the kind-specific AppConfig
+        value. Clip evidence intentionally has no admin-store key today and
+        therefore resolves from ``providers.vision_clip`` when no explicit
+        override is supplied.
+
+        Returning the whole chain lets callers advance after a provider error
+        without resolving the same configured primary again. OpenAI and
+        Anthropic implement ``caption_clip`` through midpoint-still
+        degradation, so this chain is valid for both evidence kinds.
         """
         config = get_config()
-        if kind == "clip":
+        if kind not in {"frame", "clip"}:
+            raise ProviderError("vision_kind", f"Unknown visual evidence kind: {kind!r}")
+        if override:
+            primary = VisionProviderKey(override)
+        elif kind == "clip":
             primary = config.providers.vision_clip
-        elif kind == "frame":
-            # The admin Providers page writes the runtime override store. The
-            # doctor Stage 2 path resolves through this fallback method, so it
-            # must honor the same precedence as get_vision_provider(); without
-            # this, the UI could show Gemini while production frames still ran
-            # through the AppConfig default.
+        else:
             if (store := get_override("vision")) is not None:
                 primary = VisionProviderKey(store)
                 logger.info(
@@ -270,22 +254,26 @@ class ProviderRegistry:
                 )
             else:
                 primary = config.providers.vision
-        else:
-            raise ProviderError(
-                "vision_kind", f"Unknown visual evidence kind: {kind!r}"
-            )
 
-        order = [primary] + [k for k in _VISION_FALLBACK_ORDER if k != primary]
+        order = list(dict.fromkeys([primary, *_VISION_FALLBACK_ORDER]))
+        providers: list[VisionProvider] = []
         for key in order:
-            cls = _VISION_PROVIDERS.get(key)
-            if cls:
-                if key != primary:
-                    logger.warning(
-                        "Falling back to vision provider (kind=%s): %s",
-                        kind, key.value,
-                    )
-                return cls()
-        raise ProviderError("vision", "All vision providers unavailable")
+            provider_class = _VISION_PROVIDERS.get(key)
+            if provider_class is not None:
+                providers.append(provider_class())
+        if not providers:
+            raise ProviderError("vision", "All vision providers unavailable")
+        return providers
+
+    def get_vision_provider_for_kind_with_fallback(self, kind: str, override: Optional[str] = None) -> VisionProvider:
+        """Return the first provider from the kind-specific ordered chain.
+
+        Same fallback chain as `get_vision_provider_with_fallback` for
+        either kind — OpenAI/Anthropic implement `caption_clip` via the
+        midpoint-still extraction so the chain stays evidence-kind-
+        agnostic at the abstract-method level (LSP).
+        """
+        return self.get_vision_provider_chain_for_kind(kind, override=override)[0]
 
 
 # ── Module-level singleton ─────────────────────────────────────────────────

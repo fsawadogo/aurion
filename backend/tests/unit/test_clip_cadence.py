@@ -20,6 +20,7 @@ This suite locks each of those behaviors.
 
 from __future__ import annotations
 
+import json
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -29,6 +30,7 @@ from app.core.types import (
     ClipMaskingMetadata,
     FrameCaption,
     MaskedClip,
+    MaskedFrame,
     Note,
     NoteSection,
     Transcript,
@@ -52,6 +54,16 @@ def _clip(s3_key: str, *, timestamp_ms: int = 0) -> MaskedClip:
         masking_metadata=ClipMaskingMetadata(
             frames_total=210, frames_with_faces=210, faces_blurred=210
         ),
+    )
+
+
+def _frame(*, timestamp_ms: int = 14500) -> MaskedFrame:
+    return MaskedFrame(
+        frame_id=f"frame_{timestamp_ms:05d}",
+        session_id=SESSION_ID,
+        timestamp_ms=timestamp_ms,
+        s3_key=f"frames/{SESSION_ID}/{timestamp_ms}.jpg",
+        masking_confirmed=True,
     )
 
 
@@ -272,7 +284,11 @@ def _stage1_note() -> Note:
     )
 
 
-def _db_for(transcript_json: str) -> MagicMock:
+def _db_for(
+    transcript_json: str,
+    *,
+    provider_overrides: str | None = None,
+) -> MagicMock:
     """A mock AsyncSession: first execute → transcript row, second →
     session row (clinician_id None so the prompt lookups are skipped)."""
     transcript_row = MagicMock()
@@ -282,6 +298,8 @@ def _db_for(transcript_json: str) -> MagicMock:
 
     session_row = MagicMock()
     session_row.clinician_id = None
+    session_row.provider_overrides = provider_overrides
+    session_row.output_language = "en"
     session_result = MagicMock()
     session_result.scalar_one_or_none.return_value = session_row
 
@@ -331,9 +349,10 @@ async def test_silent_exam_clips_only_runs_stage2() -> None:
 async def test_silent_exam_frames_only_with_no_stored_frames_short_circuits() -> None:
     """FRAMES_ONLY + zero triggers + NO stored frames still fast-skips. The skip
     now keys off "no evidence" (post-cadence), not "no triggers": if the S3
-    prefix is empty, Stage 2 completes with reason=no_visual_evidence and never
-    captions. (When cadence HAS stored frames, retrieval returns them and Stage
-    2 proceeds — covered by the retrieve_all_masked_frames path.)"""
+    prefix is empty, Stage 2 returns an empty result and never captions. The
+    durable owner writes the terminal audit only after committing the job.
+    (When cadence HAS stored frames, retrieval returns them and Stage 2
+    proceeds — covered by the retrieve_all_masked_frames path.)"""
     db = _db_for(_transcript_json(with_trigger=False))
     session_uuid = uuid.UUID(SESSION_ID)
 
@@ -354,8 +373,62 @@ async def test_silent_exam_frames_only_with_no_stored_frames_short_circuits() ->
     # No evidence → skip: clips not retrieved (FRAMES_ONLY), nothing captioned.
     mock_retrieve_clips.assert_not_awaited()
     mock_caption.assert_not_awaited()
-    reasons = [
-        c.kwargs.get("reason") for c in mock_write_audit.await_args_list
-    ]
-    assert "no_visual_evidence" in reasons
+    mock_write_audit.assert_not_awaited()
     assert resp.frames_processed == 0
+
+
+async def test_doctor_hybrid_run_threads_distinct_session_provider_overrides() -> None:
+    """The real Stage-2 doctor path preserves both persisted provider pins."""
+    db = _db_for(
+        _transcript_json(with_trigger=True),
+        provider_overrides=json.dumps(
+            {
+                "vision": "openai",
+                "vision_clip": "gemini",
+                "visual_evidence_mode": "hybrid",
+            }
+        ),
+    )
+    session_uuid = uuid.UUID(SESSION_ID)
+    mock_caption = AsyncMock(return_value=[_caption()])
+
+    with (
+        patch.object(
+            vision_api,
+            "resolve_evidence_mode",
+            return_value=VisualEvidenceMode.HYBRID,
+        ),
+        patch.object(vision_api, "get_latest_note", AsyncMock(return_value=_stage1_note())),
+        patch.object(
+            vision_api,
+            "retrieve_all_masked_frames",
+            AsyncMock(return_value=[_frame()]),
+        ),
+        patch.object(
+            vision_api,
+            "retrieve_clips_for_triggers",
+            AsyncMock(
+                return_value=[
+                    _clip(
+                        f"clips/{SESSION_ID}/000014500_x.mp4",
+                        timestamp_ms=14500,
+                    )
+                ]
+            ),
+        ),
+        patch.object(vision_api, "caption_visual_evidence", mock_caption),
+        patch.object(
+            vision_api,
+            "reconcile_captions",
+            AsyncMock(side_effect=lambda caps, note, **_kwargs: caps),
+        ),
+        patch.object(vision_api, "create_note_version", AsyncMock()),
+        patch.object(vision_api, "record_clip_metrics", AsyncMock()),
+        patch.object(vision_api, "write_audit", AsyncMock()),
+    ):
+        response = await vision_api.run_stage2_vision(session_uuid, db)
+
+    mock_caption.assert_awaited_once()
+    assert mock_caption.await_args.kwargs["frame_provider_override"] == "openai"
+    assert mock_caption.await_args.kwargs["clip_provider_override"] == "gemini"
+    assert response.frames_processed == 1

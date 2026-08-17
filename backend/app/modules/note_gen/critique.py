@@ -12,14 +12,13 @@ model to review its own work for the most common mistakes:
     (missed content — flagged but NOT auto-corrected; physician decides).
 
 Best-effort: any failure (no API key, HTTP error, malformed response)
-logs a warning and returns the original note unchanged. Stage 1 SLA
-(<30s) is preserved because the critique runs in series after generation
-but typically completes in <2s for small notes (the critique payload
-is the note itself plus a transcript reference, no rebuild).
+logs a warning and returns the original note unchanged. A config-driven hard
+timeout protects the Stage 1 SLA even if this optional serial pass stalls.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
@@ -31,6 +30,8 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.types import Note, Transcript
+from app.modules.config.appconfig_client import get_config
+from app.modules.config.schema import NoteGenerationModelParams
 
 logger = logging.getLogger("aurion.note_gen.critique")
 
@@ -87,6 +88,7 @@ def _build_critique_prompt(note: Note, transcript: Transcript) -> str:
     """Render the note + transcript-segment-id list so the critic can
     verify each claim's source_id maps to a real segment."""
     valid_segment_ids = {s.id for s in transcript.segments}
+    canonical_quotes = {s.id: s.text for s in transcript.segments}
     note_dump: list[str] = []
     for section in note.sections:
         note_dump.append(
@@ -96,20 +98,36 @@ def _build_critique_prompt(note: Note, transcript: Transcript) -> str:
             note_dump.append("  (no claims)")
         for claim in section.claims:
             anchor_ok = claim.source_id in valid_segment_ids
+            primary_quote = canonical_quotes.get(
+                claim.source_id,
+                claim.source_quote or "",
+            )
             meta = f"src={claim.source_id} valid={anchor_ok}"
             # GS-8 (#552): a SYNTHESIZED claim may cite extra anchors
             # (additional_sources). Surface them + their validity so the critic
             # drops a claim whose extra anchor is fabricated (not a real
             # segment) — grounding must hold for EVERY cited source, not just
             # the primary.
-            extra_ids = [s.source_id for s in claim.additional_sources]
-            if extra_ids:
-                extras_ok = all(sid in valid_segment_ids for sid in extra_ids)
-                meta += f" extra_srcs={extra_ids} extra_valid={extras_ok}"
+            extra_sources = [
+                {
+                    "source_id": source.source_id,
+                    "valid": source.source_id in valid_segment_ids,
+                    # Never trust a model-supplied quote when the canonical
+                    # transcript segment is available. Unknown IDs have no
+                    # canonical quote and remain visibly invalid.
+                    "source_quote": canonical_quotes.get(source.source_id, ""),
+                }
+                for source in claim.additional_sources
+            ]
+            if extra_sources:
+                meta += (
+                    " additional_sources="
+                    + json.dumps(extra_sources, ensure_ascii=False)
+                )
             note_dump.append(
                 f"  - {claim.id} [{meta}]: "
                 f'"{claim.text}"  '
-                f'(source_quote: "{claim.source_quote or ""}")'
+                f'(source_quote: "{primary_quote}")'
             )
     return (
         f"Valid transcript segment IDs: {sorted(valid_segment_ids)}\n\n"
@@ -145,40 +163,55 @@ async def critique_note(
     user_prompt = _build_critique_prompt(note, transcript)
 
     _started = time.monotonic()
+    model_params = getattr(get_config(), "model_params", None)
+    note_params = getattr(
+        model_params,
+        "note_generation",
+        NoteGenerationModelParams(),
+    )
+    timeout_seconds = getattr(
+        note_params,
+        "stage1_critique_timeout_seconds",
+        NoteGenerationModelParams().stage1_critique_timeout_seconds,
+    )
     try:
-        async with httpx.AsyncClient(timeout=60.0) as client:
-            response = await client.post(
-                _ENDPOINT,
-                headers={
-                    "x-api-key": _ANTHROPIC_API_KEY,
-                    "anthropic-version": "2023-06-01",
-                    "Content-Type": "application/json",
-                },
-                json={
-                    "model": _MODEL,
-                    "max_tokens": 1500,
-                    "temperature": 0.1,
-                    "system": CRITIQUE_SYSTEM_PROMPT,
-                    "messages": [{"role": "user", "content": user_prompt}],
-                    "tools": [
-                        {
-                            "name": "emit_critique",
-                            "description": (
-                                "Emit conservative cleanup actions for "
-                                "the Stage 1 note (drop unanchored claims, "
-                                "flip section statuses)."
-                            ),
-                            "input_schema": _CRITIQUE_SCHEMA,
-                        }
-                    ],
-                    "tool_choice": {
-                        "type": "tool",
-                        "name": "emit_critique",
+        # The HTTP timeout is useful per socket operation; ``asyncio.timeout``
+        # is the hard end-to-end wall that protects Stage 1 delivery even if a
+        # transport phase or telemetry await would otherwise outlive it.
+        async with asyncio.timeout(timeout_seconds):
+            async with httpx.AsyncClient(timeout=timeout_seconds) as client:
+                response = await client.post(
+                    _ENDPOINT,
+                    headers={
+                        "x-api-key": _ANTHROPIC_API_KEY,
+                        "anthropic-version": "2023-06-01",
+                        "Content-Type": "application/json",
                     },
-                },
-            )
-            response.raise_for_status()
-            data = response.json()
+                    json={
+                        "model": _MODEL,
+                        "max_tokens": 1500,
+                        "temperature": 0.1,
+                        "system": CRITIQUE_SYSTEM_PROMPT,
+                        "messages": [{"role": "user", "content": user_prompt}],
+                        "tools": [
+                            {
+                                "name": "emit_critique",
+                                "description": (
+                                    "Emit conservative cleanup actions for "
+                                    "the Stage 1 note (drop unanchored claims, "
+                                    "flip section statuses)."
+                                ),
+                                "input_schema": _CRITIQUE_SCHEMA,
+                            }
+                        ],
+                        "tool_choice": {
+                            "type": "tool",
+                            "name": "emit_critique",
+                        },
+                    },
+                )
+                response.raise_for_status()
+                data = response.json()
 
         # Telemetry: count this (registry-bypassing) second Claude call so
         # per-session token/cost is complete. Best-effort — never blocks the
@@ -245,8 +278,9 @@ def _apply_actions(note: Note, actions: list[dict]) -> int:
             if len(section.claims) < before:
                 applied += 1
                 logger.info(
-                    "critique drop_claim: section=%s claim=%s reason=%s",
-                    section_id, claim_id, action.get("reason", ""),
+                    "critique drop_claim: section=%s claim=%s",
+                    section_id,
+                    claim_id,
                 )
 
         elif kind == "set_section_status":
@@ -256,8 +290,9 @@ def _apply_actions(note: Note, actions: list[dict]) -> int:
                     section.status = new_status
                     applied += 1
                     logger.info(
-                        "critique set_section_status: section=%s -> %s reason=%s",
-                        section_id, new_status, action.get("reason", ""),
+                        "critique set_section_status: section=%s -> %s",
+                        section_id,
+                        new_status,
                     )
 
     return applied

@@ -112,11 +112,17 @@ def _note() -> Note:
     )
 
 
-def _flags(template_engine_enabled: bool):
+def _flags(
+    template_engine_enabled: bool,
+    *,
+    grounded_synthesis_enabled: bool = False,
+    grounded_visual_findings_enabled: bool = False,
+):
     return SimpleNamespace(
         feature_flags=SimpleNamespace(
             template_engine_enabled=template_engine_enabled,
-            grounded_visual_findings_enabled=False,
+            grounded_synthesis_enabled=grounded_synthesis_enabled,
+            grounded_visual_findings_enabled=grounded_visual_findings_enabled,
             # Standalone-visual is an independent lever from the template-aware
             # capture under test — off keeps the standard merge path.
             visual_evidence_standalone_enabled=False,
@@ -617,7 +623,15 @@ def test_clips_are_not_called_frames():
 # ── AC-6 / AC-7 · the route wiring ──────────────────────────────────────────
 
 
-def _stage2_harness(monkeypatch, *, session_row, flag_on, resolver):
+def _stage2_harness(
+    monkeypatch,
+    *,
+    session_row,
+    flag_on,
+    resolver,
+    grounded_synthesis_enabled=False,
+    grounded_visual_findings_enabled=False,
+):
     """Patch `run_stage2_vision`'s collaborators and capture what captioning
     was handed. Returns the dict the assertions read."""
     from app.api.v1 import vision as route
@@ -654,13 +668,22 @@ def _stage2_harness(monkeypatch, *, session_row, flag_on, resolver):
 
     async def _capture_captions(**kwargs):
         captured["template"] = kwargs.get("template")
+        captured["grounded"] = kwargs.get("grounded")
         return []
 
     async def _resolver(row, db):
         captured["resolver_calls"] += 1
         return resolver(row, db)
 
-    monkeypatch.setattr(route, "get_config", lambda: _flags(flag_on))
+    monkeypatch.setattr(
+        route,
+        "get_config",
+        lambda: _flags(
+            flag_on,
+            grounded_synthesis_enabled=grounded_synthesis_enabled,
+            grounded_visual_findings_enabled=grounded_visual_findings_enabled,
+        ),
+    )
     monkeypatch.setattr(route, "get_latest_note", lambda *_a, **_k: _async(_note()))
     monkeypatch.setattr(route, "resolve_session_template", _resolver)
     monkeypatch.setattr(route, "caption_visual_evidence", _capture_captions)
@@ -693,7 +716,6 @@ def _stage2_harness(monkeypatch, *, session_row, flag_on, resolver):
     monkeypatch.setattr(route, "create_note_version", _noop_async)
     monkeypatch.setattr(route, "write_audit", _noop_async)
     monkeypatch.setattr(route, "record_clip_metrics", _noop_async)
-    monkeypatch.setattr(route, "has_unresolved_conflicts", lambda _c: False)
 
     return captured, _DB()
 
@@ -794,6 +816,41 @@ async def test_template_resolution_failure_does_not_fail_stage2(monkeypatch):
 
 
 # ── The shared router (TE-3 refactor, reused by TE-4) ───────────────────────
+
+
+@pytest.mark.parametrize(
+    ("master_enabled", "visual_enabled", "expected"),
+    [
+        (False, True, False),
+        (True, False, False),
+        (True, True, True),
+    ],
+)
+@pytest.mark.asyncio
+async def test_grounded_visual_requires_governing_and_visual_flags(
+    monkeypatch,
+    master_enabled,
+    visual_enabled,
+    expected,
+):
+    """The visual sub-flag cannot bypass sanctioned Grounded Synthesis."""
+    import uuid
+
+    from app.api.v1.vision import run_stage2_vision
+
+    row = SimpleNamespace(clinician_id=None, provider_overrides=None)
+    captured, db = _stage2_harness(
+        monkeypatch,
+        session_row=row,
+        flag_on=False,
+        resolver=lambda *_a: _template(),
+        grounded_synthesis_enabled=master_enabled,
+        grounded_visual_findings_enabled=visual_enabled,
+    )
+
+    await run_stage2_vision(uuid.uuid4(), db)
+
+    assert captured["grounded"] is expected
 
 
 def test_find_target_section_keys_off_the_anchor_id():

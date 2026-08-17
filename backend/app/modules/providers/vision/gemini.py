@@ -16,6 +16,8 @@ import base64
 import logging
 import os
 import random
+import time
+import weakref
 from typing import Final
 
 import httpx
@@ -53,13 +55,22 @@ _LOG_KEY_PREFIX_LEN: Final[int] = 12
 # into zero findings. Bounded exponential backoff with full jitter lets a burst
 # drain instead of collapsing. 429 = rate limit, 503 = transient upstream.
 _RETRY_STATUSES: Final[frozenset[int]] = frozenset({429, 503})
-_MAX_RETRIES: Final[int] = 5
+_MAX_RETRIES: Final[int] = 2
 _BACKOFF_BASE_SECONDS: Final[float] = 1.0
 _BACKOFF_MAX_SECONDS: Final[float] = 30.0
 
-_GENERATE_CONTENT_URL: Final[str] = (
-    "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+# Shared per-event-loop request gates prevent two independent captioning runs
+# (for example Grounded Lab + a doctor session) from each consuming a separate
+# concurrency budget in the same ECS worker. Weak keys avoid retaining closed
+# test/application loops.
+_REQUEST_GATES: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, dict[int, asyncio.Semaphore]] = (
+    weakref.WeakKeyDictionary()
 )
+_TRANSIENT_CIRCUITS: weakref.WeakKeyDictionary[asyncio.AbstractEventLoop, float] = (
+    weakref.WeakKeyDictionary()
+)
+
+_GENERATE_CONTENT_URL: Final[str] = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
 
 
 def _redact(text: str) -> str:
@@ -81,9 +92,44 @@ def _retry_after_seconds(response: httpx.Response) -> float | None:
     if raw is None:
         return None
     try:
-        return max(0.0, float(raw))
+        return min(max(0.0, float(raw)), _BACKOFF_MAX_SECONDS)
     except ValueError:
         return None
+
+
+def _request_gate() -> asyncio.Semaphore:
+    """Return the process-shared Gemini gate for the current event loop."""
+
+    loop = asyncio.get_running_loop()
+    limit = get_config().pipeline.vision_gemini_max_concurrency
+    by_limit = _REQUEST_GATES.setdefault(loop, {})
+    gate = by_limit.get(limit)
+    if gate is None:
+        gate = asyncio.Semaphore(limit)
+        by_limit[limit] = gate
+    return gate
+
+
+def _open_rate_limit_circuit() -> None:
+    """Open the loop-shared fail-fast circuit after a transient failure."""
+
+    loop = asyncio.get_running_loop()
+    cooldown = get_config().pipeline.vision_gemini_circuit_breaker_seconds
+    _TRANSIENT_CIRCUITS[loop] = max(
+        _TRANSIENT_CIRCUITS.get(loop, 0.0),
+        time.monotonic() + cooldown,
+    )
+
+
+def _ensure_rate_limit_circuit_closed() -> None:
+    loop = asyncio.get_running_loop()
+    remaining = _TRANSIENT_CIRCUITS.get(loop, 0.0) - time.monotonic()
+    if remaining > 0:
+        raise ProviderError(
+            "gemini",
+            "Vision provider is temporarily unavailable after a transient "
+            f"failure; fallback required for approximately {remaining:.0f}s",
+        )
 
 
 async def _post_generate_content(
@@ -92,10 +138,11 @@ async def _post_generate_content(
     json_body: dict,
     *,
     label: str,
+    max_retries: int = _MAX_RETRIES,
 ) -> httpx.Response:
     """POST to Gemini ``generateContent`` with bounded backoff on 429/503.
 
-    Retries a rate-limited / transiently-failed call up to ``_MAX_RETRIES``
+    Retries a rate-limited / transiently-failed call up to ``max_retries``
     times, honouring a ``Retry-After`` header when the server sends one, else
     backing off 1s, 2s, 4s, … with full jitter, capped at
     ``_BACKOFF_MAX_SECONDS``. The API key is never logged (only the status and
@@ -118,19 +165,17 @@ async def _post_generate_content(
             },
             json=json_body,
         )
-        if response.status_code in _RETRY_STATUSES and attempt < _MAX_RETRIES:
+        if response.status_code in _RETRY_STATUSES and attempt < max_retries:
             delay = _retry_after_seconds(response)
             if delay is None:
-                backoff = min(
-                    _BACKOFF_BASE_SECONDS * (2**attempt), _BACKOFF_MAX_SECONDS
-                )
+                backoff = min(_BACKOFF_BASE_SECONDS * (2**attempt), _BACKOFF_MAX_SECONDS)
                 delay = random.uniform(0.0, backoff)
             logger.warning(
                 "Gemini %s rate-limited (HTTP %d); retry %d/%d in %.1fs",
                 label,
                 response.status_code,
                 attempt + 1,
-                _MAX_RETRIES,
+                max_retries,
                 delay,
             )
             await asyncio.sleep(delay)
@@ -138,6 +183,57 @@ async def _post_generate_content(
             continue
         response.raise_for_status()
         return response
+
+
+async def _guarded_post_generate_content(
+    client: httpx.AsyncClient,
+    model: str,
+    json_body: dict,
+    *,
+    label: str,
+) -> httpx.Response:
+    """Apply Gemini's shared quota gate and transient-failure circuit.
+
+    Only one unhealthy primary is allowed to consume the configured bounded
+    attempt window. Exhausted retryable responses (429/503), transport errors,
+    and the local attempt deadline open the circuit so evidence already queued
+    on the process gate immediately advances to the real provider chain.
+    Ordinary non-retryable 4xx responses still fall back for that evidence item
+    but do not poison Gemini for the rest of the run.
+
+    ``asyncio.CancelledError`` is intentionally not caught: Stage-2 owner
+    cancellation must propagate through this gate and cancel the HTTP request.
+    """
+
+    async with _request_gate():
+        _ensure_rate_limit_circuit_closed()
+        pipeline = get_config().pipeline
+        try:
+            async with asyncio.timeout(
+                pipeline.vision_gemini_primary_timeout_seconds
+            ):
+                return await _post_generate_content(
+                    client,
+                    model,
+                    json_body,
+                    label=label,
+                    max_retries=pipeline.vision_gemini_max_retries,
+                )
+        except TimeoutError as error:
+            _open_rate_limit_circuit()
+            raise ProviderError(
+                "gemini",
+                "Vision provider exceeded the bounded primary-attempt timeout; "
+                "fallback required",
+                error,
+            ) from error
+        except httpx.HTTPStatusError as error:
+            if error.response.status_code in _RETRY_STATUSES:
+                _open_rate_limit_circuit()
+            raise
+        except httpx.TransportError:
+            _open_rate_limit_circuit()
+            raise
 
 
 class GeminiVisionProvider(VisionProvider):
@@ -161,7 +257,7 @@ class GeminiVisionProvider(VisionProvider):
 
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await _post_generate_content(
+                response = await _guarded_post_generate_content(
                     client,
                     model,
                     {
@@ -177,7 +273,7 @@ class GeminiVisionProvider(VisionProvider):
                                     },
                                     {
                                         "text": (
-                                            f"Audio context at this timestamp: \"{anchor.text}\"\n"
+                                            f'Audio context at this timestamp: "{anchor.text}"\n'
                                             f"Describe what is visible in this clinical frame."
                                         ),
                                     },
@@ -263,7 +359,7 @@ class GeminiVisionProvider(VisionProvider):
 
         try:
             async with httpx.AsyncClient(timeout=120.0) as client:
-                response = await _post_generate_content(
+                response = await _guarded_post_generate_content(
                     client,
                     model,
                     {
@@ -282,7 +378,7 @@ class GeminiVisionProvider(VisionProvider):
                                     },
                                     {
                                         "text": (
-                                            f"Audio context at this timestamp: \"{anchor.text}\"\n"
+                                            f'Audio context at this timestamp: "{anchor.text}"\n'
                                             f"This is a video clip with duration {clip.duration_ms}ms. "
                                             f"Describe what is observable across the clip, including motion."
                                         ),
@@ -306,9 +402,7 @@ class GeminiVisionProvider(VisionProvider):
                 try:
                     text = data["candidates"][0]["content"]["parts"][0]["text"]
                 except (KeyError, IndexError, TypeError) as e:
-                    raise ProviderError(
-                        "gemini", f"Clip captioning failed: malformed response envelope: {e}", e
-                    ) from e
+                    raise ProviderError("gemini", f"Clip captioning failed: malformed response envelope: {e}", e) from e
                 content = parse_caption_json("gemini", text)
 
                 # Synthesise a `MaskedFrame`-shaped anchor for the caption

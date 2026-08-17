@@ -16,6 +16,8 @@ gates the frames/clips purge on the same flag.
 
 from __future__ import annotations
 
+import asyncio
+import traceback
 import uuid
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -121,8 +123,27 @@ class TestRunStage1Wiring:
         purge.assert_awaited_once_with(session.id)
 
     @pytest.mark.asyncio
-    async def test_run_stage1_does_not_purge_when_note_gen_fails(self):
+    @pytest.mark.parametrize("deadline_exceeded", [False, True])
+    async def test_run_stage1_does_not_purge_when_note_gen_fails(
+        self, deadline_exceeded: bool
+    ):
         """A failed Stage 1 raises before the purge — audio is kept for retry."""
+        phi_sentinel = "Marie Example has a private clinical finding"
+        failure = (
+            tx.Stage1DeadlineExceededError()
+            if deadline_exceeded
+            else RuntimeError(phi_sentinel)
+        )
+        expected_reason = (
+            "stage1_deadline_exceeded"
+            if deadline_exceeded
+            else "stage1_generation_failed"
+        )
+        expected_detail = (
+            "Stage 1 processing timed out."
+            if deadline_exceeded
+            else "Stage 1 note generation failed."
+        )
         transcript = _transcript()
         db = AsyncMock()
         db.add = MagicMock()  # sync in SQLAlchemy — keep it off the async path
@@ -134,22 +155,400 @@ class TestRunStage1Wiring:
             participants_json=None, template_key=None, custom_template_id=None,
             state=MagicMock(value="processing_stage1"),
         )
+        transition = AsyncMock()
+        alerts = AsyncMock()
+        audits = AsyncMock()
         with (
             patch.object(tx, "transcribe_audio", AsyncMock(return_value=transcript)),
             patch.object(tx, "classify_triggers", AsyncMock(return_value=transcript)),
             patch.object(tx, "scan_transcript_for_phi",
                          AsyncMock(return_value=MagicMock(phi_detected=False))),
             patch.object(tx, "generate_stage1_note",
-                         AsyncMock(side_effect=RuntimeError("provider blew up"))),
-            patch.object(tx, "transition_session", AsyncMock()),
-            patch.object(tx, "try_publish_alert", AsyncMock()),
-            patch.object(tx, "write_audit", AsyncMock()),
+                         AsyncMock(side_effect=failure)),
+            patch.object(tx, "transition_session", transition),
+            patch.object(tx, "try_publish_alert", alerts),
+            patch.object(tx, "write_audit", audits),
             patch.object(tx, "_purge_raw_audio_if_not_retained",
                          AsyncMock()) as purge,
         ):
-            with pytest.raises(tx.HTTPException):
+            with pytest.raises(tx.HTTPException) as caught:
                 await tx.run_stage1(db, session, b"audio-bytes")
         purge.assert_not_awaited()
+        assert caught.value.detail == expected_detail
+        assert phi_sentinel not in "".join(
+            traceback.format_exception(caught.value)
+        )
+        assert phi_sentinel not in repr(audits.await_args_list)
+        assert phi_sentinel not in repr(alerts.await_args_list)
+        failure_audit = next(
+            call
+            for call in audits.await_args_list
+            if call.args[1] == tx.AuditEventType.STAGE1_FAILED
+        )
+        assert failure_audit.kwargs["reason"] == expected_reason
+        assert alerts.await_args.kwargs["metadata"]["reason"] == expected_reason
+        db.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_stage1_owner_deadline_cancels_transcription(self):
+        cancelled = asyncio.Event()
+
+        async def blocked_transcription(*_args, **_kwargs):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                cancelled.set()
+
+        db = AsyncMock()
+        session = MagicMock(
+            id=uuid.uuid4(),
+            specialty="general",
+            output_language="en",
+            state=MagicMock(value="processing_stage1"),
+        )
+        note_gen = AsyncMock()
+        audits = AsyncMock()
+        with (
+            patch.object(tx, "sla_stage1_ms", return_value=100),
+            patch.object(
+                tx,
+                "transcribe_audio",
+                AsyncMock(side_effect=blocked_transcription),
+            ),
+            patch.object(tx, "generate_stage1_note", note_gen),
+            patch.object(tx, "transition_session", AsyncMock()),
+            patch.object(tx, "try_publish_alert", AsyncMock()),
+            patch.object(tx, "write_audit", audits),
+        ):
+            with pytest.raises(tx.HTTPException) as caught:
+                await tx.run_stage1(db, session, b"audio-bytes")
+
+        assert cancelled.is_set()
+        assert caught.value.detail == "Stage 1 processing timed out."
+        note_gen.assert_not_awaited()
+        failure_audit = next(
+            call
+            for call in audits.await_args_list
+            if call.args[1] == tx.AuditEventType.STAGE1_FAILED
+        )
+        assert failure_audit.kwargs["reason"] == "stage1_deadline_exceeded"
+        db.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_run_stage1_sanitizes_ordinary_transcription_failure(self):
+        phi_sentinel = "Marie Example private transcription content"
+        db = AsyncMock()
+        session = MagicMock(
+            id=uuid.uuid4(),
+            specialty="general",
+            output_language="en",
+            state=MagicMock(value="processing_stage1"),
+        )
+        note_gen = AsyncMock()
+        audits = AsyncMock()
+        alerts = AsyncMock()
+        with (
+            patch.object(
+                tx,
+                "transcribe_audio",
+                AsyncMock(side_effect=RuntimeError(phi_sentinel)),
+            ),
+            patch.object(tx, "generate_stage1_note", note_gen),
+            patch.object(tx, "transition_session", AsyncMock()),
+            patch.object(tx, "try_publish_alert", alerts),
+            patch.object(tx, "write_audit", audits),
+        ):
+            with pytest.raises(tx.HTTPException) as caught:
+                await tx.run_stage1(db, session, b"audio-bytes")
+
+        assert caught.value.detail == (
+            "Transcription failed; the session could not be processed."
+        )
+        assert phi_sentinel not in "".join(
+            traceback.format_exception(caught.value)
+        )
+        assert phi_sentinel not in repr(audits.await_args_list)
+        assert phi_sentinel not in repr(alerts.await_args_list)
+        note_gen.assert_not_awaited()
+        failure_audit = next(
+            call
+            for call in audits.await_args_list
+            if call.args[1] == tx.AuditEventType.STAGE1_FAILED
+        )
+        assert failure_audit.kwargs["reason"] == "transcription_failed"
+        assert alerts.await_args.kwargs["metadata"]["reason"] == (
+            "transcription_failed"
+        )
+        db.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_owner_timeout_during_late_stage1_step_resets_and_fails_once(
+        self,
+    ):
+        note, transcript = _run_stage1_env()
+        late_cancelled = asyncio.Event()
+
+        async def blocked_metric(*_args, **_kwargs):
+            try:
+                await asyncio.Event().wait()
+            finally:
+                late_cancelled.set()
+
+        db = AsyncMock()
+        db.add = MagicMock()
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
+        session = MagicMock(
+            id=uuid.uuid4(),
+            specialty="general",
+            output_language="en",
+            participants_json=None,
+            template_key=None,
+            custom_template_id=None,
+            state=MagicMock(value="processing_stage1"),
+        )
+        transition = AsyncMock()
+        audits = AsyncMock()
+        notify = AsyncMock()
+        purge = AsyncMock()
+        with (
+            patch.object(tx, "sla_stage1_ms", return_value=100),
+            patch.object(tx, "transcribe_audio", AsyncMock(return_value=transcript)),
+            patch.object(tx, "classify_triggers", AsyncMock(return_value=transcript)),
+            patch.object(
+                tx,
+                "scan_transcript_for_phi",
+                AsyncMock(return_value=MagicMock(phi_detected=False)),
+            ),
+            patch.object(tx, "generate_stage1_note", AsyncMock(return_value=note)),
+            patch.object(tx, "transition_session", transition),
+            patch.object(
+                tx,
+                "_record_stage1_latency",
+                AsyncMock(side_effect=blocked_metric),
+            ),
+            patch.object(tx, "notify_stage1_delivered", notify),
+            patch.object(tx, "write_audit", audits),
+            patch.object(tx, "try_publish_alert", AsyncMock()),
+            patch.object(tx, "_purge_raw_audio_if_not_retained", purge),
+        ):
+            with pytest.raises(tx.HTTPException) as caught:
+                await tx.run_stage1(db, session, b"audio-bytes")
+
+        assert caught.value.detail == "Stage 1 processing timed out."
+        assert late_cancelled.is_set()
+        db.rollback.assert_awaited_once()
+        db.refresh.assert_awaited_once_with(session)
+        db.commit.assert_awaited_once()
+        assert [call.args[2] for call in transition.await_args_list] == [
+            tx.SessionState.AWAITING_REVIEW,
+            tx.SessionState.STAGE1_FAILED,
+        ]
+        stage_events = [call.args[1] for call in audits.await_args_list]
+        assert stage_events.count(tx.AuditEventType.STAGE1_FAILED) == 1
+        assert tx.AuditEventType.STAGE1_DELIVERED not in stage_events
+        notify.assert_not_awaited()
+        purge.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    async def test_complete_stage1_just_within_owner_budget_succeeds(self):
+        note, transcript = _run_stage1_env()
+        late_step_completed = asyncio.Event()
+
+        async def bounded_purge(*_args, **_kwargs):
+            await asyncio.sleep(0.02)
+            late_step_completed.set()
+
+        db = AsyncMock()
+        db.add = MagicMock()
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
+        session = MagicMock(
+            id=uuid.uuid4(),
+            specialty="general",
+            output_language="en",
+            participants_json=None,
+            template_key=None,
+            custom_template_id=None,
+        )
+        audits = AsyncMock()
+        transition = AsyncMock()
+        with (
+            patch.object(tx, "sla_stage1_ms", return_value=300),
+            patch.object(tx, "transcribe_audio", AsyncMock(return_value=transcript)),
+            patch.object(tx, "classify_triggers", AsyncMock(return_value=transcript)),
+            patch.object(
+                tx,
+                "scan_transcript_for_phi",
+                AsyncMock(return_value=MagicMock(phi_detected=False)),
+            ),
+            patch.object(tx, "generate_stage1_note", AsyncMock(return_value=note)),
+            patch.object(tx, "transition_session", transition),
+            patch.object(tx, "_record_stage1_latency", AsyncMock()),
+            patch.object(tx, "notify_stage1_delivered", AsyncMock()),
+            patch.object(tx, "write_audit", audits),
+            patch.object(
+                tx,
+                "_purge_raw_audio_if_not_retained",
+                AsyncMock(side_effect=bounded_purge),
+            ),
+        ):
+            result = await tx.run_stage1(db, session, b"audio-bytes")
+
+        assert result is transcript
+        assert late_step_completed.is_set()
+        db.rollback.assert_not_awaited()
+        db.refresh.assert_not_awaited()
+        transition.assert_awaited_once_with(
+            db,
+            session,
+            tx.SessionState.AWAITING_REVIEW,
+        )
+        stage_events = [call.args[1] for call in audits.await_args_list]
+        assert stage_events.count(tx.AuditEventType.STAGE1_DELIVERED) == 1
+        assert tx.AuditEventType.STAGE1_FAILED not in stage_events
+
+    @pytest.mark.asyncio
+    async def test_slow_post_commit_purge_cannot_flip_durable_success_to_failure(
+        self,
+    ):
+        note, transcript = _run_stage1_env()
+        purge_started = asyncio.Event()
+        release_purge = asyncio.Event()
+        call_order: list[str] = []
+
+        async def commit() -> None:
+            call_order.append("commit")
+
+        async def blocked_purge(*_args, **_kwargs) -> None:
+            call_order.append("purge")
+            purge_started.set()
+            await release_purge.wait()
+
+        db = AsyncMock()
+        db.add = MagicMock()
+        db.commit = AsyncMock(side_effect=commit)
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
+        session = MagicMock(
+            id=uuid.uuid4(),
+            specialty="general",
+            output_language="en",
+            participants_json=None,
+            template_key=None,
+            custom_template_id=None,
+        )
+        audits = AsyncMock()
+        transition = AsyncMock()
+        with (
+            patch.object(tx, "sla_stage1_ms", return_value=80),
+            patch.object(tx, "transcribe_audio", AsyncMock(return_value=transcript)),
+            patch.object(tx, "classify_triggers", AsyncMock(return_value=transcript)),
+            patch.object(
+                tx,
+                "scan_transcript_for_phi",
+                AsyncMock(return_value=MagicMock(phi_detected=False)),
+            ),
+            patch.object(tx, "generate_stage1_note", AsyncMock(return_value=note)),
+            patch.object(tx, "transition_session", transition),
+            patch.object(tx, "_record_stage1_latency", AsyncMock()),
+            patch.object(tx, "notify_stage1_delivered", AsyncMock()),
+            patch.object(tx, "write_audit", audits),
+            patch.object(
+                tx,
+                "_purge_raw_audio_if_not_retained",
+                AsyncMock(side_effect=blocked_purge),
+            ),
+        ):
+            result = await tx.run_stage1(db, session, b"audio-bytes")
+            await purge_started.wait()
+
+            assert result is transcript
+            assert call_order == ["commit", "purge"]
+            db.rollback.assert_not_awaited()
+            db.refresh.assert_not_awaited()
+            assert [call.args[2] for call in transition.await_args_list] == [
+                tx.SessionState.AWAITING_REVIEW
+            ]
+            stage_events = [call.args[1] for call in audits.await_args_list]
+            assert stage_events.count(tx.AuditEventType.STAGE1_DELIVERED) == 1
+            assert tx.AuditEventType.STAGE1_FAILED not in stage_events
+
+            release_purge.set()
+            await asyncio.sleep(0)
+
+    @pytest.mark.asyncio
+    async def test_timeout_at_commit_honors_durable_success_winner(self):
+        note, transcript = _run_stage1_env()
+        commit_cancelled = asyncio.Event()
+        purge_finished = asyncio.Event()
+
+        async def ambiguous_commit() -> None:
+            try:
+                await asyncio.Event().wait()
+            finally:
+                commit_cancelled.set()
+
+        async def refresh_as_committed(row) -> None:
+            row.state = tx.SessionState.AWAITING_REVIEW
+
+        async def purge(*_args, **_kwargs) -> None:
+            purge_finished.set()
+
+        db = AsyncMock()
+        db.add = MagicMock()
+        db.commit = AsyncMock(side_effect=ambiguous_commit)
+        db.refresh = AsyncMock(side_effect=refresh_as_committed)
+        db.execute = AsyncMock(
+            return_value=MagicMock(scalar_one_or_none=MagicMock(return_value=None))
+        )
+        session = MagicMock(
+            id=uuid.uuid4(),
+            specialty="general",
+            output_language="en",
+            participants_json=None,
+            template_key=None,
+            custom_template_id=None,
+            state=tx.SessionState.PROCESSING_STAGE1,
+        )
+        audits = AsyncMock()
+        transition = AsyncMock()
+        with (
+            patch.object(tx, "sla_stage1_ms", return_value=80),
+            patch.object(tx, "transcribe_audio", AsyncMock(return_value=transcript)),
+            patch.object(tx, "classify_triggers", AsyncMock(return_value=transcript)),
+            patch.object(
+                tx,
+                "scan_transcript_for_phi",
+                AsyncMock(return_value=MagicMock(phi_detected=False)),
+            ),
+            patch.object(tx, "generate_stage1_note", AsyncMock(return_value=note)),
+            patch.object(tx, "transition_session", transition),
+            patch.object(tx, "_record_stage1_latency", AsyncMock()),
+            patch.object(tx, "notify_stage1_delivered", AsyncMock()),
+            patch.object(tx, "write_audit", audits),
+            patch.object(
+                tx,
+                "_purge_raw_audio_if_not_retained",
+                AsyncMock(side_effect=purge),
+            ),
+        ):
+            result = await tx.run_stage1(db, session, b"audio-bytes")
+            await asyncio.wait_for(purge_finished.wait(), timeout=0.2)
+
+        assert result is transcript
+        assert commit_cancelled.is_set()
+        db.rollback.assert_awaited_once()
+        db.refresh.assert_awaited_once_with(session)
+        assert [call.args[2] for call in transition.await_args_list] == [
+            tx.SessionState.AWAITING_REVIEW
+        ]
+        stage_events = [call.args[1] for call in audits.await_args_list]
+        assert stage_events.count(tx.AuditEventType.STAGE1_DELIVERED) == 1
+        assert tx.AuditEventType.STAGE1_FAILED not in stage_events
 
 
 # ── export_note_docx video-purge gating ─────────────────────────────────────

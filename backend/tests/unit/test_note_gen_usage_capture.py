@@ -134,13 +134,11 @@ async def test_anthropic_sets_usage_from_response() -> None:
 async def test_record_helper_prices_and_records_usage(monkeypatch) -> None:
     from app.modules.note_gen import service as ng
 
-    svc = MagicMock()
-    svc.record = AsyncMock()
-    monkeypatch.setattr(ng, "get_provider_usage_service", lambda: svc)
+    db = MagicMock()
 
     set_call_usage(input_tokens=1_000_000, output_tokens=0, model="gpt-4o")
     await ng._record_provider_usage(
-        db=AsyncMock(),
+        db=db,
         provider_type="note_generation",
         provider_name="openai",
         operation="generate_note",
@@ -149,12 +147,12 @@ async def test_record_helper_prices_and_records_usage(monkeypatch) -> None:
         session_id=None,
     )
 
-    kwargs = svc.record.call_args.kwargs
-    assert kwargs["input_tokens"] == 1_000_000
-    assert kwargs["output_tokens"] == 0
-    assert kwargs["model_name"] == "gpt-4o"
+    row = db.add.call_args.args[0]
+    assert row.input_tokens == 1_000_000
+    assert row.output_tokens == 0
+    assert row.model_name == "gpt-4o"
     # 1M input tokens of gpt-4o at $2.50/MT.
-    assert kwargs["cost_usd"] == pytest.approx(2.50)
+    assert row.cost_usd == pytest.approx(2.50)
     # Read-once: the helper consumed it.
     assert consume_call_usage() is None
 
@@ -165,13 +163,11 @@ async def test_record_helper_consumes_on_failure_without_pricing(monkeypatch) ->
     records no cost — we don't price calls that didn't deliver."""
     from app.modules.note_gen import service as ng
 
-    svc = MagicMock()
-    svc.record = AsyncMock()
-    monkeypatch.setattr(ng, "get_provider_usage_service", lambda: svc)
+    db = MagicMock()
 
     set_call_usage(input_tokens=500, output_tokens=0, model="gpt-4o")
     await ng._record_provider_usage(
-        db=AsyncMock(),
+        db=db,
         provider_type="note_generation",
         provider_name="openai",
         operation="generate_note",
@@ -180,6 +176,6 @@ async def test_record_helper_consumes_on_failure_without_pricing(monkeypatch) ->
         session_id=None,
     )
 
-    kwargs = svc.record.call_args.kwargs
-    assert kwargs["cost_usd"] is None
+    row = db.add.call_args.args[0]
+    assert row.cost_usd is None
     assert consume_call_usage() is None

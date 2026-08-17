@@ -1,20 +1,31 @@
 """Anthropic note generation provider -- real implementation.
 
-Calls Claude to generate structured SOAP notes from transcripts.
-Uses the shared system prompt and response parser from shared.py.
+Stage 1 uses a compact, three-shard internal wire format to avoid regenerating
+an 8k+ token tool call. Stage 2 retains the original full response contract.
+Both paths return the same public ``Note`` model.
 """
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import os
+from dataclasses import dataclass
+from typing import Any
 
 import httpx
 
 from app.core.types import Note, ProviderError, Template, Transcript
 from app.modules.config.appconfig_client import get_config
 from app.modules.providers.base import ChatMessage, NoteGenerationProvider
+from app.modules.providers.note_gen.compact_stage1 import (
+    Stage1ShardSpec,
+    compact_response_schema,
+    hydrate_compact_stage1_shards,
+    partition_stage1_template,
+    validate_compact_stage1_shard_payload,
+)
 from app.modules.providers.note_gen.shared import (
     NOTE_GEN_SYSTEM_PROMPT,
     NOTE_RESPONSE_SCHEMA,
@@ -27,6 +38,43 @@ logger = logging.getLogger("aurion.providers.note_gen.anthropic")
 
 _ANTHROPIC_API_KEY = os.getenv("ANTHROPIC_API_KEY", "")
 _MODEL = "claude-sonnet-4-6"
+_ENDPOINT = "https://api.anthropic.com/v1/messages"
+
+
+def _output_ceilings(configured_max_tokens: int) -> tuple[int, ...]:
+    """Configured ceiling followed by one bounded truncation retry."""
+
+    escalated = min(max(configured_max_tokens * 4, 16_000), 32_000)
+    if escalated > configured_max_tokens:
+        return configured_max_tokens, escalated
+    return (configured_max_tokens,)
+
+
+def _compact_shard_ceilings(full_note_ceilings: tuple[int, ...], shard_count: int) -> tuple[int, ...]:
+    """Share the configured output budget across concurrent first attempts.
+
+    Three simultaneous calls must not each reserve the full-note token budget.
+    A truncated shard alone retries at the configured full-note ceiling and,
+    if needed, at the historical escalated ceiling.
+    """
+
+    if shard_count <= 1:
+        return full_note_ceilings
+    configured = full_note_ceilings[0]
+    initial = max(100, (configured + shard_count - 1) // shard_count)
+    return tuple(dict.fromkeys((initial, *full_note_ceilings)))
+
+
+@dataclass
+class _UsageAccumulator:
+    """Aggregate usage from concurrent shards in the caller's context."""
+
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+    def add(self, usage: dict[str, Any]) -> None:
+        self.input_tokens += int(usage.get("input_tokens", 0))
+        self.output_tokens += int(usage.get("output_tokens", 0))
 
 
 class AnthropicNoteGenerationProvider(NoteGenerationProvider):
@@ -47,157 +95,337 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
         if not _ANTHROPIC_API_KEY:
             raise ProviderError("anthropic", "ANTHROPIC_API_KEY not configured")
 
-        user_prompt = build_user_prompt(
-            transcript,
-            template,
-            stage,
-            output_language,
-            prior_context_text=prior_context_text,
-            participants=participants,
-            specialty_prefix=specialty_prefix,
-            encounter_context=encounter_context,
-        )
-        # AI-PROMPTS-B — service-assembled system prompt (base +
-        # per-physician overlay) when present; bare base constant
-        # otherwise. The base text is never mutated.
         effective_system = system_prompt or NOTE_GEN_SYSTEM_PROMPT
-        # Read model params from AppConfig at call time (CLAUDE.md
-        # §"Runtime Configuration") — admins can tune temp / max_tokens
-        # without a redeploy.
         params = get_config().model_params.note_generation
-
-        # Output ceilings, in escalation order. A long encounter (e.g. a
-        # 400-segment video import) can exceed the configured max_tokens
-        # mid-tool-call; the API then returns stop_reason="max_tokens" with an
-        # EMPTY tool input ({}), which previously parsed "successfully" into a
-        # zero-section note — a silent BLANK note delivered as success. On
-        # truncation we retry once at an escalated ceiling; if that truncates
-        # too we fail LOUDLY (ProviderError) so the pipeline surfaces it.
-        # claude-sonnet supports far larger outputs, so the escalation is safe.
-        ceilings = [params.max_tokens]
-        escalated = min(max(params.max_tokens * 4, 16_000), 32_000)
-        if escalated > params.max_tokens:
-            ceilings.append(escalated)
-
-        # Telemetry: sum usage across attempts so a retried call bills honestly.
-        total_input_tokens = 0
-        total_output_tokens = 0
+        ceilings = _output_ceilings(params.max_tokens)
 
         try:
-            # 300s: grounded synthesis over a full note with the enriched
-            # specialty prompt + few-shot can exceed the old 120s ceiling —
-            # a ReadTimeout there surfaced as a blank "Note generation failed:"
-            # and a 500 on upload. Well within the 5-min Stage 2 budget.
             async with httpx.AsyncClient(timeout=300.0) as client:
-                for attempt_max_tokens in ceilings:
-                    response = await client.post(
-                        "https://api.anthropic.com/v1/messages",
-                        headers={
-                            "x-api-key": _ANTHROPIC_API_KEY,
-                            "anthropic-version": "2023-06-01",
-                            "Content-Type": "application/json",
-                        },
-                        json={
-                            "model": _MODEL,
-                            "max_tokens": attempt_max_tokens,
-                            "temperature": params.temperature,
-                            "system": effective_system,
-                            "messages": [
-                                {"role": "user", "content": user_prompt},
-                            ],
-                            # Force the model to emit the note via a tool call.
-                            # Anthropic guarantees the `input` matches the
-                            # `input_schema` when tool_choice pins the tool —
-                            # eliminates an entire class of JSON parse / shape
-                            # errors that previously surfaced as STAGE1_FAILED.
-                            "tools": [
-                                {
-                                    "name": "emit_clinical_note",
-                                    "description": (
-                                        "Emit the structured clinical note built "
-                                        "from the transcript per the descriptive-"
-                                        "mode rules in the system prompt."
-                                    ),
-                                    "input_schema": NOTE_RESPONSE_SCHEMA,
-                                }
-                            ],
-                            "tool_choice": {
-                                "type": "tool",
-                                "name": "emit_clinical_note",
-                            },
-                        },
-                    )
-                    response.raise_for_status()
-                    data = response.json()
-                    usage = data.get("usage") or {}
-                    total_input_tokens += int(usage.get("input_tokens", 0))
-                    total_output_tokens += int(usage.get("output_tokens", 0))
-                    set_call_usage(
-                        input_tokens=total_input_tokens,
-                        output_tokens=total_output_tokens,
-                        model=_MODEL,
+                # Prior-context facts rely on the established full response
+                # contract. Compact Stage 1 can represent only current
+                # transcript anchors, so it is unsafe for that input.
+                if stage == 1 and template.sections and not prior_context_text:
+                    return await self._generate_compact_stage1(
+                        client=client,
+                        transcript=transcript,
+                        template=template,
+                        output_language=output_language,
+                        effective_system=effective_system,
+                        prior_context_text=prior_context_text,
+                        participants=participants,
+                        specialty_prefix=specialty_prefix,
+                        encounter_context=encounter_context,
+                        temperature=params.temperature,
+                        ceilings=ceilings,
                     )
 
-                    if data.get("stop_reason") == "max_tokens":
-                        logger.warning(
-                            "Anthropic note gen truncated at max_tokens=%d: "
-                            "session=%s segments=%d — %s",
-                            attempt_max_tokens,
-                            transcript.session_id,
-                            len(transcript.segments),
-                            "retrying at a higher ceiling"
-                            if attempt_max_tokens != ceilings[-1]
-                            else "ceiling exhausted",
-                        )
-                        continue
-
-                    # Tool-use response: content blocks include a tool_use
-                    # block whose `input` is the schema-validated JSON. Fall
-                    # back to a text block if the model declined the tool
-                    # (shouldn't happen with tool_choice, but defensive).
-                    payload_str = None
-                    for block in data.get("content", []):
-                        if block.get("type") == "tool_use" and block.get("name") == "emit_clinical_note":
-                            payload_str = json.dumps(block["input"])
-                            break
-                    if payload_str is None:
-                        # Defensive fallback — should never hit with forced
-                        # tool_choice but tolerate older API shapes (text
-                        # block, or a bare text-bearing block) for resilience.
-                        for block in data.get("content", []):
-                            if "text" in block:
-                                payload_str = block["text"]
-                                break
-                    if payload_str is None:
-                        raise ProviderError("anthropic", "No tool_use or text block in response")
-                    return parse_note_response(payload_str, transcript, template, stage, "anthropic")
-
-            # Every ceiling truncated — fail loudly rather than deliver the
-            # empty tool input as a blank note.
+                user_prompt = build_user_prompt(
+                    transcript,
+                    template,
+                    stage,
+                    output_language,
+                    prior_context_text=prior_context_text,
+                    participants=participants,
+                    specialty_prefix=specialty_prefix,
+                    encounter_context=encounter_context,
+                )
+                return await self._generate_full_note(
+                    client=client,
+                    transcript=transcript,
+                    template=template,
+                    stage=stage,
+                    user_prompt=user_prompt,
+                    effective_system=effective_system,
+                    temperature=params.temperature,
+                    ceilings=ceilings,
+                )
+        except httpx.HTTPError as exc:
+            logger.error(
+                "Anthropic note gen failed: session=%s error=%s",
+                transcript.session_id,
+                str(exc),
+            )
             raise ProviderError(
                 "anthropic",
-                f"Note generation output truncated at max_tokens={ceilings[-1]} "
-                f"({len(transcript.segments)}-segment transcript) — the encounter "
-                "is too long for the configured output ceiling.",
+                f"Note generation failed: {type(exc).__name__}: {exc}",
+                exc,
+            )
+        except (json.JSONDecodeError, KeyError, IndexError) as exc:
+            logger.error(
+                "Anthropic response parse failed: session=%s error=%s",
+                transcript.session_id,
+                str(exc),
+            )
+            raise ProviderError("anthropic", f"Response parse failed: {exc}", exc)
+
+    async def _generate_compact_stage1(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        transcript: Transcript,
+        template: Template,
+        output_language: str,
+        effective_system: str,
+        prior_context_text: str | None,
+        participants: list[dict] | None,
+        specialty_prefix: str | None,
+        encounter_context: str | None,
+        temperature: float,
+        ceilings: tuple[int, ...],
+    ) -> Note:
+        """Generate at most three compact section shards concurrently."""
+
+        shards = partition_stage1_template(template)
+        shard_ceilings = _compact_shard_ceilings(ceilings, len(shards))
+        usage = _UsageAccumulator()
+
+        async def run_shard(
+            shard: Stage1ShardSpec,
+        ) -> tuple[Stage1ShardSpec, dict[str, Any]]:
+            prompt = build_user_prompt(
+                transcript,
+                shard.template,
+                stage=1,
+                output_language=output_language,
+                prior_context_text=prior_context_text,
+                participants=participants,
+                specialty_prefix=specialty_prefix,
+                encounter_context=encounter_context,
+                compact_stage1=True,
+            )
+            payload = await self._generate_compact_shard(
+                client=client,
+                transcript=transcript,
+                shard=shard,
+                user_prompt=prompt,
+                effective_system=effective_system,
+                temperature=temperature,
+                ceilings=shard_ceilings,
+                usage=usage,
+            )
+            return shard, payload
+
+        tasks = [asyncio.create_task(run_shard(shard)) for shard in shards]
+        try:
+            payloads = await asyncio.gather(*tasks)
+        except (Exception, asyncio.CancelledError):
+            # asyncio.gather does not cancel siblings when one request fails.
+            # Stop them so a terminal Stage 1 job cannot consume quota later.
+            for task in tasks:
+                if not task.done():
+                    task.cancel()
+            await asyncio.gather(*tasks, return_exceptions=True)
+            raise
+        finally:
+            if usage.input_tokens or usage.output_tokens:
+                set_call_usage(
+                    input_tokens=usage.input_tokens,
+                    output_tokens=usage.output_tokens,
+                    model=_MODEL,
+                )
+
+        return hydrate_compact_stage1_shards(
+            payloads,
+            transcript,
+            template,
+            provider_name="anthropic",
+        )
+
+    async def _generate_compact_shard(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        transcript: Transcript,
+        shard: Stage1ShardSpec,
+        user_prompt: str,
+        effective_system: str,
+        temperature: float,
+        ceilings: tuple[int, ...],
+        usage: _UsageAccumulator,
+    ) -> dict[str, Any]:
+        """Generate one shard; retry only this shard on truncation."""
+
+        for attempt_max_tokens in ceilings:
+            response = await client.post(
+                _ENDPOINT,
+                headers={
+                    "x-api-key": _ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": _MODEL,
+                    "max_tokens": attempt_max_tokens,
+                    "temperature": temperature,
+                    "system": effective_system,
+                    "messages": [{"role": "user", "content": user_prompt}],
+                    "tools": [
+                        {
+                            "name": "emit_clinical_note",
+                            "description": (
+                                "Emit this section group of the structured clinical note under the active system rules."
+                            ),
+                            "input_schema": compact_response_schema(shard.section_ids),
+                        }
+                    ],
+                    "tool_choice": {
+                        "type": "tool",
+                        "name": "emit_clinical_note",
+                    },
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            attempt_usage = data.get("usage") or {}
+            usage.add(attempt_usage)
+            logger.info(
+                "Anthropic model call completed: session=%s provider=anthropic "
+                "model=%s stage=1 shard=%s max_tokens=%d stop_reason=%s "
+                "input_tokens=%d output_tokens=%d",
+                transcript.session_id,
+                _MODEL,
+                shard.name,
+                attempt_max_tokens,
+                data.get("stop_reason", "unknown"),
+                int(attempt_usage.get("input_tokens", 0)),
+                int(attempt_usage.get("output_tokens", 0)),
             )
 
-        except httpx.HTTPError as e:
-            logger.error("Anthropic note gen failed: session=%s error=%s", transcript.session_id, str(e))
-            raise ProviderError("anthropic", f"Note generation failed: {type(e).__name__}: {e}", e)
-        except (json.JSONDecodeError, KeyError, IndexError) as e:
-            logger.error("Anthropic response parse failed: session=%s error=%s", transcript.session_id, str(e))
-            raise ProviderError("anthropic", f"Response parse failed: {e}", e)
+            if data.get("stop_reason") == "max_tokens":
+                logger.warning(
+                    "Anthropic compact Stage 1 shard truncated: session=%s shard=%s max_tokens=%d - %s",
+                    transcript.session_id,
+                    shard.name,
+                    attempt_max_tokens,
+                    "retrying shard" if attempt_max_tokens != ceilings[-1] else "ceiling exhausted",
+                )
+                continue
 
-    async def generate_text(
-        self, system: str, messages: list[ChatMessage]
-    ) -> str:
-        """Structural-chat completion against Claude.
+            payload: dict[str, Any] | None = None
+            for block in data.get("content", []):
+                if block.get("type") == "tool_use" and block.get("name") == "emit_clinical_note":
+                    tool_input = block.get("input")
+                    if isinstance(tool_input, dict):
+                        payload = tool_input
+                    break
+            if payload is None:
+                for block in data.get("content", []):
+                    if "text" in block:
+                        decoded = json.loads(block["text"])
+                        if isinstance(decoded, dict):
+                            payload = decoded
+                        break
+            if payload is None:
+                raise ProviderError(
+                    "anthropic",
+                    f"No compact tool payload for Stage 1 shard {shard.name}",
+                )
+            validate_compact_stage1_shard_payload(shard, payload)
+            return payload
 
-        Used by the conversational template authoring service. No tools,
-        no JSON schema — the model returns plain assistant text. Any
-        JSON the service needs is emitted by the model inside fenced
-        code blocks per the system prompt, and parsed by the service.
-        """
+        raise ProviderError(
+            "anthropic",
+            f"Stage 1 shard {shard.name} truncated at max_tokens={ceilings[-1]} ({len(transcript.segments)} segments)",
+        )
+
+    async def _generate_full_note(
+        self,
+        *,
+        client: httpx.AsyncClient,
+        transcript: Transcript,
+        template: Template,
+        stage: int,
+        user_prompt: str,
+        effective_system: str,
+        temperature: float,
+        ceilings: tuple[int, ...],
+    ) -> Note:
+        """Original full response path, retained for Stage 2."""
+
+        usage = _UsageAccumulator()
+        for attempt_max_tokens in ceilings:
+            response = await client.post(
+                _ENDPOINT,
+                headers={
+                    "x-api-key": _ANTHROPIC_API_KEY,
+                    "anthropic-version": "2023-06-01",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": _MODEL,
+                    "max_tokens": attempt_max_tokens,
+                    "temperature": temperature,
+                    "system": effective_system,
+                    "messages": [{"role": "user", "content": user_prompt}],
+                    "tools": [
+                        {
+                            "name": "emit_clinical_note",
+                            "description": ("Emit the structured clinical note under the active system rules."),
+                            "input_schema": NOTE_RESPONSE_SCHEMA,
+                        }
+                    ],
+                    "tool_choice": {
+                        "type": "tool",
+                        "name": "emit_clinical_note",
+                    },
+                },
+            )
+            response.raise_for_status()
+            data = response.json()
+            attempt_usage = data.get("usage") or {}
+            usage.add(attempt_usage)
+            logger.info(
+                "Anthropic model call completed: session=%s provider=anthropic "
+                "model=%s stage=%d shard=full max_tokens=%d stop_reason=%s "
+                "input_tokens=%d output_tokens=%d",
+                transcript.session_id,
+                _MODEL,
+                stage,
+                attempt_max_tokens,
+                data.get("stop_reason", "unknown"),
+                int(attempt_usage.get("input_tokens", 0)),
+                int(attempt_usage.get("output_tokens", 0)),
+            )
+            set_call_usage(
+                input_tokens=usage.input_tokens,
+                output_tokens=usage.output_tokens,
+                model=_MODEL,
+            )
+
+            if data.get("stop_reason") == "max_tokens":
+                logger.warning(
+                    "Anthropic note gen truncated at max_tokens=%d: session=%s segments=%d - %s",
+                    attempt_max_tokens,
+                    transcript.session_id,
+                    len(transcript.segments),
+                    "retrying at a higher ceiling" if attempt_max_tokens != ceilings[-1] else "ceiling exhausted",
+                )
+                continue
+
+            payload_str = None
+            for block in data.get("content", []):
+                if block.get("type") == "tool_use" and block.get("name") == "emit_clinical_note":
+                    payload_str = json.dumps(block["input"])
+                    break
+            if payload_str is None:
+                for block in data.get("content", []):
+                    if "text" in block:
+                        payload_str = block["text"]
+                        break
+            if payload_str is None:
+                raise ProviderError("anthropic", "No tool_use or text block in response")
+            return parse_note_response(payload_str, transcript, template, stage, "anthropic")
+
+        raise ProviderError(
+            "anthropic",
+            f"Note generation output truncated at max_tokens={ceilings[-1]} "
+            f"({len(transcript.segments)}-segment transcript) - the encounter "
+            "is too long for the configured output ceiling.",
+        )
+
+    async def generate_text(self, system: str, messages: list[ChatMessage]) -> str:
+        """Structural-chat completion against Claude."""
+
         if not _ANTHROPIC_API_KEY:
             raise ProviderError("anthropic", "ANTHROPIC_API_KEY not configured")
         if not messages:
@@ -207,7 +435,7 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
                 response = await client.post(
-                    "https://api.anthropic.com/v1/messages",
+                    _ENDPOINT,
                     headers={
                         "x-api-key": _ANTHROPIC_API_KEY,
                         "anthropic-version": "2023-06-01",
@@ -218,9 +446,7 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
                         "max_tokens": params.max_tokens,
                         "temperature": params.temperature,
                         "system": system,
-                        "messages": [
-                            {"role": m.role, "content": m.content} for m in messages
-                        ],
+                        "messages": [{"role": message.role, "content": message.content} for message in messages],
                     },
                 )
                 response.raise_for_status()
@@ -230,7 +456,6 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
                 if block.get("type") == "text" and "text" in block:
                     return block["text"]
             raise ProviderError("anthropic", "No text block in response")
-
-        except httpx.HTTPError as e:
-            logger.error("Anthropic generate_text failed: error=%s", str(e))
-            raise ProviderError("anthropic", f"generate_text failed: {e}", e)
+        except httpx.HTTPError as exc:
+            logger.error("Anthropic generate_text failed: error=%s", str(exc))
+            raise ProviderError("anthropic", f"generate_text failed: {exc}", exc)

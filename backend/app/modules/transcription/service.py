@@ -35,6 +35,10 @@ from app.modules.providers.usage_service import try_record_provider_usage
 
 logger = logging.getLogger("aurion.transcription")
 
+_TRANSCRIPTION_PROVIDER_FAILURE = "transcription_provider_error"
+_TRANSCRIPTION_UNEXPECTED_FAILURE = "transcription_unexpected_error"
+_TRANSCRIPTION_PUBLIC_MESSAGE = "Transcription failed."
+
 
 # ── Demo Mode ──────────────────────────────────────────────────────────────
 #
@@ -248,7 +252,7 @@ async def transcribe_audio(
         await audit.write_event(
             session_id=str(session_id),
             event_type=AuditEventType.TRANSCRIPTION_FAILED,
-            error_message="Provider raised ProviderError",
+            error_message=_TRANSCRIPTION_PROVIDER_FAILURE,
         )
         await try_record_provider_usage(
             provider_type="transcription",
@@ -265,13 +269,16 @@ async def transcribe_audio(
             message="Transcription provider raised ProviderError",
             metadata={"session_id": str(session_id)},
         )
-        raise
-    except Exception as e:
+        raise ProviderError(
+            "transcription",
+            _TRANSCRIPTION_PUBLIC_MESSAGE,
+        ) from None
+    except Exception:
         audit = get_audit_log_service()
         await audit.write_event(
             session_id=str(session_id),
             event_type=AuditEventType.TRANSCRIPTION_FAILED,
-            error_message=str(e),
+            error_message=_TRANSCRIPTION_UNEXPECTED_FAILURE,
         )
         await try_record_provider_usage(
             provider_type="transcription",
@@ -286,10 +293,9 @@ async def transcribe_audio(
             severity=AlertSeverity.CRITICAL,
             source="transcription_service",
             message="Transcription failed with unexpected exception",
-            metadata={"session_id": str(session_id), "reason": str(e)[:200]},
+            metadata={"session_id": str(session_id)},
         )
         raise ProviderError(
-            provider_override or "transcription",
-            f"Transcription failed: {e}",
-            e,
-        )
+            "transcription",
+            _TRANSCRIPTION_PUBLIC_MESSAGE,
+        ) from None

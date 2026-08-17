@@ -83,8 +83,9 @@ resource "aws_appconfig_configuration_profile" "main" {
               required             = ["temperature", "max_tokens"]
               additionalProperties = false
               properties = {
-                temperature = { type = "number", minimum = 0.0, maximum = 2.0 }
-                max_tokens  = { type = "integer", minimum = 100, maximum = 16000 }
+                temperature                     = { type = "number", minimum = 0.0, maximum = 2.0 }
+                max_tokens                      = { type = "integer", minimum = 100, maximum = 16000 }
+                stage1_critique_timeout_seconds = { type = "number", minimum = 0.5, maximum = 15.0 }
               }
             }
             vision = {
@@ -192,6 +193,15 @@ resource "aws_appconfig_configuration_profile" "main" {
             # it. Caps the Gemini fan-out so a large frame set drains under the
             # vision rate limit instead of 429-storming.
             vision_max_concurrency = { type = "integer", minimum = 1, maximum = 32 }
+            # Process-wide Gemini quota controls. Optional for older profiles;
+            # backend defaults are fail-safe for the development key.
+            vision_gemini_max_concurrency         = { type = "integer", minimum = 1, maximum = 8 }
+            vision_gemini_max_retries             = { type = "integer", minimum = 0, maximum = 5 }
+            vision_gemini_primary_timeout_seconds = { type = "number", minimum = 5, maximum = 120 }
+            vision_gemini_circuit_breaker_seconds = { type = "integer", minimum = 1, maximum = 600 }
+            vision_provider_usage_timeout_seconds = { type = "number", minimum = 0.1, maximum = 5 }
+            vision_max_evidence_items             = { type = "integer", minimum = 1, maximum = 200 }
+            vision_trigger_evidence_fraction      = { type = "number", minimum = 0.5, maximum = 1.0 }
           }
         }
         feature_flags = {
@@ -305,9 +315,10 @@ resource "aws_appconfig_configuration_profile" "main" {
             cross_clinician_chart_enabled = { type = "boolean" }
             # Grounded visual findings — video produces cited exam findings
             # (Stage-2 vision shifts descriptive→grounded, source_id=frame_id
-            # invariant). SEPARATE from grounded_synthesis_enabled. NOT in
-            # `required` so older documents validate under additionalProperties
-            # = false — the backend Pydantic schema defaults it false.
+            # invariant). It narrows grounded_synthesis_enabled; BOTH flags are
+            # required in the doctor pipeline. NOT in `required` so older
+            # documents validate under additionalProperties = false — the
+            # backend Pydantic schema defaults it false.
             grounded_visual_findings_enabled = { type = "boolean" }
             # Fusion B (parallel-then-merge). NOT `required`; backend defaults it
             # false. Gates any future LIVE use of parallel fusion — the A/B
