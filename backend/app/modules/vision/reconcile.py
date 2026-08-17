@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from typing import Optional
@@ -54,6 +55,8 @@ Compare every caption with both the audio-derived claims and the other captions,
 Compare LITERALLY. Do not infer clinical meaning. If the audio is silent on something the frame shows, that is ENRICHES.
 If the frame is too generic to compare (low signal, equipment-only, anatomy inventory, viewer thumbnails, or image-quality commentary), classify as REPEATS so it doesn't pollute the note.
 
+For every ENRICHES decision, also return note_text: exactly one concise, note-ready clinical sentence derived solely from that frame's visual caption. Start with the supported finding, not the acquisition medium or patient position. You may remove scene narration and tighten wording, but do not add or strengthen a fact, import a fact from the audio, or combine evidence from another frame. If the frame's caption cannot support such a sentence, classify it as REPEATS and return an empty note_text.
+
 Return only the requested tool call."""
 
 
@@ -70,9 +73,17 @@ _RECONCILE_SCHEMA: dict = {
                         "type": "string",
                         "enum": ["ENRICHES", "REPEATS", "CONFLICTS"],
                     },
+                    "note_text": {
+                        "type": "string",
+                        "description": (
+                            "For ENRICHES: exactly one concise clinical sentence "
+                            "derived only from this frame's visual caption. Empty "
+                            "for REPEATS and CONFLICTS."
+                        ),
+                    },
                     "conflict_detail": {"type": "string"},
                 },
-                "required": ["frame_id", "status"],
+                "required": ["frame_id", "status", "note_text"],
             },
         }
     },
@@ -91,29 +102,46 @@ def _build_user_prompt(note: Note, captions: list[FrameCaption]) -> str:
         for claim in section.claims:
             if claim.source_type == "transcript" and claim.source_id:
                 by_anchor.setdefault(claim.source_id, []).append(
-                    f"  - [{section.id}] {claim.text}  "
-                    f"(source quote: \"{claim.source_quote}\")"
+                    f'  - [{section.id}] {claim.text}  (source quote: "{claim.source_quote}")'
                 )
 
     captions_block: list[str] = []
     for cap in captions:
         anchor_claims = by_anchor.get(cap.audio_anchor_id, [])
-        anchor_summary = (
-            "\n".join(anchor_claims) if anchor_claims
-            else "  (no audio claims anchored to this moment)"
-        )
+        anchor_summary = "\n".join(anchor_claims) if anchor_claims else "  (no audio claims anchored to this moment)"
         captions_block.append(
             f"FRAME {cap.frame_id} (anchored to {cap.audio_anchor_id}, "
             f"confidence={cap.confidence}):\n"
-            f"  visual: \"{cap.visual_description}\"\n"
+            f'  visual: "{cap.visual_description}"\n'
             f"  audio claims at the same moment:\n{anchor_summary}\n"
         )
 
     return (
         "Classify each frame against the audio claims and all other visual captions. "
-        "Keep only non-duplicative, supported clinical enrichment.\n\n"
-        + "\n".join(captions_block)
+        "Keep only non-duplicative, supported clinical enrichment. For every ENRICHES "
+        "decision, return note_text as one note-ready clinical sentence based only on "
+        "that frame's visual text; never import facts from the audio or another frame.\n\n" + "\n".join(captions_block)
     )
+
+
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+")
+_ACQUISITION_NARRATION_OPENER = re.compile(
+    r"^(?:(?:a|an|the)\s+)?(?:image|frame|photo|photograph|picture|video|clip|"
+    r"still|monitor|screen|subject)\b",
+    re.IGNORECASE,
+)
+
+
+def _note_ready_sentence(value: object) -> str | None:
+    """Return one chart-ready sentence, or ``None`` for scene narration."""
+
+    if not isinstance(value, str):
+        return None
+    text = " ".join(value.split())
+    if not text or _ACQUISITION_NARRATION_OPENER.search(text):
+        return None
+    sentences = [sentence for sentence in _SENTENCE_BOUNDARY.split(text) if sentence]
+    return text if len(sentences) == 1 else None
 
 
 async def reconcile_captions(
@@ -145,8 +173,7 @@ async def reconcile_captions(
 
     if not _ANTHROPIC_API_KEY:
         logger.warning(
-            "reconcile: ANTHROPIC_API_KEY not configured — leaving "
-            "provider-reported integration_status unchanged"
+            "reconcile: ANTHROPIC_API_KEY not configured — leaving provider-reported integration_status unchanged"
         )
         return captions
 
@@ -236,6 +263,19 @@ async def reconcile_captions(
         new_status = decision.get("status")
         if new_status in {"ENRICHES", "REPEATS", "CONFLICTS"}:
             cap.integration_status = new_status
+        if new_status == "ENRICHES":
+            # Prefer the reconciler's chart-ready wording. A pre-existing
+            # single-sentence caption remains a compatibility fallback for
+            # custom prompts or older responses. Paragraph-shaped scene
+            # descriptions fail closed as REPEATS instead of entering the note.
+            note_text = _note_ready_sentence(decision.get("note_text"))
+            note_text = note_text or _note_ready_sentence(cap.visual_description)
+            if note_text is None:
+                cap.integration_status = "REPEATS"
+                cap.conflict_flag = False
+                cap.conflict_detail = None
+                continue
+            cap.visual_description = note_text
         if new_status == "CONFLICTS":
             cap.conflict_flag = True
             detail = decision.get("conflict_detail")
@@ -250,6 +290,9 @@ async def reconcile_captions(
     conflicts = sum(1 for c in captions if c.conflict_flag)
     logger.info(
         "reconcile: enriches=%d repeats=%d conflicts=%d (of %d captions)",
-        enriches, repeats, conflicts, len(captions),
+        enriches,
+        repeats,
+        conflicts,
+        len(captions),
     )
     return captions
