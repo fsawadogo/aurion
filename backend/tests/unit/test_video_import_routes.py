@@ -76,6 +76,16 @@ async def test_create_sets_import_source_and_audits_attestation() -> None:
 
 
 @pytest.mark.asyncio
+async def test_clinician_import_auto_advances_stage2_after_frames() -> None:
+    body = vi.CreateVideoImportRequest(specialty="general", consent_attested=True)
+    user = SimpleNamespace(user_id=uuid.uuid4())
+    with patch.object(vi, "create_import_session", AsyncMock()) as create:
+        await vi.create_video_import(body, None, user, AsyncMock())
+
+    assert create.call_args.kwargs["auto_advance_stage2"] is True
+
+
+@pytest.mark.asyncio
 async def test_create_applies_owned_custom_template() -> None:
     """tpl-03: an owned custom_template_id is validated and forwarded to
     create_session (so the upload uses that template's structure + AI

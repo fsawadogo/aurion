@@ -124,12 +124,12 @@ async def test_auto_advance_runs_stage2_when_flagged() -> None:
 
 
 @pytest.mark.asyncio
-async def test_no_auto_advance_when_flag_off() -> None:
+async def test_clinician_job_also_advances_after_frames_when_legacy_flag_off() -> None:
     job, session = _job(auto_advance_stage2=False), _session()
     started = _patches(job, session)
     try:
         await vi._run_video_import_in_background(session.id, job.id)
-        vi._auto_advance_stage2.assert_not_awaited()
+        vi._auto_advance_stage2.assert_awaited_once()
     finally:
         _stop(started)
 
@@ -339,17 +339,17 @@ async def test_auto_advance_creates_and_completes_stage2_job() -> None:
 
 
 @pytest.mark.asyncio
-async def test_auto_advance_marks_job_failed_then_reraises() -> None:
+async def test_auto_advance_failure_preserves_audio_only_review_path() -> None:
     mocks, started = _auto_advance_patches(stage2_raises=True)
     try:
         db, session, sid = AsyncMock(), _session(), uuid.uuid4()
-        with pytest.raises(RuntimeError):
-            await vi._auto_advance_stage2(db, session, sid)
+        version = await vi._auto_advance_stage2(db, session, sid)
     finally:
         for p in started:
             p.stop()
 
-    # Failure is recorded on the job (not left running) and bubbles so the
-    # outer orchestrator still marks VIDEO_IMPORT_FAILED.
+    # Failure is recorded on Stage 2 but does not fail successful ingestion;
+    # the doctor can reach review and explicitly approve the audio-only note.
+    assert version is None
     mocks["mark_failed"].assert_awaited_once()
     mocks["mark_completed"].assert_not_awaited()

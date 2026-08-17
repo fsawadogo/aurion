@@ -332,25 +332,24 @@ export async function approveStage1(sessionId: string): Promise<void> {
   });
 }
 
-/** POST /api/v1/notes/{id}/approve — final approval, transitions to REVIEW_COMPLETE.
- *
- * iOS calls approve-stage1 then approve sequentially as a single
- * user-visible action. The web mirrors that behaviour via approveAll()
- * below — caller almost never needs to invoke this directly.
- */
-export async function approveFinal(sessionId: string): Promise<void> {
+/** POST /api/v1/notes/{id}/approve — final approval after Stage 2 reaches a
+ * terminal state. A failed Stage 2 requires an explicit audio-only ack. */
+export async function approveFinal(
+  sessionId: string,
+  allowStage2Failure = false,
+): Promise<void> {
   await fetchWithAuth(`/api/v1/notes/${sessionId}/approve`, {
     method: "POST",
+    body: JSON.stringify({ allow_stage2_failure: allowStage2Failure }),
   });
 }
 
-/** Single-tap approve from the web UI. Mirrors the iOS NoteReviewView
- * pattern of firing /approve-stage1 then /approve back-to-back; the
- * second call 409s if the first already drove the session past
- * AWAITING_REVIEW, which we tolerate (state has already advanced). */
+/** Legacy two-phase helper. If Stage 1 still needs approval, start Stage 2
+ * and return; final approval must be a later user action after Stage 2. */
 export async function approveAll(sessionId: string): Promise<void> {
   try {
     await approveStage1(sessionId);
+    return;
   } catch (e) {
     // If the session was already past stage1 (e.g. tab was open before
     // the user approved on iOS) the call 409s — fine, fall through to

@@ -2,7 +2,9 @@ import { describe, expect, it, vi, beforeEach } from "vitest";
 import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
-import VideoImportClient from "@/components/portal/VideoImportClient";
+import VideoImportClient, {
+  isVideoImportReviewReady,
+} from "@/components/portal/VideoImportClient";
 
 import { withIntl } from "./helpers/intl";
 
@@ -96,6 +98,26 @@ beforeEach(() => {
 function mkFile(name: string): File {
   return new File([new Uint8Array([1, 2, 3])], name, { type: "video/mp4" });
 }
+
+describe("VideoImportClient — review readiness", () => {
+  it("does not expose review merely because Stage 1 is awaiting review", () => {
+    expect(
+      isVideoImportReviewReady({
+        status: "running",
+        session_state: "AWAITING_REVIEW",
+      } as never),
+    ).toBe(false);
+  });
+
+  it("exposes review only after the import job completes", () => {
+    expect(
+      isVideoImportReviewReady({
+        status: "completed",
+        session_state: "PROCESSING_STAGE2",
+      } as never),
+    ).toBe(true);
+  });
+});
 
 describe("VideoImportClient — flag OFF (single file, unchanged)", () => {
   it("uses a single (non-multiple) input and no ordered clip list", async () => {

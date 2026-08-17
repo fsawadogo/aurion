@@ -257,7 +257,19 @@ class ProviderRegistry:
         if kind == "clip":
             primary = config.providers.vision_clip
         elif kind == "frame":
-            primary = config.providers.vision
+            # The admin Providers page writes the runtime override store. The
+            # doctor Stage 2 path resolves through this fallback method, so it
+            # must honor the same precedence as get_vision_provider(); without
+            # this, the UI could show Gemini while production frames still ran
+            # through the AppConfig default.
+            if (store := get_override("vision")) is not None:
+                primary = VisionProviderKey(store)
+                logger.info(
+                    "vision provider overridden via admin store: %s",
+                    primary.value,
+                )
+            else:
+                primary = config.providers.vision
         else:
             raise ProviderError(
                 "vision_kind", f"Unknown visual evidence kind: {kind!r}"

@@ -58,7 +58,7 @@ vi.mock("@/lib/portal-api", () => ({
   getPortalFeatureFlags: vi.fn(),
   getMyProfile: vi.fn(),
   assistNote: vi.fn(),
-  approveAll: vi.fn(),
+  approveFinal: vi.fn(),
   editNote: vi.fn(),
   exportNote: vi.fn(),
   resolveConflict: vi.fn(),
@@ -71,11 +71,15 @@ import {
   listMyCustomTemplates,
   getPortalFeatureFlags,
   getMyProfile,
+  approveFinal,
 } from "@/lib/portal-api";
 import { regenerateNote } from "@/lib/api";
 import NoteReviewPage from "@/app/portal/notes/[id]/NoteReviewClient";
 
-function detail(sessionState = "AWAITING_REVIEW") {
+function detail(
+  sessionState = "PROCESSING_STAGE2",
+  stage2Status = "completed",
+) {
   return {
     note: {
       session_id: "sess-1",
@@ -99,6 +103,7 @@ function detail(sessionState = "AWAITING_REVIEW") {
       is_approved: false,
       can_export: true,
       session_state: sessionState,
+      stage2_status: stage2Status,
     },
   };
 }
@@ -129,7 +134,7 @@ function actions() {
     // "Resolve conflicts to approve"), so match either — otherwise the query
     // silently returns null in exactly the busy state we're testing.
     approve: screen.getByRole("button", {
-      name: /Approve & sign|Resolve conflicts to approve/i,
+      name: /Approve & sign|Resolve conflicts to approve|Finishing visual review/i,
     }),
   };
 }
@@ -137,7 +142,7 @@ function actions() {
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(getNoteDetail).mockResolvedValue(detail() as never);
-  vi.mocked(getSession).mockResolvedValue({ state: "AWAITING_REVIEW" } as never);
+  vi.mocked(getSession).mockResolvedValue({ state: "PROCESSING_STAGE2" } as never);
   vi.mocked(listMyMacros).mockResolvedValue([] as never);
   vi.mocked(listMyCustomTemplates).mockResolvedValue([] as never);
   vi.mocked(getPortalFeatureFlags).mockResolvedValue(FLAGS as never);
@@ -157,6 +162,34 @@ describe("NoteReview — actions while the note is being replaced", () => {
     expect(screen.getByTestId("note-document")).toHaveAttribute(
       "aria-busy",
       "false",
+    );
+  });
+
+  it("final approval is a single call after Stage 2 completed", async () => {
+    render(withIntl(<NoteReviewPage />));
+    await waitFor(() => expect(getNoteDetail).toHaveBeenCalled());
+
+    fireEvent.click(actions().approve);
+
+    await waitFor(() =>
+      expect(approveFinal).toHaveBeenCalledWith("sess-1", false),
+    );
+  });
+
+  it("labels and explicitly acknowledges an audio-only fallback", async () => {
+    vi.mocked(getNoteDetail).mockResolvedValue(
+      detail("PROCESSING_STAGE2", "failed") as never,
+    );
+    render(withIntl(<NoteReviewPage />));
+
+    const approve = await screen.findByRole("button", {
+      name: /Approve audio-only & sign/i,
+    });
+    expect(approve).toBeEnabled();
+    fireEvent.click(approve);
+
+    await waitFor(() =>
+      expect(approveFinal).toHaveBeenCalledWith("sess-1", true),
     );
   });
 
@@ -226,7 +259,7 @@ describe("NoteReview — actions while the note is being replaced", () => {
     // from the server side, so the same rule has to hold without anyone
     // remembering to add a second condition to three buttons.
     vi.mocked(getNoteDetail).mockResolvedValue(
-      detail("PROCESSING_STAGE2") as never,
+      detail("PROCESSING_STAGE2", "running") as never,
     );
 
     render(withIntl(<NoteReviewPage />));

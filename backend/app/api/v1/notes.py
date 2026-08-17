@@ -154,6 +154,7 @@ class ExportMetadata(BaseModel):
     is_approved: bool
     can_export: bool
     session_state: str
+    stage2_status: Literal["no_job", "pending", "running", "completed", "failed"]
     # Patient identifier — decrypted server-side, only populated for
     # the row's owner (the NoteDetail endpoint already routes through
     # get_owned_session_or_404, so any non-owner caller never reaches
@@ -178,6 +179,12 @@ class NoteApprovalResponse(BaseModel):
     version: int
     approved: bool
     message: str
+
+
+class FinalApprovalRequest(BaseModel):
+    """Explicit acknowledgement required for an audio-only fallback."""
+
+    allow_stage2_failure: bool = False
 
 
 class AudioReplayUrlResponse(BaseModel):
@@ -455,6 +462,7 @@ async def get_full_note(
 @router.post("/{session_id}/approve", response_model=NoteApprovalResponse)
 async def approve_final_note(
     session_id: uuid.UUID,
+    body: Optional[FinalApprovalRequest] = None,
     user: CurrentUser = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -483,6 +491,30 @@ async def approve_final_note(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="No note found to approve.",
         )
+
+    # PROCESSING_STAGE2 is both the in-flight state and the final-review state;
+    # the job row is the authoritative discriminator. Never let a fast click
+    # finalize Stage 1 while visual enrichment is still pending or running.
+    # A failed visual pass is approvable only through an explicit audio-only
+    # acknowledgement from the client.
+    if session.state == SessionState.PROCESSING_STAGE2:
+        stage2_job = await get_latest_job(session_id, db)
+        stage2_status = stage2_job.status if stage2_job is not None else "no_job"
+        if stage2_status in {"no_job", "pending", "running"}:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Stage 2 must finish before final approval.",
+            )
+        if stage2_status == "failed" and not (
+            body is not None and body.allow_stage2_failure
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Stage 2 failed. Explicitly acknowledge the audio-only "
+                    "fallback before final approval."
+                ),
+            )
 
     _check_unresolved_conflicts(note)
 
@@ -672,10 +704,11 @@ async def get_note_detail(
     # fan them out with gather to keep the detail page snappy on web.
     session = await get_owned_session_or_404(db, session_id, user)
 
-    note, transcript, approved = await asyncio.gather(
+    note, transcript, approved, stage2_job = await asyncio.gather(
         get_latest_note(str(session_id), db),
         _load_transcript(db, session_id),
         is_note_approved(str(session_id), db),
+        get_latest_job(session_id, db),
     )
     if not note:
         raise HTTPException(
@@ -711,6 +744,7 @@ async def get_note_detail(
         is_approved=approved,
         can_export=session.state in {SessionState.REVIEW_COMPLETE, SessionState.EXPORTED},
         session_state=session.state.value,
+        stage2_status=stage2_job.status if stage2_job is not None else "no_job",
         external_reference_id=external_id,
     )
 
