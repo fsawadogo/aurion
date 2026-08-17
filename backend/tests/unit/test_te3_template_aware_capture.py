@@ -631,6 +631,7 @@ def _stage2_harness(
     resolver,
     grounded_synthesis_enabled=False,
     grounded_visual_findings_enabled=False,
+    assembled_prompt="PROMPT",
 ):
     """Patch `run_stage2_vision`'s collaborators and capture what captioning
     was handed. Returns the dict the assertions read."""
@@ -669,6 +670,8 @@ def _stage2_harness(
     async def _capture_captions(**kwargs):
         captured["template"] = kwargs.get("template")
         captured["grounded"] = kwargs.get("grounded")
+        captured["frame_system_prompt"] = kwargs.get("frame_system_prompt")
+        captured["clip_system_prompt"] = kwargs.get("clip_system_prompt")
         return []
 
     async def _resolver(row, db):
@@ -703,7 +706,11 @@ def _stage2_harness(
     monkeypatch.setattr(
         route, "retrieve_clips_for_triggers", lambda *_a, **_k: _async([])
     )
-    monkeypatch.setattr(route, "assemble_prompt", lambda *_a, **_k: _async("PROMPT"))
+    async def _assemble(prompt_id, *_a, **kwargs):
+        captured.setdefault("assemble_calls", []).append((prompt_id, kwargs))
+        return assembled_prompt
+
+    monkeypatch.setattr(route, "assemble_prompt", _assemble)
     monkeypatch.setattr(route, "reconcile_captions", lambda *_a, **_k: _async([]))
     # TE-4 gave merge a `template` arg — the same one that aimed capture.
     monkeypatch.setattr(
@@ -851,6 +858,82 @@ async def test_grounded_visual_requires_governing_and_visual_flags(
     await run_stage2_vision(uuid.uuid4(), db)
 
     assert captured["grounded"] is expected
+
+
+@pytest.mark.asyncio
+async def test_registry_descriptive_base_does_not_shadow_grounded_default(
+    monkeypatch,
+):
+    """A clinician without a visual override must receive grounded mode.
+
+    The doctor route must ask prompt assembly for overrides only. Passing the
+    registry base as an override previously made the path use descriptive
+    captions while the grounded feature flags were enabled.
+    """
+    import uuid
+
+    from app.api.v1.vision import run_stage2_vision
+    row = SimpleNamespace(clinician_id=uuid.uuid4(), provider_overrides=None)
+    captured, db = _stage2_harness(
+        monkeypatch,
+        session_row=row,
+        flag_on=False,
+        resolver=lambda *_a: _template(),
+        grounded_synthesis_enabled=True,
+        grounded_visual_findings_enabled=True,
+        assembled_prompt=None,
+    )
+
+    await run_stage2_vision(uuid.uuid4(), db)
+
+    assert captured["grounded"] is True
+    assert captured["frame_system_prompt"] is None
+    assert captured["clip_system_prompt"] is None
+    vision_calls = [
+        call
+        for call in captured["assemble_calls"]
+        if call[0] in {"vision_frame", "vision_clip"}
+    ]
+    assert [call[0] for call in vision_calls] == [
+        "vision_frame",
+        "vision_clip",
+    ]
+    assert all(
+        call[1]["include_registry_default"] is False for call in vision_calls
+    )
+
+
+@pytest.mark.asyncio
+async def test_true_clinician_visual_override_still_wins_in_grounded_mode(
+    monkeypatch,
+):
+    import uuid
+
+    from app.api.v1.vision import run_stage2_vision
+
+    row = SimpleNamespace(clinician_id=uuid.uuid4(), provider_overrides=None)
+    captured, db = _stage2_harness(
+        monkeypatch,
+        session_row=row,
+        flag_on=False,
+        resolver=lambda *_a: _template(),
+        grounded_synthesis_enabled=True,
+        grounded_visual_findings_enabled=True,
+        assembled_prompt="CUSTOM CLINICIAN VISUAL PROMPT",
+    )
+
+    await run_stage2_vision(uuid.uuid4(), db)
+
+    assert captured["frame_system_prompt"] == "CUSTOM CLINICIAN VISUAL PROMPT"
+    assert captured["clip_system_prompt"] == "CUSTOM CLINICIAN VISUAL PROMPT"
+    vision_calls = [
+        call
+        for call in captured["assemble_calls"]
+        if call[0] in {"vision_frame", "vision_clip"}
+    ]
+    assert all(
+        call[1]["include_registry_default"] is False for call in vision_calls
+    )
 
 
 def test_find_target_section_keys_off_the_anchor_id():

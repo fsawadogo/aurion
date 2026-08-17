@@ -9,6 +9,8 @@ from __future__ import annotations
 
 import uuid
 
+import pytest
+
 from app.modules.prompts.assembly import _select_published
 
 OWNER = uuid.uuid4()
@@ -72,3 +74,53 @@ def test_role_skipped_when_role_value_none() -> None:
         ("ALL", None, None, "all-text"),
     ]
     assert _select_published(rows, OWNER, None) == "all-text"
+
+
+@pytest.mark.asyncio
+async def test_prompt_assembly_can_return_no_runtime_override(monkeypatch) -> None:
+    """Vision may choose its grounded/descriptive default after DB lookup."""
+    from app.modules.prompts import assembly
+
+    async def _no_user(*_args, **_kwargs):
+        return None
+
+    async def _no_publication(*_args, **_kwargs):
+        return None
+
+    monkeypatch.setattr(assembly, "_get_user_prompt", _no_user)
+    monkeypatch.setattr(assembly, "_get_published_prompt", _no_publication)
+
+    resolved = await assembly.assemble_prompt(
+        "vision_frame",
+        OWNER,
+        object(),
+        include_registry_default=False,
+    )
+
+    assert resolved is None
+
+
+@pytest.mark.asyncio
+async def test_explicit_override_equal_to_registry_default_is_preserved(
+    monkeypatch,
+) -> None:
+    """Override presence, not text equality, controls runtime precedence."""
+    from app.modules.prompts import PROMPTS, assembly
+
+    async def _no_user(*_args, **_kwargs):
+        return None
+
+    async def _published_default(*_args, **_kwargs):
+        return PROMPTS["vision_frame"].system_prompt
+
+    monkeypatch.setattr(assembly, "_get_user_prompt", _no_user)
+    monkeypatch.setattr(assembly, "_get_published_prompt", _published_default)
+
+    resolved = await assembly.assemble_prompt(
+        "vision_frame",
+        OWNER,
+        object(),
+        include_registry_default=False,
+    )
+
+    assert resolved == PROMPTS["vision_frame"].system_prompt
