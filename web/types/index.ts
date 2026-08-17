@@ -387,6 +387,7 @@ export interface ExportMetadata {
   is_approved: boolean;
   can_export: boolean;
   session_state: SessionState;
+  stage2_status: "no_job" | "pending" | "running" | "completed" | "failed";
   external_reference_id?: string | null;
 }
 

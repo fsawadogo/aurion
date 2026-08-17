@@ -348,8 +348,9 @@ async def create_video_import(
     The session is created in CONSENT_PENDING with ``import_source`` set; the
     consent attestation immediately confirms consent (CONSENT_ATTESTED), so
     the orchestrator may later drive RECORDING → PROCESSING_STAGE1 through the
-    normal consent hard-gate. Clinician imports stop at AWAITING_REVIEW for
-    human review (no auto-advance).
+    normal consent hard-gate. Stage 2 is started automatically only after
+    frame extraction finishes; the clinician sees one final review/approval
+    step after both stages reach a terminal state.
     """
     if not body.consent_attested:
         raise HTTPException(
@@ -361,7 +362,7 @@ async def create_video_import(
         clinician_id=user.user_id,
         actor_id=user.user_id,
         body=body,
-        auto_advance_stage2=False,
+        auto_advance_stage2=True,
     )
 
 
@@ -986,10 +987,10 @@ async def _auto_advance_stage2(
             db=db,
         )
         return new_version
-    except Exception as exc:  # noqa: BLE001 — record on the job, then bubble
-        # Mark the Stage-2 job failed so the iOS poll surfaces the failure
-        # (not a perpetual "queued"); the outer video-import handler still
-        # records VIDEO_IMPORT_FAILED + the CRITICAL alert when this re-raises.
+    except Exception as exc:  # noqa: BLE001 — record and preserve fallback
+        # Ingestion and Stage 1 succeeded. Record Stage 2 as failed, but do not
+        # fail the whole import: the review page must remain reachable so the
+        # clinician can explicitly approve the audio-only fallback.
         await mark_failed(job.id, str(exc), db)
         await write_audit(
             session_id,
@@ -997,7 +998,7 @@ async def _auto_advance_stage2(
             job_id=str(job.id),
             reason=str(exc)[:200],
         )
-        raise
+        return None
 
 
 async def _run_video_import_in_background(
@@ -1101,17 +1102,10 @@ async def _run_video_import_in_background(
                 await purge_raw_video(str(session_id), key)
             await jobs.mark_raw_video_purged(db, job)
 
-            # 4. Admin/eval bulk runs auto-advance Stage 2 so the full
-            #    multimodal note is produced without a manual Stage 1 approval.
-            #    Clinician imports (auto_advance_stage2=False) stop at
-            #    AWAITING_REVIEW for human review. Final approval +
-            #    conflict resolution always stay human (the session is left in
-            #    PROCESSING_STAGE2, never auto-approved to REVIEW_COMPLETE).
-            #    Standalone-visual imports ALSO auto-advance so the video
-            #    findings actually populate the note (an empty audio note would
-            #    otherwise sit at AWAITING_REVIEW with nothing to review). Final
-            #    approval + conflict resolution still stay human (left in
-            #    PROCESSING_STAGE2, never auto-approved to REVIEW_COMPLETE).
+            # 4. Every video import auto-advances Stage 2 only now, after all
+            #    frames have been extracted and masked. This closes the race
+            #    where review exposed Stage 1 while the frame set was empty.
+            #    Final approval + conflict resolution remain human actions.
             # Stand down if the clinician cancelled while we were working.
             # /cancel can only mark the row — it cannot kill this detached
             # task — so without this check a late-finishing orchestrator would
@@ -1128,9 +1122,7 @@ async def _run_video_import_in_background(
                 )
                 return
 
-            new_version = None
-            if job.auto_advance_stage2 or standalone:
-                new_version = await _auto_advance_stage2(db, session, session_id)
+            new_version = await _auto_advance_stage2(db, session, session_id)
 
             await jobs.mark_completed(
                 db,

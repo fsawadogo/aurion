@@ -31,6 +31,7 @@ from app.modules.providers.transcription.assemblyai import (
 )
 from app.modules.providers.transcription.whisper import WhisperTranscriptionProvider
 from app.modules.providers.vision.anthropic import AnthropicVisionProvider
+from app.modules.providers.vision.gemini import GeminiVisionProvider
 
 
 def _mock_config(**overrides) -> AppConfigSchema:
@@ -132,6 +133,17 @@ class TestRegistryPrecedence:
         ):
             provider = registry.get_vision_provider()
         assert isinstance(provider, AnthropicVisionProvider)
+
+    def test_frame_fallback_resolver_respects_admin_vision_override(self) -> None:
+        """The doctor Stage 2 dispatcher uses the kind-aware fallback path."""
+        registry = ProviderRegistry()
+        store.set_cached("vision", "gemini")
+        with patch(
+            "app.modules.config.provider_registry.get_config",
+            return_value=_mock_config(vision="anthropic"),
+        ):
+            provider = registry.get_vision_provider_for_kind_with_fallback("frame")
+        assert isinstance(provider, GeminiVisionProvider)
 
     def test_fallback_primary_respects_store_override(self) -> None:
         registry = ProviderRegistry()

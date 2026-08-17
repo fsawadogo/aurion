@@ -28,7 +28,7 @@ import PatientSummaryCard from "@/components/portal/PatientSummaryCard";
 import PreviewVsFinalCard from "@/components/portal/PreviewVsFinalCard";
 import StageTwoProgressBanner from "@/components/portal/StageTwoProgressBanner";
 import {
-  approveAll,
+  approveFinal,
   assistNote,
   editNote,
   exportNote,
@@ -103,10 +103,16 @@ export default function NoteReviewPage() {
    * it to every control that reads the note fixes the class rather than the
    * three instances.
    */
+  const stage2Status = detail?.export_metadata.stage2_status ?? "no_job";
+  const stage2InFlight =
+    detail?.export_metadata.session_state === "PROCESSING_STAGE2" &&
+    (stage2Status === "no_job" ||
+      stage2Status === "pending" ||
+      stage2Status === "running");
   const noteBusy =
     regenerating ||
     approving ||
-    detail?.export_metadata.session_state === "PROCESSING_STAGE2";
+    stage2InFlight;
 
   useEffect(() => {
     let cancelled = false;
@@ -231,7 +237,10 @@ export default function NoteReviewPage() {
     setApproving(true);
     setError(null);
     try {
-      await approveAll(sessionId);
+      await approveFinal(
+        sessionId,
+        detail.export_metadata.stage2_status === "failed",
+      );
       await load();
     } catch (e) {
       setError(humanizeError(e, t("approvalError")));
@@ -701,11 +710,18 @@ function SignOffControl({
   const t = useTranslations("NoteReview.actions");
   const isApproved = detail.export_metadata.is_approved;
   const state = detail.export_metadata.session_state;
+  const stage2Status = detail.export_metadata.stage2_status;
+  const stage2Failed = stage2Status === "failed";
+  const waitingForStage2 =
+    state === "AWAITING_REVIEW" ||
+    (state === "PROCESSING_STAGE2" &&
+      stage2Status !== "completed" &&
+      stage2Status !== "failed");
   const blocked =
     noteBusy ||
     detail.conflict_state.has_unresolved ||
     state === "PROCESSING_STAGE1" ||
-    state === "PROCESSING_STAGE2";
+    waitingForStage2;
 
   if (isApproved) {
     return (
@@ -728,9 +744,21 @@ function SignOffControl({
       disabled={approving || blocked}
       // Conflicts already surface in the ConflictsBanner at the top, so the
       // label carries the reason without a second inline hint.
-      title={blocked ? t("blockedHint") : undefined}
+      title={
+        waitingForStage2
+          ? t("stage2PendingHint")
+          : blocked
+            ? t("blockedHint")
+            : undefined
+      }
     >
-      {blocked ? t("resolveToApprove") : t("approveAndSign")}
+      {blocked
+        ? waitingForStage2
+          ? t("stage2Pending")
+          : t("resolveToApprove")
+        : stage2Failed
+          ? t("approveAudioOnly")
+          : t("approveAndSign")}
     </Button>
   );
 }

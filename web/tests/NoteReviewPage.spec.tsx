@@ -51,7 +51,7 @@ vi.mock("@/lib/portal-api", () => ({
   getPortalFeatureFlags: vi.fn(),
   getMyProfile: vi.fn(),
   assistNote: vi.fn(),
-  approveAll: vi.fn(),
+  approveFinal: vi.fn(),
   editNote: vi.fn(),
   exportNote: vi.fn(),
   resolveConflict: vi.fn(),
@@ -90,8 +90,9 @@ const DETAIL = {
   export_metadata: {
     latest_version: 1,
     is_approved: false,
-    can_export: true,
-    session_state: "AWAITING_REVIEW",
+      can_export: true,
+      session_state: "AWAITING_REVIEW",
+      stage2_status: "no_job",
   },
 };
 

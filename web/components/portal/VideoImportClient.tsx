@@ -83,6 +83,13 @@ function humanizeVisitType(key: string): string {
 }
 const POLL_MS = 4000;
 
+/** Stage 1 awaiting review is intentionally insufficient: frame extraction
+ * and Stage 2 continue afterward. Review opens only when the import job has
+ * completed the multimodal pipeline. */
+export function isVideoImportReviewReady(status: VideoImportStatus): boolean {
+  return status.status === "completed";
+}
+
 type Phase = "form" | "uploading" | "processing" | "error" | "cancelled";
 
 // Stepper stages, mapped from the backend job status + session state.
@@ -409,8 +416,7 @@ export default function VideoImportClient({
   })();
 
   function mapStage(s: VideoImportStatus): number {
-    if (s.status === "completed" || s.session_state === "AWAITING_REVIEW")
-      return STAGES.indexOf("ready");
+    if (isVideoImportReviewReady(s)) return STAGES.indexOf("ready");
     if (s.frames_extracted > 0 || s.frames_dropped > 0)
       return STAGES.indexOf("maskingFrames");
     if (s.session_state === "PROCESSING_STAGE1")
@@ -431,7 +437,7 @@ export default function VideoImportClient({
         return;
       }
       setStageIndex(mapStage(s));
-      if (s.status === "completed" || s.session_state === "AWAITING_REVIEW") {
+      if (isVideoImportReviewReady(s)) {
         // Static-export: hard-navigate to the dynamic note-review route.
         window.location.href = `${reviewBase}/${sessionId}`;
         return;

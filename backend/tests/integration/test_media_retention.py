@@ -319,6 +319,11 @@ async def _call_approve(
         patch.object(notes_module, "get_latest_note", AsyncMock(return_value=note)),
         patch.object(
             notes_module,
+            "get_latest_job",
+            AsyncMock(return_value=MagicMock(status="completed")),
+        ),
+        patch.object(
+            notes_module,
             "is_note_approved",
             AsyncMock(return_value=already_approved),
         ),

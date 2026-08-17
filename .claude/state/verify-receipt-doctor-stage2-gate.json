@@ -1,0 +1,19 @@
+{
+  "task_id": "doctor-stage2-gate",
+  "branch": "lane-backend/doctor-stage2-gate",
+  "verified_at": "2026-08-16T23:03:09-04:00",
+  "checks": {
+    "focused_backend_tests": "53 passed across final approval gating, video import orchestration/routes, provider overrides, and affected media-retention coverage.",
+    "backend_tests": "2215 passed, 1 skipped in the standard full unit run. Four additional tests failed only because the sandbox denied pytest's default temp directory; the exact four reran with a verified workspace basetemp and passed. Effective result: 2219 passed, 1 skipped.",
+    "backend_lint": "Ruff on every changed backend production and test file: all checks passed.",
+    "focused_web_tests": "25 passed across NoteReview and VideoImport focused suites.",
+    "web_lint": "ESLint on changed production web sources: passed.",
+    "web_types": "Repository-wide tsc --noEmit remains red on pre-existing unrelated test-fixture errors in AI Prompts, Audit, and VideoImport tests. No changed production TypeScript file introduced a reported error.",
+    "acceptance_criteria": "AC-1 through AC-7 verified by focused regressions, full backend units, lint, and zero ios diff. AC-8 is intentionally post-deploy: rerun the five original knee-visit clips through the doctor pipeline and compare against Marie's reference.",
+    "ios_builds": "n/a for this backend/web workstream. git diff main...HEAD -- ios/ is empty. If the shared backend contract later requires an iOS adjustment, that client implementation is assigned to Faical.",
+    "stack_boots": "not rerun for this receipt; production-path validation will occur after PR deployment through the logged-in doctor flow and CloudWatch.",
+    "security": "No prompt, direct model SDK call, secret, masking upload contract, consent path, or audit mutation was added. Approval is stricter and provider resolution remains registry-mediated.",
+    "simplify": "Manual scope review completed: sequencing, approval policy, and provider routing remain in their existing modules; no new abstraction was introduced. No P1 finding identified.",
+    "product_direction": "Durably recorded in docs/plans/doctor-stage2-gate.md: this workstream changes backend/web rather than iOS; any necessary iOS implementation belongs to Faical; measurement uses the real doctor pipeline; and grounded cited clinical interpretation is the target rather than literal description."
+  }
+}
