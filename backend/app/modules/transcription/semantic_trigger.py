@@ -25,8 +25,11 @@ from __future__ import annotations
 import logging
 import math
 import os
+from functools import partial
 
 import httpx
+
+from app.modules.providers._retry import send_with_backoff
 
 logger = logging.getLogger("aurion.transcription.semantic_trigger")
 
@@ -74,7 +77,8 @@ async def _embed_batch(texts: list[str]) -> list[list[float]]:
     if not texts:
         return []
     async with httpx.AsyncClient(timeout=30.0) as client:
-        response = await client.post(
+        _send = partial(
+            client.post,
             _EMBED_ENDPOINT,
             headers={
                 "Authorization": f"Bearer {_OPENAI_API_KEY}",
@@ -82,7 +86,9 @@ async def _embed_batch(texts: list[str]) -> list[list[float]]:
             },
             json={"model": _EMBED_MODEL, "input": texts},
         )
-        response.raise_for_status()
+        # Live dev logs show this endpoint 429s under load — same bounded
+        # backoff as the LLM provider calls.
+        response = await send_with_backoff(_send, provider="openai", label="embeddings")
         data = response.json()
     return [item["embedding"] for item in data["data"]]
 
