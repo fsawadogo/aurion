@@ -34,6 +34,7 @@ from app.core.types import (
     NoteClaim,
     NoteSection,
     PriorContextUsedSummary,
+    ProviderError,
     Template,
     Transcript,
 )
@@ -1059,10 +1060,24 @@ async def generate_stage1_note(
 
     registry = get_registry()
 
+    # An explicit per-session override is an eval-team pin — never
+    # substitute a different provider under it. Otherwise resolve the whole
+    # ordered chain so a runtime ProviderError (e.g. a 429 that outlived the
+    # provider's own bounded retry) advances to the next provider instead of
+    # failing Stage 1 outright (CLAUDE.md §Error handling: "Provider
+    # unavailable → fallback to next, log it").
     if provider_override:
-        provider = registry.get_note_provider(override=provider_override)
+        provider_chain = [registry.get_note_provider(override=provider_override)]
     else:
-        provider = registry.get_note_provider_with_fallback()
+        chain_resolver = getattr(registry, "get_note_provider_chain", None)
+        resolved = chain_resolver() if callable(chain_resolver) else None
+        if isinstance(resolved, (list, tuple)) and resolved:
+            provider_chain = list(resolved)
+        else:
+            # Compatibility for registry test doubles written before the
+            # chain API — single attempt, the historical contract.
+            provider_chain = [registry.get_note_provider_with_fallback()]
+    provider = provider_chain[0]
 
     logger.info(
         "Generating Stage 1 note: session=%s specialty=%s template=%s provider=%s",
@@ -1127,65 +1142,89 @@ async def generate_stage1_note(
     # Both the success and failure paths record so dashboards can show
     # failure / fallback rates accurately. Telemetry is best-effort —
     # a writer hiccup never alters the surrounding code path.
-    _usage_started = time.monotonic()
-    try:
-        provider_operation = provider.generate_note(
-            transcript,
-            template,
-            stage=1,
-            output_language=output_language,
-            system_prompt=system_prompt,
-            prior_context_text=prior_context_text or None,
-            participants=participants or None,
-            specialty_prefix=specialty_prefix,
-            encounter_context=encounter_context or None,
-        )
-        if deadline_owned_externally:
-            note = await provider_operation
-        else:
-            note = await _await_with_stage1_deadline(
-                provider_operation,
-                deadline_at=stage1_deadline_at,
+    # Provider-chain fallback: a ProviderError from one provider (rate
+    # limit that outlived its bounded retry, outage, malformed response)
+    # advances to the next distinct provider in the chain, still under the
+    # same Stage-1 deadline. Every attempt records its own telemetry row so
+    # fallback rates stay visible on the #73 dashboards. A deadline
+    # exhaustion never falls back — no budget remains for a second call.
+    note: Optional[Note] = None
+    for _attempt_index, provider in enumerate(provider_chain):
+        if _attempt_index:
+            logger.warning(
+                "Falling back to note provider: session=%s provider=%s (attempt %d/%d)",
+                session_id,
+                type(provider).__name__,
+                _attempt_index + 1,
+                len(provider_chain),
             )
-        usage_kwargs = {
-            "db": db,
-            "provider_type": "note_generation",
-            "provider_name": getattr(note, "provider_used", "unknown"),
-            "operation": "generate_note",
-            "latency_ms": int((time.monotonic() - _usage_started) * 1000),
-            "success": True,
-            "session_id": session_id,
-        }
-        if deadline_owned_externally:
-            await _record_provider_usage(**usage_kwargs)
-        else:
-            await _record_provider_usage_before_deadline(
-                deadline_at=stage1_deadline_at,
-                **usage_kwargs,
+        _usage_started = time.monotonic()
+        try:
+            provider_operation = provider.generate_note(
+                transcript,
+                template,
+                stage=1,
+                output_language=output_language,
+                system_prompt=system_prompt,
+                prior_context_text=prior_context_text or None,
+                participants=participants or None,
+                specialty_prefix=specialty_prefix,
+                encounter_context=encounter_context or None,
             )
-    except Stage1DeadlineExceededError:
-        # No budget remains for an awaited telemetry write. Preserve the
-        # stable exception so the owner can fail the session without exposing
-        # a provider/model error body.
-        raise
-    except Exception:
-        usage_kwargs = {
-            "db": db,
-            "provider_type": "note_generation",
-            "provider_name": type(provider).__name__,
-            "operation": "generate_note",
-            "latency_ms": int((time.monotonic() - _usage_started) * 1000),
-            "success": False,
-            "session_id": session_id,
-        }
-        if deadline_owned_externally:
-            await _record_provider_usage(**usage_kwargs)
-        else:
-            await _record_provider_usage_before_deadline(
-                deadline_at=stage1_deadline_at,
-                **usage_kwargs,
-            )
-        raise
+            if deadline_owned_externally:
+                note = await provider_operation
+            else:
+                note = await _await_with_stage1_deadline(
+                    provider_operation,
+                    deadline_at=stage1_deadline_at,
+                )
+            usage_kwargs = {
+                "db": db,
+                "provider_type": "note_generation",
+                "provider_name": getattr(note, "provider_used", "unknown"),
+                "operation": "generate_note",
+                "latency_ms": int((time.monotonic() - _usage_started) * 1000),
+                "success": True,
+                "session_id": session_id,
+            }
+            if deadline_owned_externally:
+                await _record_provider_usage(**usage_kwargs)
+            else:
+                await _record_provider_usage_before_deadline(
+                    deadline_at=stage1_deadline_at,
+                    **usage_kwargs,
+                )
+        except Stage1DeadlineExceededError:
+            # No budget remains for an awaited telemetry write. Preserve the
+            # stable exception so the owner can fail the session without exposing
+            # a provider/model error body.
+            raise
+        except Exception as _note_exc:
+            usage_kwargs = {
+                "db": db,
+                "provider_type": "note_generation",
+                "provider_name": type(provider).__name__,
+                "operation": "generate_note",
+                "latency_ms": int((time.monotonic() - _usage_started) * 1000),
+                "success": False,
+                "session_id": session_id,
+            }
+            if deadline_owned_externally:
+                await _record_provider_usage(**usage_kwargs)
+            else:
+                await _record_provider_usage_before_deadline(
+                    deadline_at=stage1_deadline_at,
+                    **usage_kwargs,
+                )
+            if (
+                isinstance(_note_exc, ProviderError)
+                and _attempt_index + 1 < len(provider_chain)
+            ):
+                continue
+            raise
+        break
+    if note is None:  # defensive — the loop either binds note or raises
+        raise ProviderError("note_generation", "All note generation providers failed")
 
     note.session_id = session_id
     note.stage = 1

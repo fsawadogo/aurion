@@ -282,6 +282,48 @@ class TestGeminiNativeClipCaptioning:
         assert inline["video_metadata"]["fps"] == get_config().pipeline.video_capture_fps
 
     @pytest.mark.asyncio
+    async def test_native_path_sets_low_media_resolution(
+        self, clip: MaskedClip, anchor: TranscriptSegment
+    ) -> None:
+        """The clip request must carry `generationConfig.mediaResolution`
+        per the AppConfig knob (schema default "low"). LOW cuts Gemini's
+        per-sampled-frame token cost ~4x on the native-video path — without
+        it a long clip's single inline request blows the per-minute token
+        quota and 429s.
+        """
+        captured_payload: dict[str, Any] = {}
+
+        async def fake_post(url, *args, **kwargs):
+            captured_payload.update(kwargs.get("json", {}))
+            return _mock_httpx_response(
+                status_code=200,
+                json_body=_gemini_response_payload(description="ok"),
+            )
+
+        fake_s3 = MagicMock()
+        fake_s3.get_object.return_value = {
+            "Body": MagicMock(read=MagicMock(return_value=b"x"))
+        }
+
+        with patch(
+            "app.modules.providers.vision.gemini.get_s3_client",
+            return_value=fake_s3,
+        ), patch(
+            "app.modules.providers.vision.gemini.httpx.AsyncClient"
+        ) as mock_client_cls, patch(
+            "app.modules.providers.vision.gemini._GOOGLE_AI_API_KEY",
+            "test-key",
+        ):
+            mock_client = AsyncMock()
+            mock_client.post = AsyncMock(side_effect=fake_post)
+            mock_client_cls.return_value.__aenter__.return_value = mock_client
+
+            await GeminiVisionProvider().caption_clip(clip, anchor)
+
+        generation_config = captured_payload["generationConfig"]
+        assert generation_config["mediaResolution"] == "MEDIA_RESOLUTION_LOW"
+
+    @pytest.mark.asyncio
     async def test_uses_descriptive_system_prompt(
         self, clip: MaskedClip, anchor: TranscriptSegment
     ) -> None:

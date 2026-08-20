@@ -53,6 +53,16 @@ router = APIRouter(prefix="/clips", tags=["clips"])
 # video-only H.264 MP4. Anything else fails fast at the boundary.
 _ALLOWED_CONTENT_TYPES: frozenset[str] = frozenset({"video/mp4"})
 
+# Server-side clip bounds. iOS extraction is already bounded by
+# `pipeline.clip_window_ms` (schema ceiling 30s), so anything past these
+# limits is a misbehaving/modified client — reject it here rather than
+# letting it reach Stage 2, where a clip this size base64-inlines into a
+# single Gemini `generateContent` request (~20 MB request cap; a 5-minute
+# MP4 blows the per-minute token quota in one shot). 14 MiB raw is
+# ≈18.7 MiB after base64 — the largest clip that still fits inline.
+_MAX_CLIP_DURATION_MS = 30_000
+_MAX_CLIP_BYTES = 14 * 1024 * 1024
+
 # How many characters of the session_id appear in log lines. Matches
 # `_session_prefix` truncation pattern from peer services so logs are
 # greppable without leaking the full UUID (PHI-adjacent identifier).
@@ -109,7 +119,7 @@ class ClipUploadResponse(BaseModel):
 async def upload_clip(
     session_id: uuid.UUID,
     timestamp_ms: int = Form(..., ge=0),
-    duration_ms: int = Form(..., ge=1),
+    duration_ms: int = Form(..., ge=1, le=_MAX_CLIP_DURATION_MS),
     trigger_segment_id: str = Form(..., min_length=1),
     frames_total: int = Form(..., ge=1),
     frames_with_faces: int = Form(..., ge=0),
@@ -173,6 +183,14 @@ async def upload_clip(
     body = await clip.read()
     if not body:
         raise HTTPException(status_code=400, detail="Empty clip body")
+    if len(body) > _MAX_CLIP_BYTES:
+        raise HTTPException(
+            status_code=413,
+            detail=(
+                f"Clip too large: {len(body)} bytes exceeds the "
+                f"{_MAX_CLIP_BYTES}-byte limit for inline Stage 2 processing."
+            ),
+        )
 
     # 5. KMS-encrypted S3 PutObject. The clip_id is server-generated so
     # the iOS side never picks the key; this also prevents two clips

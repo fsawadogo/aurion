@@ -9,11 +9,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+from functools import partial
 
 import httpx
 
 from app.core.types import Note, ProviderError, Template, Transcript
 from app.modules.config.appconfig_client import get_config
+from app.modules.providers._retry import send_with_backoff
 from app.modules.providers.base import ChatMessage, NoteGenerationProvider
 from app.modules.providers.note_gen.shared import (
     NOTE_GEN_SYSTEM_PROMPT,
@@ -69,7 +71,8 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
 
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(
+                _send = partial(
+                    client.post,
                     f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                     # Key rides an auth HEADER, never the ?key= URL query param:
                     # httpx logs the request URL (and puts it in HTTPStatusError),
@@ -96,7 +99,7 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
                         },
                     },
                 )
-                response.raise_for_status()
+                response = await send_with_backoff(_send, provider="gemini", label="note_gen")
                 data = response.json()
                 usage = data.get("usageMetadata") or {}
                 set_call_usage(
@@ -134,7 +137,8 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
         model = get_config().model_versions.gemini or _MODEL
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
+                _send = partial(
+                    client.post,
                     f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent",
                     # Key rides an auth HEADER, never the ?key= URL query param
                     # (httpx logs the URL / embeds it in errors → CloudWatch leak).
@@ -154,7 +158,7 @@ class GeminiNoteGenerationProvider(NoteGenerationProvider):
                         },
                     },
                 )
-                response.raise_for_status()
+                response = await send_with_backoff(_send, provider="gemini", label="generate_text")
                 data = response.json()
                 return data["candidates"][0]["content"]["parts"][0]["text"]
 

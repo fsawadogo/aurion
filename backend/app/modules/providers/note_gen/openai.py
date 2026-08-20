@@ -9,11 +9,13 @@ from __future__ import annotations
 import json
 import logging
 import os
+from functools import partial
 
 import httpx
 
 from app.core.types import Note, ProviderError, Template, Transcript
 from app.modules.config.appconfig_client import get_config
+from app.modules.providers._retry import send_with_backoff
 from app.modules.providers.base import ChatMessage, NoteGenerationProvider
 from app.modules.providers.note_gen.shared import (
     NOTE_GEN_SYSTEM_PROMPT,
@@ -70,7 +72,8 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
 
         try:
             async with httpx.AsyncClient(timeout=300.0) as client:
-                response = await client.post(
+                _send = partial(
+                    client.post,
                     "https://api.openai.com/v1/chat/completions",
                     headers={
                         "Authorization": f"Bearer {_OPENAI_API_KEY}",
@@ -87,7 +90,7 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
                         "response_format": {"type": "json_object"},
                     },
                 )
-                response.raise_for_status()
+                response = await send_with_backoff(_send, provider="openai", label="note_gen")
                 data = response.json()
                 usage = data.get("usage") or {}
                 set_call_usage(
@@ -123,7 +126,8 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
         params = get_config().model_params.note_generation
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
+                _send = partial(
+                    client.post,
                     "https://api.openai.com/v1/chat/completions",
                     headers={
                         "Authorization": f"Bearer {_OPENAI_API_KEY}",
@@ -142,7 +146,7 @@ class OpenAINoteGenerationProvider(NoteGenerationProvider):
                         ],
                     },
                 )
-                response.raise_for_status()
+                response = await send_with_backoff(_send, provider="openai", label="generate_text")
                 data = response.json()
                 return data["choices"][0]["message"]["content"]
 

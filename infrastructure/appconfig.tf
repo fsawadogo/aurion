@@ -98,6 +98,11 @@ resource "aws_appconfig_configuration_profile" "main" {
                 # clip descriptions on frontier vision models).
                 max_tokens           = { type = "integer", minimum = 100, maximum = 8000 }
                 confidence_threshold = { type = "string", enum = ["low", "medium", "high"] }
+                # Gemini native-video clip tokenisation resolution. NOT in
+                # `required` so older hosted documents stay deployable — the
+                # backend Pydantic default ("low") applies when absent. MUST
+                # match VisionModelParams.clip_media_resolution.
+                clip_media_resolution = { type = "string", enum = ["default", "low", "medium", "high"] }
               }
             }
           }
@@ -346,7 +351,7 @@ resource "aws_appconfig_configuration_profile" "main" {
             # Standalone visual evidence — video can carry a note when audio is
             # empty/thin (video-import path). NOT `required`; backend defaults it
             # false. Face-less-frame retention needs compliance sign-off to enable.
-            visual_evidence_standalone_enabled = { type = "boolean" }
+            visual_evidence_standalone_enabled  = { type = "boolean" }
             keep_low_confidence_visual_findings = { type = "boolean" }
           }
         }

@@ -12,12 +12,14 @@ import json
 import logging
 import os
 from dataclasses import dataclass
+from functools import partial
 from typing import Any
 
 import httpx
 
 from app.core.types import Note, ProviderError, Template, Transcript
 from app.modules.config.appconfig_client import get_config
+from app.modules.providers._retry import send_with_backoff
 from app.modules.providers.base import ChatMessage, NoteGenerationProvider
 from app.modules.providers.note_gen.compact_stage1 import (
     Stage1ShardSpec,
@@ -246,7 +248,8 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
         """Generate one shard; retry only this shard on truncation."""
 
         for attempt_max_tokens in ceilings:
-            response = await client.post(
+            _send = partial(
+                client.post,
                 _ENDPOINT,
                 headers={
                     "x-api-key": _ANTHROPIC_API_KEY,
@@ -274,7 +277,7 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
                     },
                 },
             )
-            response.raise_for_status()
+            response = await send_with_backoff(_send, provider="anthropic", label="note_gen_shard")
             data = response.json()
             attempt_usage = data.get("usage") or {}
             usage.add(attempt_usage)
@@ -344,7 +347,8 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
 
         usage = _UsageAccumulator()
         for attempt_max_tokens in ceilings:
-            response = await client.post(
+            _send = partial(
+                client.post,
                 _ENDPOINT,
                 headers={
                     "x-api-key": _ANTHROPIC_API_KEY,
@@ -370,7 +374,7 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
                     },
                 },
             )
-            response.raise_for_status()
+            response = await send_with_backoff(_send, provider="anthropic", label="note_gen")
             data = response.json()
             attempt_usage = data.get("usage") or {}
             usage.add(attempt_usage)
@@ -434,7 +438,8 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
         params = get_config().model_params.note_generation
         try:
             async with httpx.AsyncClient(timeout=60.0) as client:
-                response = await client.post(
+                _send = partial(
+                    client.post,
                     _ENDPOINT,
                     headers={
                         "x-api-key": _ANTHROPIC_API_KEY,
@@ -449,7 +454,7 @@ class AnthropicNoteGenerationProvider(NoteGenerationProvider):
                         "messages": [{"role": message.role, "content": message.content} for message in messages],
                     },
                 )
-                response.raise_for_status()
+                response = await send_with_backoff(_send, provider="anthropic", label="generate_text")
                 data = response.json()
 
             for block in data.get("content", []):
