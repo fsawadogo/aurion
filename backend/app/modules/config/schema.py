@@ -75,6 +75,16 @@ class VisionModelParams(BaseModel):
     # detailed visual evidence; 8000 ceiling matches the Terraform validator.
     max_tokens: int = Field(default=1500, ge=100, le=8000)
     confidence_threshold: Literal["low", "medium", "high"] = "medium"
+    # Gemini tokenisation resolution for the NATIVE-VIDEO clip path. "low"
+    # cuts the per-sampled-frame video token cost ~4x (≈258 → ≈66 tokens),
+    # which is the difference between a long clip fitting inside the
+    # per-minute token quota and 429-ing; exam-room motion survives low
+    # resolution because the signal is movement, not fine texture.
+    # "default" omits the field so Gemini applies its server-side default.
+    # Frame captions (single JPEGs) are unaffected — resolution IS the
+    # signal there. MUST stay in sync with the Terraform AppConfig
+    # validator (infrastructure/appconfig.tf, see #774 for what drift does).
+    clip_media_resolution: Literal["default", "low", "medium", "high"] = "low"
 
 
 class ModelParamsConfig(BaseModel):

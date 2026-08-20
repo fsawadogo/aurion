@@ -141,12 +141,15 @@ class ProviderRegistry:
         logger.info("Resolved vision provider: %s", key.value)
         return cls()
 
-    def get_note_provider_with_fallback(self) -> NoteGenerationProvider:
-        """Try the configured provider first, then fall back through the ordered list.
+    def get_note_provider_chain(self) -> list[NoteGenerationProvider]:
+        """Return the ordered, duplicate-free note-provider chain.
 
         The DB override store (if set) takes precedence over AppConfig as
-        the primary, matching :meth:`get_note_provider`'s precedence; the
-        ordered fallback list still applies if the primary is unavailable.
+        the primary, matching :meth:`get_note_provider`'s precedence.
+        Mirrors :meth:`get_vision_provider_chain_for_kind`: returning the
+        whole chain lets the caller advance to the next distinct provider
+        after a runtime ``ProviderError`` instead of resolving the same
+        configured primary again.
         """
         config = get_config()
         if (store := get_override("note_generation")) is not None:
@@ -157,16 +160,26 @@ class ProviderRegistry:
             )
         else:
             primary = config.providers.note_generation
-        order = [primary] + [k for k in _NOTE_GEN_FALLBACK_ORDER if k != primary]
-
+        order = list(dict.fromkeys([primary, *_NOTE_GEN_FALLBACK_ORDER]))
+        providers: list[NoteGenerationProvider] = []
         for key in order:
-            cls = _NOTE_GEN_PROVIDERS.get(key)
-            if cls:
-                if key != primary:
-                    logger.warning("Falling back to note provider: %s", key.value)
-                return cls()
+            provider_class = _NOTE_GEN_PROVIDERS.get(key)
+            if provider_class is not None:
+                providers.append(provider_class())
+        if not providers:
+            raise ProviderError("note_generation", "All note generation providers unavailable")
+        return providers
 
-        raise ProviderError("note_generation", "All note generation providers unavailable")
+    def get_note_provider_with_fallback(self) -> NoteGenerationProvider:
+        """Return the first provider in the ordered note-provider chain.
+
+        Kept for callers that only need the resolved primary. Runtime
+        fallback belongs to the caller: use :meth:`get_note_provider_chain`
+        when a provider error needs to advance to the next distinct
+        implementation — the old behaviour of calling this method again
+        after a failure just re-resolved the same configured primary.
+        """
+        return self.get_note_provider_chain()[0]
 
     def get_vision_provider_with_fallback(self) -> VisionProvider:
         """Return the first provider in the ordered frame-provider chain.

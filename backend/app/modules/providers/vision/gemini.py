@@ -354,6 +354,16 @@ class GeminiVisionProvider(VisionProvider):
         # latency scale ~linearly with fps, so this is bounded by the same
         # AppConfig knob that bounds capture (pipeline.video_capture_fps, 1-10).
         sampling_fps = get_config().pipeline.video_capture_fps
+        # Clip tokenisation resolution (AppConfig, schema default "low"):
+        # LOW cuts Gemini's per-sampled-frame token cost ~4x on the
+        # native-video path, keeping long clips inside the per-minute
+        # token quota. "default" omits the field entirely.
+        _clip_resolution = get_config().model_params.vision.clip_media_resolution
+        _media_resolution_field = (
+            {"mediaResolution": f"MEDIA_RESOLUTION_{_clip_resolution.upper()}"}
+            if _clip_resolution != "default"
+            else {}
+        )
         # #437 — config-driven model id (override → compiled-in default).
         model = get_config().model_versions.gemini or _MODEL
 
@@ -394,6 +404,7 @@ class GeminiVisionProvider(VisionProvider):
                             "maxOutputTokens": get_config().model_params.vision.max_tokens,
                             "responseMimeType": "application/json",
                             "responseSchema": VISION_RESPONSE_SCHEMA,
+                            **_media_resolution_field,
                         },
                     },
                     label="clip vision",

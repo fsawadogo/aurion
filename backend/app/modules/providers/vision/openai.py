@@ -12,6 +12,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+from functools import partial
 from typing import Any, Final
 
 import httpx
@@ -25,6 +26,7 @@ from app.core.types import (
     TranscriptSegment,
 )
 from app.modules.config.appconfig_client import get_config
+from app.modules.providers._retry import send_with_backoff
 from app.modules.providers.base import VisionProvider
 from app.modules.providers.vision._clip_to_still import extract_midpoint_still
 from app.modules.providers.vision.shared import (
@@ -84,7 +86,8 @@ class OpenAIVisionProvider(VisionProvider):
                     },
                 ]
 
-                response = await client.post(
+                _send = partial(
+                    client.post,
                     "https://api.openai.com/v1/chat/completions",
                     headers={
                         "Authorization": f"Bearer {_OPENAI_API_KEY}",
@@ -99,7 +102,7 @@ class OpenAIVisionProvider(VisionProvider):
                         "response_format": {"type": "json_object"},
                     },
                 )
-                response.raise_for_status()
+                response = await send_with_backoff(_send, provider="openai", label="vision_frame")
                 data = response.json()
                 # Guard the envelope extraction: a malformed envelope
                 # (missing/empty "choices", missing "message"/"content")
